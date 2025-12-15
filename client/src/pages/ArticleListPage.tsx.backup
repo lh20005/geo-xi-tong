@@ -1,0 +1,251 @@
+import { useState, useEffect } from 'react';
+import { Card, Table, Button, Space, Tag, Modal, Typography, message } from 'antd';
+import { EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined } from '@ant-design/icons';
+import { apiClient } from '../api/client';
+import ArticleContent from '../components/ArticleContent';
+import ArticleEditorModal from '../components/ArticleEditorModal';
+
+const { Paragraph, Text } = Typography;
+
+export default function ArticleListPage() {
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [viewModal, setViewModal] = useState<any>(null);
+  const [editModal, setEditModal] = useState<any>(null);
+  const [editorVisible, setEditorVisible] = useState(false);
+
+  useEffect(() => {
+    loadArticles();
+  }, []);
+
+  const loadArticles = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.get('/articles');
+      setArticles(response.data.articles || response.data);
+    } catch (error: any) {
+      message.error(error.message || '加载文章列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleView = async (id: number) => {
+    try {
+      const response = await apiClient.get(`/articles/${id}`);
+      setViewModal(response.data);
+    } catch (error: any) {
+      message.error(error.message || '加载文章详情失败');
+    }
+  };
+
+  const handleEdit = async (id: number) => {
+    try {
+      const response = await apiClient.get(`/articles/${id}`);
+      setEditModal(response.data);
+      setEditorVisible(true);
+    } catch (error: any) {
+      message.error(error.message || '加载文章详情失败');
+    }
+  };
+
+  const handleEditorClose = () => {
+    setEditorVisible(false);
+    setEditModal(null);
+  };
+
+  const handleEditorSave = () => {
+    loadArticles(); // 刷新列表
+  };
+
+  const handleDelete = async (id: number) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除这篇文章吗？',
+      onOk: async () => {
+        try {
+          await apiClient.delete(`/articles/${id}`);
+          message.success('删除成功');
+          loadArticles();
+        } catch (error: any) {
+          message.error(error.message || '删除失败');
+        }
+      },
+    });
+  };
+
+  const handleCopy = (content: string) => {
+    navigator.clipboard.writeText(content);
+    message.success('文章已复制到剪贴板');
+  };
+
+  const columns = [
+    {
+      title: '转化目标',
+      dataIndex: 'conversionTargetName',
+      key: 'conversionTargetName',
+      render: (text: string) => text ? <Tag color="orange">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      key: 'keyword',
+      render: (text: string) => <Tag color="blue">{text}</Tag>,
+    },
+    {
+      title: '蒸馏结果',
+      dataIndex: 'distillationKeyword',
+      key: 'distillationKeyword',
+      render: (text: string) => text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
+      title: '发布状态',
+      dataIndex: 'isPublished',
+      key: 'isPublished',
+      render: (isPublished: boolean, record: any) => {
+        if (isPublished) {
+          return (
+            <div>
+              <Tag color="success">已发布</Tag>
+              {record.publishedAt && (
+                <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                  {new Date(record.publishedAt).toLocaleString('zh-CN')}
+                </div>
+              )}
+            </div>
+          );
+        }
+        return <Tag color="default">草稿</Tag>;
+      },
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (text: string) => new Date(text).toLocaleString('zh-CN'),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: any) => (
+        <Space>
+          <Button
+            type="link"
+            icon={<EyeOutlined />}
+            onClick={() => handleView(record.id)}
+          >
+            查看
+          </Button>
+          <Button
+            type="link"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record.id)}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDelete(record.id)}
+          >
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Card
+        title="文章管理"
+        bordered={false}
+        extra={
+          <Button onClick={loadArticles}>刷新</Button>
+        }
+      >
+        <Table
+          columns={columns}
+          dataSource={articles}
+          rowKey="id"
+          loading={loading}
+          pagination={{ pageSize: 10 }}
+        />
+      </Card>
+
+      <Modal
+        title={
+          <Space>
+            <span>文章详情</span>
+            {viewModal && <Tag color="blue">{viewModal.keyword}</Tag>}
+          </Space>
+        }
+        open={!!viewModal}
+        onCancel={() => setViewModal(null)}
+        width={900}
+        footer={[
+          <Button
+            key="copy"
+            icon={<CopyOutlined />}
+            onClick={() => handleCopy(viewModal.content)}
+          >
+            复制文章
+          </Button>,
+          <Button
+            key="close"
+            type="primary"
+            onClick={() => setViewModal(null)}
+          >
+            关闭
+          </Button>,
+        ]}
+      >
+        {viewModal && (
+          <div>
+            <Paragraph style={{ color: '#64748b', marginBottom: 16 }}>
+              创建时间: {new Date(viewModal.createdAt || viewModal.created_at).toLocaleString('zh-CN')}
+              {viewModal.updatedAt && viewModal.updatedAt !== viewModal.createdAt && (
+                <Text style={{ marginLeft: 16 }}>
+                  更新时间: {new Date(viewModal.updatedAt || viewModal.updated_at).toLocaleString('zh-CN')}
+                </Text>
+              )}
+            </Paragraph>
+
+            <div>
+              {viewModal.title && (
+                <div style={{ marginBottom: 16 }}>
+                  <Text strong style={{ fontSize: 18 }}>
+                    {viewModal.title}
+                  </Text>
+                </div>
+              )}
+              <div
+                style={{
+                  maxHeight: 500,
+                  overflow: 'auto',
+                  padding: 16,
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 6,
+                }}
+              >
+                <ArticleContent
+                  content={viewModal.content}
+                  imageUrl={viewModal.imageUrl || viewModal.image_url}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ArticleEditorModal
+        visible={editorVisible}
+        article={editModal}
+        onClose={handleEditorClose}
+        onSave={handleEditorSave}
+      />
+    </div>
+  );
+}

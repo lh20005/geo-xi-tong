@@ -1,0 +1,408 @@
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { 
+  Card, Table, Button, Space, Tag, Modal, Typography, message, 
+  Row, Col, Statistic, Select, Input, Checkbox 
+} from 'antd';
+import { 
+  EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined,
+  SearchOutlined, ReloadOutlined 
+} from '@ant-design/icons';
+import { 
+  getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
+  Article, ArticleStats 
+} from '../api/articles';
+import { apiClient } from '../api/client';
+import ArticleContent from '../components/ArticleContent';
+import ArticleEditorModal from '../components/ArticleEditorModal';
+
+const { Paragraph, Text } = Typography;
+const { Option } = Select;
+
+interface FilterState {
+  publishStatus: 'all' | 'published' | 'unpublished';
+  distillationId: number | null;
+  searchKeyword: string;
+}
+
+export default function ArticleListPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [stats, setStats] = useState<ArticleStats>({ total: 0, published: 0, unpublished: 0 });
+  const [distillations, setDistillations] = useState<Array<{ id: number; keyword: string }>>([]);
+  const [filters, setFilters] = useState<FilterState>({
+    publishStatus: 'all',
+    distillationId: null,
+    searchKeyword: ''
+  });
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [viewModal, setViewModal] = useState<any>(null);
+  const [editModal, setEditModal] = useState<any>(null);
+  const [editorVisible, setEditorVisible] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const status = params.get('status') as 'all' | 'published' | 'unpublished' | null;
+    const topic = params.get('topic');
+    const search = params.get('search');
+    const pageParam = params.get('page');
+
+    setFilters({
+      publishStatus: status || 'all',
+      distillationId: topic ? parseInt(topic) : null,
+      searchKeyword: search || ''
+    });
+
+    if (pageParam) {
+      setPage(parseInt(pageParam));
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.publishStatus !== 'all') params.set('status', filters.publishStatus);
+    if (filters.distillationId) params.set('topic', filters.distillationId.toString());
+    if (filters.searchKeyword) params.set('search', filters.searchKeyword);
+    if (page > 1) params.set('page', page.toString());
+
+    const newSearch = params.toString();
+    if (newSearch !== location.search.substring(1)) {
+      navigate(`?${newSearch}`, { replace: true });
+    }
+  }, [filters, page]);
+
+  useEffect(() => {
+    loadArticles();
+    loadStats();
+  }, [filters, page]);
+
+  useEffect(() => {
+    loadDistillations();
+  }, []);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [filters]);
+
+  const loadArticles = async () => {
+    setLoading(true);
+    try {
+      const response = await getArticles(page, pageSize, filters);
+      setArticles(response.articles || []);
+      setTotal(response.total || 0);
+    } catch (error: any) {
+      message.error(error.message || '加载文章列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    try {
+      const statsData = await getArticleStats();
+      setStats(statsData);
+    } catch (error: any) {
+      console.error('加载统计数据失败:', error);
+    }
+  };
+
+  const loadDistillations = async () => {
+    try {
+      const response = await apiClient.get('/distillation/history');
+      setDistillations(response.data.history || []);
+    } catch (error: any) {
+      console.error('加载话题列表失败:', error);
+    }
+  };
+
+  const handleView = async (id: number) => {
+    try {
+      const response = await apiClient.get(`/articles/${id}`);
+      setViewModal(response.data);
+    } catch (error: any) {
+      message.error(error.message || '加载文章详情失败');
+    }
+  };
+
+  const handleEdit = async (id: number) => {
+    try {
+      const response = await apiClient.get(`/articles/${id}`);
+      setEditModal(response.data);
+      setEditorVisible(true);
+    } catch (error: any) {
+      message.error(error.message || '加载文章详情失败');
+    }
+  };
+
+  const handleEditorClose = () => {
+    setEditorVisible(false);
+    setEditModal(null);
+  };
+
+  const handleEditorSave = () => {
+    loadArticles();
+    loadStats();
+  };
+
+  const handleDelete = async (id: number) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除这篇文章吗？',
+      onOk: async () => {
+        try {
+          await apiClient.delete(`/articles/${id}`);
+          message.success('删除成功');
+          loadArticles();
+          loadStats();
+        } catch (error: any) {
+          message.error(error.message || '删除失败');
+        }
+      },
+    });
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return;
+
+    Modal.confirm({
+      title: '确认批量删除',
+      content: `确定要删除选中的 ${selectedIds.size} 篇文章吗？`,
+      onOk: async () => {
+        try {
+          await batchDeleteArticles(Array.from(selectedIds));
+          message.success(`成功删除 ${selectedIds.size} 篇文章`);
+          setSelectedIds(new Set());
+          loadArticles();
+          loadStats();
+        } catch (error: any) {
+          message.error(error.message || '批量删除失败');
+        }
+      },
+    });
+  };
+
+  const handleDeleteAll = () => {
+    Modal.confirm({
+      title: '确认删除所有',
+      content: `确定要删除所有 ${total} 篇文章吗？此操作不可恢复！`,
+      okText: '确认删除',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const result = await deleteAllArticles();
+          message.success(`成功删除 ${result.deletedCount} 篇文章`);
+          setSelectedIds(new Set());
+          loadArticles();
+          loadStats();
+        } catch (error: any) {
+          message.error(error.message || '删除所有失败');
+        }
+      },
+    });
+  };
+
+  const handleCopy = (content: string) => {
+    navigator.clipboard.writeText(content);
+    message.success('文章已复制到剪贴板');
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const currentPageIds = articles.map(a => a.id);
+      setSelectedIds(new Set([...selectedIds, ...currentPageIds]));
+    } else {
+      const currentPageIds = new Set(articles.map(a => a.id));
+      setSelectedIds(new Set([...selectedIds].filter(id => !currentPageIds.has(id))));
+    }
+  };
+
+  const handleSelectOne = (id: number, checked: boolean) => {
+    const newSelected = new Set(selectedIds);
+    if (checked) {
+      newSelected.add(id);
+    } else {
+      newSelected.delete(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleFilterChange = (key: keyof FilterState, value: any) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPage(1);
+  };
+
+  const handleSearch = () => {
+    setPage(1);
+    loadArticles();
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      publishStatus: 'all',
+      distillationId: null,
+      searchKeyword: ''
+    });
+    setPage(1);
+  };
+
+  const handleStatsClick = (status: 'all' | 'published' | 'unpublished') => {
+    handleFilterChange('publishStatus', status);
+  };
+
+  const isAllSelected = articles.length > 0 && articles.every(a => selectedIds.has(a.id));
+  const isSomeSelected = articles.some(a => selectedIds.has(a.id)) && !isAllSelected;
+
+  const columns = [
+    {
+      title: (
+        <Checkbox
+          checked={isAllSelected}
+          indeterminate={isSomeSelected}
+          onChange={(e) => handleSelectAll(e.target.checked)}
+        />
+      ),
+      key: 'checkbox',
+      width: 50,
+      render: (_: any, record: Article) => (
+        <Checkbox
+          checked={selectedIds.has(record.id)}
+          onChange={(e) => handleSelectOne(record.id, e.target.checked)}
+        />
+      ),
+    },
+    {
+      title: '转化目标',
+      dataIndex: 'conversionTargetName',
+      key: 'conversionTargetName',
+      render: (text: string) => text ? <Tag color="orange">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
+      title: '关键词',
+      dataIndex: 'keyword',
+      key: 'keyword',
+      render: (text: string) => <Tag color="blue">{text}</Tag>,
+    },
+    {
+      title: '蒸馏结果',
+      dataIndex: 'distillationKeyword',
+      key: 'distillationKeyword',
+      render: (text: string) => text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
+      title: '发布状态',
+      dataIndex: 'isPublished',
+      key: 'isPublished',
+      render: (isPublished: boolean, record: any) => {
+        if (isPublished) {
+          return (
+            <div>
+              <Tag color="success">已发布</Tag>
+              {record.publishedAt && (
+                <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
+                  {new Date(record.publishedAt).toLocaleString('zh-CN')}
+                </div>
+              )}
+            </div>
+          );
+        }
+        return <Tag color="default">草稿</Tag>;
+      },
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      render: (text: string) => new Date(text).toLocaleString('zh-CN'),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: any) => (
+        <Space>
+          <Button type="link" icon={<EyeOutlined />} onClick={() => handleView(record.id)}>查看</Button>
+          <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record.id)}>编辑</Button>
+          <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleDelete(record.id)}>删除</Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Row gutter={16} style={{ marginBottom: 24 }}>
+        <Col span={8}>
+          <Card hoverable onClick={() => handleStatsClick('all')}>
+            <Statistic title="总文章数" value={stats.total} valueStyle={{ color: '#1890ff' }} />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card hoverable onClick={() => handleStatsClick('published')}>
+            <Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} />
+          </Card>
+        </Col>
+        <Col span={8}>
+          <Card hoverable onClick={() => handleStatsClick('unpublished')}>
+            <Statistic title="未发布" value={stats.unpublished} valueStyle={{ color: '#faad14' }} />
+          </Card>
+        </Col>
+      </Row>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Space wrap style={{ width: '100%' }}>
+          <span>发布状态:</span>
+          <Select style={{ width: 120 }} value={filters.publishStatus} onChange={(value) => handleFilterChange('publishStatus', value)}>
+            <Option value="all">全部</Option>
+            <Option value="published">已发布</Option>
+            <Option value="unpublished">未发布</Option>
+          </Select>
+          <span>话题:</span>
+          <Select style={{ width: 200 }} placeholder="选择话题" allowClear value={filters.distillationId} onChange={(value) => handleFilterChange('distillationId', value)}>
+            {distillations.map(d => (<Option key={d.id} value={d.id}>{d.keyword}</Option>))}
+          </Select>
+          <span>搜索:</span>
+          <Input style={{ width: 200 }} placeholder="输入关键词" value={filters.searchKeyword} onChange={(e) => handleFilterChange('searchKeyword', e.target.value)} onPressEnter={handleSearch} />
+          <Button icon={<SearchOutlined />} onClick={handleSearch}>搜索</Button>
+          <Button icon={<ReloadOutlined />} onClick={handleClearFilters}>清除筛选</Button>
+        </Space>
+      </Card>
+
+      {selectedIds.size > 0 && (
+        <Card style={{ marginBottom: 16, backgroundColor: '#e6f7ff' }}>
+          <Space>
+            <Text strong>已选中 {selectedIds.size} 篇文章</Text>
+            <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>删除选中</Button>
+          </Space>
+        </Card>
+      )}
+
+      <Card title="文章管理" bordered={false} extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
+        <Table columns={columns} dataSource={articles} rowKey="id" loading={loading} pagination={{ current: page, pageSize, total, onChange: (newPage) => setPage(newPage), showSizeChanger: false, showTotal: (total) => `共 ${total} 篇文章` }} />
+      </Card>
+
+      <Modal title={<Space><span>文章详情</span>{viewModal && <Tag color="blue">{viewModal.keyword}</Tag>}</Space>} open={!!viewModal} onCancel={() => setViewModal(null)} width={900} footer={[<Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content)}>复制文章</Button>, <Button key="close" type="primary" onClick={() => setViewModal(null)}>关闭</Button>]}>
+        {viewModal && (
+          <div>
+            <Paragraph style={{ color: '#64748b', marginBottom: 16 }}>
+              创建时间: {new Date(viewModal.createdAt || viewModal.created_at).toLocaleString('zh-CN')}
+              {viewModal.updatedAt && viewModal.updatedAt !== viewModal.createdAt && (<Text style={{ marginLeft: 16 }}>更新时间: {new Date(viewModal.updatedAt || viewModal.updated_at).toLocaleString('zh-CN')}</Text>)}
+            </Paragraph>
+            <div>
+              {viewModal.title && (<div style={{ marginBottom: 16 }}><Text strong style={{ fontSize: 18 }}>{viewModal.title}</Text></div>)}
+              <div style={{ maxHeight: 500, overflow: 'auto', padding: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
+                <ArticleContent content={viewModal.content} imageUrl={viewModal.imageUrl || viewModal.image_url} />
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ArticleEditorModal visible={editorVisible} article={editModal} onClose={handleEditorClose} onSave={handleEditorSave} />
+    </div>
+  );
+}
