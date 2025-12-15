@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>蒸馏结果列显示测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #1890ff;
+            margin-bottom: 20px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #e8e8e8;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background: #fafafa;
+            font-weight: 600;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #e6f7ff;
+            color: #1890ff;
+            border: 1px solid #91d5ff;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 4px;
+            word-break: break-word;
+            white-space: normal;
+        }
+        
+        .topics-container {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .single-topic {
+            word-break: break-word;
+            white-space: normal;
+        }
+        
+        .column-distillation {
+            width: 200px;
+            max-width: 200px;
+        }
+        
+        .status-tag {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        
+        .status-completed {
+            background: #f6ffed;
+            color: #52c41a;
+            border: 1px solid #b7eb8f;
+        }
+        
+        .status-failed {
+            background: #fff1f0;
+            color: #ff4d4f;
+            border: 1px solid #ffccc7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>蒸馏结果列显示测试</h1>
+        <p>测试不同场景下的蒸馏结果显示效果</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>任务ID</th>
+                    <th>关键词</th>
+                    <th>请求/生成</th>
+                    <th>状态</th>
+                    <th class="column-distillation">蒸馏结果</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 场景1: 单个话题 -->
+                <tr>
+                    <td>35</td>
+                    <td>英国留学机构</td>
+                    <td>1/1</td>
+                    <td><span class="status-tag status-completed">已完成</span></td>
+                    <td class="column-distillation">
+                        <div class="single-topic">
+                            <span class="tag">对比一下启德和新东方的英国留学服务</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <!-- 场景2: 单个短话题 -->
+                <tr>
+                    <td>34</td>
+                    <td>英国留学机构</td>
+                    <td>1/1</td>
+                    <td><span class="status-tag status-completed">已完成</span></td>
+                    <td class="column-distillation">
+                        <div class="single-topic">
+                            <span class="tag">英国留学中介和DIY哪个好</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <!-- 场景3: 多个话题（3个） -->
+                <tr>
+                    <td>27</td>
+                    <td>英国留学机构</td>
+                    <td>3/3</td>
+                    <td><span class="status-tag status-completed">已完成</span></td>
+                    <td class="column-distillation">
+                        <div class="topics-container">
+                            <span class="tag">如何选择英国留学中介</span>
+                            <span class="tag">英国留学中介机构排名前十</span>
+                            <span class="tag">靠谱的英国留学中介推荐</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <!-- 场景4: 多个话题，其中有长话题 -->
+                <tr>
+                    <td>26</td>
+                    <td>英国留学机构</td>
+                    <td>2/2</td>
+                    <td><span class="status-tag status-completed">已完成</span></td>
+                    <td class="column-distillation">
+                        <div class="topics-container">
+                            <span class="tag">英国留学机构哪家申请成功率最高并且服务质量好</span>
+                            <span class="tag">对比分析启德、新东方、金吉列等主流英国留学中介的优劣势</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <!-- 场景5: 未生成文章 -->
+                <tr>
+                    <td>22</td>
+                    <td>英国留学机构</td>
+                    <td>1/0</td>
+                    <td><span class="status-tag status-failed">失败</span></td>
+                    <td class="column-distillation">
+                        <span class="tag" style="background: #f5f5f5; color: #999; border-color: #d9d9d9;">待生成</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <div style="margin-top: 30px; padding: 15px; background: #e6f7ff; border-left: 4px solid #1890ff; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #1890ff;">显示规则说明</h3>
+            <ul style="margin-bottom: 0;">
+                <li><strong>单个话题</strong>：直接显示，话题过长时自动换行</li>
+                <li><strong>多个话题</strong>：每行显示一个话题，垂直排列</li>
+                <li><strong>长话题</strong>：自动换行，不截断</li>
+                <li><strong>未生成</strong>：显示"待生成"标签</li>
+                <li><strong>列宽</strong>：固定200px，内容自适应</li>
+            </ul>
+        </div>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #fff7e6; border-left: 4px solid #faad14; border-radius: 4px;">
+            <h3 style="margin-top: 0; color: #faad14;">CSS关键属性</h3>
+            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">
+word-break: break-word;    // 允许在单词内换行
+white-space: normal;       // 允许换行
+display: flex;             // 使用弹性布局
+flex-direction: column;    // 垂直排列
+gap: 4px;                  // 元素间距</pre>
+        </div>
+    </div>
+</body>
+</html>

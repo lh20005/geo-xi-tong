@@ -97,6 +97,15 @@ export default function DistillationResultsPage() {
     loadData();
   }, [currentPage, pageSize, filterKeyword, filterProvider, searchText]);
 
+  // 添加自动刷新功能，每15秒刷新一次以同步最新的引用计数
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadData();
+    }, 15000); // 15秒刷新一次
+    
+    return () => clearInterval(interval);
+  }, [currentPage, pageSize, filterKeyword, filterProvider, searchText]);
+
   // 处理关键词筛选改变
   const handleKeywordChange = (value: string) => {
     setFilterKeyword(value);

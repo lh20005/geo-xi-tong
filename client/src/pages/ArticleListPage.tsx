@@ -290,8 +290,8 @@ export default function ArticleListPage() {
     },
     {
       title: '蒸馏结果',
-      dataIndex: 'distillationKeyword',
-      key: 'distillationKeyword',
+      dataIndex: 'topicQuestion',
+      key: 'topicQuestion',
       render: (text: string) => text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
     },
     {

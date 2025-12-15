@@ -17,6 +17,7 @@ import {
   DeleteOutlined,
   FileTextOutlined,
   ArrowLeftOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
 
@@ -34,17 +35,26 @@ export default function TopicsPage() {
 
   useEffect(() => {
     loadTopics();
+    
+    // 每10秒自动刷新一次，以同步最新的使用计数
+    const interval = setInterval(() => {
+      loadTopics();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, [distillationId]);
 
-  const loadTopics = async () => {
-    setLoading(true);
+  const loadTopics = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const response = await axios.get(`/api/topics/${distillationId}`);
-      setTopics(response.data);
+      const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
+      setTopics(response.data.topics);
     } catch (error) {
-      message.error('加载话题失败');
+      if (!silent) {
+        message.error('加载话题失败');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -55,7 +65,7 @@ export default function TopicsPage() {
 
   const handleSaveEdit = async () => {
     try {
-      await axios.put(`/api/topics/${editModal.id}`, {
+      await axios.put(`/api/topics/${editModal.topicId}`, {
         question: editValue,
       });
       message.success('话题更新成功');
@@ -66,13 +76,13 @@ export default function TopicsPage() {
     }
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (topicId: number) => {
     Modal.confirm({
       title: '确认删除',
       content: '确定要删除这个话题吗？',
       onOk: async () => {
         try {
-          await axios.delete(`/api/topics/${id}`);
+          await axios.delete(`/api/topics/${topicId}`);
           message.success('删除成功');
           loadTopics();
         } catch (error) {
@@ -116,6 +126,13 @@ export default function TopicsPage() {
         extra={
           <Space>
             <Button
+              icon={<ReloadOutlined />}
+              onClick={() => loadTopics()}
+              loading={loading}
+            >
+              刷新
+            </Button>
+            <Button
               type="primary"
               icon={<FileTextOutlined />}
               onClick={handleGenerateArticle}
@@ -140,7 +157,7 @@ export default function TopicsPage() {
                 background: '#f8fafc',
                 marginBottom: 12,
                 borderRadius: 8,
-                border: selectedTopics.includes(topic.id)
+                border: selectedTopics.includes(topic.topicId)
                   ? '2px solid #0ea5e9'
                   : '1px solid #e2e8f0',
               }}
@@ -156,7 +173,7 @@ export default function TopicsPage() {
                   type="text"
                   danger
                   icon={<DeleteOutlined />}
-                  onClick={() => handleDelete(topic.id)}
+                  onClick={() => handleDelete(topic.topicId)}
                 >
                   删除
                 </Button>,
@@ -165,16 +182,28 @@ export default function TopicsPage() {
               <List.Item.Meta
                 avatar={
                   <Checkbox
-                    checked={selectedTopics.includes(topic.id)}
+                    checked={selectedTopics.includes(topic.topicId)}
                     onChange={(e) =>
-                      handleSelectTopic(topic.id, e.target.checked)
+                      handleSelectTopic(topic.topicId, e.target.checked)
                     }
                   />
                 }
                 title={
-                  <div style={{ fontSize: 15, color: '#1e293b' }}>
-                    {topic.question}
-                  </div>
+                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <div style={{ fontSize: 15, color: '#1e293b' }}>
+                      {topic.question}
+                    </div>
+                    <Space size={8}>
+                      <Tag color={topic.usageCount === 0 ? 'default' : 'blue'}>
+                        已使用 {topic.usageCount} 次
+                      </Tag>
+                      {topic.lastUsedAt && (
+                        <span style={{ fontSize: 12, color: '#64748b' }}>
+                          最后使用: {new Date(topic.lastUsedAt).toLocaleString('zh-CN')}
+                        </span>
+                      )}
+                    </Space>
+                  </Space>
                 }
               />
             </List.Item>

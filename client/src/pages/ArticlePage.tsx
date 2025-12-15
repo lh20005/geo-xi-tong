@@ -49,9 +49,9 @@ export default function ArticlePage() {
 
   const loadKeyword = async () => {
     try {
-      const response = await axios.get(`/api/topics/${distillationId}`);
-      if (response.data.length > 0) {
-        setKeyword(response.data[0].keyword);
+      const response = await axios.get(`/api/distillations/${distillationId}`);
+      if (response.data && response.data.keyword) {
+        setKeyword(response.data.keyword);
       }
     } catch (error) {
       console.error('加载关键词失败:', error);

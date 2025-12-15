@@ -199,6 +199,8 @@ articleRouter.get('/', async (req, res) => {
         a.keyword,
         a.distillation_id,
         d.keyword as distillation_keyword,
+        a.topic_id,
+        t.question as topic_question,
         a.task_id,
         gt.conversion_target_id,
         ct.company_name as conversion_target_name,
@@ -209,6 +211,7 @@ articleRouter.get('/', async (req, res) => {
         a.updated_at
        FROM articles a
        LEFT JOIN distillations d ON a.distillation_id = d.id
+       LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        ${whereClause}
@@ -224,6 +227,8 @@ articleRouter.get('/', async (req, res) => {
         keyword: row.keyword,
         distillationId: row.distillation_id,
         distillationKeyword: row.distillation_keyword,
+        topicId: row.topic_id,
+        topicQuestion: row.topic_question,
         taskId: row.task_id,
         conversionTargetId: row.conversion_target_id,
         conversionTargetName: row.conversion_target_name,
@@ -250,7 +255,7 @@ articleRouter.get('/:id', async (req, res) => {
     
     const result = await pool.query(
       `SELECT 
-        id, title, keyword, distillation_id, task_id, requirements,
+        id, title, keyword, distillation_id, topic_id, task_id, requirements,
         content, image_url, provider, is_published, published_at, created_at, updated_at
        FROM articles 
        WHERE id = $1`,
@@ -267,6 +272,7 @@ articleRouter.get('/:id', async (req, res) => {
       title: article.title,
       keyword: article.keyword,
       distillationId: article.distillation_id,
+      topicId: article.topic_id,
       taskId: article.task_id,
       requirements: article.requirements,
       content: article.content,

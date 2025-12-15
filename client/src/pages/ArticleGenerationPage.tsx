@@ -223,17 +223,48 @@ export default function ArticleGenerationPage() {
       title: '蒸馏结果',
       dataIndex: 'distillationResult',
       key: 'distillationResult',
-      width: 150,
-      ellipsis: { showTitle: false },
-      render: (text: string | null) => (
-        <Tooltip title={text || '已删除'}>
-          {text ? (
-            <Tag color="cyan">{text}</Tag>
-          ) : (
-            <Tag color="default">已删除</Tag>
-          )}
-        </Tooltip>
-      )
+      width: 200,
+      render: (text: string | null) => {
+        if (!text) {
+          return <Tag color="default">待生成</Tag>;
+        }
+        
+        // 按逗号分隔话题
+        const topics = text.split(',').map(t => t.trim()).filter(t => t.length > 0);
+        
+        if (topics.length === 0) {
+          return <Tag color="default">待生成</Tag>;
+        }
+        
+        // 单个话题：直接显示
+        if (topics.length === 1) {
+          return (
+            <div style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+              <Tag color="cyan" style={{ marginBottom: 4 }}>{topics[0]}</Tag>
+            </div>
+          );
+        }
+        
+        // 多个话题：每行一个
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {topics.map((topic, index) => (
+              <Tag 
+                key={index} 
+                color="cyan"
+                style={{ 
+                  marginBottom: 0,
+                  wordBreak: 'break-word',
+                  whiteSpace: 'normal',
+                  display: 'inline-block'
+                }}
+              >
+                {topic}
+              </Tag>
+            ))}
+          </div>
+        );
+      }
     },
     {
       title: '进度',

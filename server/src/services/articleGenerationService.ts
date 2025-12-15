@@ -1,6 +1,7 @@
 import { pool } from '../db/database';
 import { AIService } from './aiService';
 import { ContentCleaner } from './contentCleaner';
+import { TopicSelectionService } from './topicSelectionService';
 
 export interface TaskConfig {
   distillationId: number;
@@ -58,81 +59,134 @@ export interface DiagnosticReport {
 
 export class ArticleGenerationService {
   /**
-   * 批量加载蒸馏结果数据
-   * 需求: 2.1, 2.3
+   * 批量加载蒸馏结果数据（支持单关键词多话题模式）
    * 
-   * 使用单次查询批量加载所有蒸馏结果的关键词和话题列表
+   * 新逻辑：
+   * 1. 如果distillationIds中有重复ID，为每个位置选择不同的话题
+   * 2. 返回数组而不是Map，保持顺序
    * 
-   * @param distillationIds 蒸馏结果ID列表
-   * @returns Map<id, {keyword, topics}> 蒸馏结果数据映射
+   * @param distillationIds 蒸馏结果ID列表（可能有重复）
+   * @returns 数组，每个元素对应一个文章的数据
    */
-  private async loadDistillationData(
+  private async loadDistillationDataArray(
     distillationIds: number[]
-  ): Promise<Map<number, { keyword: string; topics: string[] }>> {
+  ): Promise<Array<{ distillationId: number; keyword: string; topicId: number; topic: string }>> {
     console.log(`[批量加载] 开始加载 ${distillationIds.length} 个蒸馏结果的数据...`);
     
     if (distillationIds.length === 0) {
-      console.warn(`[批量加载] ID列表为空，返回空Map`);
-      return new Map();
+      console.warn(`[批量加载] ID列表为空，返回空数组`);
+      return [];
     }
     
-    // 使用array_agg聚合话题，批量查询所有蒸馏结果
-    // 需求: 2.1 - 使用单次查询批量加载
-    const result = await pool.query(
-      `SELECT 
-        d.id,
-        d.keyword,
-        array_agg(t.question ORDER BY t.id) as topics
-       FROM distillations d
-       LEFT JOIN topics t ON d.id = t.distillation_id
-       WHERE d.id = ANY($1)
-       GROUP BY d.id, d.keyword`,
-      [distillationIds]
+    // 1. 获取唯一的蒸馏结果ID
+    const uniqueIds = [...new Set(distillationIds)];
+    console.log(`[批量加载] 唯一的蒸馏结果ID: [${uniqueIds.join(', ')}]`);
+    
+    // 2. 批量查询蒸馏结果的关键词
+    const distillationResult = await pool.query(
+      `SELECT id, keyword FROM distillations WHERE id = ANY($1)`,
+      [uniqueIds]
     );
     
-    // 将查询结果转换为Map结构（需求 2.3）
-    const dataMap = new Map<number, { keyword: string; topics: string[] }>();
+    const keywordMap = new Map<number, string>();
+    for (const row of distillationResult.rows) {
+      keywordMap.set(row.id, row.keyword);
+    }
     
-    for (const row of result.rows) {
-      const id = row.id;
-      const keyword = row.keyword;
-      // topics可能为null（如果没有话题），转换为空数组
-      const topics = row.topics ? row.topics.filter((t: string) => t !== null) : [];
+    // 3. 为每个蒸馏结果ID（包括重复的）选择话题
+    const topicService = new TopicSelectionService();
+    const dataArray: Array<{ distillationId: number; keyword: string; topicId: number; topic: string }> = [];
+    
+    // 跟踪每个蒸馏结果已使用的话题ID，避免重复
+    const usedTopicIds = new Map<number, Set<number>>();
+    
+    for (let i = 0; i < distillationIds.length; i++) {
+      const distillationId = distillationIds[i];
+      const keyword = keywordMap.get(distillationId);
       
-      dataMap.set(id, { keyword, topics });
+      if (!keyword) {
+        console.warn(`[批量加载] 警告：蒸馏结果ID ${distillationId} 不存在`);
+        continue;
+      }
+      
+      // 获取该蒸馏结果已使用的话题ID集合
+      if (!usedTopicIds.has(distillationId)) {
+        usedTopicIds.set(distillationId, new Set());
+      }
+      const usedIds = usedTopicIds.get(distillationId)!;
+      
+      // 选择一个未使用的话题
+      const topicData = await topicService.selectLeastUsedTopic(distillationId);
+      
+      if (!topicData) {
+        console.warn(`[批量加载] 警告：蒸馏结果ID ${distillationId} 没有可用话题`);
+        continue;
+      }
+      
+      // 如果这个话题已经在本次任务中使用过，尝试选择下一个
+      let selectedTopic = topicData;
+      if (usedIds.has(topicData.topicId)) {
+        // 查询下一个未使用的话题
+        const nextTopicResult = await pool.query(
+          `SELECT id, question, usage_count
+           FROM topics
+           WHERE distillation_id = $1 AND id NOT IN (${Array.from(usedIds).join(',') || '0'})
+           ORDER BY usage_count ASC, created_at ASC
+           LIMIT 1`,
+          [distillationId]
+        );
+        
+        if (nextTopicResult.rows.length > 0) {
+          selectedTopic = {
+            topicId: nextTopicResult.rows[0].id,
+            question: nextTopicResult.rows[0].question,
+            usageCount: nextTopicResult.rows[0].usage_count || 0
+          };
+        }
+      }
+      
+      // 记录已使用的话题
+      usedIds.add(selectedTopic.topicId);
+      
+      dataArray.push({
+        distillationId,
+        keyword,
+        topicId: selectedTopic.topicId,
+        topic: selectedTopic.question
+      });
+      
+      console.log(`[批量加载] [${i + 1}/${distillationIds.length}] 蒸馏结果 ID=${distillationId}, 关键词="${keyword}", 选中话题ID=${selectedTopic.topicId}, 使用次数=${selectedTopic.usageCount}`);
     }
     
-    // 检查是否有缺失的蒸馏结果（需求 2.3）
-    const missingIds = distillationIds.filter(id => !dataMap.has(id));
-    if (missingIds.length > 0) {
-      console.warn(`[批量加载] 警告：蒸馏结果ID [${missingIds.join(', ')}] 不存在或已被删除`);
-    }
+    console.log(`[批量加载] 成功加载 ${dataArray.length} 个文章数据`);
     
-    console.log(`[批量加载] 成功加载 ${dataMap.size} 个蒸馏结果的数据`);
-    
-    return dataMap;
+    return dataArray;
   }
 
   /**
-   * 创建生成任务
-   * 需求: 1.4, 4.1, 4.5, 13.1
+   * 创建生成任务（单关键词多话题模式）
    * 
    * 实现步骤：
-   * 1. 调用selectDistillationsForTask选择蒸馏结果
-   * 2. 将选择的ID列表序列化为JSON字符串
-   * 3. 保存到generation_tasks.selected_distillation_ids字段
-   * 4. 创建任务记录
-   * 5. 异步启动任务执行
+   * 1. 使用用户指定的distillationId
+   * 2. 调用selectDistillationsForTask验证并生成ID数组
+   * 3. 将选择的ID列表序列化为JSON字符串
+   * 4. 保存到generation_tasks.selected_distillation_ids字段
+   * 5. 创建任务记录
+   * 6. 异步启动任务执行
    */
   async createTask(config: TaskConfig): Promise<number> {
     console.log(`[任务创建] 开始创建任务，请求生成 ${config.articleCount} 篇文章`);
+    console.log(`[任务创建] 使用蒸馏结果ID: ${config.distillationId}`);
     
-    // 1. 智能选择蒸馏结果（需求 1.1, 1.2, 1.5）
-    const selectedDistillationIds = await this.selectDistillationsForTask(config.articleCount);
+    // 1. 为指定的蒸馏结果选择话题（验证并生成重复的ID数组）
+    const selectedDistillationIds = await this.selectDistillationsForTask(
+      config.articleCount,
+      config.distillationId
+    );
     
-    // 2. 将ID数组序列化为JSON字符串（需求 1.4, 4.1）
+    // 2. 将ID数组序列化为JSON字符串
     const selectedIdsJson = JSON.stringify(selectedDistillationIds);
-    console.log(`[任务创建] 选择的蒸馏结果IDs: ${selectedIdsJson}`);
+    console.log(`[任务创建] 将生成 ${config.articleCount} 篇文章，使用同一关键词的不同话题`);
     
     // 3. 保存任务记录，包含selected_distillation_ids
     const result = await pool.query(
@@ -141,7 +195,7 @@ export class ArticleGenerationService {
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') 
        RETURNING id`,
       [
-        config.distillationId, // 保留用于向后兼容
+        config.distillationId,
         config.albumId,
         config.knowledgeBaseId,
         config.articleSettingId,
@@ -191,7 +245,12 @@ export class ArticleGenerationService {
         ct.company_name as conversion_target_name,
         d.keyword,
         d.provider,
-        (SELECT question FROM topics WHERE distillation_id = gt.distillation_id ORDER BY id ASC LIMIT 1) as distillation_result
+        (
+          SELECT STRING_AGG(DISTINCT t.question, ', ' ORDER BY t.question)
+          FROM articles a
+          INNER JOIN topics t ON a.topic_id = t.id
+          WHERE a.task_id = gt.id
+        ) as distillation_result
        FROM generation_tasks gt
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        INNER JOIN distillations d ON gt.distillation_id = d.id
@@ -265,7 +324,12 @@ export class ArticleGenerationService {
         ct.company_name as conversion_target_name,
         d.keyword,
         d.provider,
-        (SELECT question FROM topics WHERE distillation_id = gt.distillation_id ORDER BY id ASC LIMIT 1) as distillation_result
+        (
+          SELECT STRING_AGG(DISTINCT t.question, ', ' ORDER BY t.question)
+          FROM articles a
+          INNER JOIN topics t ON a.topic_id = t.id
+          WHERE a.task_id = gt.id
+        ) as distillation_result
        FROM generation_tasks gt
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        INNER JOIN distillations d ON gt.distillation_id = d.id
@@ -400,14 +464,15 @@ export class ArticleGenerationService {
         return;
       }
 
-      // 3. 批量加载所有预选蒸馏结果的数据（需求 2.3）
+      // 3. 批量加载所有预选蒸馏结果的数据（支持单关键词多话题）
       console.log(`[任务 ${taskId}] 批量加载蒸馏结果数据...`);
-      const distillationDataMap = await this.loadDistillationData(selectedDistillationIds);
-      console.log(`[任务 ${taskId}] 成功加载 ${distillationDataMap.size} 个蒸馏结果的数据`);
+      const distillationDataArray = await this.loadDistillationDataArray(selectedDistillationIds);
+      console.log(`[任务 ${taskId}] 成功加载 ${distillationDataArray.length} 个文章数据`);
       
-      // 详细记录每个蒸馏结果的信息
-      for (const [id, data] of distillationDataMap.entries()) {
-        console.log(`[任务 ${taskId}] 蒸馏结果 ID=${id}, 关键词="${data.keyword}", 话题数=${data.topics.length}`);
+      // 详细记录每个文章的数据
+      for (let i = 0; i < distillationDataArray.length; i++) {
+        const data = distillationDataArray[i];
+        console.log(`[任务 ${taskId}] [文章 ${i + 1}] 蒸馏结果 ID=${data.distillationId}, 关键词="${data.keyword}", 话题ID=${data.topicId}, 话题="${data.topic.substring(0, 30)}..."`);
       }
 
       // 获取知识库内容
@@ -425,47 +490,30 @@ export class ArticleGenerationService {
       console.log(`[任务 ${taskId}] 使用AI提供商: ${aiConfig.provider}`);
 
       // 确定实际生成数量
-      const actualCount = selectedDistillationIds.length;
+      const actualCount = distillationDataArray.length;
       console.log(`[任务 ${taskId}] 计划生成 ${actualCount} 篇文章`);
 
-      // 4. 逐个生成文章，为每篇文章分配不同的蒸馏结果（需求 2.2, 2.4, 2.5）
+      // 4. 逐个生成文章，每篇使用不同的话题
       let generatedCount = 0;
       const errors: string[] = [];
 
       for (let i = 0; i < actualCount; i++) {
         console.log(`\n[任务 ${taskId}] ========== 开始生成第 ${i + 1}/${actualCount} 篇文章 ==========`);
         
-        // 为第i篇文章使用selected_distillation_ids[i]对应的蒸馏结果（需求 2.2）
-        const distillationId = selectedDistillationIds[i];
-        console.log(`[任务 ${taskId}] [文章 ${i + 1}] 从selected_distillation_ids[${i}]获取蒸馏结果ID: ${distillationId}`);
+        const distillationData = distillationDataArray[i];
+        const distillationId = distillationData.distillationId;
         
-        const distillationData = distillationDataMap.get(distillationId);
-        
-        if (!distillationData) {
-          const errorMsg = `文章 ${i + 1}: 蒸馏结果ID ${distillationId} 的数据不存在或已被删除`;
-          console.error(`[任务 ${taskId}] ${errorMsg}`);
-          errors.push(errorMsg);
-          continue; // 跳过这篇文章，继续处理下一篇
-        }
-        
-        if (!distillationData.topics || distillationData.topics.length === 0) {
-          const errorMsg = `文章 ${i + 1}: 蒸馏结果ID ${distillationId} 没有话题`;
-          console.error(`[任务 ${taskId}] ${errorMsg}`);
-          errors.push(errorMsg);
-          continue; // 跳过这篇文章，继续处理下一篇
-        }
-        
-        console.log(`[任务 ${taskId}] [文章 ${i + 1}] 使用蒸馏结果: ID=${distillationId}, 关键词="${distillationData.keyword}", 话题数=${distillationData.topics.length}`);
+        console.log(`[任务 ${taskId}] [文章 ${i + 1}] 使用蒸馏结果: ID=${distillationId}, 关键词="${distillationData.keyword}", 话题ID=${distillationData.topicId}, 话题="${distillationData.topic.substring(0, 30)}..."`);
 
         try {
           // 从图库随机选择图片
           const imageUrl = await this.selectRandomImage(task.albumId);
           console.log(`[任务 ${taskId}] 选择图片: ${imageUrl}`);
 
-          // 生成单篇文章（需求 2.4 - 单文章数据隔离）
+          // 生成单篇文章（使用单个话题）
           const result = await this.generateSingleArticle(
             distillationData.keyword,
-            distillationData.topics,
+            [distillationData.topic], // 只使用一个话题
             imageUrl,
             knowledgeContent,
             articlePrompt,
@@ -475,18 +523,19 @@ export class ArticleGenerationService {
           if (result.success && result.title && result.content) {
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章生成成功，标题: ${result.title}`);
 
-            // 5. 保存文章并记录使用（使用事务）
+            // 5. 保存文章并记录使用（包括话题使用记录）
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 开始保存文章并更新usage_count...`);
-            const articleId = await this.saveArticleWithUsageTracking(
+            const articleId = await this.saveArticleWithTopicTracking(
               taskId,
               distillationId,
+              distillationData.topicId,
               distillationData.keyword,
               result.title,
               result.content,
               imageUrl,
               aiConfig.provider
             );
-            console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章保存成功，ID: ${articleId}，蒸馏结果ID: ${distillationId} 的usage_count已更新`);
+            console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章保存成功，ID: ${articleId}，话题ID: ${distillationData.topicId} 的usage_count已更新`);
 
             generatedCount++;
 
@@ -495,17 +544,17 @@ export class ArticleGenerationService {
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 进度更新: ${generatedCount}/${actualCount}`);
           } else {
             // 文章生成失败
-            const errorMsg = `文章 ${i + 1} (关键词: ${distillationData.keyword}): ${result.error || '未知错误'}`;
+            const errorMsg = `文章 ${i + 1} (关键词: ${distillationData.keyword}, 话题: ${distillationData.topic.substring(0, 20)}): ${result.error || '未知错误'}`;
             console.error(`[任务 ${taskId}] ${errorMsg}`);
             errors.push(errorMsg);
-            // 继续处理下一篇文章（需求 6.1）
+            // 继续处理下一篇文章
           }
         } catch (error: any) {
           // 捕获其他意外错误（如保存失败）
-          const errorMsg = `文章 ${i + 1} (关键词: ${distillationData.keyword}): ${error.message}`;
+          const errorMsg = `文章 ${i + 1} (关键词: ${distillationData.keyword}, 话题: ${distillationData.topic.substring(0, 20)}): ${error.message}`;
           console.error(`[任务 ${taskId}] ${errorMsg}`);
           errors.push(errorMsg);
-          // 继续处理下一篇文章（需求 6.1, 6.3）
+          // 继续处理下一篇文章
         }
       }
 
@@ -989,62 +1038,54 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 智能选择蒸馏结果（按使用次数升序）
-   * 需求: 1.1, 1.2, 1.5, 5.1, 5.3, 5.4
+   * 为任务选择蒸馏结果（单关键词多话题模式）
    * 
-   * 实现步骤：
-   * 1. 查询所有有话题的蒸馏结果（排除没有话题的）
-   * 2. 按usage_count ASC, created_at ASC排序
-   * 3. 使用LIMIT限制返回数量为requestedCount
-   * 4. 验证可用数量是否充足
-   * 5. 如果可用数量少于请求数量，抛出清晰的错误消息
+   * 新逻辑：
+   * 1. 使用用户指定的distillationId
+   * 2. 验证该蒸馏结果有足够的话题
+   * 3. 返回重复的distillationId数组（长度=requestedCount）
    * 
-   * @param requestedCount 请求的蒸馏结果数量
-   * @returns 选择的蒸馏结果ID数组
+   * @param requestedCount 请求的文章数量
+   * @param distillationId 用户选择的蒸馏结果ID
+   * @returns 蒸馏结果ID数组（重复的同一个ID）
    */
-  async selectDistillationsForTask(requestedCount: number): Promise<number[]> {
-    console.log(`[智能选择] 开始选择 ${requestedCount} 个蒸馏结果...`);
+  async selectDistillationsForTask(requestedCount: number, distillationId: number): Promise<number[]> {
+    console.log(`[智能选择] 为蒸馏结果 ${distillationId} 选择 ${requestedCount} 个话题...`);
     
-    // 首先查询所有有话题的蒸馏结果数量（用于验证）
-    const countResult = await pool.query(
-      `SELECT COUNT(DISTINCT d.id) as available_count
-       FROM distillations d
-       INNER JOIN topics t ON d.id = t.distillation_id
-       WHERE d.id IS NOT NULL`
+    // 验证蒸馏结果是否存在
+    const distillationCheck = await pool.query(
+      'SELECT id, keyword FROM distillations WHERE id = $1',
+      [distillationId]
     );
     
-    const availableCount = parseInt(countResult.rows[0].available_count);
-    console.log(`[智能选择] 可用蒸馏结果数量: ${availableCount}`);
-    
-    // 验证可用数量是否充足（需求 1.3, 5.1, 5.2）
-    if (availableCount < requestedCount) {
-      const errorMsg = `可用蒸馏结果不足，当前只有${availableCount}个可用，但请求生成${requestedCount}篇文章`;
-      console.error(`[智能选择] ${errorMsg}`);
-      throw new Error(errorMsg);
+    if (distillationCheck.rows.length === 0) {
+      throw new Error(`蒸馏结果ID ${distillationId} 不存在`);
     }
     
-    // 查询并选择蒸馏结果（需求 1.1, 1.2, 1.5）
-    // 按usage_count升序、created_at升序排序，选择前N个
-    const result = await pool.query(
-      `SELECT d.id
-       FROM distillations d
-       INNER JOIN topics t ON d.id = t.distillation_id
-       GROUP BY d.id, d.usage_count, d.created_at
-       HAVING COUNT(t.id) > 0
-       ORDER BY d.usage_count ASC, d.created_at ASC
-       LIMIT $1`,
-      [requestedCount]
+    const keyword = distillationCheck.rows[0].keyword;
+    console.log(`[智能选择] 蒸馏结果: ID=${distillationId}, 关键词="${keyword}"`);
+    
+    // 查询该蒸馏结果有多少个话题
+    const topicCountResult = await pool.query(
+      'SELECT COUNT(*) as count FROM topics WHERE distillation_id = $1',
+      [distillationId]
     );
     
-    // 处理空结果情况
-    if (result.rows.length === 0) {
-      const errorMsg = '没有找到任何有话题的蒸馏结果';
-      console.error(`[智能选择] ${errorMsg}`);
-      throw new Error(errorMsg);
+    const topicCount = parseInt(topicCountResult.rows[0].count);
+    console.log(`[智能选择] 该蒸馏结果有 ${topicCount} 个话题`);
+    
+    // 验证话题数量是否充足
+    if (topicCount === 0) {
+      throw new Error(`蒸馏结果"${keyword}"没有话题，无法生成文章`);
     }
     
-    const selectedIds = result.rows.map((row: any) => row.id);
-    console.log(`[智能选择] 成功选择 ${selectedIds.length} 个蒸馏结果: [${selectedIds.join(', ')}]`);
+    if (topicCount < requestedCount) {
+      console.warn(`[智能选择] 警告：话题数量(${topicCount})少于请求数量(${requestedCount})，部分话题会被重复使用`);
+    }
+    
+    // 返回重复的distillationId数组
+    const selectedIds = Array(requestedCount).fill(distillationId);
+    console.log(`[智能选择] 将为关键词"${keyword}"生成 ${requestedCount} 篇文章，使用不同的话题`);
     
     return selectedIds;
   }
@@ -1123,11 +1164,71 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 在事务中保存文章并记录使用
+   * 在事务中保存文章并记录使用（包含话题追踪）
    * 1. 保存文章
-   * 2. 创建使用记录
-   * 3. 更新usage_count
-   * 4. 如果任何步骤失败，回滚整个事务
+   * 2. 创建蒸馏使用记录
+   * 3. 创建话题使用记录
+   * 4. 更新蒸馏usage_count
+   * 5. 更新话题usage_count
+   * 6. 如果任何步骤失败，回滚整个事务
+   */
+  private async saveArticleWithTopicTracking(
+    taskId: number,
+    distillationId: number,
+    topicId: number,
+    keyword: string,
+    title: string,
+    content: string,
+    imageUrl: string,
+    provider: string
+  ): Promise<number> {
+    const client = await pool.connect();
+    const topicService = new TopicSelectionService();
+    
+    try {
+      await client.query('BEGIN');
+      console.log(`[保存文章] 事务开始`);
+
+      // 1. 保存文章（包含topic_id）
+      const articleResult = await client.query(
+        `INSERT INTO articles 
+         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         RETURNING id`,
+        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider]
+      );
+
+      const articleId = articleResult.rows[0].id;
+      console.log(`[保存文章] 文章已插入，ID: ${articleId}, topic_id: ${topicId}`);
+
+      // 2. 创建蒸馏使用记录
+      await this.recordDistillationUsage(distillationId, taskId, articleId, client);
+      console.log(`[保存文章] 蒸馏使用记录已创建`);
+
+      // 3. 创建话题使用记录并更新话题usage_count
+      await topicService.recordTopicUsage(topicId, distillationId, articleId, taskId, client);
+      console.log(`[保存文章] 话题使用记录已创建，话题usage_count已更新`);
+
+      // 4. 更新蒸馏usage_count
+      await this.incrementUsageCount(distillationId, client);
+      console.log(`[保存文章] 蒸馏usage_count已更新`);
+
+      await client.query('COMMIT');
+      console.log(`[保存文章] 事务提交成功`);
+
+      return articleId;
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error(`[保存文章] 事务回滚，错误: ${error.message}`);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 在事务中保存文章并记录使用（旧版，保留用于向后兼容）
+   * @deprecated 使用 saveArticleWithTopicTracking 代替
    */
   private async saveArticleWithUsageTracking(
     taskId: number,
@@ -1141,16 +1242,7 @@ export class ArticleGenerationService {
     const client = await pool.connect();
     
     try {
-      // 查询更新前的usage_count
-      const beforeResult = await client.query(
-        'SELECT usage_count FROM distillations WHERE id = $1',
-        [distillationId]
-      );
-      const usageCountBefore = beforeResult.rows[0]?.usage_count || 0;
-      console.log(`[保存文章] 蒸馏结果ID ${distillationId} 当前usage_count: ${usageCountBefore}`);
-      
       await client.query('BEGIN');
-      console.log(`[保存文章] 事务开始`);
 
       // 1. 保存文章
       const articleResult = await client.query(
@@ -1162,31 +1254,18 @@ export class ArticleGenerationService {
       );
 
       const articleId = articleResult.rows[0].id;
-      console.log(`[保存文章] 文章已插入，ID: ${articleId}`);
 
       // 2. 创建使用记录
       await this.recordDistillationUsage(distillationId, taskId, articleId, client);
-      console.log(`[保存文章] 使用记录已创建: distillation_id=${distillationId}, task_id=${taskId}, article_id=${articleId}`);
 
       // 3. 更新usage_count
       await this.incrementUsageCount(distillationId, client);
-      console.log(`[保存文章] usage_count已更新（+1）`);
 
       await client.query('COMMIT');
-      console.log(`[保存文章] 事务提交成功`);
-      
-      // 验证更新后的usage_count
-      const afterResult = await client.query(
-        'SELECT usage_count FROM distillations WHERE id = $1',
-        [distillationId]
-      );
-      const usageCountAfter = afterResult.rows[0]?.usage_count || 0;
-      console.log(`[保存文章] 蒸馏结果ID ${distillationId} 更新后usage_count: ${usageCountAfter} (增加了 ${usageCountAfter - usageCountBefore})`);
 
       return articleId;
     } catch (error: any) {
       await client.query('ROLLBACK');
-      console.error(`[保存文章] 事务回滚，错误: ${error.message}`);
       throw error;
     } finally {
       client.release();

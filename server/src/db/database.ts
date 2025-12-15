@@ -154,13 +154,10 @@ export async function getTopicsWithReferences(
       t.created_at,
       d.keyword,
       d.provider,
-      COUNT(DISTINCT a.id) as reference_count
+      t.usage_count as reference_count
     FROM topics t
     LEFT JOIN distillations d ON t.distillation_id = d.id
-    LEFT JOIN articles a ON a.distillation_id = t.distillation_id 
-      AND a.content LIKE '%' || t.question || '%'
     ${whereClause}
-    GROUP BY t.id, t.distillation_id, t.question, t.created_at, d.keyword, d.provider
     ORDER BY t.created_at DESC
     LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
   `;
@@ -228,11 +225,9 @@ export async function getTopicsStatistics(
     SELECT 
       COUNT(DISTINCT t.id) as total_topics,
       COUNT(DISTINCT d.keyword) as total_keywords,
-      COUNT(DISTINCT a.id) as total_references
+      SUM(t.usage_count) as total_references
     FROM topics t
     LEFT JOIN distillations d ON t.distillation_id = d.id
-    LEFT JOIN articles a ON a.distillation_id = t.distillation_id 
-      AND a.content LIKE '%' || t.question || '%'
     ${whereClause}
   `;
 
