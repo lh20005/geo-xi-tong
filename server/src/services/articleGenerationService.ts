@@ -2,6 +2,7 @@ import { pool } from '../db/database';
 import { AIService } from './aiService';
 import { ContentCleaner } from './contentCleaner';
 import { TopicSelectionService } from './topicSelectionService';
+import { ImageSelectionService } from './imageSelectionService';
 
 export interface TaskConfig {
   distillationId: number;
@@ -79,7 +80,7 @@ export class ArticleGenerationService {
     }
     
     // 1. 获取唯一的蒸馏结果ID
-    const uniqueIds = [...new Set(distillationIds)];
+    const uniqueIds = Array.from(new Set(distillationIds));
     console.log(`[批量加载] 唯一的蒸馏结果ID: [${uniqueIds.join(', ')}]`);
     
     // 2. 批量查询蒸馏结果的关键词
@@ -494,9 +495,28 @@ export class ArticleGenerationService {
         console.log(`[任务 ${taskId}] [文章 ${i + 1}] 使用蒸馏结果: ID=${distillationId}, 关键词="${distillationData.keyword}", 话题ID=${distillationData.topicId}, 话题="${distillationData.topic.substring(0, 30)}..."`);
 
         try {
-          // 从图库随机选择图片
-          const imageUrl = await this.selectRandomImage(task.albumId);
-          console.log(`[任务 ${taskId}] 选择图片: ${imageUrl}`);
+          // 从图库均衡选择图片（使用次数最少的优先）
+          let imageUrl: string;
+          let imageId: number | undefined;
+          
+          try {
+            const imageData = await this.selectBalancedImage(task.albumId);
+            
+            if (imageData) {
+              imageUrl = imageData.imageUrl;
+              imageId = imageData.imageId;
+              console.log(`[任务 ${taskId}] [文章 ${i + 1}] 选择图片: ID=${imageId}, URL=${imageUrl}`);
+            } else {
+              // 如果图库为空，使用默认占位图片
+              imageUrl = '/uploads/gallery/placeholder.png';
+              console.log(`[任务 ${taskId}] [文章 ${i + 1}] 图库为空，使用默认占位图片`);
+            }
+          } catch (imageError: any) {
+            // 图片选择失败，使用默认图片继续执行
+            console.error(`[任务 ${taskId}] [文章 ${i + 1}] 图片选择失败:`, imageError.message);
+            imageUrl = '/uploads/gallery/placeholder.png';
+            console.log(`[任务 ${taskId}] [文章 ${i + 1}] 使用默认占位图片继续执行`);
+          }
 
           // 生成单篇文章（使用单个话题）
           const result = await this.generateSingleArticle(
@@ -511,7 +531,7 @@ export class ArticleGenerationService {
           if (result.success && result.title && result.content) {
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章生成成功，标题: ${result.title}`);
 
-            // 5. 保存文章并记录使用（包括话题使用记录）
+            // 5. 保存文章并记录使用（包括话题使用记录和图片使用记录）
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 开始保存文章并更新usage_count...`);
             const articleId = await this.saveArticleWithTopicTracking(
               taskId,
@@ -521,9 +541,10 @@ export class ArticleGenerationService {
               result.title,
               result.content,
               imageUrl,
-              aiConfig.provider
+              aiConfig.provider,
+              imageId
             );
-            console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章保存成功，ID: ${articleId}，话题ID: ${distillationData.topicId} 的usage_count已更新`);
+            console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章保存成功，ID: ${articleId}，话题ID: ${distillationData.topicId} 的usage_count已更新${imageId ? `，图片ID: ${imageId} 的usage_count已更新` : ''}`);
 
             generatedCount++;
 
@@ -604,9 +625,28 @@ export class ArticleGenerationService {
       const pair = keywordTopicPairs[i];
 
       try {
-        // 从图库随机选择图片
-        const imageUrl = await this.selectRandomImage(task.albumId);
-        console.log(`[任务 ${taskId}] 选择图片: ${imageUrl}`);
+        // 从图库均衡选择图片（使用次数最少的优先）
+        let imageUrl: string;
+        let imageId: number | undefined;
+        
+        try {
+          const imageData = await this.selectBalancedImage(task.albumId);
+          
+          if (imageData) {
+            imageUrl = imageData.imageUrl;
+            imageId = imageData.imageId;
+            console.log(`[任务 ${taskId}] 选择图片: ID=${imageId}, URL=${imageUrl}`);
+          } else {
+            // 如果图库为空，使用默认占位图片
+            imageUrl = '/uploads/gallery/placeholder.png';
+            console.log(`[任务 ${taskId}] 图库为空，使用默认占位图片`);
+          }
+        } catch (imageError: any) {
+          // 图片选择失败，使用默认图片继续执行
+          console.error(`[任务 ${taskId}] 图片选择失败:`, imageError.message);
+          imageUrl = '/uploads/gallery/placeholder.png';
+          console.log(`[任务 ${taskId}] 使用默认占位图片继续执行`);
+        }
 
         // 生成单篇文章
         const result = await this.generateSingleArticle(
@@ -629,9 +669,10 @@ export class ArticleGenerationService {
             result.title,
             result.content,
             imageUrl,
-            aiConfig.provider
+            aiConfig.provider,
+            imageId
           );
-          console.log(`[任务 ${taskId}] 文章保存成功，ID: ${articleId}`);
+          console.log(`[任务 ${taskId}] 文章保存成功，ID: ${articleId}${imageId ? `，图片ID: ${imageId} 的usage_count已更新` : ''}`);
 
           generatedCount++;
 
@@ -697,7 +738,31 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 从图库随机选择图片
+   * 从图库均衡选择图片（使用次数最少的优先）
+   * 
+   * 新逻辑：
+   * 1. 选择使用次数最少的图片
+   * 2. 如果有多张图片使用次数相同，按创建时间升序选择
+   * 3. 返回图片ID和路径，供后续记录使用
+   */
+  async selectBalancedImage(albumId: number): Promise<{ imageId: number; imageUrl: string } | null> {
+    const imageService = new ImageSelectionService();
+    const imageData = await imageService.selectLeastUsedImage(albumId);
+    
+    if (!imageData) {
+      console.log(`[图片选择] 相册 ${albumId} 为空，返回null`);
+      return null;
+    }
+    
+    return {
+      imageId: imageData.imageId,
+      imageUrl: `/uploads/gallery/${imageData.filepath}`
+    };
+  }
+
+  /**
+   * 从图库随机选择图片（旧方法，保留用于向后兼容）
+   * @deprecated 请使用 selectBalancedImage 实现均衡选择
    */
   async selectRandomImage(albumId: number): Promise<string> {
     const result = await pool.query(
@@ -1168,7 +1233,8 @@ export class ArticleGenerationService {
     title: string,
     content: string,
     imageUrl: string,
-    provider: string
+    provider: string,
+    imageId?: number
   ): Promise<number> {
     const client = await pool.connect();
     const topicService = new TopicSelectionService();
@@ -1201,6 +1267,25 @@ export class ArticleGenerationService {
       await this.incrementUsageCount(distillationId, client);
       console.log(`[保存文章] 蒸馏usage_count已更新`);
 
+      // 5. 如果提供了imageId，记录图片使用并更新usage_count
+      if (imageId) {
+        await client.query(
+          `UPDATE images 
+           SET usage_count = COALESCE(usage_count, 0) + 1 
+           WHERE id = $1`,
+          [imageId]
+        );
+        
+        await client.query(
+          `INSERT INTO image_usage (image_id, article_id)
+           VALUES ($1, $2)
+           ON CONFLICT (image_id, article_id) DO NOTHING`,
+          [imageId, articleId]
+        );
+        
+        console.log(`[保存文章] 图片 ${imageId} 的usage_count已更新`);
+      }
+
       await client.query('COMMIT');
       console.log(`[保存文章] 事务提交成功`);
 
@@ -1225,7 +1310,8 @@ export class ArticleGenerationService {
     title: string,
     content: string,
     imageUrl: string,
-    provider: string
+    provider: string,
+    imageId?: number
   ): Promise<number> {
     const client = await pool.connect();
     
@@ -1248,6 +1334,23 @@ export class ArticleGenerationService {
 
       // 3. 更新usage_count
       await this.incrementUsageCount(distillationId, client);
+
+      // 4. 如果提供了imageId，记录图片使用并更新usage_count
+      if (imageId) {
+        await client.query(
+          `UPDATE images 
+           SET usage_count = COALESCE(usage_count, 0) + 1 
+           WHERE id = $1`,
+          [imageId]
+        );
+        
+        await client.query(
+          `INSERT INTO image_usage (image_id, article_id)
+           VALUES ($1, $2)
+           ON CONFLICT (image_id, article_id) DO NOTHING`,
+          [imageId, articleId]
+        );
+      }
 
       await client.query('COMMIT');
 

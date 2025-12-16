@@ -14,6 +14,7 @@ import {
   CheckCircleOutlined,
   SyncOutlined
 } from '@ant-design/icons';
+import axios from 'axios';
 import TaskConfigModal from '../components/TaskConfigModal';
 import { 
   createTask, 
@@ -181,15 +182,25 @@ export default function ArticleGenerationPage() {
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
-  // 删除单个任务
-  const handleDeleteTask = async (taskId: number, taskStatus: string) => {
-    if (taskStatus === 'running') {
-      message.warning('无法删除正在运行的任务');
-      return;
-    }
-
+  // 终止任务
+  const handleCancelTask = async (taskId: number) => {
     try {
       setDeleting(true);
+      await axios.post(`/api/article-generation/tasks/${taskId}/cancel`);
+      message.success('任务已终止');
+      loadTasks();
+    } catch (error: any) {
+      message.error(error.response?.data?.error || '终止任务失败');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // 删除单个任务（包括运行中的任务）
+  const handleDeleteTask = async (taskId: number, taskStatus: string) => {
+    try {
+      setDeleting(true);
+      // 如果是运行中的任务，会先终止再删除
       await deleteTask(taskId);
       message.success('任务已删除');
       setSelectedRowKeys(selectedRowKeys.filter(key => key !== taskId));
@@ -212,15 +223,14 @@ export default function ArticleGenerationPage() {
     const selectedTasks = tasks.filter(task => selectedRowKeys.includes(task.id));
     const runningTasks = selectedTasks.filter(task => task.status === 'running');
 
-    if (runningTasks.length > 0) {
-      message.warning(`无法删除正在运行的任务（任务ID: ${runningTasks.map(t => t.id).join(', ')}）`);
-      return;
-    }
+    const warningMessage = runningTasks.length > 0 
+      ? `选中的任务中有 ${runningTasks.length} 个正在运行，将被终止并删除。确定要继续吗？`
+      : `确定要删除选中的 ${selectedRowKeys.length} 个任务吗？此操作不可恢复。`;
 
     Modal.confirm({
       title: '确认批量删除',
       icon: <ExclamationCircleOutlined />,
-      content: `确定要删除选中的 ${selectedRowKeys.length} 个任务吗？此操作不可恢复。`,
+      content: warningMessage,
       okText: '确认删除',
       okType: 'danger',
       cancelText: '取消',
@@ -418,32 +428,54 @@ export default function ArticleGenerationPage() {
     {
       title: '操作',
       key: 'action',
-      width: 100,
+      width: 150,
       align: 'center' as const,
       fixed: 'right' as const,
       render: (_: any, record: GenerationTask) => (
-        <Popconfirm
-          title="确认删除"
-          description={`确定要删除任务 #${record.id} 吗？`}
-          onConfirm={() => handleDeleteTask(record.id, record.status)}
-          okText="删除"
-          cancelText="取消"
-          okButtonProps={{ danger: true }}
-          disabled={record.status === 'running'}
-        >
-          <Tooltip title={record.status === 'running' ? '正在运行的任务无法删除' : '删除任务'}>
-            <Button
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              size="small"
-              disabled={record.status === 'running'}
-              loading={deleting}
+        <Space size="small">
+          {(record.status === 'running' || record.status === 'pending') && (
+            <Popconfirm
+              title="确认终止"
+              description={`确定要终止任务 #${record.id} 吗？`}
+              onConfirm={() => handleCancelTask(record.id)}
+              okText="终止"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
             >
-              删除
-            </Button>
-          </Tooltip>
-        </Popconfirm>
+              <Tooltip title="终止任务">
+                <Button
+                  type="text"
+                  danger
+                  icon={<ExclamationCircleOutlined />}
+                  size="small"
+                  loading={deleting}
+                >
+                  终止
+                </Button>
+              </Tooltip>
+            </Popconfirm>
+          )}
+          <Popconfirm
+            title="确认删除"
+            description={`确定要删除任务 #${record.id} 吗？${record.status === 'running' ? ' 任务将被终止并删除。' : ''}`}
+            onConfirm={() => handleDeleteTask(record.id, record.status)}
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+          >
+            <Tooltip title="删除任务">
+              <Button
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                size="small"
+                loading={deleting}
+              >
+                删除
+              </Button>
+            </Tooltip>
+          </Popconfirm>
+        </Space>
       )
     }
   ];

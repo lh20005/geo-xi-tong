@@ -266,10 +266,10 @@ articleGenerationRouter.post('/tasks/:id/retry', async (req, res) => {
 });
 
 /**
- * 删除单个任务
- * DELETE /api/article-generation/tasks/:id
+ * 终止正在运行的任务
+ * POST /api/article-generation/tasks/:id/cancel
  */
-articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
+articleGenerationRouter.post('/tasks/:id/cancel', async (req, res) => {
   try {
     const taskId = parseInt(req.params.id);
 
@@ -283,9 +283,48 @@ articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
       return res.status(404).json({ error: '任务不存在' });
     }
 
-    // 不允许删除正在运行的任务
-    if (task.status === 'running') {
-      return res.status(400).json({ error: '无法删除正在运行的任务，请等待任务完成或失败后再删除' });
+    // 只能终止运行中或待处理的任务
+    if (task.status !== 'running' && task.status !== 'pending') {
+      return res.status(400).json({ error: `任务状态为 ${task.status}，无法终止` });
+    }
+
+    // 将任务标记为失败
+    await service.updateTaskStatus(taskId, 'failed', task.generatedCount, '任务已被用户终止');
+
+    res.json({
+      success: true,
+      message: '任务已终止',
+      taskId
+    });
+  } catch (error: any) {
+    console.error('终止任务错误:', error);
+    res.status(500).json({ error: '终止任务失败', details: error.message });
+  }
+});
+
+/**
+ * 删除单个任务（包括运行中的任务）
+ * DELETE /api/article-generation/tasks/:id
+ */
+articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
+  try {
+    const taskId = parseInt(req.params.id);
+    const { force } = req.query; // 支持强制删除
+
+    if (isNaN(taskId) || taskId <= 0) {
+      return res.status(400).json({ error: '无效的任务ID' });
+    }
+
+    // 检查任务是否存在
+    const task = await service.getTaskDetail(taskId);
+    if (!task) {
+      return res.status(404).json({ error: '任务不存在' });
+    }
+
+    // 如果任务正在运行，需要先终止
+    if (task.status === 'running' && force !== 'true') {
+      // 先终止任务
+      await service.updateTaskStatus(taskId, 'failed', task.generatedCount, '任务已被用户终止');
     }
 
     // 删除任务（会级联删除关联的文章）

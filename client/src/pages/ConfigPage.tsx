@@ -1,7 +1,190 @@
 import { useState, useEffect } from 'react';
-import { Card, Form, Select, Input, Button, message, Space, Alert, Spin } from 'antd';
+import { Card, Form, Select, Input, Button, message, Space, Alert, Spin, Tabs, InputNumber } from 'antd';
 import { ApiOutlined, CheckCircleOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import axios from 'axios';
+
+const { TextArea } = Input;
+
+// 关键词蒸馏配置组件
+function DistillationConfigTab() {
+  const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
+  const [currentConfig, setCurrentConfig] = useState<any>(null);
+
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  const loadConfig = async () => {
+    try {
+      const response = await axios.get('/api/config/distillation');
+      setCurrentConfig(response.data);
+      if (response.data.configured) {
+        form.setFieldsValue({
+          prompt: response.data.prompt,
+          topicCount: response.data.topicCount
+        });
+      } else {
+        // 设置默认值
+        form.setFieldsValue({
+          prompt: response.data.prompt,
+          topicCount: response.data.topicCount
+        });
+      }
+    } catch (error) {
+      console.error('加载配置失败:', error);
+      message.error('加载配置失败');
+    }
+  };
+
+  const handleSubmit = async (values: any) => {
+    setLoading(true);
+    try {
+      await axios.post('/api/config/distillation', values);
+      message.success('关键词蒸馏配置保存成功！');
+      loadConfig();
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || '保存配置失败';
+      message.error(errorMsg);
+      console.error('保存配置错误:', error.response?.data || error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (currentConfig) {
+      form.setFieldsValue({
+        prompt: currentConfig.prompt,
+        topicCount: currentConfig.topicCount
+      });
+    }
+  };
+
+  return (
+    <div style={{ padding: '24px 0' }}>
+      {currentConfig?.configured && (
+        <Alert
+          message="当前配置"
+          description={`已配置关键词蒸馏 - 生成话题数量: ${currentConfig.topicCount}个`}
+          type="success"
+          icon={<CheckCircleOutlined />}
+          showIcon
+          style={{ marginBottom: 24 }}
+        />
+      )}
+
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={handleSubmit}
+        autoComplete="off"
+      >
+        <Form.Item
+          label="关键词蒸馏提示词"
+          name="prompt"
+          rules={[
+            { required: true, message: '请输入关键词蒸馏提示词' },
+            {
+              validator: (_, value) => {
+                if (!value) return Promise.resolve();
+                if (!value.includes('{keyword}')) {
+                  return Promise.reject(new Error('提示词必须包含 {keyword} 占位符'));
+                }
+                if (!value.includes('{count}')) {
+                  return Promise.reject(new Error('提示词必须包含 {count} 占位符'));
+                }
+                return Promise.resolve();
+              }
+            }
+          ]}
+          extra={
+            <div style={{ marginTop: 8 }}>
+              <div>提示词中必须包含以下占位符：</div>
+              <div style={{ color: '#1890ff', marginTop: 4 }}>
+                • <code>{'{keyword}'}</code> - 将被替换为用户输入的关键词
+              </div>
+              <div style={{ color: '#1890ff' }}>
+                • <code>{'{count}'}</code> - 将被替换为生成话题数量
+              </div>
+            </div>
+          }
+        >
+          <TextArea
+            rows={12}
+            placeholder="请输入关键词蒸馏提示词..."
+            style={{ fontFamily: 'monospace' }}
+          />
+        </Form.Item>
+
+        <Form.Item
+          label="生成话题数量"
+          name="topicCount"
+          rules={[
+            { required: true, message: '请输入生成话题数量' },
+            { type: 'number', min: 5, max: 30, message: '数量必须在5-30之间' }
+          ]}
+          extra="每次蒸馏生成的话题数量，建议10-15个"
+        >
+          <InputNumber
+            min={5}
+            max={30}
+            style={{ width: 200 }}
+            placeholder="请输入数量"
+          />
+        </Form.Item>
+
+        <Form.Item>
+          <Space>
+            <Button
+              type="primary"
+              htmlType="submit"
+              size="large"
+              loading={loading}
+              icon={<CheckCircleOutlined />}
+            >
+              保存配置
+            </Button>
+            <Button size="large" onClick={handleReset}>
+              重置
+            </Button>
+          </Space>
+        </Form.Item>
+      </Form>
+
+      <Card
+        type="inner"
+        title="配置说明"
+        style={{ marginTop: 24, background: '#f8fafc' }}
+      >
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <div>
+            <strong>关键词蒸馏提示词：</strong>
+            <br />
+            这是发送给AI大模型的指令，用于指导AI如何根据关键词生成相关话题。
+            提示词中的 <code>{'{keyword}'}</code> 会被替换为实际的关键词，
+            <code>{'{count}'}</code> 会被替换为生成话题数量。
+          </div>
+          <div>
+            <strong>生成话题数量：</strong>
+            <br />
+            控制每次蒸馏生成多少个话题。数量越多，覆盖的搜索意图越广泛，
+            但也会增加AI处理时间。建议设置为10-15个。
+          </div>
+          <div>
+            <strong>使用建议：</strong>
+            <br />
+            • 提示词应该清晰地说明生成话题的要求和格式
+            <br />
+            • 可以在提示词中加入示例，帮助AI理解期望的输出格式
+            <br />
+            • 修改配置后，新的蒸馏任务会立即使用新配置
+          </div>
+        </Space>
+      </Card>
+    </div>
+  );
+}
 
 export default function ConfigPage() {
   const [form] = Form.useForm();
@@ -113,14 +296,22 @@ export default function ConfigPage() {
   return (
     <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
       <Card
-        title={
-          <Space>
-            <ApiOutlined style={{ color: '#0ea5e9' }} />
-            <span>AI API 配置</span>
-          </Space>
-        }
+        title="系统配置"
         bordered={false}
       >
+        <Tabs
+          defaultActiveKey="api"
+          items={[
+            {
+              key: 'api',
+              label: (
+                <Space>
+                  <ApiOutlined />
+                  <span>AI API配置</span>
+                </Space>
+              ),
+              children: (
+                <div>
         {currentConfig?.configured && (
           <Alert
             message="当前配置"
@@ -298,6 +489,21 @@ export default function ConfigPage() {
             )}
           </Space>
         </Card>
+                </div>
+              ),
+            },
+            {
+              key: 'distillation',
+              label: (
+                <Space>
+                  <ThunderboltOutlined />
+                  <span>关键词蒸馏配置</span>
+                </Space>
+              ),
+              children: <DistillationConfigTab />,
+            },
+          ]}
+        />
       </Card>
     </div>
   );

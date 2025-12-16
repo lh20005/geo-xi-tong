@@ -68,7 +68,7 @@ export default function Sidebar() {
     {
       key: '/config',
       icon: <SettingOutlined />,
-      label: 'API配置',
+      label: '系统配置',
     },
   ];
 

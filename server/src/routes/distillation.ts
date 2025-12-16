@@ -26,6 +26,19 @@ distillationRouter.post('/', async (req, res) => {
     
     const { provider, api_key, ollama_base_url, ollama_model } = configResult.rows[0];
     
+    // 获取关键词蒸馏配置
+    const distillConfigResult = await pool.query(
+      'SELECT prompt, topic_count FROM distillation_config WHERE is_active = true LIMIT 1'
+    );
+    
+    let promptTemplate: string | undefined;
+    let topicCount: number | undefined;
+    
+    if (distillConfigResult.rows.length > 0) {
+      promptTemplate = distillConfigResult.rows[0].prompt;
+      topicCount = distillConfigResult.rows[0].topic_count;
+    }
+    
     // 创建AI服务实例
     const aiService = new AIService({
       provider,
@@ -34,8 +47,8 @@ distillationRouter.post('/', async (req, res) => {
       ollamaModel: ollama_model
     });
     
-    // 执行蒸馏
-    const questions = await aiService.distillKeyword(keyword);
+    // 执行蒸馏（使用配置的prompt和数量）
+    const questions = await aiService.distillKeyword(keyword, promptTemplate, topicCount);
     
     // 保存蒸馏记录
     const distillationResult = await pool.query(

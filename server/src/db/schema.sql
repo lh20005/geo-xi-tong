@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS images (
   filepath VARCHAR(500) NOT NULL,
   mime_type VARCHAR(50) NOT NULL,
   size INTEGER NOT NULL,
+  usage_count INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -99,6 +100,16 @@ CREATE TABLE IF NOT EXISTS conversion_targets (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT unique_company_name UNIQUE (company_name)
+);
+
+-- 关键词蒸馏配置表
+CREATE TABLE IF NOT EXISTS distillation_config (
+  id SERIAL PRIMARY KEY,
+  prompt TEXT NOT NULL,
+  topic_count INTEGER NOT NULL DEFAULT 12 CHECK (topic_count >= 5 AND topic_count <= 30),
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 文章设置表
@@ -150,3 +161,18 @@ CREATE INDEX IF NOT EXISTS idx_article_settings_created_at ON article_settings(c
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_status ON generation_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_created_at ON generation_tasks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_conversion_target ON generation_tasks(conversion_target_id);
+CREATE INDEX IF NOT EXISTS idx_distillation_config_active ON distillation_config(is_active);
+
+-- 图片使用追踪表
+CREATE TABLE IF NOT EXISTS image_usage (
+  id SERIAL PRIMARY KEY,
+  image_id INTEGER NOT NULL REFERENCES images(id) ON DELETE CASCADE,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(image_id, article_id)
+);
+
+-- 图片使用追踪索引
+CREATE INDEX IF NOT EXISTS idx_images_usage_count ON images(album_id, usage_count ASC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_image_usage_image_id ON image_usage(image_id);
+CREATE INDEX IF NOT EXISTS idx_image_usage_article_id ON image_usage(article_id);

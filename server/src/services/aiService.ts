@@ -34,9 +34,17 @@ export class AIService {
 
   /**
    * 关键词蒸馏 - 生成真实用户提问
+   * @param keyword 关键词
+   * @param promptTemplate 提示词模板（可选，如果不提供则使用默认模板）
+   * @param topicCount 生成话题数量（可选，如果不提供则使用默认值12）
    */
-  async distillKeyword(keyword: string): Promise<string[]> {
-    const prompt = `你是一个专业的搜索行为分析专家。请根据关键词"${keyword}"，生成10-15个真实用户在互联网搜索时可能提出的问题。
+  async distillKeyword(
+    keyword: string, 
+    promptTemplate?: string, 
+    topicCount?: number
+  ): Promise<string[]> {
+    // 使用提供的模板或默认模板
+    const template = promptTemplate || `你是一个专业的搜索行为分析专家。请根据关键词"{keyword}"，生成{count}个真实用户在互联网搜索时可能提出的问题。
 
 要求：
 1. 问题要符合真实用户的搜索习惯
@@ -52,6 +60,14 @@ export class AIService {
 - 专业的英国留学服务商哪家专业
 
 请直接返回问题列表，每行一个问题，不要编号，不要其他说明文字。`;
+
+    // 使用提供的数量或默认值
+    const count = topicCount || 12;
+    
+    // 替换模板中的占位符
+    const prompt = template
+      .replace(/\{keyword\}/g, keyword)
+      .replace(/\{count\}/g, count.toString());
 
     const response = await this.callAI(prompt);
     const questions = response
