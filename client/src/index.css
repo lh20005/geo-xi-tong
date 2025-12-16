@@ -20,3 +20,15 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* 分页组件居中显示 */
+.ant-table-pagination {
+  display: flex !important;
+  justify-content: center !important;
+  margin-top: 16px !important;
+}
+
+/* 表头文字居中显示 */
+.ant-table-thead > tr > th {
+  text-align: center !important;
+}

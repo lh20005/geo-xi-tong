@@ -161,6 +161,7 @@ export default function KnowledgeBaseDetailPage() {
       title: '文件名',
       dataIndex: 'filename',
       key: 'filename',
+      align: 'center' as const,
       render: (text: string, record: KnowledgeDocument) => (
         <Space>
           <FileTextOutlined style={{ color: '#1890ff' }} />
@@ -174,12 +175,14 @@ export default function KnowledgeBaseDetailPage() {
       dataIndex: 'file_size',
       key: 'file_size',
       width: 120,
+      align: 'center' as const,
       render: (size: number) => formatFileSize(size),
     },
     {
       title: '内容预览',
       dataIndex: 'content_preview',
       key: 'content_preview',
+      align: 'center' as const,
       ellipsis: true,
       render: (text: string) => (
         <Tooltip title={text}>
@@ -192,12 +195,14 @@ export default function KnowledgeBaseDetailPage() {
       dataIndex: 'created_at',
       key: 'created_at',
       width: 180,
+      align: 'center' as const,
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
       width: 150,
+      align: 'center' as const,
       render: (_: any, record: KnowledgeDocument) => (
         <Space size="small">
           <Button

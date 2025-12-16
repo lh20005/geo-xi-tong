@@ -189,50 +189,51 @@ export default function DistillationPage() {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',
-      render: (text: string) => <Tag color="blue">{text}</Tag>,
+      width: '25%',
+      align: 'center' as const,
+      render: (text: string) => <Tag color="blue" style={{ fontSize: 14 }}>{text}</Tag>,
     },
     {
       title: '话题数量',
       dataIndex: 'topic_count',
       key: 'topic_count',
-    },
-    {
-      title: 'AI模型',
-      dataIndex: 'provider',
-      key: 'provider',
-      render: (text: string) => (
-        <Tag color={text === 'deepseek' ? 'purple' : text === 'ollama' ? 'orange' : 'green'}>
-          {text === 'deepseek' ? 'DeepSeek' : text === 'ollama' ? 'Ollama' : 'Gemini'}
-        </Tag>
+      width: '15%',
+      align: 'center' as const,
+      render: (count: number) => (
+        <span style={{ fontSize: 14, fontWeight: 500, color: '#0ea5e9' }}>{count}</span>
       ),
     },
     {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      render: (text: string) => new Date(text).toLocaleString('zh-CN'),
+      width: '25%',
+      align: 'center' as const,
+      render: (text: string) => (
+        <span style={{ fontSize: 14 }}>{new Date(text).toLocaleString('zh-CN')}</span>
+      ),
     },
     {
       title: '操作',
       key: 'action',
+      width: '35%',
+      align: 'center' as const,
       render: (_: any, record: any) => (
-        <Space>
+        <Space size="middle">
           <Button
-            type="link"
+            type="primary"
             icon={<EyeOutlined />}
             onClick={() => handleViewHistory(record)}
           >
             查看详情
           </Button>
           <Button
-            type="link"
             icon={<EditOutlined />}
             onClick={() => handleEditKeyword(record.id, record.keyword)}
           >
             编辑
           </Button>
           <Button
-            type="link"
             danger
             icon={<DeleteOutlined />}
             onClick={() => handleDeleteRecord(record.id)}
@@ -279,12 +280,6 @@ export default function DistillationPage() {
             开始蒸馏
           </Button>
         </Space.Compact>
-
-        <div style={{ marginTop: 24, padding: 16, background: '#f8fafc', borderRadius: 8 }}>
-          <Paragraph style={{ margin: 0, color: '#64748b' }}>
-            💡 蒸馏完成后，系统将自动跳转到结果页面查看生成的话题
-          </Paragraph>
-        </div>
       </Card>
 
       <Card
@@ -314,7 +309,13 @@ export default function DistillationPage() {
           columns={columns}
           dataSource={history}
           rowKey="id"
-          pagination={{ pageSize: 10 }}
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条记录`,
+            pageSizeOptions: ['10', '20', '50', '100']
+          }}
           locale={{
             emptyText: (
               <Empty

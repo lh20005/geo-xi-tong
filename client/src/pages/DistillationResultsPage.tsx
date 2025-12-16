@@ -1,14 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Button, message, Space, Table, Tag, Modal, Empty, 
-  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert 
+  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Form, Popconfirm 
 } from 'antd';
 import { 
   FileTextOutlined, DeleteOutlined, ThunderboltOutlined, 
-  SearchOutlined, FilterOutlined, ReloadOutlined 
+  SearchOutlined, FilterOutlined, ReloadOutlined, PlusOutlined,
+  ExclamationCircleOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { fetchResultsWithReferences, fetchAllKeywords, deleteTopics } from '../api/distillationResultsApi';
+import { 
+  fetchResultsWithReferences, 
+  fetchAllKeywords, 
+  deleteTopics, 
+  createManualDistillation,
+  deleteTopicsByKeyword
+} from '../api/distillationResultsApi';
 import { TopicWithReference, Statistics } from '../types/distillationResults';
 
 const { Search } = Input;
@@ -35,6 +42,11 @@ export default function DistillationResultsPage() {
   const [searchInput, setSearchInput] = useState(''); // 用于输入框的即时值
   const [allKeywords, setAllKeywords] = useState<string[]>([]); // 所有关键词
   const [isSearchMode, setIsSearchMode] = useState(false); // 是否处于搜索模式
+  
+  // 手动输入对话框状态
+  const [isManualModalVisible, setIsManualModalVisible] = useState(false);
+  const [manualForm] = Form.useForm();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // 独立加载所有关键词
   const loadAllKeywords = async () => {
@@ -192,6 +204,104 @@ export default function DistillationResultsPage() {
   // 计算是否有活动的筛选条件
   const hasActiveFilters = filterKeyword || filterProvider || searchText;
 
+  // 打开手动输入对话框
+  const handleOpenManualModal = () => {
+    manualForm.resetFields();
+    setIsManualModalVisible(true);
+  };
+
+  // 关闭手动输入对话框
+  const handleCloseManualModal = () => {
+    setIsManualModalVisible(false);
+    manualForm.resetFields();
+  };
+
+  // 提交手动输入的蒸馏结果
+  const handleManualSubmit = async () => {
+    try {
+      const values = await manualForm.validateFields();
+      const { keyword, questions } = values;
+      
+      // 将多行文本分割成数组，过滤空行
+      const questionArray = questions
+        .split('\n')
+        .map((q: string) => q.trim())
+        .filter((q: string) => q.length > 0);
+      
+      if (questionArray.length === 0) {
+        message.warning('请至少输入一个蒸馏结果');
+        return;
+      }
+      
+      setIsSubmitting(true);
+      const result = await createManualDistillation(keyword.trim(), questionArray);
+      
+      message.success(`成功保存 ${result.count} 个蒸馏结果`);
+      handleCloseManualModal();
+      loadData();
+      loadAllKeywords();
+    } catch (error: any) {
+      console.error('保存失败:', error);
+      if (error.response?.data?.error) {
+        message.error(error.response.data.error);
+      } else {
+        message.error('保存失败，请重试');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 删除单个话题
+  const handleDeleteSingle = async (topicId: number, question: string) => {
+    try {
+      const result = await deleteTopics([topicId]);
+      message.success('删除成功');
+      loadData();
+      loadAllKeywords();
+    } catch (error: any) {
+      console.error('删除失败:', error);
+      message.error(error.response?.data?.error || '删除失败');
+    }
+  };
+
+  // 按关键词删除所有蒸馏结果
+  const handleDeleteByKeyword = () => {
+    if (!filterKeyword) {
+      message.warning('请先选择要删除的关键词');
+      return;
+    }
+
+    Modal.confirm({
+      title: '确认删除',
+      icon: <ExclamationCircleOutlined />,
+      content: (
+        <div>
+          <p>确定要删除关键词 <Tag color="blue">{filterKeyword}</Tag> 下的所有蒸馏结果吗？</p>
+          <p style={{ color: '#ff4d4f', marginTop: 8 }}>此操作不可恢复！</p>
+        </div>
+      ),
+      okText: '确定删除',
+      cancelText: '取消',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const result = await deleteTopicsByKeyword(filterKeyword);
+          message.success(`成功删除 ${result.deletedCount} 个蒸馏结果`);
+          setFilterKeyword('');
+          setSelectedRowKeys([]);
+          loadData();
+          loadAllKeywords();
+        } catch (error: any) {
+          console.error('删除失败:', error);
+          message.error(error.response?.data?.error || '删除失败');
+        }
+      }
+    });
+  };
+
+
+
   // 表格列定义
   const columns = [
     {
@@ -199,6 +309,7 @@ export default function DistillationResultsPage() {
       dataIndex: 'keyword',
       key: 'keyword',
       width: 150,
+      align: 'center' as const,
       sorter: (a: TopicWithReference, b: TopicWithReference) => 
         a.keyword.localeCompare(b.keyword),
       render: (text: string) => <Tag color="blue">{text}</Tag>
@@ -207,6 +318,7 @@ export default function DistillationResultsPage() {
       title: '蒸馏结果',
       dataIndex: 'question',
       key: 'question',
+      align: 'center' as const,
       ellipsis: {
         showTitle: false,
       },
@@ -221,6 +333,7 @@ export default function DistillationResultsPage() {
       dataIndex: 'referenceCount',
       key: 'referenceCount',
       width: 120,
+      align: 'center' as const,
       sorter: (a: TopicWithReference, b: TopicWithReference) => 
         a.referenceCount - b.referenceCount,
       render: (count: number) => (
@@ -238,9 +351,35 @@ export default function DistillationResultsPage() {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 180,
+      align: 'center' as const,
       sorter: (a: TopicWithReference, b: TopicWithReference) => 
         new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
       render: (date: string) => new Date(date).toLocaleString('zh-CN')
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 100,
+      align: 'center' as const,
+      render: (_: any, record: TopicWithReference) => (
+        <Popconfirm
+          title="确认删除"
+          description="确定要删除这条蒸馏结果吗？"
+          onConfirm={() => handleDeleteSingle(record.id, record.question)}
+          okText="确定"
+          cancelText="取消"
+          okType="danger"
+        >
+          <Button 
+            type="link" 
+            danger 
+            size="small"
+            icon={<DeleteOutlined />}
+          >
+            删除
+          </Button>
+        </Popconfirm>
+      )
     }
   ];
   
@@ -282,16 +421,25 @@ export default function DistillationResultsPage() {
             </Space>
           }
           extra={
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() => {
-                loadData();
-                loadAllKeywords();
-              }}
-              loading={loading}
-            >
-              刷新
-            </Button>
+            <Space>
+              <Button
+                type="primary"
+                icon={<PlusOutlined />}
+                onClick={handleOpenManualModal}
+              >
+                新建
+              </Button>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  loadData();
+                  loadAllKeywords();
+                }}
+                loading={loading}
+              >
+                刷新
+              </Button>
+            </Space>
           }
         >
           {/* 搜索模式提示 */}
@@ -312,7 +460,7 @@ export default function DistillationResultsPage() {
           {/* 统计卡片区域 */}
           <Row gutter={16} style={{ marginBottom: 24 }}>
             <Col span={6}>
-              <Card size="small">
+              <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
                   title="总话题数" 
                   value={statistics.totalTopics} 
@@ -322,7 +470,7 @@ export default function DistillationResultsPage() {
               </Card>
             </Col>
             <Col span={6}>
-              <Card size="small">
+              <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
                   title="关键词数量" 
                   value={statistics.totalKeywords} 
@@ -332,7 +480,7 @@ export default function DistillationResultsPage() {
               </Card>
             </Col>
             <Col span={6}>
-              <Card size="small">
+              <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
                   title="总被引用次数" 
                   value={statistics.totalReferences} 
@@ -342,7 +490,7 @@ export default function DistillationResultsPage() {
               </Card>
             </Col>
             <Col span={6}>
-              <Card size="small">
+              <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
                   title="当前显示" 
                   value={data.length} 
@@ -430,24 +578,41 @@ export default function DistillationResultsPage() {
           </div>
 
           {/* 操作栏 */}
-          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
+          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Space>
-              {selectedRowKeys.length > 0 && (
-                <span style={{ color: '#64748b' }}>
+              {selectedRowKeys.length > 0 ? (
+                <span style={{ color: '#64748b', fontWeight: 500 }}>
                   已选择 {selectedRowKeys.length} 项
+                </span>
+              ) : filterKeyword ? (
+                <span style={{ color: '#1890ff', fontSize: 13 }}>
+                  💡 当前关键词"{filterKeyword}"共有 {total} 条结果
+                </span>
+              ) : (
+                <span style={{ color: '#94a3b8', fontSize: 13 }}>
+                  💡 提示：可勾选多项批量删除，或选择关键词后一键删除
                 </span>
               )}
             </Space>
-            <Space>
-              {selectedRowKeys.length > 0 && (
-                <Button
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={handleDeleteSelected}
-                >
-                  删除选中 ({selectedRowKeys.length})
-                </Button>
-              )}
+            <Space size="middle">
+              <Button
+                danger
+                icon={<DeleteOutlined />}
+                onClick={handleDeleteSelected}
+                disabled={selectedRowKeys.length === 0}
+              >
+                删除选中 ({selectedRowKeys.length})
+              </Button>
+              
+              <Button
+                danger
+                type="primary"
+                icon={<DeleteOutlined />}
+                onClick={handleDeleteByKeyword}
+                disabled={!filterKeyword}
+              >
+                删除当前关键词
+              </Button>
             </Space>
           </div>
 
@@ -491,6 +656,54 @@ export default function DistillationResultsPage() {
           />
         </Card>
       )}
+
+      {/* 手动输入对话框 */}
+      <Modal
+        title="手动批量输入蒸馏结果"
+        open={isManualModalVisible}
+        onOk={handleManualSubmit}
+        onCancel={handleCloseManualModal}
+        confirmLoading={isSubmitting}
+        width={600}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form
+          form={manualForm}
+          layout="vertical"
+          style={{ marginTop: 16 }}
+        >
+          <Form.Item
+            name="keyword"
+            label="关键词"
+            rules={[
+              { required: true, message: '请输入关键词' },
+              { max: 255, message: '关键词不能超过255个字符' }
+            ]}
+            extra="只能输入一个关键词"
+          >
+            <Input 
+              placeholder="请输入关键词" 
+              maxLength={255}
+            />
+          </Form.Item>
+          
+          <Form.Item
+            name="questions"
+            label="蒸馏结果"
+            rules={[
+              { required: true, message: '请输入蒸馏结果' }
+            ]}
+            extra="可以输入若干个蒸馏结果，每行一个"
+          >
+            <Input.TextArea
+              placeholder="请输入蒸馏结果，每行一个&#10;例如：&#10;如何提高工作效率？&#10;团队协作的最佳实践是什么？&#10;如何管理时间？"
+              rows={10}
+              showCount
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

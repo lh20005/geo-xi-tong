@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试手动批量输入蒸馏结果</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        
+        .form-group .hint {
+            display: block;
+            margin-top: 6px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+        
+        .form-group input:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 200px;
+            line-height: 1.6;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 30px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .result.success {
+            background: #e8f5e9;
+            border: 2px solid #4caf50;
+            color: #2e7d32;
+        }
+        
+        .result.error {
+            background: #ffebee;
+            border: 2px solid #f44336;
+            color: #c62828;
+        }
+        
+        .result h3 {
+            margin-bottom: 12px;
+            font-size: 16px;
+        }
+        
+        .result pre {
+            background: rgba(0, 0, 0, 0.05);
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .examples {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        
+        .examples h3 {
+            margin-bottom: 12px;
+            color: #333;
+            font-size: 16px;
+        }
+        
+        .examples ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .examples li {
+            padding: 8px 0;
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .examples li:before {
+            content: "•";
+            color: #667eea;
+            font-weight: bold;
+            display: inline-block;
+            width: 1em;
+            margin-left: -1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 手动批量输入蒸馏结果</h1>
+            <p>测试页面 - 验证API功能</p>
+        </div>
+        
+        <div class="content">
+            <form id="distillationForm">
+                <div class="form-group">
+                    <label for="keyword">关键词 *</label>
+                    <input 
+                        type="text" 
+                        id="keyword" 
+                        name="keyword" 
+                        placeholder="请输入关键词，例如：产品设计"
+                        maxlength="255"
+                        required
+                    >
+                    <span class="hint">只能输入一个关键词，最多255个字符</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="questions">蒸馏结果 *</label>
+                    <textarea 
+                        id="questions" 
+                        name="questions" 
+                        placeholder="请输入蒸馏结果，每行一个&#10;例如：&#10;用户体验设计的核心原则是什么？&#10;如何进行用户研究？&#10;产品迭代的最佳实践？"
+                        required
+                    ></textarea>
+                    <span class="hint">可以输入若干个蒸馏结果，每行一个。空行会被自动过滤。</span>
+                </div>
+                
+                <div class="button-group">
+                    <button type="submit" class="btn-primary" id="submitBtn">
+                        💾 保存蒸馏结果
+                    </button>
+                    <button type="button" class="btn-secondary" id="resetBtn">
+                        🔄 重置表单
+                    </button>
+                </div>
+            </form>
+            
+            <div id="result" class="result"></div>
+            
+            <div class="examples">
+                <h3>📝 示例数据</h3>
+                <ul>
+                    <li><strong>关键词示例：</strong>产品设计、时间管理、市场营销、团队协作</li>
+                    <li><strong>蒸馏结果示例：</strong></li>
+                    <li style="padding-left: 20px;">用户体验设计的核心原则是什么？</li>
+                    <li style="padding-left: 20px;">如何进行用户研究？</li>
+                    <li style="padding-left: 20px;">产品迭代的最佳实践？</li>
+                    <li style="padding-left: 20px;">设计系统如何搭建？</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_URL = 'http://localhost:3001/api/distillation/manual';
+        
+        const form = document.getElementById('distillationForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const resultDiv = document.getElementById('result');
+        
+        // 提交表单
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const keyword = document.getElementById('keyword').value.trim();
+            const questionsText = document.getElementById('questions').value;
+            
+            // 将文本按行分割，过滤空行
+            const questions = questionsText
+                .split('\n')
+                .map(q => q.trim())
+                .filter(q => q.length > 0);
+            
+            if (questions.length === 0) {
+                showResult('error', '请至少输入一个蒸馏结果');
+                return;
+            }
+            
+            // 禁用按钮
+            submitBtn.disabled = true;
+            submitBtn.textContent = '⏳ 保存中...';
+            
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        keyword,
+                        questions
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    showResult('success', `✅ 保存成功！`, data);
+                    form.reset();
+                } else {
+                    showResult('error', `❌ 保存失败：${data.error || '未知错误'}`, data);
+                }
+            } catch (error) {
+                showResult('error', `❌ 网络错误：${error.message}`);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '💾 保存蒸馏结果';
+            }
+        });
+        
+        // 重置表单
+        resetBtn.addEventListener('click', () => {
+            form.reset();
+            resultDiv.style.display = 'none';
+        });
+        
+        // 显示结果
+        function showResult(type, message, data = null) {
+            resultDiv.className = `result ${type}`;
+            resultDiv.style.display = 'block';
+            
+            let html = `<h3>${message}</h3>`;
+            
+            if (data) {
+                html += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            
+            resultDiv.innerHTML = html;
+            
+            // 滚动到结果区域
+            resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    </script>
+</body>
+</html>

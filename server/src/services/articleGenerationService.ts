@@ -246,7 +246,7 @@ export class ArticleGenerationService {
         d.keyword,
         d.provider,
         (
-          SELECT STRING_AGG(DISTINCT t.question, ', ' ORDER BY t.question)
+          SELECT STRING_AGG(t.question, '|||' ORDER BY a.id)
           FROM articles a
           INNER JOIN topics t ON a.topic_id = t.id
           WHERE a.task_id = gt.id
@@ -261,22 +261,10 @@ export class ArticleGenerationService {
 
     return {
       tasks: result.rows.map(row => {
-        let distillationResult = row.distillation_result || null;
-        let keyword = row.keyword;
-        
-        // 处理多个蒸馏结果的情况（需求 8.4, 8.5）
-        if (row.selected_distillation_ids) {
-          try {
-            const selectedIds: number[] = JSON.parse(row.selected_distillation_ids);
-            if (selectedIds.length > 1) {
-              // 如果使用多个蒸馏结果，显示摘要
-              distillationResult = `使用了${selectedIds.length}个蒸馏结果`;
-            }
-            // keyword保持为第一个蒸馏结果的关键词（已经从JOIN中获取）
-          } catch (error) {
-            console.error('解析selected_distillation_ids失败:', error);
-          }
-        }
+        // 直接使用SQL查询的distillation_result，不再进行额外处理
+        // 这样可以显示每篇文章对应的具体话题内容
+        const distillationResult = row.distillation_result || null;
+        const keyword = row.keyword;
         
         return {
           id: row.id,

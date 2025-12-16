@@ -93,11 +93,13 @@ const UsageHistoryModal: React.FC<UsageHistoryModalProps> = ({
       dataIndex: 'taskId',
       key: 'taskId',
       width: 100,
+      align: 'center',
     },
     {
       title: '文章标题',
       dataIndex: 'articleTitle',
       key: 'articleTitle',
+      align: 'center',
       render: (text: string, record: UsageRecord) => {
         if (record.articleDeleted) {
           return <span style={{ color: '#999' }}>{text}</span>;
@@ -117,6 +119,7 @@ const UsageHistoryModal: React.FC<UsageHistoryModalProps> = ({
       dataIndex: 'usedAt',
       key: 'usedAt',
       width: 180,
+      align: 'center',
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
   ];

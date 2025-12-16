@@ -243,7 +243,7 @@ export async function getTopicsStatistics(
 
 /**
  * 批量删除话题
- * 使用事务确保数据一致性
+ * 使用事务确保数据一致性，并清理没有话题的distillation记录
  * 
  * @param topicIds 要删除的话题ID数组
  * @returns 删除的记录数
@@ -258,11 +258,30 @@ export async function deleteTopicsByIds(topicIds: number[]): Promise<number> {
   try {
     await client.query('BEGIN');
 
+    // 查询这些话题关联的distillation IDs
+    const distillationsResult = await client.query(
+      'SELECT DISTINCT distillation_id FROM topics WHERE id = ANY($1::int[])',
+      [topicIds]
+    );
+    const distillationIds = distillationsResult.rows.map(row => row.distillation_id);
+
     // 删除话题
     const result = await client.query(
       'DELETE FROM topics WHERE id = ANY($1::int[])',
       [topicIds]
     );
+
+    // 删除没有话题的distillation记录
+    if (distillationIds.length > 0) {
+      await client.query(
+        `DELETE FROM distillations 
+         WHERE id = ANY($1::int[]) 
+         AND NOT EXISTS (
+           SELECT 1 FROM topics WHERE distillation_id = distillations.id
+         )`,
+        [distillationIds]
+      );
+    }
 
     await client.query('COMMIT');
     

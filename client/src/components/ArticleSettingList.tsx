@@ -23,12 +23,14 @@ export default function ArticleSettingList({
       title: '设置名称',
       dataIndex: 'name',
       key: 'name',
+      align: 'center',
       ellipsis: true,
     },
     {
       title: '提示词预览',
       dataIndex: 'prompt',
       key: 'prompt',
+      align: 'center',
       ellipsis: true,
       render: (text: string) => {
         const preview = text.length > 80 ? text.substring(0, 80) + '...' : text;
@@ -39,11 +41,13 @@ export default function ArticleSettingList({
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
+      align: 'center',
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
+      align: 'center',
       render: (_, record) => (
         <Space>
           <Button

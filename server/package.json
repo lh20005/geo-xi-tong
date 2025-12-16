@@ -11,13 +11,16 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:ollama": "tsx src/db/migrate-ollama.ts",
     "db:migrate:smart-selection": "tsx src/db/migrate-smart-selection.ts",
+    "db:migrate:manual-distillation": "tsx src/db/migrate-manual-distillation.ts",
+    "db:migrate:fix-articles-fk": "tsx src/db/migrate-fix-articles-fk.ts",
     "db:rollback:smart-selection": "tsx src/db/rollback-smart-selection.ts",
     "db:fix:constraint": "tsx src/db/fix-constraint.ts",
     "verify-usage-count": "tsx src/scripts/verify-usage-count.ts",
     "fix-usage-count": "tsx src/scripts/fix-usage-count.ts",
     "test-smart-selection": "tsx src/scripts/test-smart-selection.ts",
     "diagnose-issue": "tsx src/scripts/diagnose-issue.ts",
-    "force-fix": "tsx src/scripts/force-fix.ts"
+    "force-fix": "tsx src/scripts/force-fix.ts",
+    "cleanup-empty-distillations": "tsx src/scripts/cleanup-empty-distillations.ts"
   },
   "dependencies": {
     "axios": "^1.6.2",

@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons';
 import { 
   getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
-  Article, ArticleStats 
+  Article, ArticleStats, getKeywordStats, KeywordStats 
 } from '../api/articles';
 import { apiClient } from '../api/client';
 import ArticleContent from '../components/ArticleContent';
@@ -21,7 +21,7 @@ const { Option } = Select;
 
 interface FilterState {
   publishStatus: 'all' | 'published' | 'unpublished';
-  distillationId: number | null;
+  keyword: string;
   searchKeyword: string;
 }
 
@@ -31,16 +31,16 @@ export default function ArticleListPage() {
   
   const [articles, setArticles] = useState<Article[]>([]);
   const [stats, setStats] = useState<ArticleStats>({ total: 0, published: 0, unpublished: 0 });
-  const [distillations, setDistillations] = useState<Array<{ id: number; keyword: string }>>([]);
+  const [keywords, setKeywords] = useState<KeywordStats[]>([]);
   const [filters, setFilters] = useState<FilterState>({
     publishStatus: 'all',
-    distillationId: null,
+    keyword: '',
     searchKeyword: ''
   });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [viewModal, setViewModal] = useState<any>(null);
   const [editModal, setEditModal] = useState<any>(null);
@@ -49,13 +49,13 @@ export default function ArticleListPage() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const status = params.get('status') as 'all' | 'published' | 'unpublished' | null;
-    const topic = params.get('topic');
+    const keyword = params.get('keyword');
     const search = params.get('search');
     const pageParam = params.get('page');
 
     setFilters({
       publishStatus: status || 'all',
-      distillationId: topic ? parseInt(topic) : null,
+      keyword: keyword || '',
       searchKeyword: search || ''
     });
 
@@ -67,7 +67,7 @@ export default function ArticleListPage() {
   useEffect(() => {
     const params = new URLSearchParams();
     if (filters.publishStatus !== 'all') params.set('status', filters.publishStatus);
-    if (filters.distillationId) params.set('topic', filters.distillationId.toString());
+    if (filters.keyword) params.set('keyword', filters.keyword);
     if (filters.searchKeyword) params.set('search', filters.searchKeyword);
     if (page > 1) params.set('page', page.toString());
 
@@ -83,7 +83,7 @@ export default function ArticleListPage() {
   }, [filters, page]);
 
   useEffect(() => {
-    loadDistillations();
+    loadKeywords();
   }, []);
 
   useEffect(() => {
@@ -93,7 +93,21 @@ export default function ArticleListPage() {
   const loadArticles = async () => {
     setLoading(true);
     try {
-      const response = await getArticles(page, pageSize, filters);
+      const apiFilters: any = {
+        publishStatus: filters.publishStatus
+      };
+      
+      // 关键词筛选
+      if (filters.keyword) {
+        apiFilters.keyword = filters.keyword;
+      }
+      
+      // 搜索关键词（模糊搜索）
+      if (filters.searchKeyword && filters.searchKeyword.trim()) {
+        apiFilters.keyword = filters.searchKeyword.trim();
+      }
+      
+      const response = await getArticles(page, pageSize, apiFilters);
       setArticles(response.articles || []);
       setTotal(response.total || 0);
     } catch (error: any) {
@@ -112,12 +126,12 @@ export default function ArticleListPage() {
     }
   };
 
-  const loadDistillations = async () => {
+  const loadKeywords = async () => {
     try {
-      const response = await apiClient.get('/distillation/history');
-      setDistillations(response.data.history || []);
+      const response = await getKeywordStats();
+      setKeywords(response.keywords || []);
     } catch (error: any) {
-      console.error('加载话题列表失败:', error);
+      console.error('加载关键词列表失败:', error);
     }
   };
 
@@ -237,15 +251,10 @@ export default function ArticleListPage() {
     setPage(1);
   };
 
-  const handleSearch = () => {
-    setPage(1);
-    loadArticles();
-  };
-
   const handleClearFilters = () => {
     setFilters({
       publishStatus: 'all',
-      distillationId: null,
+      keyword: '',
       searchKeyword: ''
     });
     setPage(1);
@@ -269,6 +278,7 @@ export default function ArticleListPage() {
       ),
       key: 'checkbox',
       width: 50,
+      align: 'center' as const,
       render: (_: any, record: Article) => (
         <Checkbox
           checked={selectedIds.has(record.id)}
@@ -280,24 +290,28 @@ export default function ArticleListPage() {
       title: '转化目标',
       dataIndex: 'conversionTargetName',
       key: 'conversionTargetName',
+      align: 'center' as const,
       render: (text: string) => text ? <Tag color="orange">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
     },
     {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',
+      align: 'center' as const,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
       title: '蒸馏结果',
       dataIndex: 'topicQuestion',
       key: 'topicQuestion',
+      align: 'center' as const,
       render: (text: string) => text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
     },
     {
       title: '发布状态',
       dataIndex: 'isPublished',
       key: 'isPublished',
+      align: 'center' as const,
       render: (isPublished: boolean, record: any) => {
         if (isPublished) {
           return (
@@ -318,11 +332,13 @@ export default function ArticleListPage() {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      align: 'center' as const,
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
+      align: 'center' as const,
       render: (_: any, record: any) => (
         <Space>
           <Button type="link" icon={<EyeOutlined />} onClick={() => handleView(record.id)}>查看</Button>
@@ -337,40 +353,116 @@ export default function ArticleListPage() {
     <div style={{ padding: 24 }}>
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={8}>
-          <Card hoverable onClick={() => handleStatsClick('all')}>
+          <Card size="small" hoverable onClick={() => handleStatsClick('all')} style={{ textAlign: 'center' }}>
             <Statistic title="总文章数" value={stats.total} valueStyle={{ color: '#1890ff' }} />
           </Card>
         </Col>
         <Col span={8}>
-          <Card hoverable onClick={() => handleStatsClick('published')}>
+          <Card size="small" hoverable onClick={() => handleStatsClick('published')} style={{ textAlign: 'center' }}>
             <Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} />
           </Card>
         </Col>
         <Col span={8}>
-          <Card hoverable onClick={() => handleStatsClick('unpublished')}>
+          <Card size="small" hoverable onClick={() => handleStatsClick('unpublished')} style={{ textAlign: 'center' }}>
             <Statistic title="未发布" value={stats.unpublished} valueStyle={{ color: '#faad14' }} />
           </Card>
         </Col>
       </Row>
 
-      <Card style={{ marginBottom: 16 }}>
-        <Space wrap style={{ width: '100%' }}>
-          <span>发布状态:</span>
-          <Select style={{ width: 120 }} value={filters.publishStatus} onChange={(value) => handleFilterChange('publishStatus', value)}>
-            <Option value="all">全部</Option>
-            <Option value="published">已发布</Option>
-            <Option value="unpublished">未发布</Option>
-          </Select>
-          <span>话题:</span>
-          <Select style={{ width: 200 }} placeholder="选择话题" allowClear value={filters.distillationId} onChange={(value) => handleFilterChange('distillationId', value)}>
-            {distillations.map(d => (<Option key={d.id} value={d.id}>{d.keyword}</Option>))}
-          </Select>
-          <span>搜索:</span>
-          <Input style={{ width: 200 }} placeholder="输入关键词" value={filters.searchKeyword} onChange={(e) => handleFilterChange('searchKeyword', e.target.value)} onPressEnter={handleSearch} />
-          <Button icon={<SearchOutlined />} onClick={handleSearch}>搜索</Button>
-          <Button icon={<ReloadOutlined />} onClick={handleClearFilters}>清除筛选</Button>
-        </Space>
-      </Card>
+      {/* 筛选工具栏 - 与生成文章页面风格一致 */}
+      <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
+        <Row gutter={16}>
+          <Col span={5}>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ color: '#64748b', fontSize: 14 }}>
+                <SearchOutlined /> 发布状态
+              </span>
+            </div>
+            <Select 
+              size="large"
+              style={{ width: '100%' }} 
+              value={filters.publishStatus} 
+              onChange={(value) => handleFilterChange('publishStatus', value)}
+            >
+              <Option value="all">全部</Option>
+              <Option value="published">已发布</Option>
+              <Option value="unpublished">未发布</Option>
+            </Select>
+          </Col>
+          
+          <Col span={5}>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ color: '#64748b', fontSize: 14 }}>
+                <SearchOutlined /> 关键词筛选
+              </span>
+            </div>
+            <Select 
+              size="large"
+              style={{ width: '100%' }} 
+              placeholder="选择关键词" 
+              allowClear 
+              showSearch
+              optionFilterProp="children"
+              value={filters.keyword || undefined} 
+              onChange={(value) => handleFilterChange('keyword', value || '')}
+            >
+              {keywords.map(k => (
+                <Option key={k.keyword} value={k.keyword}>
+                  {k.keyword} ({k.count})
+                </Option>
+              ))}
+            </Select>
+          </Col>
+          
+          <Col span={7}>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ color: '#64748b', fontSize: 14 }}>
+                <SearchOutlined /> 搜索内容
+              </span>
+            </div>
+            <Input 
+              size="large"
+              style={{ width: '100%' }} 
+              placeholder="输入关键词搜索" 
+              value={filters.searchKeyword} 
+              onChange={(e) => handleFilterChange('searchKeyword', e.target.value)}
+              onPressEnter={() => setPage(1)}
+              allowClear
+              suffix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+            />
+          </Col>
+          
+          <Col span={3}>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
+            </div>
+            <Button 
+              size="large"
+              block
+              icon={<ReloadOutlined />} 
+              onClick={handleClearFilters}
+              disabled={filters.publishStatus === 'all' && !filters.keyword && !filters.searchKeyword}
+            >
+              清除筛选
+            </Button>
+          </Col>
+          
+          <Col span={4}>
+            <div style={{ marginBottom: 8 }}>
+              <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
+            </div>
+            <Button 
+              size="large"
+              type="primary" 
+              block
+              icon={<ReloadOutlined />} 
+              onClick={loadArticles}
+            >
+              刷新
+            </Button>
+          </Col>
+        </Row>
+      </div>
 
       {selectedIds.size > 0 && (
         <Card style={{ marginBottom: 16, backgroundColor: '#e6f7ff' }}>
@@ -382,7 +474,28 @@ export default function ArticleListPage() {
       )}
 
       <Card title="文章管理" bordered={false} extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
-        <Table columns={columns} dataSource={articles} rowKey="id" loading={loading} pagination={{ current: page, pageSize, total, onChange: (newPage) => setPage(newPage), showSizeChanger: false, showTotal: (total) => `共 ${total} 篇文章` }} />
+        <Table 
+          columns={columns} 
+          dataSource={articles} 
+          rowKey="id" 
+          loading={loading} 
+          pagination={{ 
+            current: page, 
+            pageSize, 
+            total, 
+            onChange: (newPage, newPageSize) => {
+              setPage(newPage);
+              if (newPageSize && newPageSize !== pageSize) {
+                setPageSize(newPageSize);
+                setPage(1);
+              }
+            }, 
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条记录`,
+            pageSizeOptions: ['10', '20', '50', '100']
+          }} 
+        />
       </Card>
 
       <Modal title={<Space><span>文章详情</span>{viewModal && <Tag color="blue">{viewModal.keyword}</Tag>}</Space>} open={!!viewModal} onCancel={() => setViewModal(null)} width={900} footer={[<Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content)}>复制文章</Button>, <Button key="close" type="primary" onClick={() => setViewModal(null)}>关闭</Button>]}>

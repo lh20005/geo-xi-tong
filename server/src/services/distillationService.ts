@@ -463,6 +463,183 @@ export class DistillationService {
   }
 
   /**
+   * 按关键词删除所有蒸馏结果
+   * 删除指定关键词下的所有话题，并删除没有话题的distillation记录
+   * 
+   * @param keyword 关键词
+   * @returns 删除结果
+   */
+  async deleteTopicsByKeyword(keyword: string): Promise<{
+    success: boolean;
+    deletedCount: number;
+    keyword: string;
+  }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 查询该关键词下的所有distillation ID和话题ID
+      const distillationsResult = await client.query(
+        `SELECT DISTINCT d.id as distillation_id
+         FROM distillations d
+         WHERE d.keyword = $1`,
+        [keyword]
+      );
+
+      const distillationIds = distillationsResult.rows.map(row => row.distillation_id);
+
+      if (distillationIds.length === 0) {
+        await client.query('COMMIT');
+        return {
+          success: true,
+          deletedCount: 0,
+          keyword
+        };
+      }
+
+      // 查询该关键词下的所有话题ID
+      const topicsResult = await client.query(
+        `SELECT t.id 
+         FROM topics t
+         WHERE t.distillation_id = ANY($1::int[])`,
+        [distillationIds]
+      );
+
+      const topicIds = topicsResult.rows.map(row => row.id);
+      let deletedTopicCount = 0;
+
+      // 删除话题
+      if (topicIds.length > 0) {
+        const deleteTopicsResult = await client.query(
+          'DELETE FROM topics WHERE id = ANY($1::int[])',
+          [topicIds]
+        );
+        deletedTopicCount = deleteTopicsResult.rowCount || 0;
+      }
+
+      // 删除没有话题的distillation记录
+      await client.query(
+        `DELETE FROM distillations 
+         WHERE id = ANY($1::int[]) 
+         AND NOT EXISTS (
+           SELECT 1 FROM topics WHERE distillation_id = distillations.id
+         )`,
+        [distillationIds]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        success: true,
+        deletedCount: deletedTopicCount,
+        keyword
+      };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error('按关键词删除话题错误:', error);
+      throw new Error(`按关键词删除话题失败: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 按筛选条件删除话题
+   * 删除符合筛选条件的所有话题
+   * 
+   * @param filters 筛选条件
+   * @returns 删除结果
+   */
+  async deleteTopicsByFilter(filters: {
+    keyword?: string;
+    provider?: string;
+    search?: string;
+  }): Promise<{
+    success: boolean;
+    deletedCount: number;
+    filters: typeof filters;
+  }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 构建查询条件
+      const conditions: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (filters.keyword) {
+        conditions.push(`d.keyword = $${paramIndex}`);
+        params.push(filters.keyword);
+        paramIndex++;
+      }
+
+      if (filters.provider) {
+        conditions.push(`d.provider = $${paramIndex}`);
+        params.push(filters.provider);
+        paramIndex++;
+      }
+
+      if (filters.search) {
+        conditions.push(`t.question ILIKE $${paramIndex}`);
+        params.push(`%${filters.search}%`);
+        paramIndex++;
+      }
+
+      if (conditions.length === 0) {
+        await client.query('COMMIT');
+        return {
+          success: true,
+          deletedCount: 0,
+          filters
+        };
+      }
+
+      const whereClause = conditions.join(' AND ');
+
+      // 查询符合条件的话题ID
+      const topicsResult = await client.query(
+        `SELECT t.id 
+         FROM topics t
+         INNER JOIN distillations d ON t.distillation_id = d.id
+         WHERE ${whereClause}`,
+        params
+      );
+
+      const topicIds = topicsResult.rows.map(row => row.id);
+
+      if (topicIds.length === 0) {
+        await client.query('COMMIT');
+        return {
+          success: true,
+          deletedCount: 0,
+          filters
+        };
+      }
+
+      // 删除话题
+      const deleteResult = await client.query(
+        'DELETE FROM topics WHERE id = ANY($1::int[])',
+        [topicIds]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        success: true,
+        deletedCount: deleteResult.rowCount || 0,
+        filters
+      };
+    } catch (error: any) {
+      await client.query('ROLLBACK');
+      console.error('按筛选条件删除话题错误:', error);
+      throw new Error(`按筛选条件删除话题失败: ${error.message}`);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * 获取统计信息
    * 调用数据库统计方法，支持筛选条件
    * 

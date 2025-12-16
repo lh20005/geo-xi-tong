@@ -62,3 +62,80 @@ export async function deleteTopics(topicIds: number[]): Promise<DeleteResponse> 
     throw error;
   }
 }
+
+/**
+ * 手动批量输入蒸馏结果
+ * 
+ * @param keyword 关键词（只能一个）
+ * @param questions 蒸馏结果数组（每行一个）
+ * @returns 保存结果
+ */
+export async function createManualDistillation(
+  keyword: string,
+  questions: string[]
+): Promise<{
+  success: boolean;
+  distillationId: number;
+  keyword: string;
+  questions: string[];
+  count: number;
+}> {
+  try {
+    const response = await apiClient.post('/distillation/manual', {
+      keyword,
+      questions
+    });
+    return response.data;
+  } catch (error) {
+    console.error('手动输入蒸馏结果失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 按关键词删除所有蒸馏结果
+ * 
+ * @param keyword 关键词
+ * @returns 删除结果
+ */
+export async function deleteTopicsByKeyword(keyword: string): Promise<{
+  success: boolean;
+  deletedCount: number;
+  keyword: string;
+}> {
+  try {
+    const response = await apiClient.delete('/distillation/topics/by-keyword', {
+      data: { keyword }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('按关键词删除话题失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 按筛选条件删除话题
+ * 
+ * @param filters 筛选条件
+ * @returns 删除结果
+ */
+export async function deleteTopicsByFilter(filters: {
+  keyword?: string;
+  provider?: string;
+  search?: string;
+}): Promise<{
+  success: boolean;
+  deletedCount: number;
+  filters: typeof filters;
+}> {
+  try {
+    const response = await apiClient.delete('/distillation/topics/by-filter', {
+      data: filters
+    });
+    return response.data;
+  } catch (error) {
+    console.error('按筛选条件删除话题失败:', error);
+    throw error;
+  }
+}

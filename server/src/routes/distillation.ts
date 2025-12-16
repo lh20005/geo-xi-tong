@@ -69,6 +69,74 @@ distillationRouter.post('/', async (req, res) => {
   }
 });
 
+// 手动批量输入蒸馏结果
+distillationRouter.post('/manual', async (req, res) => {
+  try {
+    const { keyword, questions } = req.body;
+    
+    // 参数验证
+    if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
+      return res.status(400).json({ error: '请提供关键词' });
+    }
+    
+    if (!questions || !Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ error: '请至少提供一个蒸馏结果' });
+    }
+    
+    // 验证每个问题都是非空字符串
+    const validQuestions = questions
+      .map(q => typeof q === 'string' ? q.trim() : '')
+      .filter(q => q.length > 0);
+    
+    if (validQuestions.length === 0) {
+      return res.status(400).json({ error: '请提供有效的蒸馏结果' });
+    }
+    
+    // 使用事务保存数据
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // 保存蒸馏记录（provider标记为'manual'表示手动输入）
+      const distillationResult = await client.query(
+        'INSERT INTO distillations (keyword, provider) VALUES ($1, $2) RETURNING id',
+        [keyword.trim(), 'manual']
+      );
+      
+      const distillationId = distillationResult.rows[0].id;
+      
+      // 批量保存话题
+      for (const question of validQuestions) {
+        await client.query(
+          'INSERT INTO topics (distillation_id, question) VALUES ($1, $2)',
+          [distillationId, question]
+        );
+      }
+      
+      await client.query('COMMIT');
+      
+      res.json({
+        success: true,
+        distillationId,
+        keyword: keyword.trim(),
+        questions: validQuestions,
+        count: validQuestions.length
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('手动输入蒸馏结果错误:', error);
+    res.status(500).json({ 
+      error: '保存蒸馏结果失败', 
+      details: error.message 
+    });
+  }
+});
+
 // ==================== 特定路径路由（必须在 /:id 之前）====================
 
 // 获取所有唯一的关键词列表
@@ -126,16 +194,18 @@ distillationRouter.get('/history', async (req, res) => {
     // 计算偏移量
     const offset = (page - 1) * pageSize;
 
-    // 查询总数
+    // 查询总数（只统计有话题的distillation记录）
     const countQuery = `
-      SELECT COUNT(*) as total
+      SELECT COUNT(DISTINCT d.id) as total
       FROM distillations d
+      INNER JOIN topics t ON d.id = t.distillation_id
       ${whereClause}
     `;
     const countResult = await pool.query(countQuery);
     const total = parseInt(countResult.rows[0].total);
 
     // 查询数据（包含usage_count和lastUsedAt）
+    // 只显示有话题的distillation记录（topic_count > 0）
     const dataQuery = `
       SELECT 
         d.id, 
@@ -153,6 +223,7 @@ distillationRouter.get('/history', async (req, res) => {
       LEFT JOIN topics t ON d.id = t.distillation_id
       ${whereClause}
       GROUP BY d.id
+      HAVING COUNT(t.id) > 0
       ${orderByClause}
       LIMIT $1 OFFSET $2
     `;
@@ -432,6 +503,59 @@ distillationRouter.delete('/topics', async (req, res) => {
     console.error('批量删除话题错误:', error);
     res.status(500).json({ 
       error: '批量删除话题失败', 
+      details: error.message 
+    });
+  }
+});
+
+// 按关键词删除所有蒸馏结果
+distillationRouter.delete('/topics/by-keyword', async (req, res) => {
+  try {
+    const { keyword } = req.body;
+
+    // 参数验证
+    if (!keyword || typeof keyword !== 'string' || keyword.trim() === '') {
+      return res.status(400).json({ error: '请提供有效的关键词' });
+    }
+
+    // 调用服务层方法
+    const result = await distillationService.deleteTopicsByKeyword(keyword.trim());
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('按关键词删除话题错误:', error);
+    res.status(500).json({ 
+      error: '按关键词删除话题失败', 
+      details: error.message 
+    });
+  }
+});
+
+// 删除当前筛选条件下的所有话题
+distillationRouter.delete('/topics/by-filter', async (req, res) => {
+  try {
+    const { keyword, provider, search } = req.body;
+
+    // 至少需要一个筛选条件
+    if (!keyword && !provider && !search) {
+      return res.status(400).json({ 
+        error: '请提供至少一个筛选条件',
+        details: '支持的筛选条件：keyword, provider, search'
+      });
+    }
+
+    // 调用服务层方法
+    const result = await distillationService.deleteTopicsByFilter({
+      keyword,
+      provider,
+      search
+    });
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('按筛选条件删除话题错误:', error);
+    res.status(500).json({ 
+      error: '按筛选条件删除话题失败', 
       details: error.message 
     });
   }

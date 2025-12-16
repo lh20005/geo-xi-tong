@@ -116,6 +116,7 @@ export default function ConversionTargetPage() {
       key: 'company_name',
       sorter: true,
       width: 200,
+      align: 'center',
     },
     {
       title: '行业类型',
@@ -123,6 +124,7 @@ export default function ConversionTargetPage() {
       key: 'industry',
       sorter: true,
       width: 120,
+      align: 'center',
       render: (industry: string) => <Tag color="blue">{industry}</Tag>,
     },
     {
@@ -131,6 +133,7 @@ export default function ConversionTargetPage() {
       key: 'company_size',
       sorter: true,
       width: 120,
+      align: 'center',
       render: (size: string) => <Tag color="green">{size}</Tag>,
     },
     {
@@ -138,6 +141,7 @@ export default function ConversionTargetPage() {
       dataIndex: 'contact_info',
       key: 'contact_info',
       width: 180,
+      align: 'center',
     },
     {
       title: '创建时间',
@@ -145,6 +149,7 @@ export default function ConversionTargetPage() {
       key: 'created_at',
       sorter: true,
       width: 180,
+      align: 'center',
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {
@@ -152,6 +157,7 @@ export default function ConversionTargetPage() {
       key: 'action',
       fixed: 'right',
       width: 200,
+      align: 'center',
       render: (_, record) => (
         <Space size="small">
           <Button

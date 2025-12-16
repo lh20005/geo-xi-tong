@@ -154,6 +154,7 @@ export default function DistillationHistoryEnhancedPage() {
       dataIndex: 'keyword',
       key: 'keyword',
       width: 150,
+      align: 'center' as const,
       render: (text: string) => <Tag color="blue">{text}</Tag>
     },
     {
@@ -161,6 +162,7 @@ export default function DistillationHistoryEnhancedPage() {
       dataIndex: 'provider',
       key: 'provider',
       width: 120,
+      align: 'center' as const,
       render: (provider: string) => {
         const colorMap: Record<string, string> = {
           deepseek: 'purple',
@@ -175,6 +177,7 @@ export default function DistillationHistoryEnhancedPage() {
       dataIndex: 'topicCount',
       key: 'topicCount',
       width: 100,
+      align: 'center' as const,
       render: (count: number) => <span>{count}个</span>
     },
     {
@@ -189,6 +192,7 @@ export default function DistillationHistoryEnhancedPage() {
       dataIndex: 'usageCount',
       key: 'usageCount',
       width: 130,
+      align: 'center' as const,
       render: (count: number, record: DistillationWithUsage) => (
         <UsageCountBadge
           count={count}
@@ -201,6 +205,7 @@ export default function DistillationHistoryEnhancedPage() {
       dataIndex: 'lastUsedAt',
       key: 'lastUsedAt',
       width: 180,
+      align: 'center' as const,
       render: (date: string | null) => 
         date ? new Date(date).toLocaleString('zh-CN') : <span style={{ color: '#999' }}>未使用</span>
     },
@@ -216,12 +221,14 @@ export default function DistillationHistoryEnhancedPage() {
       dataIndex: 'createdAt',
       key: 'createdAt',
       width: 180,
+      align: 'center' as const,
       render: (date: string) => new Date(date).toLocaleString('zh-CN')
     },
     {
       title: '操作',
       key: 'action',
       width: 150,
+      align: 'center' as const,
       render: (_: any, record: DistillationWithUsage) => (
         <Space>
           <Button
