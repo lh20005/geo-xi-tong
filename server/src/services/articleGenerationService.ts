@@ -831,19 +831,7 @@ export class ArticleGenerationService {
     content: string,
     imageUrl: string
   ): string {
-    // 检查内容是否已包含图片占位符（AI生成的）
-    // Feature: article-image-embedding, Property 13: 占位符替换正确性
-    const placeholderRegex = /\[IMAGE_PLACEHOLDER\]/i;
-    if (placeholderRegex.test(content)) {
-      // 替换占位符为实际图片
-      return content.replace(
-        placeholderRegex,
-        `![文章配图](${imageUrl})`
-      );
-    }
-
-    // 如果没有占位符，智能插入图片
-    // Feature: article-image-embedding, Property 14: 无占位符自动插入
+    // 智能插入图片（不使用占位符）
     const paragraphs = content.split('\n\n').filter(p => p.trim());
     
     if (paragraphs.length === 0) {
@@ -853,7 +841,7 @@ export class ArticleGenerationService {
       // 只有一段，图片放在末尾
       return `${content}\n\n![文章配图](${imageUrl})`;
     } else {
-      // 多段，图片放在第一段或第二段后
+      // 多段，图片放在第一段后
       const insertIndex = 1; // 在第一段后插入
       paragraphs.splice(
         insertIndex,
@@ -865,8 +853,7 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 构建包含图片指示的AI提示词
-   * Feature: article-image-embedding, Property 12: AI提示词包含占位符指示
+   * 构建AI提示词（不使用占位符）
    */
   private buildPromptWithImageInstruction(
     basePrompt: string,
@@ -879,9 +866,8 @@ export class ArticleGenerationService {
     let prompt = '【重要输出要求】\n';
     prompt += '1. 直接输出文章内容，不要包含任何思考过程\n';
     prompt += '2. 使用纯文本格式，不要使用Markdown符号（如#、*、-等）\n';
-    prompt += '3. 在文章的适当位置（建议在第一段或第二段之后）插入 [IMAGE_PLACEHOLDER] 标记，用于后续插入配图\n';
-    prompt += '4. 按照"标题：[标题内容]"格式开始，然后是正文\n';
-    prompt += '5. 文章内容要自然流畅，段落之间用空行分隔\n\n';
+    prompt += '3. 按照"标题：[标题内容]"格式开始，然后是正文\n';
+    prompt += '4. 文章内容要自然流畅，段落之间用空行分隔\n\n';
     prompt += basePrompt + '\n\n';
     prompt += `核心关键词：${keyword}\n\n`;
     prompt += '相关话题：\n' + topicsList;
@@ -892,7 +878,7 @@ export class ArticleGenerationService {
     }
 
     prompt += '\n\n请撰写一篇专业、高质量的文章。严格按照以下格式输出：\n\n';
-    prompt += '标题：[文章标题]\n\n[文章正文内容，在适当位置包含 [IMAGE_PLACEHOLDER]]';
+    prompt += '标题：[文章标题]\n\n[文章正文内容]';
 
     return prompt;
   }

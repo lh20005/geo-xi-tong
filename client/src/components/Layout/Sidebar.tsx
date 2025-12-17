@@ -11,6 +11,9 @@ import {
   AimOutlined,
   EditOutlined,
   RocketOutlined,
+  CloudUploadOutlined,
+  SendOutlined,
+  HistoryOutlined,
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -64,6 +67,21 @@ export default function Sidebar() {
       key: '/articles',
       icon: <FolderOutlined />,
       label: '文章管理',
+    },
+    {
+      key: '/platform-management',
+      icon: <CloudUploadOutlined />,
+      label: '平台登录',
+    },
+    {
+      key: '/publishing-tasks',
+      icon: <SendOutlined />,
+      label: '发布任务',
+    },
+    {
+      key: '/publishing-records',
+      icon: <HistoryOutlined />,
+      label: '发布记录',
     },
     {
       key: '/config',

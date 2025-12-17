@@ -14,6 +14,7 @@
     "db:migrate:manual-distillation": "tsx src/db/migrate-manual-distillation.ts",
     "db:migrate:fix-articles-fk": "tsx src/db/migrate-fix-articles-fk.ts",
     "db:migrate:image-usage": "tsx src/db/migrate-image-usage-tracking.ts",
+    "db:migrate:publishing": "tsx src/db/migrate-publishing.ts",
     "db:rollback:smart-selection": "tsx src/db/rollback-smart-selection.ts",
     "db:fix:constraint": "tsx src/db/fix-constraint.ts",
     "verify-usage-count": "tsx src/scripts/verify-usage-count.ts",
@@ -35,6 +36,7 @@
     "multer": "^2.0.2",
     "pdf-parse": "^1.1.1",
     "pg": "^8.11.3",
+    "puppeteer": "^24.33.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -45,6 +47,7 @@
     "@types/node": "^20.10.5",
     "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.10.9",
+    "@types/puppeteer": "^5.4.7",
     "fast-check": "^4.4.0",
     "jest": "^30.2.0",
     "ts-jest": "^29.4.6",

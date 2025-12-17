@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import { 
   EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined,
-  SearchOutlined, ReloadOutlined 
+  SearchOutlined, ReloadOutlined, SendOutlined 
 } from '@ant-design/icons';
 import { 
   getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
@@ -15,6 +15,7 @@ import {
 import { apiClient } from '../api/client';
 import ArticleContent from '../components/ArticleContent';
 import ArticleEditorModal from '../components/ArticleEditorModal';
+import PublishingConfigModal from '../components/Publishing/PublishingConfigModal';
 
 const { Paragraph, Text } = Typography;
 const { Option } = Select;
@@ -45,6 +46,7 @@ export default function ArticleListPage() {
   const [viewModal, setViewModal] = useState<any>(null);
   const [editModal, setEditModal] = useState<any>(null);
   const [editorVisible, setEditorVisible] = useState(false);
+  const [publishingModalVisible, setPublishingModalVisible] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -224,6 +226,17 @@ export default function ArticleListPage() {
   const handleCopy = (content: string) => {
     navigator.clipboard.writeText(content);
     message.success('文章已复制到剪贴板');
+  };
+
+  const handlePublish = () => {
+    setPublishingModalVisible(true);
+  };
+
+  const handlePublishingSuccess = () => {
+    setPublishingModalVisible(false);
+    setSelectedIds(new Set());
+    loadArticles();
+    message.success('发布任务创建成功');
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -464,14 +477,19 @@ export default function ArticleListPage() {
         </Row>
       </div>
 
-      {selectedIds.size > 0 && (
-        <Card style={{ marginBottom: 16, backgroundColor: '#e6f7ff' }}>
-          <Space>
-            <Text strong>已选中 {selectedIds.size} 篇文章</Text>
-            <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>删除选中</Button>
-          </Space>
-        </Card>
-      )}
+      <Card style={{ marginBottom: 16, backgroundColor: '#e6f7ff' }}>
+        <Space>
+          {selectedIds.size > 0 ? (
+            <>
+              <Text strong>已选中 {selectedIds.size} 篇文章</Text>
+              <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>删除选中</Button>
+            </>
+          ) : (
+            <Text type="secondary">可以在下方表格中选择文章进行批量操作</Text>
+          )}
+          <Button type="primary" icon={<SendOutlined />} onClick={handlePublish}>发布到平台</Button>
+        </Space>
+      </Card>
 
       <Card title="文章管理" bordered={false} extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
         <Table 
@@ -516,6 +534,12 @@ export default function ArticleListPage() {
       </Modal>
 
       <ArticleEditorModal visible={editorVisible} article={editModal} onClose={handleEditorClose} onSave={handleEditorSave} />
+      
+      <PublishingConfigModal
+        visible={publishingModalVisible}
+        onSuccess={handlePublishingSuccess}
+        onCancel={() => setPublishingModalVisible(false)}
+      />
     </div>
   );
 }

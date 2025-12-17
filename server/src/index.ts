@@ -4,6 +4,8 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { apiRouter } from './routes';
 import { errorHandler } from './middleware/errorHandler';
+import { encryptionService } from './services/EncryptionService';
+import { taskScheduler } from './services/TaskScheduler';
 
 dotenv.config({ path: '../.env' });
 
@@ -24,6 +26,35 @@ app.use('/api', apiRouter);
 // 错误处理
 app.use(errorHandler);
 
-app.listen(PORT, () => {
-  console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+// 初始化加密服务并启动服务器
+async function startServer() {
+  try {
+    await encryptionService.initialize();
+    console.log('✅ 加密服务初始化成功');
+    
+    // 启动任务调度器
+    taskScheduler.start();
+    
+    app.listen(PORT, () => {
+      console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error('❌ 服务器启动失败:', error);
+    process.exit(1);
+  }
+}
+
+// 优雅关闭
+process.on('SIGTERM', () => {
+  console.log('收到 SIGTERM 信号，正在关闭服务器...');
+  taskScheduler.stop();
+  process.exit(0);
 });
+
+process.on('SIGINT', () => {
+  console.log('收到 SIGINT 信号，正在关闭服务器...');
+  taskScheduler.stop();
+  process.exit(0);
+});
+
+startServer();

@@ -17,6 +17,7 @@ export interface Article {
   distillationId?: number;
   distillationKeyword?: string;
   topicId?: number;
+  topicQuestion?: string;
   taskId?: number;
   conversionTargetId?: number;
   conversionTargetName?: string;

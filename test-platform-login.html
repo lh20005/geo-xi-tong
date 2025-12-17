@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>平台登录功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #1890ff;
+            border-bottom: 2px solid #1890ff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 24px;
+        }
+        .platform-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+        .platform-card {
+            border: 2px solid #d9d9d9;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .platform-card:hover {
+            border-color: #1890ff;
+            box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+            transform: translateY(-2px);
+        }
+        .platform-card.logged-in {
+            border-color: #52c41a;
+            background: #f6ffed;
+        }
+        .platform-icon {
+            width: 60px;
+            height: 60px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 12px;
+            font-size: 32px;
+            font-weight: bold;
+            color: #1890ff;
+        }
+        .platform-name {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+        }
+        .platform-status {
+            font-size: 12px;
+            color: #8c8c8c;
+        }
+        .platform-status.logged-in {
+            color: #52c41a;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        th {
+            background: #fafafa;
+            font-weight: 600;
+            color: #333;
+        }
+        tr:hover {
+            background: #fafafa;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background: #1890ff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #40a9ff;
+        }
+        .btn-danger {
+            background: #ff4d4f;
+            color: white;
+        }
+        .btn-danger:hover {
+            background: #ff7875;
+        }
+        .btn-test {
+            background: #52c41a;
+            color: white;
+            margin-right: 8px;
+        }
+        .btn-test:hover {
+            background: #73d13d;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .status-active {
+            background: #f6ffed;
+            color: #52c41a;
+            border: 1px solid #b7eb8f;
+        }
+        .status-inactive {
+            background: #f5f5f5;
+            color: #8c8c8c;
+            border: 1px solid #d9d9d9;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #8c8c8c;
+        }
+        .message {
+            padding: 12px 16px;
+            border-radius: 4px;
+            margin: 16px 0;
+        }
+        .message-success {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            color: #52c41a;
+        }
+        .message-error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+            color: #ff4d4f;
+        }
+        .message-info {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            color: #1890ff;
+        }
+        .test-section {
+            background: #f0f7ff;
+            padding: 16px;
+            border-radius: 8px;
+            margin: 16px 0;
+        }
+        .star-icon {
+            color: #faad14;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 平台登录功能测试</h1>
+        
+        <div class="test-section">
+            <h3>测试步骤：</h3>
+            <ol>
+                <li>点击下方的"加载平台列表"按钮</li>
+                <li>点击任意平台卡片进行浏览器登录测试</li>
+                <li>在弹出的浏览器窗口中输入账号密码</li>
+                <li>登录成功后查看下方的账号列表</li>
+            </ol>
+        </div>
+
+        <div>
+            <button class="btn btn-test" onclick="loadPlatforms()">加载平台列表</button>
+            <button class="btn btn-test" onclick="loadAccounts()">加载账号列表</button>
+            <button class="btn btn-primary" onclick="testBrowserLogin()">测试浏览器登录（知乎）</button>
+        </div>
+
+        <div id="message"></div>
+
+        <h2>📱 可用平台</h2>
+        <div id="platforms" class="loading">点击"加载平台列表"按钮加载...</div>
+
+        <h2>👤 已保存的账号信息</h2>
+        <div id="accounts" class="loading">点击"加载账号列表"按钮加载...</div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3001/api/publishing';
+
+        function showMessage(message, type = 'info') {
+            const messageDiv = document.getElementById('message');
+            messageDiv.innerHTML = `<div class="message message-${type}">${message}</div>`;
+            setTimeout(() => {
+                messageDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        async function loadPlatforms() {
+            try {
+                showMessage('正在加载平台列表...', 'info');
+                const response = await fetch(`${API_BASE}/platforms`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayPlatforms(data.data);
+                    showMessage('平台列表加载成功', 'success');
+                } else {
+                    showMessage('加载失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('加载失败: ' + error.message, 'error');
+                console.error('加载平台列表失败:', error);
+            }
+        }
+
+        async function loadAccounts() {
+            try {
+                showMessage('正在加载账号列表...', 'info');
+                const response = await fetch(`${API_BASE}/accounts`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayAccounts(data.data);
+                    showMessage('账号列表加载成功', 'success');
+                } else {
+                    showMessage('加载失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('加载失败: ' + error.message, 'error');
+                console.error('加载账号列表失败:', error);
+            }
+        }
+
+        function displayPlatforms(platforms) {
+            const container = document.getElementById('platforms');
+            
+            if (platforms.length === 0) {
+                container.innerHTML = '<p class="loading">暂无可用平台</p>';
+                return;
+            }
+
+            const html = `
+                <div class="platform-grid">
+                    ${platforms.map(platform => `
+                        <div class="platform-card" onclick="loginPlatform('${platform.platform_id}', '${platform.platform_name}')">
+                            <div class="platform-icon">${platform.platform_name.charAt(0)}</div>
+                            <div class="platform-name">${platform.platform_name}</div>
+                            <div class="platform-status">点击登录</div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        function displayAccounts(accounts) {
+            const container = document.getElementById('accounts');
+            
+            if (accounts.length === 0) {
+                container.innerHTML = '<p class="loading">暂无已保存的账号</p>';
+                return;
+            }
+
+            const html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>平台</th>
+                            <th>账号名称</th>
+                            <th>状态</th>
+                            <th>创建时间</th>
+                            <th>最后使用</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${accounts.map(account => `
+                            <tr>
+                                <td>${account.id}</td>
+                                <td>${account.platform_id}</td>
+                                <td>
+                                    ${account.account_name}
+                                    ${account.is_default ? '<span class="star-icon">⭐</span>' : ''}
+                                </td>
+                                <td>
+                                    <span class="status-badge status-${account.status === 'active' ? 'active' : 'inactive'}">
+                                        ${account.status === 'active' ? '正常' : '未激活'}
+                                    </span>
+                                </td>
+                                <td>${new Date(account.created_at).toLocaleString()}</td>
+                                <td>${account.last_used_at ? new Date(account.last_used_at).toLocaleString() : '-'}</td>
+                                <td>
+                                    <button class="btn btn-danger" onclick="deleteAccount(${account.id})">删除</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            container.innerHTML = html;
+        }
+
+        async function loginPlatform(platformId, platformName) {
+            if (!confirm(`确定要打开浏览器登录 ${platformName} 吗？\n\n这将打开一个新的浏览器窗口，请在窗口中完成登录。`)) {
+                return;
+            }
+
+            try {
+                showMessage(`正在打开 ${platformName} 登录页面，请在浏览器中完成登录...`, 'info');
+                
+                const response = await fetch(`${API_BASE}/browser-login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ platform_id: platformId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage(`${platformName} 登录成功！`, 'success');
+                    // 重新加载账号列表
+                    await loadAccounts();
+                } else {
+                    showMessage(`登录失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage(`登录失败: ${error.message}`, 'error');
+                console.error('浏览器登录失败:', error);
+            }
+        }
+
+        async function testBrowserLogin() {
+            await loginPlatform('zhihu', '知乎');
+        }
+
+        async function deleteAccount(accountId) {
+            if (!confirm('确定要删除这个账号吗？\n\n删除后将无法恢复，且Cookie信息也会被清除。')) {
+                return;
+            }
+
+            try {
+                showMessage('正在删除账号...', 'info');
+                
+                const response = await fetch(`${API_BASE}/accounts/${accountId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('账号删除成功', 'success');
+                    // 重新加载账号列表
+                    await loadAccounts();
+                } else {
+                    showMessage('删除失败: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('删除失败: ' + error.message, 'error');
+                console.error('删除账号失败:', error);
+            }
+        }
+
+        // 页面加载时自动加载数据
+        window.addEventListener('load', () => {
+            console.log('页面加载完成，准备测试平台登录功能');
+        });
+    </script>
+</body>
+</html>

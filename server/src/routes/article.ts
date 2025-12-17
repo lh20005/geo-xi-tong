@@ -255,10 +255,30 @@ articleRouter.get('/:id', async (req, res) => {
     
     const result = await pool.query(
       `SELECT 
-        id, title, keyword, distillation_id, topic_id, task_id, requirements,
-        content, image_url, provider, is_published, published_at, created_at, updated_at
-       FROM articles 
-       WHERE id = $1`,
+        a.id,
+        a.title,
+        a.keyword,
+        a.distillation_id,
+        d.keyword as distillation_keyword,
+        a.topic_id,
+        t.question as topic_question,
+        a.task_id,
+        gt.conversion_target_id,
+        ct.company_name as conversion_target_name,
+        a.requirements,
+        a.content,
+        a.image_url,
+        a.provider,
+        a.is_published,
+        a.published_at,
+        a.created_at,
+        a.updated_at
+       FROM articles a
+       LEFT JOIN distillations d ON a.distillation_id = d.id
+       LEFT JOIN topics t ON a.topic_id = t.id
+       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+       LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
+       WHERE a.id = $1`,
       [id]
     );
     
@@ -272,8 +292,12 @@ articleRouter.get('/:id', async (req, res) => {
       title: article.title,
       keyword: article.keyword,
       distillationId: article.distillation_id,
+      distillationKeyword: article.distillation_keyword,
       topicId: article.topic_id,
+      topicQuestion: article.topic_question,
       taskId: article.task_id,
+      conversionTargetId: article.conversion_target_id,
+      conversionTargetName: article.conversion_target_name,
       requirements: article.requirements,
       content: article.content,
       imageUrl: article.image_url,
@@ -401,14 +425,10 @@ articleRouter.post('/:id/smart-format', async (req, res) => {
 
     for (let i = 0; i < paragraphs.length; i++) {
       const paragraph = paragraphs[i].trim();
-      
-      if (paragraph === '[IMAGE_PLACEHOLDER]' && imageUrl) {
-        formattedHtml += `<img src="${imageUrl}" alt="article image" style="max-width: 100%; height: auto; margin: 20px 0;" />`;
-      } else {
-        formattedHtml += `<p>${paragraph}</p>`;
-      }
+      formattedHtml += `<p>${paragraph}</p>`;
 
-      if (i === 0 && hasImage && !formattedText.includes('[IMAGE_PLACEHOLDER]')) {
+      // 在第一段后插入图片
+      if (i === 0 && hasImage && imageUrl) {
         formattedHtml += `<img src="${imageUrl}" alt="article image" style="max-width: 100%; height: auto; margin: 20px 0;" />`;
       }
     }

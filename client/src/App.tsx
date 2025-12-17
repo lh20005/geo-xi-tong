@@ -16,6 +16,9 @@ import KnowledgeBaseDetailPage from './pages/KnowledgeBaseDetailPage';
 import ConversionTargetPage from './pages/ConversionTargetPage';
 import ArticleSettingsPage from './pages/ArticleSettingsPage';
 import ArticleGenerationPage from './pages/ArticleGenerationPage';
+import PlatformManagementPage from './pages/PlatformManagementPage';
+import PublishingTasksPage from './pages/PublishingTasksPage';
+import PublishingRecordsPage from './pages/PublishingRecordsPage';
 
 const { Content } = Layout;
 
@@ -35,6 +38,9 @@ function App() {
             <Route path="/topics/:distillationId" element={<TopicsPage />} />
             <Route path="/article/:distillationId" element={<ArticlePage />} />
             <Route path="/articles" element={<ArticleListPage />} />
+            <Route path="/platform-management" element={<PlatformManagementPage />} />
+            <Route path="/publishing-tasks" element={<PublishingTasksPage />} />
+            <Route path="/publishing-records" element={<PublishingRecordsPage />} />
             <Route path="/gallery" element={<GalleryPage />} />
             <Route path="/gallery/:albumId" element={<AlbumDetailPage />} />
             <Route path="/knowledge-base" element={<KnowledgeBasePage />} />
