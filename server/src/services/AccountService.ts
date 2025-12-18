@@ -1,5 +1,6 @@
 import { pool } from '../db/database';
 import { encryptionService } from './EncryptionService';
+import { getStandardBrowserConfig, findChromeExecutable } from '../config/browserConfig';
 
 export interface Account {
   id: number;
@@ -266,56 +267,34 @@ export class AccountService {
         };
       }
       
-      console.log(`[浏览器登录] 启动浏览器，准备打开 ${platform.platform_name} 登录页面...`);
+      console.log(`\n========================================`);
+      console.log(`[浏览器登录] 开始登录流程`);
+      console.log(`[浏览器登录] 平台: ${platform.platform_name} (${platform.platform_id})`);
+      console.log(`[浏览器登录] 登录URL: ${loginUrl}`);
+      console.log(`========================================\n`);
       
       // 查找系统Chrome路径
-      const chromePaths = [
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
-        '/usr/bin/google-chrome', // Linux
-        '/usr/bin/chromium', // Linux Chromium
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
-      ];
+      const executablePath = findChromeExecutable();
       
-      let executablePath: string | undefined;
-      const fs = require('fs');
-      
-      for (const path of chromePaths) {
-        if (fs.existsSync(path)) {
-          executablePath = path;
-          console.log(`[浏览器登录] 找到Chrome: ${path}`);
-          break;
-        }
-      }
-      
-      // 启动浏览器
-      const launchOptions: any = {
+      // 使用统一的浏览器配置（参照头条号配置，使用最大化窗口）
+      const launchOptions = getStandardBrowserConfig({
         headless: false, // 显示浏览器窗口
-        defaultViewport: {
-          width: 1280,
-          height: 800
-        },
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
-        ]
-      };
+        executablePath
+      });
       
-      // 如果找到系统Chrome，使用它
-      if (executablePath) {
-        launchOptions.executablePath = executablePath;
-      }
-      
+      console.log(`[浏览器登录] 正在启动浏览器...`);
       browser = await puppeteer.launch(launchOptions);
+      console.log(`[浏览器登录] 浏览器启动成功`);
       
       const page = await browser.newPage();
+      console.log(`[浏览器登录] 创建新页面成功`);
       
       // 导航到登录页面
-      console.log(`[浏览器登录] 正在打开登录页面: ${loginUrl}`);
+      console.log(`[浏览器登录] 正在导航到登录页面...`);
       await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      console.log(`[浏览器登录] 页面加载完成，当前URL: ${page.url()}`);
       
-      console.log(`[浏览器登录] 已打开 ${platform.platform_name} 登录页面，等待用户登录...`);
+      console.log(`[浏览器登录] 等待用户完成登录...`);
       
       // 等待用户登录完成（检测URL变化或特定元素）
       await this.waitForLogin(page, platform.platform_id);
@@ -460,138 +439,21 @@ export class AccountService {
   
   /**
    * 等待用户登录完成
+   * 统一使用简单的URL变化检测（参考头条号成功经验）
    */
   private async waitForLogin(page: any, platformId: string): Promise<void> {
-    const currentUrl = page.url();
+    const initialUrl = page.url();
+    console.log(`[等待登录] ${platformId} 平台 - 初始URL: ${initialUrl}`);
     
-    // 根据不同平台设置不同的等待条件
-    const waitConditions: { [key: string]: () => Promise<void> } = {
-      // 自媒体平台
-      'wangyi': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'souhu': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'baijiahao': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('register') && !window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'toutiao': async () => {
-        // 头条号登录后URL变化，不再包含 login 或 auth
-        await page.waitForFunction(
-          `!window.location.href.includes('login') && !window.location.href.includes('auth')`,
-          { timeout: 300000 }
-        );
-        console.log(`[等待登录] 头条号登录成功，当前URL: ${page.url()}`);
-      },
-      'qie': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('userAuth') && !window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      
-      // 社交媒体平台
-      'wechat': async () => {
-        await page.waitForFunction(
-          `window.location.href.includes('home') || window.location.href.includes('cgi-bin')`,
-          { timeout: 300000 }
-        );
-      },
-      'xiaohongshu': async () => {
-        await page.waitForFunction(
-          `window.location.href.includes('creator.xiaohongshu.com') && !window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'douyin': async () => {
-        await page.waitForFunction(
-          `window.location.href.includes('creator.douyin.com') && !window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'bilibili': async () => {
-        await page.waitForFunction(
-          `window.location.href.includes('member.bilibili.com') && !window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      
-      // 技术社区平台
-      'zhihu': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('signin')`,
-          { timeout: 300000 }
-        );
-      },
-      'jianshu': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('sign_in')`,
-          { timeout: 300000 }
-        );
-      },
-      'csdn': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('login') && !window.location.href.includes('passport')`,
-          { timeout: 300000 }
-        );
-      },
-      'juejin': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'segmentfault': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'oschina': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('login')`,
-          { timeout: 300000 }
-        );
-      },
-      'cnblogs': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('signin')`,
-          { timeout: 300000 }
-        );
-      },
-      'v2ex': async () => {
-        await page.waitForFunction(
-          `!window.location.href.includes('signin')`,
-          { timeout: 300000 }
-        );
-      }
-    };
+    // 统一策略：等待URL变化
+    // 原理：所有平台登录后URL都会发生变化（跳转到首页、控制台等）
+    await page.waitForFunction(
+      `window.location.href !== "${initialUrl}"`,
+      { timeout: 300000 }
+    );
     
-    const waitFn = waitConditions[platformId];
-    
-    if (waitFn) {
-      console.log(`[等待登录] 使用 ${platformId} 特定的等待条件`);
-      await waitFn();
-    } else {
-      // 默认等待：等待URL变化或5分钟超时
-      console.log(`[等待登录] 使用默认等待条件，等待URL从 ${currentUrl} 变化`);
-      await page.waitForFunction(
-        `window.location.href !== "${currentUrl}"`,
-        { timeout: 300000 }
-      );
-    }
-    
-    console.log(`[等待登录] 检测到URL变化，当前URL: ${page.url()}`);
+    const finalUrl = page.url();
+    console.log(`[等待登录] ${platformId} 登录成功，当前URL: ${finalUrl}`);
     
     // 额外等待2秒确保Cookie设置完成
     await new Promise(resolve => setTimeout(resolve, 2000));

@@ -8,7 +8,6 @@ import {
   Modal,
   Input,
   Form,
-  Select,
   Empty,
   Tag,
 } from 'antd';
@@ -26,42 +25,18 @@ import axios from 'axios';
 
 const { TextArea } = Input;
 
-// TypeScript 接口定义
+// TypeScript 接口定义（简化后的结构）
 interface ConversionTarget {
   id: number;
   company_name: string;
-  industry: string;
-  company_size: string;
-  features?: string;
-  contact_info: string;
+  industry?: string;
   website?: string;
-  target_audience?: string;
-  core_products?: string;
+  address?: string;
   created_at: string;
   updated_at: string;
 }
 
 type ModalMode = 'create' | 'edit' | 'view';
-
-// 行业选项
-const INDUSTRY_OPTIONS = [
-  '互联网',
-  '金融',
-  '制造业',
-  '教育',
-  '医疗',
-  '零售',
-  '其他',
-];
-
-// 公司规模选项
-const COMPANY_SIZE_OPTIONS = [
-  '1-50人',
-  '51-200人',
-  '201-500人',
-  '501-1000人',
-  '1000人以上',
-];
 
 export default function ConversionTargetPage() {
   // 状态管理
@@ -117,31 +92,39 @@ export default function ConversionTargetPage() {
       sorter: true,
       width: 200,
       align: 'center',
+      render: (text: string) => <strong>{text}</strong>,
     },
     {
       title: '行业类型',
       dataIndex: 'industry',
       key: 'industry',
-      sorter: true,
-      width: 120,
+      width: 150,
       align: 'center',
-      render: (industry: string) => <Tag color="blue">{industry}</Tag>,
+      render: (industry?: string) => 
+        industry ? <Tag color="blue">{industry}</Tag> : <span style={{ color: '#999' }}>-</span>,
     },
     {
-      title: '公司规模',
-      dataIndex: 'company_size',
-      key: 'company_size',
-      sorter: true,
-      width: 120,
+      title: '官方网站',
+      dataIndex: 'website',
+      key: 'website',
+      width: 200,
       align: 'center',
-      render: (size: string) => <Tag color="green">{size}</Tag>,
+      render: (website?: string) =>
+        website ? (
+          <a href={website} target="_blank" rel="noopener noreferrer">
+            {website}
+          </a>
+        ) : (
+          <span style={{ color: '#999' }}>-</span>
+        ),
     },
     {
-      title: '联系方式',
-      dataIndex: 'contact_info',
-      key: 'contact_info',
-      width: 180,
+      title: '公司地址',
+      dataIndex: 'address',
+      key: 'address',
+      width: 250,
       align: 'center',
+      render: (address?: string) => address || <span style={{ color: '#999' }}>-</span>,
     },
     {
       title: '创建时间',
@@ -155,27 +138,27 @@ export default function ConversionTargetPage() {
     {
       title: '操作',
       key: 'action',
-      fixed: 'right',
       width: 200,
       align: 'center',
-      render: (_, record) => (
+      fixed: 'right',
+      render: (_: any, record: ConversionTarget) => (
         <Space size="small">
           <Button
-            size="small"
+            type="link"
             icon={<EyeOutlined />}
             onClick={() => handleView(record)}
           >
             查看
           </Button>
           <Button
-            size="small"
+            type="link"
             icon={<EditOutlined />}
             onClick={() => handleEdit(record)}
           >
             编辑
           </Button>
           <Button
-            size="small"
+            type="link"
             danger
             icon={<DeleteOutlined />}
             onClick={() => handleDelete(record)}
@@ -187,33 +170,28 @@ export default function ConversionTargetPage() {
     },
   ];
 
-  // 处理表格变化（分页、排序）
+  // 处理表格变化
   const handleTableChange = (
     pagination: TablePaginationConfig,
-    _filters: Record<string, FilterValue | null>,
+    filters: Record<string, FilterValue | null>,
     sorter: SorterResult<ConversionTarget> | SorterResult<ConversionTarget>[]
   ) => {
-    if (pagination.current) {
-      setCurrentPage(pagination.current);
-    }
-    if (pagination.pageSize) {
-      setPageSize(pagination.pageSize);
-    }
+    if (pagination.current) setCurrentPage(pagination.current);
+    if (pagination.pageSize) setPageSize(pagination.pageSize);
 
-    // 处理排序
     if (!Array.isArray(sorter) && sorter.field) {
       setSortField(sorter.field as string);
       setSortOrder(sorter.order || 'descend');
     }
   };
 
-  // 处理搜索
+  // 搜索
   const handleSearch = (value: string) => {
     setSearchKeyword(value);
-    setCurrentPage(1); // 重置到第一页
+    setCurrentPage(1);
   };
 
-  // 打开创建对话框
+  // 新建
   const handleCreate = () => {
     setModalMode('create');
     setSelectedTarget(null);
@@ -221,103 +199,103 @@ export default function ConversionTargetPage() {
     setModalVisible(true);
   };
 
-  // 打开查看对话框
+  // 查看
   const handleView = (record: ConversionTarget) => {
     setModalMode('view');
     setSelectedTarget(record);
     form.setFieldsValue({
       companyName: record.company_name,
       industry: record.industry,
-      companySize: record.company_size,
-      features: record.features,
-      contactInfo: record.contact_info,
       website: record.website,
-      targetAudience: record.target_audience,
-      coreProducts: record.core_products,
+      address: record.address,
     });
     setModalVisible(true);
   };
 
-  // 打开编辑对话框
+  // 编辑
   const handleEdit = (record: ConversionTarget) => {
     setModalMode('edit');
     setSelectedTarget(record);
     form.setFieldsValue({
       companyName: record.company_name,
       industry: record.industry,
-      companySize: record.company_size,
-      features: record.features,
-      contactInfo: record.contact_info,
       website: record.website,
-      targetAudience: record.target_audience,
-      coreProducts: record.core_products,
+      address: record.address,
     });
     setModalVisible(true);
   };
 
-  // 处理删除
+  // 删除
   const handleDelete = (record: ConversionTarget) => {
     Modal.confirm({
       title: '确认删除',
-      content: `确定要删除转化目标"${record.company_name}"吗？此操作不可恢复。`,
+      content: `确定要删除转化目标"${record.company_name}"吗？`,
       okText: '确定',
       cancelText: '取消',
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/conversion-targets/${record.id}`);
-          message.success('删除成功');
-          loadConversionTargets();
+          const response = await axios.delete(`/api/conversion-targets/${record.id}`);
+          if (response.data.success) {
+            message.success('删除成功');
+            loadConversionTargets();
+          }
         } catch (error: any) {
+          console.error('删除失败:', error);
           message.error(error.response?.data?.error || '删除失败');
         }
       },
     });
   };
 
-  // 处理表单提交
+  // 提交表单
   const handleSubmit = async () => {
+    if (modalMode === 'view') {
+      setModalVisible(false);
+      return;
+    }
+
     try {
       const values = await form.validateFields();
-      setLoading(true);
+      
+      const data = {
+        companyName: values.companyName,
+        industry: values.industry || '',
+        website: values.website || '',
+        address: values.address || '',
+      };
 
       if (modalMode === 'create') {
-        await axios.post('/api/conversion-targets', values);
-        message.success('创建成功');
+        const response = await axios.post('/api/conversion-targets', data);
+        if (response.data.success) {
+          message.success('创建成功');
+          setModalVisible(false);
+          loadConversionTargets();
+        }
       } else if (modalMode === 'edit' && selectedTarget) {
-        await axios.patch(`/api/conversion-targets/${selectedTarget.id}`, values);
-        message.success('更新成功');
+        const response = await axios.patch(`/api/conversion-targets/${selectedTarget.id}`, data);
+        if (response.data.success) {
+          message.success('更新成功');
+          setModalVisible(false);
+          loadConversionTargets();
+        }
       }
-
-      setModalVisible(false);
-      form.resetFields();
-      loadConversionTargets();
     } catch (error: any) {
-      if (error.response?.data?.code === 'DUPLICATE_ENTRY') {
-        message.error('公司名称已存在');
-      } else if (error.response?.data?.error) {
-        message.error(error.response.data.error);
-      } else {
-        message.error('操作失败');
+      if (error.errorFields) {
+        // 表单验证错误
+        return;
       }
-    } finally {
-      setLoading(false);
+      console.error('操作失败:', error);
+      message.error(error.response?.data?.error || '操作失败');
     }
   };
 
-  // 关闭对话框
-  const handleCancel = () => {
-    setModalVisible(false);
-    form.resetFields();
-    setSelectedTarget(null);
-  };
-
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: '24px' }}>
       <Card
         title={
           <Space>
-            <AimOutlined style={{ color: '#1890ff' }} />
+            <AimOutlined />
             <span>转化目标管理</span>
           </Space>
         }
@@ -326,20 +304,15 @@ export default function ConversionTargetPage() {
             <Input.Search
               placeholder="搜索公司名称或行业"
               allowClear
-              style={{ width: 250 }}
               onSearch={handleSearch}
-              enterButton={<SearchOutlined />}
+              style={{ width: 250 }}
+              prefix={<SearchOutlined />}
             />
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              onClick={handleCreate}
-            >
-              新增转化目标
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              新建转化目标
             </Button>
           </Space>
         }
-        bordered={false}
       >
         <Table
           columns={columns}
@@ -351,7 +324,8 @@ export default function ConversionTargetPage() {
             pageSize: pageSize,
             total: total,
             showSizeChanger: true,
-            showTotal: (total) => `共 ${total} 条记录`,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 条`,
             pageSizeOptions: ['10', '20', '50', '100'],
           }}
           onChange={handleTableChange}
@@ -361,33 +335,29 @@ export default function ConversionTargetPage() {
               <Empty
                 description="暂无转化目标"
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-              >
-                <p style={{ color: '#64748b' }}>
-                  点击"新增转化目标"按钮来创建第一个转化目标
-                </p>
-              </Empty>
+              />
             ),
           }}
         />
       </Card>
 
-      {/* 表单对话框 */}
+      {/* 新建/编辑/查看模态框 */}
       <Modal
         title={
           modalMode === 'create'
-            ? '新增转化目标'
+            ? '新建转化目标'
             : modalMode === 'edit'
             ? '编辑转化目标'
             : '查看转化目标'
         }
         open={modalVisible}
-        onOk={modalMode === 'view' ? handleCancel : handleSubmit}
-        onCancel={handleCancel}
-        confirmLoading={loading}
-        okText={modalMode === 'view' ? '关闭' : '保存'}
+        onOk={handleSubmit}
+        onCancel={() => setModalVisible(false)}
+        okText={modalMode === 'view' ? '关闭' : modalMode === 'create' ? '创建' : '保存'}
         cancelText="取消"
-        width={720}
         cancelButtonProps={{ style: { display: modalMode === 'view' ? 'none' : 'inline-block' } }}
+        width={600}
+        destroyOnClose
       >
         <Form
           form={form}
@@ -399,102 +369,41 @@ export default function ConversionTargetPage() {
             name="companyName"
             rules={[
               { required: true, message: '请输入公司名称' },
-              { min: 2, max: 255, message: '公司名称长度为2-255字符' },
+              { min: 2, message: '公司名称至少2个字符' },
+              { max: 255, message: '公司名称不能超过255个字符' },
             ]}
           >
-            <Input placeholder="请输入公司名称" />
+            <Input placeholder="请输入公司名称（必填）" maxLength={255} />
           </Form.Item>
 
           <Form.Item
             label="行业类型"
             name="industry"
-            rules={[{ required: true, message: '请选择行业类型' }]}
+            extra="可选，例如：教育、互联网、金融等"
           >
-            <Select placeholder="请选择行业类型">
-              {INDUSTRY_OPTIONS.map((option) => (
-                <Select.Option key={option} value={option}>
-                  {option}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            label="公司规模"
-            name="companySize"
-            rules={[{ required: true, message: '请选择公司规模' }]}
-          >
-            <Select placeholder="请选择公司规模">
-              {COMPANY_SIZE_OPTIONS.map((option) => (
-                <Select.Option key={option} value={option}>
-                  {option}
-                </Select.Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          <Form.Item
-            label="联系方式"
-            name="contactInfo"
-            rules={[
-              { required: true, message: '请输入联系方式' },
-              {
-                pattern: /^1[3-9]\d{9}$|^[\w-]+(\.[\w-]+)*@[\w-]+(\.[\w-]+)+$/,
-                message: '请输入有效的手机号或邮箱',
-              },
-            ]}
-          >
-            <Input placeholder="请输入手机号或邮箱" />
+            <Input placeholder="请输入行业类型（可选）" maxLength={100} />
           </Form.Item>
 
           <Form.Item
             label="官方网站"
             name="website"
             rules={[
-              {
-                type: 'url',
-                message: '请输入有效的网址（以http://或https://开头）',
-              },
+              { type: 'url', message: '请输入有效的网址' },
             ]}
+            extra="可选，必须以http://或https://开头"
           >
-            <Input placeholder="https://example.com" />
+            <Input placeholder="请输入官方网站（可选）" />
           </Form.Item>
 
           <Form.Item
-            label="公司特色"
-            name="features"
-            rules={[{ max: 1000, message: '公司特色不能超过1000字符' }]}
+            label="公司地址"
+            name="address"
+            extra="可选，用于文章生成时引用真实地址"
           >
             <TextArea
+              placeholder="请输入公司地址（可选）&#10;例如：杭州市西湖区教工路123号"
               rows={3}
-              placeholder="请描述公司的特色和优势"
-              maxLength={1000}
-              showCount
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="目标客户群"
-            name="targetAudience"
-            rules={[{ max: 500, message: '目标客户群不能超过500字符' }]}
-          >
-            <TextArea
-              rows={2}
-              placeholder="请描述目标客户群体"
               maxLength={500}
-              showCount
-            />
-          </Form.Item>
-
-          <Form.Item
-            label="核心产品服务"
-            name="coreProducts"
-            rules={[{ max: 1000, message: '核心产品服务不能超过1000字符' }]}
-          >
-            <TextArea
-              rows={3}
-              placeholder="请描述核心产品和服务"
-              maxLength={1000}
               showCount
             />
           </Form.Item>

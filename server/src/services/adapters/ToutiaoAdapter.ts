@@ -343,8 +343,8 @@ export class ToutiaoAdapter extends PlatformAdapter {
         // ========== 步骤1：提取所有文字（移除图片标记）==========
         console.log('[头条号] 📝 步骤1：提取所有文字内容...');
         
-        // 移除所有图片标记，只保留文字
-        const textOnly = cleanContent.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '').trim();
+        // 使用基类的通用清理方法，移除HTML标签和图片标记，保留段落格式
+        const textOnly = this.cleanArticleContent(cleanContent);
         console.log(`[头条号] 📏 纯文字长度: ${textOnly.length} 个字符`);
         console.log(`[头条号] 📝 文字预览: "${textOnly.substring(0, 100)}${textOnly.length > 100 ? '...' : ''}"`);
         

@@ -31,20 +31,19 @@ describe('ArticleGenerationService', () => {
       const serviceFilePath = path.join(__dirname, '../services/articleGenerationService.ts');
       const serviceCode = fs.readFileSync(serviceFilePath, 'utf-8');
 
-      // 验证提示词模板包含必要的指令
-      const requiredInstructions = [
-        '不要包含任何思考过程',
-        '使用纯文本格式',
-        '不要使用Markdown符号',
-        '不要使用"让我思考"',
-        '标题：'
+      // 验证提示词构建逻辑
+      // 新设计：详细要求在模板中定义，代码只负责数据拼接
+      const requiredElements = [
+        '占位符',  // 支持占位符替换
+        '标题：',  // 基本格式要求
+        '话题'     // 话题导向
       ];
 
-      const allInstructionsPresent = requiredInstructions.every(instruction =>
-        serviceCode.includes(instruction)
+      const allElementsPresent = requiredElements.every(element =>
+        serviceCode.includes(element)
       );
 
-      expect(allInstructionsPresent).toBe(true);
+      expect(allElementsPresent).toBe(true);
     });
 
     it('should verify prompt template structure', () => {
@@ -54,16 +53,13 @@ describe('ArticleGenerationService', () => {
       const serviceFilePath = path.join(__dirname, '../services/articleGenerationService.ts');
       const serviceCode = fs.readFileSync(serviceFilePath, 'utf-8');
 
-      // 检查是否有【重要输出要求】部分
-      expect(serviceCode).toContain('【重要输出要求】');
+      // 检查是否支持占位符替换
+      expect(serviceCode).toContain('replacePromptVariables');
       
-      // 检查是否明确禁止思考过程
-      expect(serviceCode).toContain('思考过程');
+      // 检查是否有话题导向
+      expect(serviceCode).toContain('话题');
       
-      // 检查是否明确要求纯文本格式
-      expect(serviceCode).toContain('纯文本格式');
-      
-      // 检查是否指定输出格式
+      // 检查是否指定基本输出格式
       expect(serviceCode).toContain('标题：[');
     });
   });

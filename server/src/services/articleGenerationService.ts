@@ -473,6 +473,26 @@ export class ArticleGenerationService {
       console.log(`[任务 ${taskId}] 加载文章设置...`);
       const articlePrompt = await this.getArticleSettingPrompt(task.articleSettingId);
 
+      // 获取转化目标（公司名称、行业、网站、地址）
+      let companyName: string | undefined;
+      let companyIndustry: string | undefined;
+      let companyWebsite: string | undefined;
+      let companyAddress: string | undefined;
+      if (task.conversionTargetId) {
+        console.log(`[任务 ${taskId}] 加载转化目标...`);
+        const targetResult = await pool.query(
+          'SELECT company_name, industry, website, address FROM conversion_targets WHERE id = $1',
+          [task.conversionTargetId]
+        );
+        if (targetResult.rows.length > 0) {
+          companyName = targetResult.rows[0].company_name;
+          companyIndustry = targetResult.rows[0].industry;
+          companyWebsite = targetResult.rows[0].website;
+          companyAddress = targetResult.rows[0].address;
+          console.log(`[任务 ${taskId}] 转化目标: ${companyName}${companyAddress ? ` (地址: ${companyAddress})` : ''}`);
+        }
+      }
+
       // 获取AI配置
       console.log(`[任务 ${taskId}] 加载AI配置...`);
       const aiConfig = await this.getActiveAIConfig();
@@ -518,14 +538,15 @@ export class ArticleGenerationService {
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 使用默认占位图片继续执行`);
           }
 
-          // 生成单篇文章（使用单个话题）
+          // 生成单篇文章（使用单个话题，包含转化目标）
           const result = await this.generateSingleArticle(
             distillationData.keyword,
             [distillationData.topic], // 只使用一个话题
             imageUrl,
             knowledgeContent,
             articlePrompt,
-            aiConfig
+            aiConfig,
+            companyName // 传入公司名称
           );
 
           if (result.success && result.title && result.content) {
@@ -607,6 +628,26 @@ export class ArticleGenerationService {
     console.log(`[任务 ${taskId}] 加载文章设置...`);
     const articlePrompt = await this.getArticleSettingPrompt(task.articleSettingId);
 
+    // 获取转化目标（公司名称、行业、网站、地址）
+    let companyName: string | undefined;
+    let companyIndustry: string | undefined;
+    let companyWebsite: string | undefined;
+    let companyAddress: string | undefined;
+    if (task.conversionTargetId) {
+      console.log(`[任务 ${taskId}] 加载转化目标...`);
+      const targetResult = await pool.query(
+        'SELECT company_name, industry, website, address FROM conversion_targets WHERE id = $1',
+        [task.conversionTargetId]
+      );
+      if (targetResult.rows.length > 0) {
+        companyName = targetResult.rows[0].company_name;
+        companyIndustry = targetResult.rows[0].industry;
+        companyWebsite = targetResult.rows[0].website;
+        companyAddress = targetResult.rows[0].address;
+        console.log(`[任务 ${taskId}] 转化目标: ${companyName}${companyAddress ? ` (地址: ${companyAddress})` : ''}`);
+      }
+    }
+
     // 获取AI配置
     console.log(`[任务 ${taskId}] 加载AI配置...`);
     const aiConfig = await this.getActiveAIConfig();
@@ -648,14 +689,18 @@ export class ArticleGenerationService {
           console.log(`[任务 ${taskId}] 使用默认占位图片继续执行`);
         }
 
-        // 生成单篇文章
+        // 生成单篇文章（包含转化目标）
         const result = await this.generateSingleArticle(
           pair.keyword,
           pair.topics,
           imageUrl,
           knowledgeContent,
           articlePrompt,
-          aiConfig
+          aiConfig,
+          companyName,
+          companyIndustry,
+          companyWebsite,
+          companyAddress
         );
 
         if (result.success && result.title && result.content) {
@@ -824,61 +869,133 @@ export class ArticleGenerationService {
 
   /**
    * 在文章内容中插入图片标记
-   * Feature: article-image-embedding, Property 1: 图片标记插入完整性
-   * Feature: article-image-embedding, Property 2: 多段落图片位置正确性
+   * 图片统一放在文章末尾
    */
   private insertImageIntoContent(
     content: string,
     imageUrl: string
   ): string {
-    // 智能插入图片（不使用占位符）
-    const paragraphs = content.split('\n\n').filter(p => p.trim());
-    
-    if (paragraphs.length === 0) {
-      // 空内容，直接返回图片
-      return `![文章配图](${imageUrl})\n\n${content}`;
-    } else if (paragraphs.length === 1) {
-      // 只有一段，图片放在末尾
-      return `${content}\n\n![文章配图](${imageUrl})`;
-    } else {
-      // 多段，图片放在第一段后
-      const insertIndex = 1; // 在第一段后插入
-      paragraphs.splice(
-        insertIndex,
-        0,
-        `![文章配图](${imageUrl})`
-      );
-      return paragraphs.join('\n\n');
-    }
+    // 图片统一放在文章末尾
+    return `${content}\n\n![文章配图](${imageUrl})`;
   }
 
   /**
-   * 构建AI提示词（不使用占位符）
+   * 构建AI提示词（包含转化目标要求）
+   */
+  /**
+   * 替换提示词中的占位符变量
+   * 支持的占位符：
+   * - {keyword} - 核心关键词
+   * - {topics} - 话题列表（带编号）
+   * - {topicsList} - 话题列表（纯文本，逗号分隔）
+   * - {companyName} - 公司名称
+   * - {companyIndustry} - 行业类型（可能为空）
+   * - {companyWebsite} - 官方网站（可能为空）
+   * - {companyAddress} - 公司地址（可能为空）
+   * - {knowledgeBase} - 知识库内容
+   */
+  private replacePromptVariables(
+    prompt: string,
+    keyword: string,
+    topics: string[],
+    knowledgeContent: string,
+    companyName?: string,
+    companyIndustry?: string,
+    companyWebsite?: string,
+    companyAddress?: string
+  ): string {
+    // 格式化话题列表（带编号）
+    const topicsFormatted = topics.map((t, i) => `${i + 1}. ${t}`).join('\n');
+    
+    // 格式化话题列表（纯文本）
+    const topicsListText = topics.join('、');
+    
+    // 替换所有占位符
+    let result = prompt
+      .replace(/\{keyword\}/g, keyword)
+      .replace(/\{topics\}/g, topicsFormatted)
+      .replace(/\{topicsList\}/g, topicsListText)
+      .replace(/\{companyName\}/g, companyName || '')
+      .replace(/\{companyIndustry\}/g, companyIndustry || '')
+      .replace(/\{companyWebsite\}/g, companyWebsite || '')
+      .replace(/\{companyAddress\}/g, companyAddress || '')
+      .replace(/\{knowledgeBase\}/g, knowledgeContent || '');
+    
+    return result;
+  }
+
+  /**
+   * 构建AI提示词（支持用户自定义模板）
+   * 
+   * 新逻辑：
+   * 1. 如果用户的提示词包含占位符，直接替换占位符
+   * 2. 如果用户的提示词不包含占位符，使用旧的拼接逻辑（向后兼容）
    */
   private buildPromptWithImageInstruction(
     basePrompt: string,
     keyword: string,
     topics: string[],
-    knowledgeContent: string
+    knowledgeContent: string,
+    companyName?: string,
+    companyIndustry?: string,
+    companyWebsite?: string,
+    companyAddress?: string
   ): string {
+    // 检查用户提示词是否包含占位符
+    const hasPlaceholders = /\{(keyword|topics|topicsList|companyName|companyIndustry|companyWebsite|companyAddress|knowledgeBase)\}/.test(basePrompt);
+    
+    if (hasPlaceholders) {
+      // 用户使用了占位符，直接替换
+      console.log('[提示词构建] 检测到占位符，使用用户自定义模板');
+      console.log(`[提示词构建] 转化目标字段值: companyName="${companyName}", industry="${companyIndustry}", website="${companyWebsite}", address="${companyAddress}"`);
+      return this.replacePromptVariables(
+        basePrompt, 
+        keyword, 
+        topics, 
+        knowledgeContent, 
+        companyName,
+        companyIndustry,
+        companyWebsite,
+        companyAddress
+      );
+    }
+    
+    // 向后兼容：用户没有使用占位符，使用简化的拼接逻辑
+    // 注意：建议用户使用占位符模板，这样可以完全自定义所有要求
+    console.log('[提示词构建] 未检测到占位符，使用简化拼接逻辑（建议使用占位符模板）');
+    
     const topicsList = topics.map((t, i) => `${i + 1}. ${t}`).join('\n');
 
-    let prompt = '【重要输出要求】\n';
-    prompt += '1. 直接输出文章内容，不要包含任何思考过程\n';
-    prompt += '2. 使用纯文本格式，不要使用Markdown符号（如#、*、-等）\n';
-    prompt += '3. 按照"标题：[标题内容]"格式开始，然后是正文\n';
-    prompt += '4. 文章内容要自然流畅，段落之间用空行分隔\n\n';
-    prompt += basePrompt + '\n\n';
-    prompt += `核心关键词：${keyword}\n\n`;
-    prompt += '相关话题：\n' + topicsList;
+    // 只添加最基本的格式要求，其他要求应该在用户的basePrompt中定义
+    let prompt = basePrompt + '\n\n';
+    
+    // 添加数据
+    prompt += `参考关键词：${keyword}\n\n`;
+    prompt += '用户关心的话题：\n' + topicsList;
 
     if (knowledgeContent && knowledgeContent.trim().length > 0) {
       prompt += '\n\n企业知识库参考资料：\n' + knowledgeContent;
-      prompt += '\n\n请基于以上企业知识库的内容，确保文章的专业性和准确性。';
     }
 
-    prompt += '\n\n请撰写一篇专业、高质量的文章。严格按照以下格式输出：\n\n';
-    prompt += '标题：[文章标题]\n\n[文章正文内容]';
+    // 添加转化目标信息
+    if (companyName && companyName.trim().length > 0) {
+      prompt += `\n\n【转化目标信息】\n`;
+      prompt += `公司名称：${companyName}\n`;
+      
+      if (companyIndustry && companyIndustry.trim().length > 0) {
+        prompt += `行业类型：${companyIndustry}\n`;
+      }
+      
+      if (companyWebsite && companyWebsite.trim().length > 0) {
+        prompt += `官方网站：${companyWebsite}\n`;
+      }
+      
+      if (companyAddress && companyAddress.trim().length > 0) {
+        prompt += `公司地址：${companyAddress}\n`;
+      }
+    }
+
+    prompt += '\n\n请按照"标题：[标题内容]"格式开始，然后是正文。';
 
     return prompt;
   }
@@ -892,15 +1009,23 @@ export class ArticleGenerationService {
     imageUrl: string,
     knowledgeContent: string,
     articlePrompt: string,
-    aiConfig: any
+    aiConfig: any,
+    companyName?: string,
+    companyIndustry?: string,
+    companyWebsite?: string,
+    companyAddress?: string
   ): Promise<{ success: boolean; title?: string; content?: string; error?: string }> {
     try {
-      // 构建包含图片指示的AI prompt
+      // 构建包含转化目标的AI prompt
       const prompt = this.buildPromptWithImageInstruction(
         articlePrompt,
         keyword,
         topics,
-        knowledgeContent
+        knowledgeContent,
+        companyName,
+        companyIndustry,
+        companyWebsite,
+        companyAddress
       );
 
       // 调用AI服务

@@ -116,7 +116,7 @@ export class QieAdapter extends PlatformAdapter {
           cleanContent = contentLines.slice(1).join('\n').trim();
         }
         
-        const textOnly = cleanContent.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '').trim();
+        const textOnly = this.cleanArticleContent(cleanContent);
         console.log(`[企鹅号] 纯文字长度: ${textOnly.length} 个字符`);
         
         const imagePaths: string[] = [];

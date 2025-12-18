@@ -230,10 +230,10 @@ export default function PublishingTasksPage() {
     
     let processedContent = content;
     
-    // 移除 [IMAGE_PLACEHOLDER] 占位符
+    // 1. 移除 [IMAGE_PLACEHOLDER] 占位符
     processedContent = processedContent.replace(/\[IMAGE_PLACEHOLDER\]/gi, '');
     
-    // 处理 Markdown 图片标记 ![alt](url)
+    // 2. 处理 Markdown 图片标记 ![alt](url)
     // 如果有实际图片URL，替换为提示文字；否则直接移除
     if (imageUrl) {
       processedContent = processedContent.replace(
@@ -244,10 +244,26 @@ export default function PublishingTasksPage() {
       processedContent = processedContent.replace(/!\[([^\]]*)\]\([^)]+\)/g, '');
     }
     
-    // 移除多余的空行（超过2个连续换行）
+    // 3. 处理HTML标签，保留段落结构
+    // 将 <p>、</p>、<br>、<br/> 转换为换行符
+    processedContent = processedContent.replace(/<\/p>/gi, '\n');
+    processedContent = processedContent.replace(/<p[^>]*>/gi, '');
+    processedContent = processedContent.replace(/<br\s*\/?>/gi, '\n');
+    
+    // 4. 移除其他所有HTML标签（保留文本内容）
+    processedContent = processedContent.replace(/<[^>]+>/g, '');
+    
+    // 5. 移除HTML实体字符
+    processedContent = processedContent.replace(/&nbsp;/g, ' ');
+    processedContent = processedContent.replace(/&lt;/g, '<');
+    processedContent = processedContent.replace(/&gt;/g, '>');
+    processedContent = processedContent.replace(/&amp;/g, '&');
+    processedContent = processedContent.replace(/&quot;/g, '"');
+    
+    // 6. 清理多余的空行（超过2个连续换行符的合并为2个）
     processedContent = processedContent.replace(/\n{3,}/g, '\n\n');
     
-    // 移除首尾空白
+    // 7. 移除首尾空白
     processedContent = processedContent.trim();
     
     return processedContent;

@@ -1,4 +1,5 @@
 import puppeteer, { Browser, Page } from 'puppeteer';
+import { getStandardBrowserConfig, findChromeExecutable } from '../config/browserConfig';
 import { publishingService } from './PublishingService';
 
 export interface BrowserOptions {
@@ -31,44 +32,16 @@ export class BrowserAutomationService {
     const opts = { ...this.defaultOptions, ...options };
 
     try {
-      // 尝试使用系统Chrome路径
-      const chromePaths = [
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', // macOS
-        '/usr/bin/google-chrome', // Linux
-        '/usr/bin/chromium-browser', // Linux Chromium
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', // Windows
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe' // Windows 32-bit
-      ];
+      // 查找系统Chrome路径
+      const executablePath = findChromeExecutable();
 
-      let executablePath: string | undefined;
-      for (const path of chromePaths) {
-        try {
-          const fs = require('fs');
-          if (fs.existsSync(path)) {
-            executablePath = path;
-            console.log(`✅ 找到Chrome浏览器: ${path}`);
-            break;
-          }
-        } catch (e) {
-          // 继续尝试下一个路径
-        }
-      }
-
-      this.browser = await puppeteer.launch({
+      // 使用统一的浏览器配置
+      const launchOptions = getStandardBrowserConfig({
         headless: opts.headless,
-        executablePath, // 使用系统Chrome，如果找不到则使用Puppeteer自带的
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--start-maximized',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-infobars'
-        ],
-        defaultViewport: null,  // 关键修复：不设置viewport，使用浏览器默认大小
-        ignoreDefaultArgs: ['--enable-automation'],
-        ignoreHTTPSErrors: true
+        executablePath
       });
+
+      this.browser = await puppeteer.launch(launchOptions);
 
       console.log('✅ 浏览器启动成功');
       return this.browser;

@@ -111,6 +111,46 @@ export abstract class PlatformAdapter {
   }
 
   /**
+   * 清理文章内容，移除HTML标签和Markdown图片语法，保留段落格式
+   * 这是一个通用方法，所有平台适配器都可以使用
+   */
+  protected cleanArticleContent(content: string): string {
+    if (!content) return '';
+    
+    let cleanedContent = content;
+    
+    // 1. 移除Markdown图片语法 ![alt](url)
+    cleanedContent = cleanedContent.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '');
+    
+    // 2. 处理HTML标签，保留段落结构
+    // 将 <p>、</p>、<br>、<br/> 转换为换行符
+    cleanedContent = cleanedContent.replace(/<\/p>/gi, '\n');
+    cleanedContent = cleanedContent.replace(/<p[^>]*>/gi, '');
+    cleanedContent = cleanedContent.replace(/<br\s*\/?>/gi, '\n');
+    
+    // 3. 移除其他所有HTML标签（保留文本内容）
+    cleanedContent = cleanedContent.replace(/<[^>]+>/g, '');
+    
+    // 4. 移除HTML实体字符
+    cleanedContent = cleanedContent.replace(/&nbsp;/g, ' ');
+    cleanedContent = cleanedContent.replace(/&lt;/g, '<');
+    cleanedContent = cleanedContent.replace(/&gt;/g, '>');
+    cleanedContent = cleanedContent.replace(/&amp;/g, '&');
+    cleanedContent = cleanedContent.replace(/&quot;/g, '"');
+    
+    // 5. 移除图片URL（http开头的链接）
+    cleanedContent = cleanedContent.replace(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)/gi, '');
+    
+    // 6. 清理多余的空行（超过2个连续换行符的合并为2个）
+    cleanedContent = cleanedContent.replace(/\n{3,}/g, '\n\n');
+    
+    // 7. 移除首尾空白
+    cleanedContent = cleanedContent.trim();
+    
+    return cleanedContent;
+  }
+
+  /**
    * 安全地填充输入框
    */
   protected async safeType(

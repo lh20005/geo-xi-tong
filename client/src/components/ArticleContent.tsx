@@ -23,47 +23,87 @@ const ArticleContent: React.FC<ArticleContentProps> = ({
   className, 
   style 
 }) => {
-  // 检测内容格式：HTML 或 Markdown
+  // 检测内容格式：HTML、Markdown 或纯文本
   const isHtmlContent = /<[^>]+>/.test(content);
+  const isMarkdownContent = /[#*_\[\]!`]/.test(content) || /!\[.*?\]\(.*?\)/.test(content);
+  
+  // 如果是纯文本（既不是HTML也不是Markdown），直接渲染并保留换行
+  if (!isHtmlContent && !isMarkdownContent) {
+    return (
+      <div 
+        className={className} 
+        style={{
+          ...style,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          lineHeight: '1.8',
+          fontSize: '16px'
+        }}
+      >
+        {content}
+      </div>
+    );
+  }
   
   if (isHtmlContent) {
-    // HTML格式内容：使用DOMPurify清理后直接渲染
+    // HTML格式内容：清理HTML标签，转换为纯文本并保留段落格式
     let processedContent = content;
     
-    // 如果内容中没有图片标签，但有imageUrl，在第一段后插入图片
-    const hasImageTag = /<img[^>]*>/i.test(content);
-    if (!hasImageTag && imageUrl) {
-      // 在第一个</p>标签后插入图片
-      const firstParagraphEnd = content.indexOf('</p>');
+    // 1. 移除Markdown图片语法 ![alt](url)
+    processedContent = processedContent.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '');
+    
+    // 2. 处理HTML标签，保留段落结构
+    // 将 <p>、</p>、<br>、<br/> 转换为换行符
+    processedContent = processedContent.replace(/<\/p>/gi, '\n\n');
+    processedContent = processedContent.replace(/<p[^>]*>/gi, '');
+    processedContent = processedContent.replace(/<br\s*\/?>/gi, '\n');
+    
+    // 3. 移除其他所有HTML标签（保留文本内容）
+    processedContent = processedContent.replace(/<[^>]+>/g, '');
+    
+    // 4. 移除HTML实体字符
+    processedContent = processedContent.replace(/&nbsp;/g, ' ');
+    processedContent = processedContent.replace(/&lt;/g, '<');
+    processedContent = processedContent.replace(/&gt;/g, '>');
+    processedContent = processedContent.replace(/&amp;/g, '&');
+    processedContent = processedContent.replace(/&quot;/g, '"');
+    
+    // 5. 移除图片URL（http开头的链接）
+    processedContent = processedContent.replace(/https?:\/\/[^\s]+\.(jpg|jpeg|png|gif|webp)/gi, '');
+    
+    // 6. 清理多余的空行（超过2个连续换行符的合并为2个）
+    processedContent = processedContent.replace(/\n{3,}/g, '\n\n');
+    
+    // 7. 移除首尾空白
+    processedContent = processedContent.trim();
+    
+    // 8. 如果有imageUrl，在适当位置添加图片提示
+    if (imageUrl) {
+      // 在第一段后添加图片提示
+      const firstParagraphEnd = processedContent.indexOf('\n\n');
       if (firstParagraphEnd !== -1) {
-        const imageTag = `<p><img src="${imageUrl}" alt="article image" style="max-width: 100%; height: auto; margin: 20px 0; display: block; border-radius: 6px; border: 1px solid #e2e8f0;" /></p>`;
         processedContent = 
-          content.substring(0, firstParagraphEnd + 4) + 
-          imageTag + 
-          content.substring(firstParagraphEnd + 4);
+          processedContent.substring(0, firstParagraphEnd) + 
+          '\n\n【此处显示文章配图】\n\n' + 
+          processedContent.substring(firstParagraphEnd + 2);
       } else {
-        // 如果没有段落标签，在开头插入
-        const imageTag = `<p><img src="${imageUrl}" alt="article image" style="max-width: 100%; height: auto; margin: 20px 0; display: block; border-radius: 6px; border: 1px solid #e2e8f0;" /></p>`;
-        processedContent = imageTag + processedContent;
+        processedContent = '【此处显示文章配图】\n\n' + processedContent;
       }
     }
-    
-    // 清理HTML内容以防止XSS攻击，保留更多样式属性
-    const cleanContent = DOMPurify.sanitize(processedContent, {
-      ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 's', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'img', 'span', 'div', 'blockquote', 'pre', 'code'],
-      ALLOWED_ATTR: ['href', 'src', 'alt', 'style', 'class', 'width', 'height', 'target', 'rel']
-    });
     
     return (
       <div 
         className={className} 
         style={{
           ...style,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
           lineHeight: '1.8',
           fontSize: '16px'
         }}
-        dangerouslySetInnerHTML={{ __html: cleanContent }}
-      />
+      >
+        {processedContent}
+      </div>
     );
   }
   

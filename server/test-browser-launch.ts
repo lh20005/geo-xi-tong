@@ -13,10 +13,16 @@ async function testBrowserLaunch() {
     const browser = await puppeteer.launch({
       headless: false,
       executablePath: chromePath,
+      defaultViewport: null, // 不设置viewport，使用浏览器默认大小
       args: [
         '--no-sandbox',
-        '--disable-setuid-sandbox'
-      ]
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--start-maximized', // 启动时最大化窗口
+        '--disable-blink-features=AutomationControlled',
+        '--disable-infobars'
+      ],
+      ignoreDefaultArgs: ['--enable-automation']
     });
     
     console.log('✅ 浏览器启动成功！');

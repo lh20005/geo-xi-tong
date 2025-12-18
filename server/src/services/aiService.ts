@@ -197,7 +197,7 @@ ${content}
             { role: 'user', content: prompt }
           ],
           temperature: 0.7,
-          max_tokens: 4000
+          max_tokens: 1200  // 限制为1200 tokens，约800-1000字
         },
         {
           headers: {
@@ -228,7 +228,7 @@ ${content}
           }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 4000
+            maxOutputTokens: 1200  // 限制为1200 tokens，约800-1000字
           }
         },
         {
@@ -263,7 +263,7 @@ ${content}
         stream: false,
         options: {
           temperature: 0.7,
-          num_predict: 4000
+          num_predict: 1200  // 限制为1200 tokens，约800-1000字
         }
       });
 

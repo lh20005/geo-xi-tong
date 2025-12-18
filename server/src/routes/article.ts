@@ -129,6 +129,106 @@ articleRouter.post('/generate', async (req, res) => {
   }
 });
 
+// 批量删除文章 - 必须在 /:id 路由之前定义
+articleRouter.delete('/batch', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { ids } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids参数必须是非空数组' });
+    }
+
+    await client.query('BEGIN');
+    
+    // 获取要删除的文章的distillation_id统计
+    const distillationResult = await client.query(
+      `SELECT distillation_id, COUNT(*) as count
+       FROM articles
+       WHERE id = ANY($1::integer[]) AND distillation_id IS NOT NULL
+       GROUP BY distillation_id`,
+      [ids]
+    );
+    
+    // 删除文章（级联删除会自动删除distillation_usage记录）
+    const deleteResult = await client.query(
+      'DELETE FROM articles WHERE id = ANY($1::integer[]) RETURNING id',
+      [ids]
+    );
+    
+    const deletedCount = deleteResult.rows.length;
+    
+    // 更新每个蒸馏结果的usage_count
+    for (const row of distillationResult.rows) {
+      await client.query(
+        'UPDATE distillations SET usage_count = GREATEST(usage_count - $1, 0) WHERE id = $2',
+        [parseInt(row.count), row.distillation_id]
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      deletedCount,
+      message: `成功删除${deletedCount}篇文章`
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('批量删除文章错误:', error);
+    res.status(500).json({ error: '批量删除文章失败', details: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 删除所有文章 - 必须在 /:id 路由之前定义
+articleRouter.delete('/all', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // 获取所有文章的distillation_id统计
+    const distillationResult = await client.query(
+      `SELECT distillation_id, COUNT(*) as count
+       FROM articles
+       WHERE distillation_id IS NOT NULL
+       GROUP BY distillation_id`
+    );
+    
+    // 删除所有文章
+    const deleteResult = await client.query(
+      'DELETE FROM articles RETURNING id'
+    );
+    
+    const deletedCount = deleteResult.rows.length;
+    
+    // 更新所有蒸馏结果的usage_count
+    for (const row of distillationResult.rows) {
+      await client.query(
+        'UPDATE distillations SET usage_count = GREATEST(usage_count - $1, 0) WHERE id = $2',
+        [parseInt(row.count), row.distillation_id]
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      deletedCount,
+      message: `成功删除所有${deletedCount}篇文章`
+    });
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    console.error('删除所有文章错误:', error);
+    res.status(500).json({ error: '删除所有文章失败', details: error.message });
+  } finally {
+    client.release();
+  }
+});
+
 // 获取文章列表（支持分页和多条件筛选）
 articleRouter.get('/', async (req, res) => {
   try {
@@ -487,7 +587,7 @@ articleRouter.put('/:id/publish', async (req, res) => {
   }
 });
 
-// 删除文章
+// 删除单篇文章 - 必须在最后定义，避免匹配到 /batch 和 /all
 articleRouter.delete('/:id', async (req, res) => {
   const client = await pool.connect();
   
@@ -524,106 +624,6 @@ articleRouter.delete('/:id', async (req, res) => {
     await client.query('ROLLBACK');
     console.error('删除文章错误:', error);
     res.status(500).json({ error: '删除文章失败', details: error.message });
-  } finally {
-    client.release();
-  }
-});
-
-// 批量删除文章
-articleRouter.delete('/batch', async (req, res) => {
-  const client = await pool.connect();
-  
-  try {
-    const { ids } = req.body;
-    
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'ids参数必须是非空数组' });
-    }
-
-    await client.query('BEGIN');
-    
-    // 获取要删除的文章的distillation_id统计
-    const distillationResult = await client.query(
-      `SELECT distillation_id, COUNT(*) as count
-       FROM articles
-       WHERE id = ANY($1::integer[]) AND distillation_id IS NOT NULL
-       GROUP BY distillation_id`,
-      [ids]
-    );
-    
-    // 删除文章（级联删除会自动删除distillation_usage记录）
-    const deleteResult = await client.query(
-      'DELETE FROM articles WHERE id = ANY($1::integer[]) RETURNING id',
-      [ids]
-    );
-    
-    const deletedCount = deleteResult.rows.length;
-    
-    // 更新每个蒸馏结果的usage_count
-    for (const row of distillationResult.rows) {
-      await client.query(
-        'UPDATE distillations SET usage_count = GREATEST(usage_count - $1, 0) WHERE id = $2',
-        [parseInt(row.count), row.distillation_id]
-      );
-    }
-    
-    await client.query('COMMIT');
-    
-    res.json({ 
-      success: true, 
-      deletedCount,
-      message: `成功删除${deletedCount}篇文章`
-    });
-  } catch (error: any) {
-    await client.query('ROLLBACK');
-    console.error('批量删除文章错误:', error);
-    res.status(500).json({ error: '批量删除文章失败', details: error.message });
-  } finally {
-    client.release();
-  }
-});
-
-// 删除所有文章
-articleRouter.delete('/all', async (req, res) => {
-  const client = await pool.connect();
-  
-  try {
-    await client.query('BEGIN');
-    
-    // 获取所有文章的distillation_id统计
-    const distillationResult = await client.query(
-      `SELECT distillation_id, COUNT(*) as count
-       FROM articles
-       WHERE distillation_id IS NOT NULL
-       GROUP BY distillation_id`
-    );
-    
-    // 删除所有文章
-    const deleteResult = await client.query(
-      'DELETE FROM articles RETURNING id'
-    );
-    
-    const deletedCount = deleteResult.rows.length;
-    
-    // 更新所有蒸馏结果的usage_count
-    for (const row of distillationResult.rows) {
-      await client.query(
-        'UPDATE distillations SET usage_count = GREATEST(usage_count - $1, 0) WHERE id = $2',
-        [parseInt(row.count), row.distillation_id]
-      );
-    }
-    
-    await client.query('COMMIT');
-    
-    res.json({ 
-      success: true, 
-      deletedCount,
-      message: `成功删除所有${deletedCount}篇文章`
-    });
-  } catch (error: any) {
-    await client.query('ROLLBACK');
-    console.error('删除所有文章错误:', error);
-    res.status(500).json({ error: '删除所有文章失败', details: error.message });
   } finally {
     client.release();
   }
