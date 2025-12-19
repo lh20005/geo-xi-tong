@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 import { 
   Card, Row, Col, Table, Button, Space, Tag, message, 
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
-  DatePicker, Input
+  DatePicker, Input, InputNumber
 } from 'antd';
 import {
   SendOutlined, ReloadOutlined, CheckCircleOutlined,
   CloseCircleOutlined, ClockCircleOutlined, SyncOutlined,
   EyeOutlined, DeleteOutlined, PlayCircleOutlined,
   FileTextOutlined, CloudUploadOutlined, HistoryOutlined,
-  StopOutlined, ExclamationCircleOutlined
+  StopOutlined, ExclamationCircleOutlined, FieldTimeOutlined
 } from '@ant-design/icons';
 import { 
   getArticles, getArticle, Article 
@@ -18,7 +18,9 @@ import {
   getPlatforms, getAccounts, Platform, Account,
   createPublishingTask, getPublishingTasks, getTaskLogs,
   executeTask, cancelTask, terminateTask, deleteTask,
-  batchDeleteTasks, deleteAllTasks, PublishingTask, PublishingLog
+  batchDeleteTasks, deleteAllTasks, PublishingTask, PublishingLog,
+  stopBatch, deleteBatch, getBatchInfo, BatchInfo,
+  subscribeToTaskLogs
 } from '../api/publishing';
 import dayjs, { Dayjs } from 'dayjs';
 
@@ -49,6 +51,9 @@ export default function PublishingTasksPage() {
 
   // 定时发布
   const [scheduledTime, setScheduledTime] = useState<Dayjs | null>(null);
+  
+  // 间隔发布（分钟）
+  const [publishInterval, setPublishInterval] = useState<number>(5);
 
   // 日志查看
   const [logsModal, setLogsModal] = useState<{ 
@@ -59,6 +64,19 @@ export default function PublishingTasksPage() {
     visible: false,
     taskId: null,
     logs: []
+  });
+
+  // 实时日志流
+  const [logStream, setLogStream] = useState<{
+    visible: boolean;
+    taskId: number | null;
+    logs: PublishingLog[];
+    isLive: boolean;
+  }>({
+    visible: false,
+    taskId: null,
+    logs: [],
+    isLive: false
   });
 
   // 文章预览
@@ -171,14 +189,42 @@ export default function PublishingTasksPage() {
       return;
     }
 
+    const articleIds = Array.from(selectedArticleIds);
+    const accountIds = Array.from(selectedAccounts);
+    const totalTasks = articleIds.length * accountIds.length;
+    
+    // 计算总耗时
+    const totalMinutes = (articleIds.length - 1) * publishInterval;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    const timeDesc = hours > 0 ? `${hours}小时${minutes}分钟` : `${minutes}分钟`;
+
     Modal.confirm({
       title: '确认创建发布任务',
-      content: `将为 ${selectedArticleIds.size} 篇文章创建 ${selectedArticleIds.size * selectedAccounts.size} 个发布任务`,
+      content: (
+        <div>
+          <p>将为 <strong>{articleIds.length}</strong> 篇文章创建 <strong>{totalTasks}</strong> 个发布任务</p>
+          <p>发布间隔：<strong>{publishInterval}</strong> 分钟</p>
+          <p>预计完成时间：约 <strong>{timeDesc}</strong></p>
+          <p style={{ color: '#666', fontSize: 12, marginTop: 8 }}>
+            ⚠️ 串行发布：第一篇文章发布完成后，等待 {publishInterval} 分钟，再发布第二篇，依此类推
+          </p>
+        </div>
+      ),
       onOk: async () => {
         try {
+          // 生成批次ID（使用时间戳 + 随机数）
+          const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          
           const tasks = [];
-          for (const articleId of selectedArticleIds) {
-            for (const accountId of selectedAccounts) {
+          let batchOrder = 0;
+          
+          // 为每篇文章创建任务
+          // 所有任务都是 pending 状态，由批次执行器按顺序执行
+          for (let i = 0; i < articleIds.length; i++) {
+            const articleId = articleIds[i];
+            
+            for (const accountId of accountIds) {
               const account = accounts.find(a => a.id === accountId);
               if (account) {
                 tasks.push(
@@ -186,20 +232,25 @@ export default function PublishingTasksPage() {
                     article_id: articleId,
                     platform_id: account.platform_id,
                     account_id: accountId,
-                    scheduled_time: scheduledTime ? scheduledTime.toISOString() : null
+                    scheduled_time: null, // 不使用定时，由批次执行器控制
+                    batch_id: batchId,
+                    batch_order: batchOrder,
+                    interval_minutes: publishInterval
                   })
                 );
               }
             }
+            
+            batchOrder++;
           }
 
           await Promise.all(tasks);
-          message.success(`成功创建 ${tasks.length} 个发布任务`);
+          message.success(`成功创建 ${tasks.length} 个发布任务，批次 ${batchId} 已开始执行`);
           
           // 清空选择
           setSelectedArticleIds(new Set());
           setSelectedAccounts(new Set());
-          setScheduledTime(null);
+          setPublishInterval(5); // 重置为默认值
           
           // 刷新任务列表
           loadTasks();
@@ -210,7 +261,7 @@ export default function PublishingTasksPage() {
     });
   };
 
-  // 查看任务日志
+  // 查看任务日志（历史日志）
   const handleViewLogs = async (taskId: number) => {
     try {
       const logs = await getTaskLogs(taskId);
@@ -223,6 +274,51 @@ export default function PublishingTasksPage() {
       message.error('加载日志失败');
     }
   };
+
+  // 打开实时日志流
+  const handleOpenLogStream = (taskId: number) => {
+    setLogStream({
+      visible: true,
+      taskId,
+      logs: [],
+      isLive: true
+    });
+  };
+
+  // 关闭实时日志流
+  const handleCloseLogStream = () => {
+    setLogStream({
+      visible: false,
+      taskId: null,
+      logs: [],
+      isLive: false
+    });
+  };
+
+  // 订阅实时日志
+  useEffect(() => {
+    if (!logStream.visible || !logStream.taskId) {
+      return;
+    }
+
+    const unsubscribe = subscribeToTaskLogs(
+      logStream.taskId,
+      (log) => {
+        setLogStream(prev => ({
+          ...prev,
+          logs: [...prev.logs, log]
+        }));
+      },
+      (error) => {
+        message.error('日志流连接失败');
+        setLogStream(prev => ({ ...prev, isLive: false }));
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [logStream.visible, logStream.taskId]);
 
   // 处理文章内容，移除占位符和Markdown标记
   const processArticleContent = (content: string, imageUrl?: string): string => {
@@ -426,6 +522,46 @@ export default function PublishingTasksPage() {
     });
   };
 
+  // 停止批次
+  const handleStopBatch = async (batchId: string) => {
+    Modal.confirm({
+      title: '确认停止批次',
+      content: '确定要停止这个批次吗？所有待处理的任务将被取消，正在执行的任务完成后不再继续。',
+      icon: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
+      okText: '确认停止',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const result = await stopBatch(batchId);
+          message.success(`成功停止批次，取消了 ${result.cancelledCount} 个待处理任务`);
+          loadTasks();
+        } catch (error: any) {
+          message.error(error.message || '停止批次失败');
+        }
+      }
+    });
+  };
+
+  // 删除批次
+  const handleDeleteBatch = async (batchId: string) => {
+    Modal.confirm({
+      title: '确认删除批次',
+      content: '确定要删除这个批次吗？批次中的所有任务都将被删除，此操作不可恢复。',
+      icon: <ExclamationCircleOutlined style={{ color: '#ff4d4f' }} />,
+      okText: '确认删除',
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const result = await deleteBatch(batchId);
+          message.success(`成功删除批次，删除了 ${result.deletedCount} 个任务`);
+          loadTasks();
+        } catch (error: any) {
+          message.error(error.message || '删除批次失败');
+        }
+      }
+    });
+  };
+
   // 任务选择处理
   const handleTaskSelect = (taskId: number, checked: boolean) => {
     const newSelected = new Set(selectedTaskIds);
@@ -506,6 +642,42 @@ export default function PublishingTasksPage() {
   const getPlatformName = (platformId: string) => {
     const platform = platforms.find(p => p.platform_id === platformId);
     return platform?.platform_name || platformId;
+  };
+
+  // 按批次分组任务
+  const groupTasksByBatch = () => {
+    const batches: { [key: string]: PublishingTask[] } = {};
+    const noBatchTasks: PublishingTask[] = [];
+
+    tasks.forEach(task => {
+      if (task.batch_id) {
+        if (!batches[task.batch_id]) {
+          batches[task.batch_id] = [];
+        }
+        batches[task.batch_id].push(task);
+      } else {
+        noBatchTasks.push(task);
+      }
+    });
+
+    // 按 batch_order 排序每个批次的任务
+    Object.keys(batches).forEach(batchId => {
+      batches[batchId].sort((a, b) => (a.batch_order || 0) - (b.batch_order || 0));
+    });
+
+    return { batches, noBatchTasks };
+  };
+
+  // 获取批次统计信息
+  const getBatchStats = (batchTasks: PublishingTask[]) => {
+    return {
+      total: batchTasks.length,
+      pending: batchTasks.filter(t => t.status === 'pending').length,
+      running: batchTasks.filter(t => t.status === 'running').length,
+      success: batchTasks.filter(t => t.status === 'success').length,
+      failed: batchTasks.filter(t => t.status === 'failed').length,
+      cancelled: batchTasks.filter(t => t.status === 'cancelled').length,
+    };
   };
 
   // 文章表格列
@@ -604,6 +776,26 @@ export default function PublishingTasksPage() {
       align: 'center' as const,
     },
     {
+      title: '批次',
+      dataIndex: 'batch_id',
+      key: 'batch_id',
+      width: 150,
+      align: 'center' as const,
+      render: (batchId: string, record: PublishingTask) => {
+        if (!batchId) return <Text type="secondary">-</Text>;
+        
+        const shortId = batchId.split('_').pop()?.substring(0, 8) || batchId;
+        return (
+          <Tooltip title={`批次ID: ${batchId}`}>
+            <Tag color="purple">
+              批次 #{shortId}
+              {record.batch_order !== undefined && ` [${record.batch_order + 1}]`}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
       title: '文章ID',
       dataIndex: 'article_id',
       key: 'article_id',
@@ -658,14 +850,26 @@ export default function PublishingTasksPage() {
       fixed: 'right' as const,
       render: (_: any, record: PublishingTask) => (
         <Space size="small">
-          <Tooltip title="查看日志">
+          <Tooltip title="查看历史日志">
             <Button 
               type="link" 
               size="small"
               icon={<EyeOutlined />} 
               onClick={() => handleViewLogs(record.id)}
             >
-              日志
+              历史
+            </Button>
+          </Tooltip>
+
+          <Tooltip title="实时日志">
+            <Button 
+              type="link" 
+              size="small"
+              icon={<SyncOutlined />} 
+              onClick={() => handleOpenLogStream(record.id)}
+              style={{ color: '#52c41a' }}
+            >
+              实时
             </Button>
           </Tooltip>
           
@@ -925,36 +1129,51 @@ export default function PublishingTasksPage() {
           }}
           bodyStyle={{ padding: 20 }}
         >
-          <Row gutter={16} align="middle">
-            <Col flex="auto">
-              <Space size="large">
-                <div>
-                  <Text style={{ color: '#fff', fontSize: 16 }}>
-                    已选择 <strong>{selectedArticleIds.size}</strong> 篇文章
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {/* 统计信息 */}
+            <Row gutter={16} align="middle">
+              <Col flex="auto">
+                <Space size="large">
+                  <div>
+                    <Text style={{ color: '#fff', fontSize: 16 }}>
+                      已选择 <strong>{selectedArticleIds.size}</strong> 篇文章
+                    </Text>
+                  </div>
+                  <div>
+                    <Text style={{ color: '#fff', fontSize: 16 }}>
+                      已选择 <strong>{selectedAccounts.size}</strong> 个平台
+                    </Text>
+                  </div>
+                  <div>
+                    <Text style={{ color: '#fff', fontSize: 16 }}>
+                      将创建 <strong>{selectedArticleIds.size * selectedAccounts.size}</strong> 个任务
+                    </Text>
+                  </div>
+                </Space>
+              </Col>
+            </Row>
+
+            {/* 定时配置 */}
+            <Row gutter={16} align="middle">
+              <Col flex="auto">
+                <Space size="middle" align="center">
+                  <FieldTimeOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  <Text style={{ color: '#fff', fontSize: 14 }}>发布间隔：</Text>
+                  <InputNumber
+                    min={1}
+                    max={1440}
+                    value={publishInterval}
+                    onChange={(value) => setPublishInterval(value || 5)}
+                    addonAfter="分钟"
+                    style={{ width: 140 }}
+                    placeholder="间隔时间"
+                  />
+                  <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
+                    第一篇立即发布，后续文章每隔 {publishInterval} 分钟发布一篇
                   </Text>
-                </div>
-                <div>
-                  <Text style={{ color: '#fff', fontSize: 16 }}>
-                    已选择 <strong>{selectedAccounts.size}</strong> 个平台
-                  </Text>
-                </div>
-                <div>
-                  <Text style={{ color: '#fff', fontSize: 16 }}>
-                    将创建 <strong>{selectedArticleIds.size * selectedAccounts.size}</strong> 个任务
-                  </Text>
-                </div>
-              </Space>
-            </Col>
-            <Col>
-              <Space>
-                <DatePicker
-                  showTime
-                  placeholder="选择定时发布时间（可选）"
-                  value={scheduledTime}
-                  onChange={setScheduledTime}
-                  disabledDate={(current) => current && current < dayjs().startOf('day')}
-                  style={{ width: 220 }}
-                />
+                </Space>
+              </Col>
+              <Col>
                 <Button 
                   type="primary" 
                   size="large"
@@ -965,14 +1184,138 @@ export default function PublishingTasksPage() {
                     background: '#fff',
                     color: '#667eea',
                     border: 'none',
-                    fontWeight: 600
+                    fontWeight: 600,
+                    height: 44
                   }}
                 >
                   创建发布任务
                 </Button>
-              </Space>
-            </Col>
-          </Row>
+              </Col>
+            </Row>
+          </Space>
+        </Card>
+      )}
+
+      {/* 实时日志显示窗口 */}
+      {logStream.visible && logStream.taskId && (
+        <Card
+          title={
+            <Space>
+              <SyncOutlined spin={logStream.isLive} style={{ color: logStream.isLive ? '#52c41a' : '#999' }} />
+              <span>发布日志 - 任务 #{logStream.taskId}</span>
+              {logStream.isLive ? (
+                <Tag color="success" icon={<SyncOutlined spin />}>实时更新中</Tag>
+              ) : (
+                <Tag color="default">已断开</Tag>
+              )}
+            </Space>
+          }
+          extra={
+            <Space>
+              <Button 
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  setLogStream(prev => ({ ...prev, logs: [] }));
+                  handleOpenLogStream(logStream.taskId!);
+                }}
+              >
+                重新连接
+              </Button>
+              <Button 
+                size="small"
+                icon={<CloseCircleOutlined />}
+                onClick={handleCloseLogStream}
+              >
+                关闭
+              </Button>
+            </Space>
+          }
+          style={{ 
+            marginBottom: 24,
+            border: '2px solid #52c41a',
+            boxShadow: '0 4px 12px rgba(82, 196, 26, 0.15)'
+          }}
+          bodyStyle={{ 
+            padding: 0,
+            maxHeight: 400,
+            overflow: 'auto',
+            background: '#000',
+            fontFamily: 'Monaco, Consolas, "Courier New", monospace'
+          }}
+        >
+          {logStream.logs.length === 0 ? (
+            <div style={{ 
+              padding: 40, 
+              textAlign: 'center',
+              color: '#52c41a'
+            }}>
+              <SyncOutlined spin style={{ fontSize: 32, marginBottom: 16 }} />
+              <div>等待日志...</div>
+            </div>
+          ) : (
+            <div style={{ padding: 16 }}>
+              {logStream.logs.map((log, index) => {
+                const levelColors: Record<string, string> = {
+                  info: '#52c41a',
+                  warning: '#faad14',
+                  error: '#ff4d4f'
+                };
+                const color = levelColors[log.level] || '#52c41a';
+                
+                return (
+                  <div 
+                    key={index}
+                    style={{ 
+                      marginBottom: 8,
+                      padding: '8px 12px',
+                      background: 'rgba(255, 255, 255, 0.05)',
+                      borderRadius: 4,
+                      borderLeft: `3px solid ${color}`
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ 
+                        color: '#666',
+                        fontSize: 11,
+                        fontFamily: 'monospace'
+                      }}>
+                        {new Date(log.timestamp || log.created_at).toLocaleTimeString('zh-CN')}
+                      </span>
+                      <span style={{ 
+                        color,
+                        fontSize: 11,
+                        fontWeight: 'bold',
+                        textTransform: 'uppercase'
+                      }}>
+                        [{log.level}]
+                      </span>
+                    </div>
+                    <div style={{ 
+                      color: '#fff',
+                      fontSize: 13,
+                      lineHeight: 1.6
+                    }}>
+                      {log.message}
+                    </div>
+                    {log.details && (
+                      <pre style={{ 
+                        margin: '8px 0 0 0',
+                        padding: 8,
+                        background: 'rgba(0, 0, 0, 0.3)',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        color: '#999',
+                        overflow: 'auto'
+                      }}>
+                        {JSON.stringify(log.details, null, 2)}
+                      </pre>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Card>
       )}
 
@@ -1019,29 +1362,120 @@ export default function PublishingTasksPage() {
         }
         bordered={false}
       >
-        <Table
-          columns={taskColumns}
-          dataSource={tasks}
-          rowKey="id"
-          loading={tasksLoading}
-          scroll={{ x: 1500 }}
-          pagination={{
-            current: taskPage,
-            pageSize: taskPageSize,
-            total: taskTotal,
-            onChange: (newPage, newPageSize) => {
-              setTaskPage(newPage);
-              if (newPageSize && newPageSize !== taskPageSize) {
-                setTaskPageSize(newPageSize);
-                setTaskPage(1);
-              }
-            },
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 个任务`,
-            pageSizeOptions: ['10', '20', '50', '100']
-          }}
-        />
+        {/* 批次分组显示 */}
+        {(() => {
+          const { batches, noBatchTasks } = groupTasksByBatch();
+          const batchIds = Object.keys(batches);
+          
+          return (
+            <>
+              {/* 显示批次任务 */}
+              {batchIds.map(batchId => {
+                const batchTasks = batches[batchId];
+                const stats = getBatchStats(batchTasks);
+                const shortId = batchId.split('_').pop()?.substring(0, 8) || batchId;
+                const intervalMinutes = batchTasks[0]?.interval_minutes || 0;
+                
+                return (
+                  <Card
+                    key={batchId}
+                    size="small"
+                    style={{ marginBottom: 16 }}
+                    title={
+                      <Space>
+                        <Tag color="purple" style={{ fontSize: 14 }}>
+                          📦 批次 #{shortId}
+                        </Tag>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {stats.total} 个任务 | 间隔 {intervalMinutes} 分钟
+                        </Text>
+                      </Space>
+                    }
+                    extra={
+                      <Space>
+                        <Tag color="default">待处理: {stats.pending}</Tag>
+                        <Tag color="processing">执行中: {stats.running}</Tag>
+                        <Tag color="success">成功: {stats.success}</Tag>
+                        <Tag color="error">失败: {stats.failed}</Tag>
+                        {stats.cancelled > 0 && <Tag color="default">已取消: {stats.cancelled}</Tag>}
+                        
+                        {stats.pending > 0 && (
+                          <Button
+                            size="small"
+                            danger
+                            icon={<StopOutlined />}
+                            onClick={() => handleStopBatch(batchId)}
+                          >
+                            停止批次
+                          </Button>
+                        )}
+                        
+                        <Button
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleDeleteBatch(batchId)}
+                        >
+                          删除批次
+                        </Button>
+                      </Space>
+                    }
+                  >
+                    <Table
+                      columns={taskColumns}
+                      dataSource={batchTasks}
+                      rowKey="id"
+                      size="small"
+                      pagination={false}
+                      scroll={{ x: 1500 }}
+                    />
+                  </Card>
+                );
+              })}
+              
+              {/* 显示非批次任务 */}
+              {noBatchTasks.length > 0 && (
+                <Card
+                  size="small"
+                  style={{ marginBottom: 16 }}
+                  title={
+                    <Space>
+                      <Tag color="default" style={{ fontSize: 14 }}>
+                        📝 单独任务
+                      </Tag>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        {noBatchTasks.length} 个任务
+                      </Text>
+                    </Space>
+                  }
+                >
+                  <Table
+                    columns={taskColumns}
+                    dataSource={noBatchTasks}
+                    rowKey="id"
+                    size="small"
+                    pagination={false}
+                    scroll={{ x: 1500 }}
+                  />
+                </Card>
+              )}
+              
+              {/* 如果没有任务 */}
+              {batchIds.length === 0 && noBatchTasks.length === 0 && (
+                <Empty description="暂无发布任务" />
+              )}
+            </>
+          );
+        })()}
+        
+        {/* 分页 */}
+        {taskTotal > 0 && (
+          <div style={{ marginTop: 16, textAlign: 'right' }}>
+            <Space>
+              <Text type="secondary">共 {taskTotal} 个任务</Text>
+            </Space>
+          </div>
+        )}
       </Card>
 
       {/* 日志查看模态框 */}

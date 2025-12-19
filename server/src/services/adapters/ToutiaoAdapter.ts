@@ -105,49 +105,41 @@ export class ToutiaoAdapter extends PlatformAdapter {
     config: PublishingConfig
   ): Promise<boolean> {
     try {
-      console.log('[头条号] ========================================');
-      console.log('[头条号] 🚀 开始头条号简化发布流程（6步）');
-      console.log('[头条号] ========================================');
-      console.log(`[头条号] 文章ID: ${article.id}`);
-      console.log(`[头条号] 文章标题: "${article.title}"`);
-      console.log(`[头条号] 标题长度: ${article.title.length} 个字符`);
-      console.log(`[头条号] 内容长度: ${article.content.length} 个字符`);
-      console.log(`[头条号] 当前URL: ${page.url()}`);
+      await this.log('info', '========================================');
+      await this.log('info', '🚀 开始头条号发布流程');
+      await this.log('info', '========================================');
+      await this.log('info', `📄 文章标题: "${article.title}" (${article.title.length}字)`);
       
-      // ========== 步骤1：点击"发布文章"菜单（如果需要）==========
-      console.log('\n[头条号] ========================================');
-      console.log('[头条号] 步骤1/6：点击"发布文章"菜单');
-      console.log('[头条号] ========================================');
+      // ========== 步骤1：确保在发布页面 ==========
+      await this.log('info', '📍 步骤1/6：确保在发布页面');
       
       const currentUrl = page.url();
       if (!currentUrl.includes('/graphic/publish')) {
-        console.log('[头条号] 当前不在发布页面，尝试点击"发布文章"菜单');
+        await this.log('info', '🔄 当前不在发布页面，正在跳转...');
         
         const publishMenuSelector = '#masterRoot > div > div.pgc-content > section > aside > div > div > div > div.byte-menu-inline.base_creation_tab > div.byte-menu-inline-content > div:nth-child(1) > span > a';
         
         try {
-          console.log('[头条号] ⏳ 等待菜单加载（5秒）...');
           await page.waitForSelector(publishMenuSelector, { timeout: 5000 });
           const menuLink = await page.$(publishMenuSelector);
           
           if (menuLink) {
-            console.log('[头条号] ✅ 找到"发布文章"菜单，正在点击...');
+            await this.log('info', '👆 点击"发布文章"菜单...');
             await menuLink.click();
-            console.log('[头条号] ⏳ 等待页面跳转（5秒）...');
             await new Promise(resolve => setTimeout(resolve, 5000));
-            console.log('[头条号] ✅ 已点击菜单，页面应已跳转');
+            await this.log('info', '✅ 已跳转到发布页面');
           }
         } catch (e) {
-          console.log('[头条号] ⚠️ 未找到菜单或已在发布页面，继续...');
+          await this.log('warning', '⚠️ 未找到菜单，可能已在发布页面');
         }
       } else {
-        console.log('[头条号] ✅ 已在发布页面，跳过菜单点击');
+        await this.log('info', '✅ 已在发布页面');
       }
       
-      // 等待发布页面完全加载（增加等待时间）
-      console.log('[头条号] ⏳ 等待发布页面完全加载（8秒）...');
+      // 等待发布页面完全加载
+      await this.log('info', '⏳ 等待页面加载完成...');
       await new Promise(resolve => setTimeout(resolve, 8000));
-      console.log('[头条号] ✅ 页面加载完成');
+      await this.log('info', '✅ 页面加载完成');
       
       // 截图保存当前页面状态
       try {
@@ -158,27 +150,17 @@ export class ToutiaoAdapter extends PlatformAdapter {
       }
       
       // ========== 步骤2：填写标题 ==========
-      console.log('\n[头条号] ========================================');
-      console.log('[头条号] 📝 步骤2/6：填写文章标题');
-      console.log('[头条号] ========================================');
+      await this.log('info', '📝 步骤2/6：填写文章标题');
       
-      // ========== 使用精确的选择器（用户提供）==========
-      console.log('[头条号] 🎯 使用精确选择器查找标题输入框');
-      
-      // 标题输入框是 textarea（不是 input）
       const titleSelector = '#root > div > div.left-column > div > div.publish-editor > div.publish-editor-title-wrapper > div > div > div.title-wrapper > div > div > div > textarea';
       
-      console.log(`[头条号] 选择器: ${titleSelector}`);
       let titleInput = await page.$(titleSelector);
       
-      if (titleInput) {
-        console.log('[头条号] ✅ 找到标题输入框（textarea）');
-      } else {
-        console.log('[头条号] ⚠️ 精确选择器未找到，尝试简化选择器...');
+      if (!titleInput) {
+        await this.log('warning', '⚠️ 精确选择器未找到，尝试简化选择器...');
         
-        // 尝试简化的选择器
         const fallbackSelectors = [
-          'textarea',  // 最简单：页面上的textarea
+          'textarea',
           '.title-wrapper textarea',
           'div.publish-editor-title-wrapper textarea'
         ];
@@ -186,76 +168,54 @@ export class ToutiaoAdapter extends PlatformAdapter {
         for (const selector of fallbackSelectors) {
           titleInput = await page.$(selector);
           if (titleInput) {
-            console.log(`[头条号] ✅ 使用简化选择器找到: ${selector}`);
+            await this.log('info', `✅ 使用简化选择器找到: ${selector}`);
             break;
           }
         }
+      } else {
+        await this.log('info', '✅ 找到标题输入框');
       }
       
       if (titleInput) {
         const title = config.title || article.title;
-        console.log('[头条号] ========================================');
-        console.log('[头条号] ✅✅✅ 找到标题输入框！开始输入标题');
-        console.log('[头条号] ========================================');
-        console.log(`[头条号] 📝 标题内容: "${title}"`);
-        console.log(`[头条号] 📏 标题长度: ${title.length} 个字符`);
+        await this.log('info', `⌨️  正在输入标题: "${title}" (${title.length}字)`);
         
-        // ========== 关键修复：必须先点击标题框，让光标进入 ==========
-        console.log(`[头条号] 🖱️  步骤1：点击标题输入框，让光标进入`);
-        console.log(`[头条号] 🖱️  正在点击...`);
+        // 点击标题框
+        await this.log('info', '👆 点击标题输入框...');
         await titleInput.click();
-        console.log(`[头条号] ✅ 已执行点击命令`);
-        
         await new Promise(resolve => setTimeout(resolve, 800));
-        console.log(`[头条号] ✅ 等待完成，光标应该在标题框内`);
         
-        // 清空并输入标题（textarea 元素）
-        console.log(`[头条号] 步骤2：清空标题框`);
-        
-        // 方法1：三次点击选中所有文本
+        // 清空并输入标题
+        await this.log('info', '🧹 清空标题框...');
         await titleInput.click({ clickCount: 3 });
         await page.keyboard.press('Backspace');
         await new Promise(resolve => setTimeout(resolve, 300));
-        console.log(`[头条号] ✅ 标题框已清空`);
         
-        // 输入标题
-        console.log(`[头条号] 步骤3：输入标题文本`);
+        await this.log('info', '⌨️  输入标题文本...');
         await page.keyboard.type(title, { delay: 80 });
         await new Promise(resolve => setTimeout(resolve, 500));
-        console.log(`[头条号] ✅ 标题文本已输入`);
         
-        // 验证标题是否输入成功（textarea 使用 value 属性）
+        // 验证标题
         const inputValue = await page.evaluate(el => (el as HTMLTextAreaElement).value, titleInput);
-        console.log(`[头条号] 步骤4：验证标题输入`);
-        console.log(`[头条号] 期望标题: "${title}"`);
-        console.log(`[头条号] 实际标题: "${inputValue}"`);
         
         if (inputValue === title) {
-          console.log('[头条号] ✅✅✅ 标题输入成功！');
+          await this.log('info', '✅ 标题输入成功！');
         } else if (inputValue.includes(title) || title.includes(inputValue)) {
-          console.log('[头条号] ⚠️ 标题部分匹配，可能成功');
+          await this.log('warning', '⚠️ 标题部分匹配');
         } else {
-          console.log(`[头条号] ❌ 标题输入不完整，尝试备用方案`);
+          await this.log('warning', '⚠️ 标题输入不完整，尝试备用方案...');
           
-          // 备用方案：直接设置value
           await page.evaluate((el, val) => {
             (el as HTMLTextAreaElement).value = val;
             el.dispatchEvent(new Event('input', { bubbles: true }));
             el.dispatchEvent(new Event('change', { bubbles: true }));
           }, titleInput, title);
           
-          const retryValue = await page.evaluate(el => (el as HTMLTextAreaElement).value, titleInput);
-          console.log(`[头条号] 备用方案结果: "${retryValue}"`);
+          await this.log('info', '✅ 使用备用方案设置标题');
         }
-        console.log(`[头条号] ========== 标题输入结束 ==========`);
       } else {
-        console.log('[头条号] ========================================');
-        console.log('[头条号] ❌❌❌ 严重错误：未找到标题输入框！！！');
-        console.log('[头条号] ========================================');
-        console.log('[头条号] 💡 请检查:');
-        console.log('[头条号]    1. 页面是否正确加载');
-        console.log('[头条号]    2. 是否在正确的发布页面');
-        console.log('[头条号]    3. 查看截图文件: toutiao-publish-page.png');
+        await this.log('error', '❌ 未找到标题输入框！');
+        throw new Error('未找到标题输入框');
         console.log('[头条号]    4. 查看上面的input元素列表');
         console.log('[头条号] ========================================');
       }
@@ -298,17 +258,13 @@ export class ToutiaoAdapter extends PlatformAdapter {
       }
       
       if (contentEditor) {
-        console.log('[头条号] ========== 开始输入内容（新方案：按位置插入图片）==========');
-        console.log('[头条号] 注意：只输入内容，不包含标题');
-        console.log('[头条号] article.title = "' + article.title + '"');
-        console.log('[头条号] article.content 前100字符 = "' + article.content.substring(0, 100) + '"');
+        await this.log('info', '📝 步骤3/6：开始输入正文内容');
         
-        // ========== 关键修复：必须先点击内容框，让光标进入 ==========
-        console.log(`[头条号] 步骤1：点击内容编辑器，让光标进入`);
+        // 点击内容编辑器
+        await this.log('info', '👆 点击内容编辑器...');
         await contentEditor.click();
-        console.log('[头条号] ⏳ 等待光标进入（2秒）...');
         await new Promise(resolve => setTimeout(resolve, 2000));
-        console.log(`[头条号] ✅ 已点击内容框，光标应该在内容框内`);
+        await this.log('info', '✅ 内容编辑器已激活');
         
         // ========== 新方案：先复制所有文字，再上传所有图片 ==========
         console.log('[头条号] 💡 新方案：先复制所有文字，再上传所有图片');
@@ -403,9 +359,9 @@ export class ToutiaoAdapter extends PlatformAdapter {
             await page.keyboard.type(textOnly, { delay: 30 });
             console.log('[头条号] ✅ 所有文字输入完成');
             
-            // 等待输入稳定
-            console.log('[头条号] ⏳ 等待文字输入稳定（3秒）...');
-            await new Promise(resolve => setTimeout(resolve, 3000));
+            // 等待输入稳定（增加到13秒，确保长文本输入完毕）
+            console.log('[头条号] ⏳ 等待文字输入稳定（13秒）...');
+            await new Promise(resolve => setTimeout(resolve, 13000));
             
           } catch (error: any) {
             console.error(`[头条号] ❌ 插入文字失败:`, error.message);

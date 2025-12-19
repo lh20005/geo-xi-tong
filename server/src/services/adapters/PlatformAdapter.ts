@@ -39,6 +39,9 @@ export interface PublishingConfig {
 export abstract class PlatformAdapter {
   abstract platformId: string;
   abstract platformName: string;
+  
+  // 当前任务ID（用于日志记录）
+  protected currentTaskId?: number;
 
   /**
    * 获取登录页面URL
@@ -59,6 +62,33 @@ export abstract class PlatformAdapter {
    * 获取发布表单选择器
    */
   abstract getPublishSelectors(): PublishSelectors;
+
+  /**
+   * 设置当前任务ID（用于日志记录）
+   */
+  setTaskId(taskId: number): void {
+    this.currentTaskId = taskId;
+  }
+
+  /**
+   * 记录日志到任务
+   */
+  protected async log(level: 'info' | 'warning' | 'error', message: string, details?: any): Promise<void> {
+    if (this.currentTaskId) {
+      const { publishingService } = require('../PublishingService');
+      await publishingService.logMessage(this.currentTaskId, level, message, details);
+    }
+    
+    // 同时输出到控制台
+    const prefix = `[${this.platformName}]`;
+    if (level === 'error') {
+      console.error(prefix, message, details || '');
+    } else if (level === 'warning') {
+      console.warn(prefix, message, details || '');
+    } else {
+      console.log(prefix, message, details || '');
+    }
+  }
 
   /**
    * 执行登录流程

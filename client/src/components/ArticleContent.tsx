@@ -25,22 +25,33 @@ const ArticleContent: React.FC<ArticleContentProps> = ({
 }) => {
   // 检测内容格式：HTML、Markdown 或纯文本
   const isHtmlContent = /<[^>]+>/.test(content);
-  const isMarkdownContent = /[#*_\[\]!`]/.test(content) || /!\[.*?\]\(.*?\)/.test(content);
+  const isMarkdownContent = /!\[.*?\]\(.*?\)/.test(content); // 只检测图片语法，更准确
   
   // 如果是纯文本（既不是HTML也不是Markdown），直接渲染并保留换行
   if (!isHtmlContent && !isMarkdownContent) {
+    // 处理纯文本：将连续的换行符转换为段落
+    const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+    
     return (
       <div 
         className={className} 
         style={{
           ...style,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
           lineHeight: '1.8',
           fontSize: '16px'
         }}
       >
-        {content}
+        {paragraphs.map((paragraph, index) => (
+          <p 
+            key={index} 
+            style={{ 
+              marginBottom: index < paragraphs.length - 1 ? '16px' : 0,
+              textIndent: '2em' // 首行缩进
+            }}
+          >
+            {paragraph.trim()}
+          </p>
+        ))}
       </div>
     );
   }

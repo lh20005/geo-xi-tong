@@ -262,9 +262,13 @@ articleRouter.get('/', async (req, res) => {
       queryParams.push(true);
       paramIndex++;
     } else if (publishStatus === 'unpublished') {
-      whereClauses.push(`a.is_published = $${paramIndex}`);
+      // 未发布：is_published = false 或 is_published IS NULL（兼容旧数据）
+      whereClauses.push(`(a.is_published = $${paramIndex} OR a.is_published IS NULL)`);
       queryParams.push(false);
       paramIndex++;
+      
+      // 未发布状态下，排除有待处理发布任务的文章（避免重复选择）
+      whereClauses.push(`(a.publishing_status IS NULL OR a.publishing_status = '')`);
     }
 
     // 话题筛选

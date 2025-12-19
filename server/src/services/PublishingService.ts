@@ -1,4 +1,5 @@
 import { pool } from '../db/database';
+import { logBroadcaster } from './LogBroadcaster';
 
 export interface PublishingTask {
   id: number;
@@ -13,6 +14,9 @@ export interface PublishingTask {
   error_message?: string;
   retry_count: number;
   max_retries: number;
+  batch_id?: string;
+  batch_order?: number;
+  interval_minutes?: number;
   created_at: Date;
   updated_at: Date;
 }
@@ -29,6 +33,9 @@ export interface CreateTaskInput {
     [key: string]: any;
   };
   scheduled_at?: Date;
+  batch_id?: string;
+  batch_order?: number;
+  interval_minutes?: number;
 }
 
 export interface TaskFilters {
@@ -57,8 +64,8 @@ export class PublishingService {
 
     const result = await pool.query(
       `INSERT INTO publishing_tasks 
-       (article_id, account_id, platform_id, config, scheduled_at, status) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
+       (article_id, account_id, platform_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
        RETURNING *`,
       [
         input.article_id,
@@ -66,7 +73,10 @@ export class PublishingService {
         input.platform_id,
         JSON.stringify(input.config),
         input.scheduled_at || null,
-        input.scheduled_at ? 'pending' : 'pending'
+        input.scheduled_at ? 'pending' : 'pending',
+        input.batch_id || null,
+        input.batch_order || 0,
+        input.interval_minutes || 0
       ]
     );
 
@@ -213,12 +223,56 @@ export class PublishingService {
    * 取消任务
    */
   async cancelTask(taskId: number): Promise<void> {
-    await pool.query(
-      `UPDATE publishing_tasks 
-       SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1 AND status = 'pending'`,
-      [taskId]
-    );
+    const client = await pool.connect();
+    
+    try {
+      await client.query('BEGIN');
+      
+      // 获取任务信息
+      const taskResult = await client.query(
+        'SELECT article_id, status FROM publishing_tasks WHERE id = $1',
+        [taskId]
+      );
+      
+      if (taskResult.rows.length === 0) {
+        throw new Error('任务不存在');
+      }
+      
+      const task = taskResult.rows[0];
+      
+      // 只能取消待处理的任务
+      if (task.status !== 'pending') {
+        throw new Error(`只能取消待处理状态的任务，当前状态: ${task.status}`);
+      }
+      
+      // 更新任务状态为已取消
+      await client.query(
+        `UPDATE publishing_tasks 
+         SET status = 'cancelled', 
+             updated_at = CURRENT_TIMESTAMP,
+             error_message = '用户手动取消'
+         WHERE id = $1`,
+        [taskId]
+      );
+      
+      // 恢复文章的可见状态（清除 publishing_status）
+      await client.query(
+        `UPDATE articles 
+         SET publishing_status = NULL 
+         WHERE id = $1`,
+        [task.article_id]
+      );
+      
+      await client.query('COMMIT');
+      
+      console.log(`✅ 任务 #${taskId} 已取消，文章 #${task.article_id} 已恢复可见`);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('取消任务失败:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -230,11 +284,20 @@ export class PublishingService {
     message: string,
     details?: any
   ): Promise<void> {
+    // 保存到数据库
     await pool.query(
       `INSERT INTO publishing_logs (task_id, level, message, details) 
        VALUES ($1, $2, $3, $4)`,
       [taskId, level, message, details ? JSON.stringify(details) : null]
     );
+
+    // 实时广播日志到连接的客户端
+    logBroadcaster.broadcast(taskId, {
+      level,
+      message,
+      timestamp: new Date().toISOString(),
+      details
+    });
   }
 
   /**
@@ -274,13 +337,35 @@ export class PublishingService {
     try {
       await client.query('BEGIN');
 
+      // 获取任务信息
+      const taskResult = await client.query(
+        'SELECT article_id FROM publishing_tasks WHERE id = $1',
+        [taskId]
+      );
+      
+      if (taskResult.rows.length === 0) {
+        throw new Error('任务不存在');
+      }
+      
+      const articleId = taskResult.rows[0].article_id;
+
       // 删除任务日志
       await client.query('DELETE FROM publishing_logs WHERE task_id = $1', [taskId]);
 
       // 删除任务
       await client.query('DELETE FROM publishing_tasks WHERE id = $1', [taskId]);
 
+      // 恢复文章的可见状态
+      await client.query(
+        `UPDATE articles 
+         SET publishing_status = NULL 
+         WHERE id = $1`,
+        [articleId]
+      );
+
       await client.query('COMMIT');
+      
+      console.log(`✅ 任务 #${taskId} 已删除，文章 #${articleId} 已恢复可见`);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
@@ -301,6 +386,16 @@ export class PublishingService {
     try {
       await client.query('BEGIN');
 
+      // 获取所有任务的文章ID
+      const articlesResult = await client.query(
+        `SELECT DISTINCT article_id 
+         FROM publishing_tasks 
+         WHERE id = ANY($1)`,
+        [taskIds]
+      );
+      
+      const articleIds = articlesResult.rows.map((row: any) => row.article_id);
+
       // 删除任务日志
       await client.query(
         `DELETE FROM publishing_logs WHERE task_id = ANY($1)`,
@@ -312,6 +407,18 @@ export class PublishingService {
         `DELETE FROM publishing_tasks WHERE id = ANY($1)`,
         [taskIds]
       );
+
+      // 恢复所有相关文章的可见状态
+      if (articleIds.length > 0) {
+        await client.query(
+          `UPDATE articles 
+           SET publishing_status = NULL 
+           WHERE id = ANY($1)`,
+          [articleIds]
+        );
+        
+        console.log(`✅ 已恢复 ${articleIds.length} 篇文章的可见状态`);
+      }
 
       await client.query('COMMIT');
 
@@ -335,6 +442,13 @@ export class PublishingService {
       const whereClause = status ? `WHERE status = $1` : '';
       const params = status ? [status] : [];
 
+      // 获取所有要删除的任务的文章ID
+      const articlesResult = await client.query(
+        `SELECT DISTINCT article_id FROM publishing_tasks ${whereClause}`,
+        params
+      );
+      const articleIds = articlesResult.rows.map((row: any) => row.article_id);
+
       // 先获取要删除的任务ID
       const taskIdsResult = await client.query(
         `SELECT id FROM publishing_tasks ${whereClause}`,
@@ -355,6 +469,18 @@ export class PublishingService {
           params
         );
 
+        // 恢复所有相关文章的可见状态
+        if (articleIds.length > 0) {
+          await client.query(
+            `UPDATE articles 
+             SET publishing_status = NULL 
+             WHERE id = ANY($1)`,
+            [articleIds]
+          );
+          
+          console.log(`✅ 已恢复 ${articleIds.length} 篇文章的可见状态`);
+        }
+
         await client.query('COMMIT');
         return { deletedCount: result.rowCount || 0 };
       }
@@ -367,6 +493,53 @@ export class PublishingService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * 获取批次中的下一个待执行任务
+   */
+  async getNextBatchTask(batchId: string): Promise<PublishingTask | null> {
+    const result = await pool.query(
+      `SELECT * FROM publishing_tasks 
+       WHERE batch_id = $1 AND status = 'pending'
+       ORDER BY batch_order ASC 
+       LIMIT 1`,
+      [batchId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return this.formatTask(result.rows[0]);
+  }
+
+  /**
+   * 获取批次中所有任务
+   */
+  async getBatchTasks(batchId: string): Promise<PublishingTask[]> {
+    const result = await pool.query(
+      `SELECT * FROM publishing_tasks 
+       WHERE batch_id = $1 
+       ORDER BY batch_order ASC`,
+      [batchId]
+    );
+
+    return result.rows.map(row => this.formatTask(row));
+  }
+
+  /**
+   * 检查批次是否完成
+   */
+  async isBatchCompleted(batchId: string): Promise<boolean> {
+    const result = await pool.query(
+      `SELECT COUNT(*) as pending_count 
+       FROM publishing_tasks 
+       WHERE batch_id = $1 AND status IN ('pending', 'running')`,
+      [batchId]
+    );
+
+    return parseInt(result.rows[0].pending_count) === 0;
   }
 
   /**
@@ -386,6 +559,9 @@ export class PublishingService {
       error_message: row.error_message,
       retry_count: row.retry_count,
       max_retries: row.max_retries,
+      batch_id: row.batch_id,
+      batch_order: row.batch_order,
+      interval_minutes: row.interval_minutes,
       created_at: row.created_at,
       updated_at: row.updated_at
     };

@@ -132,6 +132,9 @@ export interface CreatePublishingTaskInput {
   account_id: number;
   scheduled_time?: string | null;
   config?: any;
+  batch_id?: string;
+  batch_order?: number;
+  interval_minutes?: number;
 }
 
 /**
@@ -300,4 +303,74 @@ export async function getArticlePublishingRecords(articleId: number): Promise<{ 
 export async function getPublishingStats(): Promise<PublishingStats> {
   const response = await apiClient.get('/publishing/stats');
   return response.data.data;
+}
+
+// ==================== 批次管理相关 ====================
+
+export interface BatchInfo {
+  total_tasks: number;
+  pending_tasks: number;
+  running_tasks: number;
+  success_tasks: number;
+  failed_tasks: number;
+  cancelled_tasks: number;
+  created_at: string;
+  interval_minutes: number;
+}
+
+/**
+ * 停止批次（取消所有待处理任务）
+ */
+export async function stopBatch(batchId: string): Promise<{ cancelledCount: number }> {
+  const response = await apiClient.post(`/publishing/batches/${batchId}/stop`);
+  return response.data.data;
+}
+
+/**
+ * 删除批次（删除所有任务）
+ */
+export async function deleteBatch(batchId: string): Promise<{ deletedCount: number }> {
+  const response = await apiClient.delete(`/publishing/batches/${batchId}`);
+  return response.data.data;
+}
+
+/**
+ * 获取批次信息
+ */
+export async function getBatchInfo(batchId: string): Promise<BatchInfo> {
+  const response = await apiClient.get(`/publishing/batches/${batchId}`);
+  return response.data.data;
+}
+
+/**
+ * 订阅任务日志流（SSE）
+ */
+export function subscribeToTaskLogs(
+  taskId: number,
+  onLog: (log: PublishingLog) => void,
+  onError?: (error: Error) => void
+): () => void {
+  const eventSource = new EventSource(`/api/publishing/tasks/${taskId}/logs/stream`);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const log = JSON.parse(event.data);
+      onLog(log);
+    } catch (error) {
+      console.error('解析日志数据失败:', error);
+    }
+  };
+
+  eventSource.onerror = (error) => {
+    console.error('日志流连接错误:', error);
+    if (onError) {
+      onError(new Error('日志流连接失败'));
+    }
+    eventSource.close();
+  };
+
+  // 返回取消订阅函数
+  return () => {
+    eventSource.close();
+  };
 }

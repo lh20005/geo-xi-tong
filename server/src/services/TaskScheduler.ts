@@ -1,14 +1,15 @@
 import { publishingService } from './PublishingService';
 import { publishingExecutor } from './PublishingExecutor';
+import { batchExecutor } from './BatchExecutor';
 
 /**
  * 任务调度器
- * 负责检查和执行定时任务
+ * 负责检查和执行定时任务（包括批次任务）
  */
 export class TaskScheduler {
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning = false;
-  private checkInterval = 60000; // 每分钟检查一次
+  private checkInterval = 10000; // 每10秒检查一次（更频繁，以便及时执行批次任务）
   private executingTasks: Set<number> = new Set();
 
   /**
@@ -21,7 +22,7 @@ export class TaskScheduler {
     }
 
     this.isRunning = true;
-    console.log('✅ 任务调度器已启动');
+    console.log('✅ 任务调度器已启动（检查间隔: 10秒）');
 
     // 立即执行一次检查
     this.checkAndExecuteTasks();
@@ -49,12 +50,21 @@ export class TaskScheduler {
    */
   private async checkAndExecuteTasks(): Promise<void> {
     try {
+      // 1. 检查批次任务（优先）
+      await batchExecutor.checkAndExecuteBatches();
+
+      // 2. 检查普通定时任务（没有 batch_id 的任务）
       const tasks = await publishingService.getPendingScheduledTasks();
 
       if (tasks.length > 0) {
         console.log(`📋 发现 ${tasks.length} 个待执行的定时任务`);
 
         for (const task of tasks) {
+          // 跳过批次任务（由 batchExecutor 处理）
+          if (task.batch_id) {
+            continue;
+          }
+
           // 避免重复执行
           if (this.executingTasks.has(task.id)) {
             continue;

@@ -948,7 +948,7 @@ export class ArticleGenerationService {
       // 用户使用了占位符，直接替换
       console.log('[提示词构建] 检测到占位符，使用用户自定义模板');
       console.log(`[提示词构建] 转化目标字段值: companyName="${companyName}", industry="${companyIndustry}", website="${companyWebsite}", address="${companyAddress}"`);
-      return this.replacePromptVariables(
+      const finalPrompt = this.replacePromptVariables(
         basePrompt, 
         keyword, 
         topics, 
@@ -958,6 +958,9 @@ export class ArticleGenerationService {
         companyWebsite,
         companyAddress
       );
+      console.log('[提示词构建] 最终提示词前200字符:', finalPrompt.substring(0, 200));
+      console.log('[提示词构建] 提示词总长度:', finalPrompt.length, '字符');
+      return finalPrompt;
     }
     
     // 向后兼容：用户没有使用占位符，使用简化的拼接逻辑
@@ -1043,7 +1046,10 @@ export class ArticleGenerationService {
 
       let response: string;
       try {
+        console.log('[AI调用] 发送提示词长度:', prompt.length, '字符');
+        console.log('[AI调用] 提示词包含字数限制要求:', prompt.includes('700-800') ? '是' : '否');
         response = await aiService['callAI'](prompt);
+        console.log('[AI调用] 收到响应长度:', response.length, '字符');
       } catch (error: any) {
         throw new Error(`AI调用失败: ${error.message}`);
       }

@@ -104,18 +104,9 @@ ${knowledgeContext}
 请基于以上企业知识库的内容，确保文章的专业性和准确性。文章内容应该与企业知识库中的信息保持一致。`;
     }
 
-    prompt += `\n\n文章要求：
-${requirements}
+    prompt += `\n\n${requirements}`;
 
-请撰写一篇专业、高质量的文章，要求：
-1. 文章要围绕核心关键词展开
-2. 自然融入相关话题中的问题和答案
-3. 内容要有价值、有深度，对读者有实际帮助
-4. 语言流畅、专业，符合SEO优化标准
-5. 结构清晰，包含标题、段落、小标题等
-6. 字数在1500-2500字之间
-
-请直接输出文章内容：`;
+    // 不添加任何额外的硬性要求，完全以提示词模板为准
 
     return await this.callAI(prompt);
   }
@@ -189,6 +180,10 @@ ${content}
    */
   private async callDeepSeek(prompt: string): Promise<string> {
     try {
+      console.log('[DeepSeek] 发送提示词长度:', prompt.length, '字符');
+      console.log('[DeepSeek] max_tokens 设置:', 1200);
+      console.log('[DeepSeek] 提示词前300字符:', prompt.substring(0, 300));
+      
       const response = await axios.post(
         'https://api.deepseek.com/v1/chat/completions',
         {
@@ -197,7 +192,7 @@ ${content}
             { role: 'user', content: prompt }
           ],
           temperature: 0.7,
-          max_tokens: 1200  // 限制为1200 tokens，约800-1000字
+          max_tokens: 1000  // 极限限制为1000 tokens，约650-800字，强制控制字数
         },
         {
           headers: {
@@ -208,7 +203,10 @@ ${content}
         }
       );
 
-      return response.data.choices[0].message.content;
+      const content = response.data.choices[0].message.content;
+      console.log('[DeepSeek] 收到响应长度:', content.length, '字符');
+      console.log('[DeepSeek] 响应前200字符:', content.substring(0, 200));
+      return content;
     } catch (error: any) {
       console.error('DeepSeek API错误:', error.response?.data || error.message);
       throw new Error(`DeepSeek API调用失败: ${error.response?.data?.error?.message || error.message}`);
@@ -228,7 +226,7 @@ ${content}
           }],
           generationConfig: {
             temperature: 0.7,
-            maxOutputTokens: 1200  // 限制为1200 tokens，约800-1000字
+            maxOutputTokens: 1000  // 极限限制为1000 tokens，约650-800字，强制控制字数
           }
         },
         {
@@ -263,7 +261,7 @@ ${content}
         stream: false,
         options: {
           temperature: 0.7,
-          num_predict: 1200  // 限制为1200 tokens，约800-1000字
+          num_predict: 1200  // 严格限制为1200 tokens，约800-950字，确保不超过850字
         }
       });
 
