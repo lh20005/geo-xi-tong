@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { 
   Card, Row, Col, Table, Button, Space, Tag, message, 
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
-  DatePicker, Input, InputNumber
+  DatePicker, Input, InputNumber, Switch
 } from 'antd';
 import {
   SendOutlined, ReloadOutlined, CheckCircleOutlined,
   CloseCircleOutlined, ClockCircleOutlined, SyncOutlined,
   EyeOutlined, DeleteOutlined, PlayCircleOutlined,
   FileTextOutlined, CloudUploadOutlined, HistoryOutlined,
-  StopOutlined, ExclamationCircleOutlined, FieldTimeOutlined
+  StopOutlined, ExclamationCircleOutlined, FieldTimeOutlined,
+  EyeInvisibleOutlined
 } from '@ant-design/icons';
 import { 
   getArticles, getArticle, Article 
@@ -22,6 +23,8 @@ import {
   stopBatch, deleteBatch, getBatchInfo, BatchInfo,
   subscribeToTaskLogs
 } from '../api/publishing';
+import ArticlePreview from '../components/ArticlePreview';
+import { processArticleContent as processArticleContentUtil } from '../utils/articleUtils';
 import dayjs, { Dayjs } from 'dayjs';
 
 const { Text, Paragraph } = Typography;
@@ -54,6 +57,12 @@ export default function PublishingTasksPage() {
   
   // 间隔发布（分钟）
   const [publishInterval, setPublishInterval] = useState<number>(5);
+
+  // 静默发布模式（默认开启静默模式）
+  const [headlessMode, setHeadlessMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('publishHeadlessMode');
+    return saved !== null ? saved === 'true' : true;
+  });
 
   // 日志查看
   const [logsModal, setLogsModal] = useState<{ 
@@ -111,6 +120,27 @@ export default function PublishingTasksPage() {
   useEffect(() => {
     loadTasks();
   }, [taskPage, taskPageSize]);
+
+  // 自动刷新任务列表（每5秒刷新一次）
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      // 只在有任务时自动刷新
+      if (tasks.length > 0) {
+        const hasRunningTasks = tasks.some(t => t.status === 'running' || t.status === 'pending');
+        if (hasRunningTasks) {
+          console.log('🔄 自动刷新任务列表...');
+          loadTasks();
+        }
+      }
+    }, 5000); // 每5秒刷新一次
+
+    return () => clearInterval(intervalId);
+  }, [tasks]); // 依赖tasks，当tasks变化时重新设置定时器
+
+  // 保存静默模式设置到 localStorage
+  useEffect(() => {
+    localStorage.setItem('publishHeadlessMode', headlessMode.toString());
+  }, [headlessMode]);
 
   // 加载草稿文章
   const loadDraftArticles = async () => {
@@ -235,7 +265,10 @@ export default function PublishingTasksPage() {
                     scheduled_time: null, // 不使用定时，由批次执行器控制
                     batch_id: batchId,
                     batch_order: batchOrder,
-                    interval_minutes: publishInterval
+                    interval_minutes: publishInterval,
+                    config: {
+                      headless: headlessMode
+                    }
                   })
                 );
               }
@@ -320,50 +353,7 @@ export default function PublishingTasksPage() {
     };
   }, [logStream.visible, logStream.taskId]);
 
-  // 处理文章内容，移除占位符和Markdown标记
-  const processArticleContent = (content: string, imageUrl?: string): string => {
-    if (!content) return '';
-    
-    let processedContent = content;
-    
-    // 1. 移除 [IMAGE_PLACEHOLDER] 占位符
-    processedContent = processedContent.replace(/\[IMAGE_PLACEHOLDER\]/gi, '');
-    
-    // 2. 处理 Markdown 图片标记 ![alt](url)
-    // 如果有实际图片URL，替换为提示文字；否则直接移除
-    if (imageUrl) {
-      processedContent = processedContent.replace(
-        /!\[([^\]]*)\]\([^)]+\)/g,
-        '【此处显示文章配图】'
-      );
-    } else {
-      processedContent = processedContent.replace(/!\[([^\]]*)\]\([^)]+\)/g, '');
-    }
-    
-    // 3. 处理HTML标签，保留段落结构
-    // 将 <p>、</p>、<br>、<br/> 转换为换行符
-    processedContent = processedContent.replace(/<\/p>/gi, '\n');
-    processedContent = processedContent.replace(/<p[^>]*>/gi, '');
-    processedContent = processedContent.replace(/<br\s*\/?>/gi, '\n');
-    
-    // 4. 移除其他所有HTML标签（保留文本内容）
-    processedContent = processedContent.replace(/<[^>]+>/g, '');
-    
-    // 5. 移除HTML实体字符
-    processedContent = processedContent.replace(/&nbsp;/g, ' ');
-    processedContent = processedContent.replace(/&lt;/g, '<');
-    processedContent = processedContent.replace(/&gt;/g, '>');
-    processedContent = processedContent.replace(/&amp;/g, '&');
-    processedContent = processedContent.replace(/&quot;/g, '"');
-    
-    // 6. 清理多余的空行（超过2个连续换行符的合并为2个）
-    processedContent = processedContent.replace(/\n{3,}/g, '\n\n');
-    
-    // 7. 移除首尾空白
-    processedContent = processedContent.trim();
-    
-    return processedContent;
-  };
+
 
   // 预览文章
   const handlePreviewArticle = async (article: Article) => {
@@ -1192,6 +1182,38 @@ export default function PublishingTasksPage() {
                 </Button>
               </Col>
             </Row>
+
+            {/* 发布模式切换 */}
+            <Row gutter={16} align="middle" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+              <Col flex="auto">
+                <Space size="middle" align="center">
+                  {headlessMode ? (
+                    <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  ) : (
+                    <EyeOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  )}
+                  <Text style={{ color: '#fff', fontSize: 14 }}>发布模式：</Text>
+                  <Switch
+                    checked={!headlessMode}
+                    onChange={(checked) => setHeadlessMode(!checked)}
+                    checkedChildren="可视化发布"
+                    unCheckedChildren="静默发布"
+                    style={{ minWidth: 100 }}
+                  />
+                  <Tooltip 
+                    title={
+                      headlessMode 
+                        ? "静默模式：浏览器在后台运行，不显示界面，速度更快" 
+                        : "可视化模式：打开浏览器窗口，可以实时观看自动操作过程"
+                    }
+                  >
+                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
+                      {headlessMode ? '🔇 静默模式：后台运行，不显示浏览器' : '👁️ 可视化模式：打开浏览器窗口观看操作'}
+                    </Text>
+                  </Tooltip>
+                </Space>
+              </Col>
+            </Row>
           </Space>
         </Card>
       )}
@@ -1589,55 +1611,12 @@ export default function PublishingTasksPage() {
               </Row>
             </Card>
 
-            {/* 文章标题 */}
-            {previewModal.article.title && (
-              <Card size="small" style={{ marginBottom: 16 }}>
-                <Text strong style={{ fontSize: 18 }}>
-                  {previewModal.article.title}
-                </Text>
-              </Card>
-            )}
-
-            {/* 文章图片 */}
-            {previewModal.article.imageUrl && (
-              <Card size="small" style={{ marginBottom: 16, textAlign: 'center' }}>
-                <img 
-                  src={previewModal.article.imageUrl} 
-                  alt="文章配图" 
-                  style={{ 
-                    maxWidth: '100%', 
-                    maxHeight: 400,
-                    borderRadius: 8,
-                    objectFit: 'contain'
-                  }} 
-                />
-              </Card>
-            )}
-
-            {/* 文章内容 */}
-            <Card 
-              size="small" 
-              title={<Text strong>文章内容</Text>}
-            >
-              {previewModal.article.content ? (
-                <div 
-                  style={{ 
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    lineHeight: 1.8,
-                    fontSize: 14,
-                    color: '#333'
-                  }}
-                >
-                  {processArticleContent(previewModal.article.content, previewModal.article.imageUrl)}
-                </div>
-              ) : (
-                <Empty 
-                  description="暂无文章内容" 
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
-              )}
-            </Card>
+            {/* 使用统一的文章预览组件 */}
+            <ArticlePreview 
+              content={previewModal.article.content}
+              title={previewModal.article.title}
+              imageUrl={previewModal.article.imageUrl}
+            />
           </div>
         )}
         {previewModal.loading && (

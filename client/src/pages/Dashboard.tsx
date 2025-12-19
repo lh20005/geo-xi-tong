@@ -1,157 +1,181 @@
-import { Card, Row, Col, Statistic, Button, Space, Typography } from 'antd';
+import { useState, useEffect, useCallback } from 'react';
+import { Row, Col, Typography, Button, Space, message, DatePicker, Select } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import {
-  ThunderboltOutlined,
-  FileTextOutlined,
-  RocketOutlined,
-  SettingOutlined,
-} from '@ant-design/icons';
+import dayjs, { Dayjs } from 'dayjs';
+import MetricsCards from '../components/Dashboard/MetricsCards';
+import TrendsChart from '../components/Dashboard/TrendsChart';
+import PublishingStatusChart from '../components/Dashboard/PublishingStatusChart';
+import PlatformDistributionChart from '../components/Dashboard/PlatformDistributionChart';
+import ResourceEfficiencyChart from '../components/Dashboard/ResourceEfficiencyChart';
+import ArticleStatsChart from '../components/Dashboard/ArticleStatsChart';
+import KeywordDistributionChart from '../components/Dashboard/KeywordDistributionChart';
+import MonthlyComparisonChart from '../components/Dashboard/MonthlyComparisonChart';
+import HourlyActivityChart from '../components/Dashboard/HourlyActivityChart';
+import SuccessRateGauge from '../components/Dashboard/SuccessRateGauge';
+import { getAllDashboardData } from '../api/dashboard';
+import type { TimeRange } from '../types/dashboard';
 
-const { Title, Paragraph } = Typography;
+const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [timeRange, setTimeRange] = useState<TimeRange>({
+    startDate: dayjs().subtract(30, 'days').format('YYYY-MM-DD'),
+    endDate: dayjs().format('YYYY-MM-DD'),
+    preset: '30d'
+  });
+  const [loading, setLoading] = useState(true);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [dashboardData, setDashboardData] = useState<any>(null);
+
+  // 加载数据
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    
+    try {
+      const data = await getAllDashboardData({
+        startDate: timeRange.startDate,
+        endDate: timeRange.endDate
+      });
+
+      setDashboardData(data);
+      setLastUpdate(new Date());
+      setLoading(false);
+    } catch (error) {
+      console.error('加载Dashboard数据失败:', error);
+      setLoading(false);
+      message.error('加载数据失败');
+    }
+  }, [timeRange]);
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // 时间范围变更
+  const handleTimeRangeChange = (preset: '7d' | '30d' | '90d' | 'custom', dates?: [Dayjs, Dayjs]) => {
+    let startDate: string;
+    let endDate: string;
+
+    if (preset === 'custom' && dates) {
+      startDate = dates[0].format('YYYY-MM-DD');
+      endDate = dates[1].format('YYYY-MM-DD');
+    } else {
+      const days = preset === '7d' ? 7 : preset === '30d' ? 30 : 90;
+      endDate = dayjs().format('YYYY-MM-DD');
+      startDate = dayjs().subtract(days, 'days').format('YYYY-MM-DD');
+    }
+
+    setTimeRange({ startDate, endDate, preset });
+  };
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 32 }}>
-        <Title level={2}>欢迎使用 GEO 优化系统</Title>
-        <Paragraph style={{ fontSize: 16, color: '#64748b' }}>
-          通过AI驱动的关键词蒸馏和内容生成，提升您的品牌在AI平台的推荐率
-        </Paragraph>
+    <div style={{ padding: 24, background: '#f0f2f5', minHeight: '100vh' }}>
+      {/* 页面标题和工具栏 */}
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+        <div>
+          <Title level={2} style={{ margin: 0 }}>数据工作台</Title>
+          <Text type="secondary">
+            系统运营数据可视化分析
+            {lastUpdate && ` · 最后更新: ${dayjs(lastUpdate).format('HH:mm:ss')}`}
+          </Text>
+        </div>
+        
+        <Space wrap>
+          <Select
+            value={timeRange.preset}
+            onChange={(value) => handleTimeRangeChange(value as any)}
+            style={{ width: 120 }}
+            options={[
+              { label: '最近7天', value: '7d' },
+              { label: '最近30天', value: '30d' },
+              { label: '最近90天', value: '90d' },
+              { label: '自定义', value: 'custom' }
+            ]}
+          />
+          
+          {timeRange.preset === 'custom' && (
+            <RangePicker
+              value={[dayjs(timeRange.startDate), dayjs(timeRange.endDate)]}
+              onChange={(dates) => {
+                if (dates && dates[0] && dates[1]) {
+                  handleTimeRangeChange('custom', dates as [Dayjs, Dayjs]);
+                }
+              }}
+            />
+          )}
+          
+          <Button
+            icon={<ReloadOutlined />}
+            onClick={loadData}
+            loading={loading}
+          >
+            刷新
+          </Button>
+        </Space>
       </div>
 
-      <Row gutter={[24, 24]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card
-            hoverable
-            style={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              border: 'none',
-            }}
-          >
-            <Statistic
-              title={<span style={{ color: '#fff' }}>关键词蒸馏</span>}
-              value="AI驱动"
-              prefix={<ThunderboltOutlined />}
-              valueStyle={{ color: '#fff' }}
-            />
-          </Card>
+      {/* 核心指标卡片 */}
+      <MetricsCards
+        data={dashboardData?.metrics}
+        loading={loading}
+        onCardClick={(type) => {
+          if (type === 'distillations') navigate('/distillation-results');
+          if (type === 'articles') navigate('/articles');
+          if (type === 'tasks') navigate('/publishing-tasks');
+        }}
+      />
+
+      {/* 第一行：趋势图和文章统计 */}
+      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+        <Col xs={24} lg={16}>
+          <TrendsChart data={dashboardData?.trends} loading={loading} />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card
-            hoverable
-            style={{
-              background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-              border: 'none',
-            }}
-          >
-            <Statistic
-              title={<span style={{ color: '#fff' }}>话题分析</span>}
-              value="智能化"
-              prefix={<FileTextOutlined />}
-              valueStyle={{ color: '#fff' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card
-            hoverable
-            style={{
-              background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-              border: 'none',
-            }}
-          >
-            <Statistic
-              title={<span style={{ color: '#fff' }}>文章生成</span>}
-              value="高质量"
-              prefix={<RocketOutlined />}
-              valueStyle={{ color: '#fff' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card
-            hoverable
-            style={{
-              background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-              border: 'none',
-            }}
-          >
-            <Statistic
-              title={<span style={{ color: '#fff' }}>多模型支持</span>}
-              value="灵活"
-              prefix={<SettingOutlined />}
-              valueStyle={{ color: '#fff' }}
-            />
-          </Card>
+        <Col xs={24} lg={8}>
+          <ArticleStatsChart data={dashboardData?.articleStats} loading={loading} />
         </Col>
       </Row>
 
-      <Row gutter={[24, 24]} style={{ marginTop: 32 }}>
+      {/* 第二行：月度对比 */}
+      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+        <Col xs={24}>
+          <MonthlyComparisonChart data={dashboardData?.monthlyComparison} loading={loading} />
+        </Col>
+      </Row>
+
+      {/* 第三行：关键词分布 */}
+      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+        <Col xs={24}>
+          <KeywordDistributionChart data={dashboardData?.keywordDistribution} loading={loading} />
+        </Col>
+      </Row>
+
+      {/* 第四行：成功率仪表盘和资源效率 */}
+      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
         <Col xs={24} lg={12}>
-          <Card
-            title="快速开始"
-            bordered={false}
-            style={{ height: '100%' }}
-          >
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <div>
-                <Title level={4}>1. 配置 AI API</Title>
-                <Paragraph>
-                  首先配置 DeepSeek 或 Gemini 的 API 密钥，系统将使用AI模型进行关键词分析和内容生成。
-                </Paragraph>
-                <Button
-                  type="primary"
-                  icon={<SettingOutlined />}
-                  onClick={() => navigate('/config')}
-                >
-                  前往配置
-                </Button>
-              </div>
-              <div>
-                <Title level={4}>2. 关键词蒸馏</Title>
-                <Paragraph>
-                  输入目标关键词，AI将分析并生成真实用户可能提出的相关问题，帮助您了解用户搜索意图。
-                </Paragraph>
-                <Button
-                  type="primary"
-                  icon={<ThunderboltOutlined />}
-                  onClick={() => navigate('/distillation')}
-                >
-                  开始蒸馏
-                </Button>
-              </div>
-            </Space>
-          </Card>
+          <SuccessRateGauge data={dashboardData?.successRates} loading={loading} />
         </Col>
         <Col xs={24} lg={12}>
-          <Card
-            title="系统特点"
-            bordered={false}
-            style={{ height: '100%' }}
-          >
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <div>
-                <Title level={5}>🎯 精准的关键词分析</Title>
-                <Paragraph>
-                  基于真实用户搜索行为，生成高质量的话题问题，提升内容的针对性。
-                </Paragraph>
-              </div>
-              <div>
-                <Title level={5}>✨ 智能内容生成</Title>
-                <Paragraph>
-                  结合关键词和话题，自动生成符合SEO标准的高质量文章内容。
-                </Paragraph>
-              </div>
-              <div>
-                <Title level={5}>🔧 灵活的模型选择</Title>
-                <Paragraph>
-                  支持 DeepSeek 和 Gemini 两种AI模型，可根据需求灵活切换。
-                </Paragraph>
-              </div>
-            </Space>
-          </Card>
+          <ResourceEfficiencyChart data={dashboardData?.resourceUsage} loading={loading} />
+        </Col>
+      </Row>
+
+      {/* 第五行：发布状态和平台分布 */}
+      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+        <Col xs={24} lg={12}>
+          <PublishingStatusChart data={dashboardData?.publishingStatus} loading={loading} />
+        </Col>
+        <Col xs={24} lg={12}>
+          <PlatformDistributionChart data={dashboardData?.platformDistribution} loading={loading} />
+        </Col>
+      </Row>
+
+      {/* 第六行：24小时活动热力图 */}
+      <Row gutter={[24, 24]} style={{ marginTop: 24 }}>
+        <Col xs={24}>
+          <HourlyActivityChart data={dashboardData?.hourlyActivity} loading={loading} />
         </Col>
       </Row>
     </div>

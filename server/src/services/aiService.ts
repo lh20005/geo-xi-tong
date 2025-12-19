@@ -191,7 +191,7 @@ ${content}
           messages: [
             { role: 'user', content: prompt }
           ],
-          temperature: 0.7,
+          temperature: 1.0,  // 提高到1.0增加创造性和多样性
           max_tokens: 1000  // 极限限制为1000 tokens，约650-800字，强制控制字数
         },
         {
@@ -225,7 +225,7 @@ ${content}
             parts: [{ text: prompt }]
           }],
           generationConfig: {
-            temperature: 0.7,
+            temperature: 1.0,  // 提高到1.0增加创造性和多样性
             maxOutputTokens: 1000  // 极限限制为1000 tokens，约650-800字，强制控制字数
           }
         },
@@ -260,7 +260,7 @@ ${content}
         ],
         stream: false,
         options: {
-          temperature: 0.7,
+          temperature: 1.0,  // 提高到1.0增加创造性和多样性
           num_predict: 1200  // 严格限制为1200 tokens，约800-950字，确保不超过850字
         }
       });

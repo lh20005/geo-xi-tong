@@ -17,7 +17,8 @@ import {
   Platform
 } from '../api/publishing';
 import { apiClient } from '../api/client';
-import ArticleContent from '../components/ArticleContent';
+import ArticlePreview from '../components/ArticlePreview';
+import { processArticleContent } from '../utils/articleUtils';
 
 const { Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -98,8 +99,9 @@ export default function PublishingRecordsPage() {
     }
   };
 
-  const handleCopy = (content: string) => {
-    navigator.clipboard.writeText(content);
+  const handleCopy = (content: string, imageUrl?: string) => {
+    const cleanContent = processArticleContent(content, imageUrl);
+    navigator.clipboard.writeText(cleanContent);
     message.success('文章内容已复制到剪贴板');
   };
 
@@ -323,7 +325,7 @@ export default function PublishingRecordsPage() {
           <Button 
             key="copy" 
             icon={<CopyOutlined />} 
-            onClick={() => viewModal && handleCopy(viewModal.content)}
+            onClick={() => viewModal && handleCopy(viewModal.content, viewModal.imageUrl)}
           >
             复制文章
           </Button>,
@@ -337,64 +339,52 @@ export default function PublishingRecordsPage() {
         ]}
       >
         {viewModal && (
-          <div>
-            <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
-              <div>
-                <Text type="secondary">发布平台：</Text>
-                <Tag color="blue">
-                  {viewModal.record?.platform_name || viewModal.record?.platform_id}
-                </Tag>
-              </div>
-              <div>
-                <Text type="secondary">发布账号：</Text>
-                <Text>{viewModal.record?.account_name || '-'}</Text>
-              </div>
-              <div>
-                <Text type="secondary">发布时间：</Text>
-                <Text>
-                  {viewModal.record?.published_at 
-                    ? new Date(viewModal.record.published_at).toLocaleString('zh-CN')
-                    : '-'
-                  }
-                </Text>
-              </div>
-              <div>
-                <Text type="secondary">文章创建时间：</Text>
-                <Text>{new Date(viewModal.createdAt).toLocaleString('zh-CN')}</Text>
-              </div>
-              {viewModal.keyword && (
+          <div style={{ maxHeight: 600, overflow: 'auto' }}>
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Space direction="vertical" style={{ width: '100%' }} size="small">
                 <div>
-                  <Text type="secondary">关键词：</Text>
-                  <Tag color="purple">{viewModal.keyword}</Tag>
+                  <Text type="secondary">发布平台：</Text>
+                  <Tag color="blue">
+                    {viewModal.record?.platform_name || viewModal.record?.platform_id}
+                  </Tag>
                 </div>
-              )}
-              {viewModal.topicQuestion && (
                 <div>
-                  <Text type="secondary">蒸馏结果：</Text>
-                  <Tag color="green">{viewModal.topicQuestion}</Tag>
+                  <Text type="secondary">发布账号：</Text>
+                  <Text>{viewModal.record?.account_name || '-'}</Text>
                 </div>
-              )}
-            </Space>
+                <div>
+                  <Text type="secondary">发布时间：</Text>
+                  <Text>
+                    {viewModal.record?.published_at 
+                      ? new Date(viewModal.record.published_at).toLocaleString('zh-CN')
+                      : '-'
+                    }
+                  </Text>
+                </div>
+                <div>
+                  <Text type="secondary">文章创建时间：</Text>
+                  <Text>{new Date(viewModal.createdAt).toLocaleString('zh-CN')}</Text>
+                </div>
+                {viewModal.keyword && (
+                  <div>
+                    <Text type="secondary">关键词：</Text>
+                    <Tag color="purple">{viewModal.keyword}</Tag>
+                  </div>
+                )}
+                {viewModal.topicQuestion && (
+                  <div>
+                    <Text type="secondary">蒸馏结果：</Text>
+                    <Tag color="green">{viewModal.topicQuestion}</Tag>
+                  </div>
+                )}
+              </Space>
+            </Card>
             
-            {viewModal.title && (
-              <div style={{ marginBottom: 16 }}>
-                <Text strong style={{ fontSize: 18 }}>{viewModal.title}</Text>
-              </div>
-            )}
-            
-            <div style={{ 
-              maxHeight: 500, 
-              overflow: 'auto', 
-              padding: 16, 
-              background: '#f8fafc', 
-              border: '1px solid #e2e8f0', 
-              borderRadius: 6 
-            }}>
-              <ArticleContent 
-                content={viewModal.content} 
-                imageUrl={viewModal.imageUrl} 
-              />
-            </div>
+            <ArticlePreview 
+              content={viewModal.content} 
+              title={viewModal.title}
+              imageUrl={viewModal.imageUrl} 
+            />
           </div>
         )}
       </Modal>

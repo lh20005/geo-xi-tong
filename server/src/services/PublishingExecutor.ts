@@ -3,6 +3,7 @@ import { publishingService } from './PublishingService';
 import { accountService } from './AccountService';
 import { adapterRegistry } from './adapters/AdapterRegistry';
 import { pool } from '../db/database';
+import { TaskTimeoutError } from '../errors/TaskTimeoutError';
 
 /**
  * 发布执行器
@@ -59,9 +60,12 @@ export class PublishingExecutor {
   }
 
   /**
-   * 执行发布任务
+   * 执行发布任务（带超时控制）
    */
   async executeTask(taskId: number): Promise<void> {
+    const taskStartTime = Date.now();
+    console.log(`\n🚀 [任务 #${taskId}] 开始执行 at ${new Date().toISOString()}`);
+    
     let page = null;
 
     try {
@@ -73,9 +77,70 @@ export class PublishingExecutor {
 
       await publishingService.logMessage(taskId, 'info', '开始执行发布任务');
 
+      // 获取超时配置（默认15分钟）
+      const timeoutMinutes = task.config?.timeout_minutes || 15;
+      
+      // 验证超时时间
+      const validatedTimeout = Math.max(1, timeoutMinutes); // 最小1分钟
+      if (timeoutMinutes > 60) {
+        console.log(`⚠️  任务 #${taskId} 超时时间较长: ${timeoutMinutes}分钟`);
+        await publishingService.logMessage(
+          taskId,
+          'warning',
+          `超时时间设置为 ${timeoutMinutes} 分钟（超过1小时）`
+        );
+      }
+
+      await publishingService.logMessage(
+        taskId,
+        'info',
+        `⏱️  任务超时限制: ${validatedTimeout} 分钟`
+      );
+
       // 更新任务状态为运行中
       await publishingService.updateTaskStatus(taskId, 'running');
 
+      // 创建超时Promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new TaskTimeoutError(validatedTimeout, taskId));
+        }, validatedTimeout * 60 * 1000);
+      });
+
+      // 创建执行Promise
+      const executePromise = this.performPublish(taskId, task);
+
+      // 使用Promise.race实现超时控制
+      page = await Promise.race([executePromise, timeoutPromise]);
+
+      const taskDuration = Math.round((Date.now() - taskStartTime) / 1000);
+      console.log(`✅ [任务 #${taskId}] 执行完成，耗时: ${taskDuration}秒`);
+
+    } catch (error: any) {
+      const taskDuration = Math.round((Date.now() - taskStartTime) / 1000);
+      console.error(`❌ [任务 #${taskId}] 执行失败，耗时: ${taskDuration}秒`, error);
+      const isTimeout = error instanceof TaskTimeoutError;
+      await this.handleTaskFailure(taskId, error, isTimeout);
+    } finally {
+      // 确保资源总是被清理（这是阻塞的，必须等待完成）
+      const cleanupStartTime = Date.now();
+      console.log(`🔄 [任务 #${taskId}] 开始清理资源...`);
+      await this.cleanupBrowser(page, taskId);
+      const cleanupDuration = Math.round((Date.now() - cleanupStartTime) / 1000);
+      console.log(`✅ [任务 #${taskId}] 资源清理完成，耗时: ${cleanupDuration}秒`);
+      
+      const totalDuration = Math.round((Date.now() - taskStartTime) / 1000);
+      console.log(`✅ [任务 #${taskId}] 总耗时: ${totalDuration}秒\n`);
+    }
+  }
+
+  /**
+   * 执行发布流程（不含超时控制）
+   */
+  private async performPublish(taskId: number, task: any): Promise<any> {
+    let page = null;
+
+    try {
       // 获取平台适配器
       const adapter = adapterRegistry.getAdapter(task.platform_id);
       if (!adapter) {
@@ -109,9 +174,11 @@ export class PublishingExecutor {
 
       const article = articleResult.rows[0];
 
-      // 启动浏览器（显示浏览器窗口以便用户看到发布过程）
-      await publishingService.logMessage(taskId, 'info', '🚀 启动浏览器...');
-      await browserAutomationService.launchBrowser({ headless: false });
+      // 启动浏览器（根据任务配置决定是否显示浏览器窗口）
+      const headlessMode = task.config?.headless !== false; // 默认为静默模式
+      const modeText = headlessMode ? '静默模式' : '可视化模式';
+      await publishingService.logMessage(taskId, 'info', `🚀 启动浏览器（${modeText}）...`);
+      await browserAutomationService.launchBrowser({ headless: headlessMode });
       await publishingService.logMessage(taskId, 'info', '✅ 浏览器启动成功');
 
       // 创建新页面
@@ -140,7 +207,7 @@ export class PublishingExecutor {
         );
         
         if (!loginSuccess) {
-          throw new Error('Cookie登录失败');
+          throw new Error(`${adapter.platformName} Cookie登录失败`);
         }
       } else {
         // 没有Cookie，使用表单登录
@@ -160,12 +227,12 @@ export class PublishingExecutor {
         );
         
         if (!loginSuccess) {
-          throw new Error('表单登录失败');
+          throw new Error(`${adapter.platformName} 表单登录失败`);
         }
       }
 
       if (!loginSuccess) {
-        throw new Error('登录失败');
+        throw new Error(`${adapter.platformName} 登录失败`);
       }
 
       await publishingService.logMessage(taskId, 'info', `✅ ${adapter.platformName} 登录成功`);
@@ -195,99 +262,128 @@ export class PublishingExecutor {
         throw new Error('文章发布失败');
       }
 
-      // 更新任务状态为成功
+      // CRITICAL: 先更新任务状态为成功
       await publishingService.updateTaskStatus(taskId, 'success');
+      await publishingService.logMessage(taskId, 'info', '✅ 任务执行成功');
+      console.log(`✅ 任务 #${taskId} 状态已更新为成功`);
+
+      // 然后创建发布记录
       await publishingService.logMessage(taskId, 'info', `🎉 文章《${article.title}》发布成功！`);
-
-      // 创建发布记录并更新文章状态
       await this.createPublishingRecord(taskId, task, account);
-      await publishingService.logMessage(taskId, 'info', '✅ 发布记录已创建，文章状态已更新');
+      await publishingService.logMessage(taskId, 'info', '✅ 发布记录已创建');
 
-      // 清除文章的 publishing_status（发布成功，文章已移到发布记录）
-      await pool.query(
-        `UPDATE articles 
-         SET publishing_status = NULL 
-         WHERE id = $1`,
-        [task.article_id]
-      );
+      // 清除文章锁
+      await this.clearArticleLock(task.article_id);
       console.log(`✅ 文章 #${task.article_id} 发布状态已清除（已移到发布记录）`);
 
-      console.log(`✅ 任务 #${taskId} 执行成功`);
-
-    } catch (error: any) {
-      console.error(`❌ 任务 #${taskId} 执行失败:`, error);
-
-      // 增加重试次数
-      await publishingService.incrementRetryCount(taskId);
-
-      // 获取当前任务信息
-      const task = await publishingService.getTaskById(taskId);
-
-      if (task && task.retry_count < task.max_retries) {
-        // 还可以重试，保持pending状态
-        await publishingService.updateTaskStatus(
-          taskId,
-          'pending',
-          `执行失败，将自动重试 (${task.retry_count + 1}/${task.max_retries})`
-        );
-        await publishingService.logMessage(
-          taskId,
-          'warning',
-          `执行失败，将自动重试 (${task.retry_count + 1}/${task.max_retries})`,
-          { error: error.message }
-        );
-      } else {
-        // 重试次数已用完，标记为失败
-        await publishingService.updateTaskStatus(
-          taskId,
-          'failed',
-          error.message
-        );
-        await publishingService.logMessage(
-          taskId,
-          'error',
-          '任务执行失败',
-          { error: error.message, stack: error.stack }
-        );
-
-        // 发布失败，恢复文章的显示状态（清除 publishing_status）
-        if (task) {
-          await pool.query(
-            `UPDATE articles 
-             SET publishing_status = NULL 
-             WHERE id = $1`,
-            [task.article_id]
-          );
-          console.log(`✅ 文章 #${task.article_id} 发布失败，已恢复显示`);
+      return page;
+    } catch (error) {
+      // 如果发生错误，确保清理page
+      if (page) {
+        try {
+          await browserAutomationService.closePage(page);
+        } catch (closeError) {
+          console.error('关闭页面失败:', closeError);
         }
       }
-    } finally {
-      // 异步关闭浏览器，不阻塞任务完成
-      // 这样批次执行器可以立即继续执行下一个任务
-      this.closeBrowserAsync(page, taskId);
+      throw error;
     }
   }
 
   /**
-   * 异步关闭浏览器（不阻塞任务完成）
+   * 处理任务失败，包含重试逻辑
    */
-  private closeBrowserAsync(page: any, taskId: number): void {
-    // 使用 setTimeout 异步执行，不阻塞主流程
-    setTimeout(async () => {
-      try {
-        console.log(`⏳ [任务 #${taskId}] 等待30秒后关闭浏览器...`);
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        
-        // 清理资源
-        if (page) {
-          await browserAutomationService.closePage(page);
-        }
-        await browserAutomationService.closeBrowser();
-        console.log(`✅ [任务 #${taskId}] 浏览器已关闭`);
-      } catch (error) {
-        console.error(`❌ [任务 #${taskId}] 关闭浏览器失败:`, error);
+  private async handleTaskFailure(taskId: number, error: Error, isTimeout: boolean = false): Promise<void> {
+    // 增加重试次数
+    await publishingService.incrementRetryCount(taskId);
+
+    // 获取当前任务信息
+    const task = await publishingService.getTaskById(taskId);
+    if (!task) {
+      console.error(`❌ 任务 #${taskId} 不存在，无法处理失败`);
+      return;
+    }
+
+    const nextRetryCount = task.retry_count + 1;
+    const failureType = isTimeout ? '超时' : '失败';
+
+    if (nextRetryCount < task.max_retries) {
+      // 还可以重试，保持pending状态
+      const statusMessage = `执行${failureType}，将自动重试 (${nextRetryCount}/${task.max_retries})`;
+      await publishingService.updateTaskStatus(
+        taskId,
+        'pending',
+        statusMessage
+      );
+      await publishingService.logMessage(
+        taskId,
+        'warning',
+        statusMessage,
+        { error: error.message, isTimeout }
+      );
+      console.log(`🔄 任务 #${taskId} 将在下次调度时重试 (${nextRetryCount}/${task.max_retries})`);
+    } else {
+      // 重试次数已用完，标记为失败或超时
+      const finalStatus = isTimeout ? 'timeout' : 'failed';
+      const errorMessage = `重试次数已用完: ${error.message}`;
+      
+      await publishingService.updateTaskStatus(
+        taskId,
+        finalStatus,
+        errorMessage
+      );
+      await publishingService.logMessage(
+        taskId,
+        'error',
+        `任务执行${failureType}，重试次数已用完`,
+        { error: error.message, stack: error.stack, isTimeout }
+      );
+
+      // 发布失败，清除文章锁
+      await this.clearArticleLock(task.article_id);
+      console.log(`✅ 文章 #${task.article_id} 发布${failureType}，已恢复显示`);
+    }
+  }
+
+  /**
+   * 清除文章锁（publishing_status）
+   */
+  private async clearArticleLock(articleId: number): Promise<void> {
+    await pool.query(
+      'UPDATE articles SET publishing_status = NULL WHERE id = $1',
+      [articleId]
+    );
+  }
+
+  /**
+   * 清理浏览器资源（同步执行，确保资源被释放）
+   */
+  private async cleanupBrowser(page: any, taskId: number): Promise<void> {
+    try {
+      // 关闭页面
+      if (page) {
+        console.log(`🔄 [任务 #${taskId}] 关闭页面...`);
+        await browserAutomationService.closePage(page);
+        console.log(`✅ [任务 #${taskId}] 页面已关闭`);
       }
-    }, 0);
+      
+      // 关闭浏览器
+      console.log(`🔄 [任务 #${taskId}] 关闭浏览器...`);
+      await browserAutomationService.closeBrowser();
+      console.log(`✅ [任务 #${taskId}] 浏览器已关闭`);
+    } catch (error) {
+      // 记录错误但不抛出异常，避免影响任务状态更新
+      console.error(`⚠️  [任务 #${taskId}] 关闭浏览器失败:`, error);
+      
+      // 尝试强制关闭
+      try {
+        console.log(`🔄 [任务 #${taskId}] 尝试强制关闭浏览器...`);
+        await browserAutomationService.forceCloseBrowser();
+        console.log(`✅ [任务 #${taskId}] 浏览器已强制关闭`);
+      } catch (forceError) {
+        console.error(`❌ [任务 #${taskId}] 强制关闭浏览器失败:`, forceError);
+      }
+    }
   }
 
   /**

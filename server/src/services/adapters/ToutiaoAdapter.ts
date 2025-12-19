@@ -192,7 +192,28 @@ export class ToutiaoAdapter extends PlatformAdapter {
         await new Promise(resolve => setTimeout(resolve, 300));
         
         await this.log('info', '⌨️  输入标题文本...');
-        await page.keyboard.type(title, { delay: 80 });
+        
+        // ========== 关键修复：优先使用evaluate方法，兼容静默模式 ==========
+        await this.log('info', '💡 使用evaluate方法设置标题（兼容静默模式）');
+        
+        const titleSetSuccess = await page.evaluate((el, val) => {
+          try {
+            (el as HTMLTextAreaElement).value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('blur', { bubbles: true }));
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }, titleInput, title);
+        
+        if (!titleSetSuccess) {
+          // 备用方案：使用keyboard.type
+          await this.log('warning', '⚠️ evaluate方法失败，使用keyboard.type');
+          await page.keyboard.type(title, { delay: 80 });
+        }
+        
         await new Promise(resolve => setTimeout(resolve, 500));
         
         // 验证标题
@@ -203,15 +224,7 @@ export class ToutiaoAdapter extends PlatformAdapter {
         } else if (inputValue.includes(title) || title.includes(inputValue)) {
           await this.log('warning', '⚠️ 标题部分匹配');
         } else {
-          await this.log('warning', '⚠️ 标题输入不完整，尝试备用方案...');
-          
-          await page.evaluate((el, val) => {
-            (el as HTMLTextAreaElement).value = val;
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-          }, titleInput, title);
-          
-          await this.log('info', '✅ 使用备用方案设置标题');
+          await this.log('warning', '⚠️ 标题验证失败，但继续执行');
         }
       } else {
         await this.log('error', '❌ 未找到标题输入框！');
@@ -353,15 +366,68 @@ export class ToutiaoAdapter extends PlatformAdapter {
             await new Promise(resolve => setTimeout(resolve, 1000));
             console.log('[头条号] ✅ 编辑器已获得焦点');
             
-            // 逐字输入文字（模拟真实输入）
+            // ========== 关键修复：使用evaluate方法直接设置内容，兼容静默模式 ==========
             console.log('[头条号] ⌨️  开始输入所有文字...');
             console.log(`[头条号] 📏 文字长度: ${textOnly.length} 个字符`);
-            await page.keyboard.type(textOnly, { delay: 30 });
-            console.log('[头条号] ✅ 所有文字输入完成');
+            console.log('[头条号] 💡 使用evaluate方法直接设置内容（兼容静默模式）');
             
-            // 等待输入稳定（增加到13秒，确保长文本输入完毕）
-            console.log('[头条号] ⏳ 等待文字输入稳定（13秒）...');
-            await new Promise(resolve => setTimeout(resolve, 13000));
+            // 方法1：尝试使用evaluate直接设置innerHTML（更可靠）
+            // 关键修复：添加超时保护，避免静默模式下卡死
+            let setContentSuccess = false;
+            try {
+              // 设置5秒超时
+              const evaluatePromise = page.evaluate((text) => {
+                const editor = document.querySelector('.ProseMirror');
+                if (editor) {
+                  // 将文本转换为HTML段落
+                  const paragraphs = text.split('\n').filter(p => p.trim());
+                  const html = paragraphs.map(p => `<p>${p}</p>`).join('');
+                  
+                  editor.innerHTML = html;
+                  
+                  // 触发input事件，确保编辑器识别内容变化
+                  editor.dispatchEvent(new Event('input', { bubbles: true }));
+                  editor.dispatchEvent(new Event('change', { bubbles: true }));
+                  
+                  return true;
+                }
+                return false;
+              }, textOnly);
+              
+              const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('evaluate超时')), 5000)
+              );
+              
+              setContentSuccess = await Promise.race([evaluatePromise, timeoutPromise]) as boolean;
+              console.log('[头条号] ✅ 所有文字输入完成（evaluate方法）');
+            } catch (error: any) {
+              console.log(`[头条号] ⚠️ evaluate方法失败或超时: ${error.message}`);
+              setContentSuccess = false;
+            }
+            
+            if (!setContentSuccess) {
+              // 方法2：备用方案 - 使用keyboard.type（可视化模式下更自然）
+              console.log('[头条号] 🔄 使用keyboard.type备用方案');
+              try {
+                // 分批输入，避免一次性输入过多导致卡顿
+                const batchSize = 500; // 每批500个字符
+                for (let i = 0; i < textOnly.length; i += batchSize) {
+                  const batch = textOnly.substring(i, Math.min(i + batchSize, textOnly.length));
+                  await page.keyboard.type(batch, { delay: 20 });
+                  console.log(`[头条号] 📝 已输入 ${Math.min(i + batchSize, textOnly.length)}/${textOnly.length} 字符`);
+                  // 每批之间短暂停顿
+                  await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                console.log('[头条号] ✅ 所有文字输入完成（keyboard方法）');
+              } catch (error: any) {
+                console.error(`[头条号] ❌ keyboard输入也失败: ${error.message}`);
+                throw new Error('文字输入失败');
+              }
+            }
+            
+            // 等待输入稳定（减少到3秒，因为evaluate方法更快）
+            console.log('[头条号] ⏳ 等待文字输入稳定（3秒）...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
             
           } catch (error: any) {
             console.error(`[头条号] ❌ 插入文字失败:`, error.message);

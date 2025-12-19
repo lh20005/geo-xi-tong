@@ -6,8 +6,12 @@ export interface PublishingTask {
   article_id: number;
   account_id: number;
   platform_id: string;
-  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
-  config: any;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'timeout';
+  config: {
+    timeout_minutes?: number;
+    headless?: boolean;
+    [key: string]: any;
+  };
   scheduled_at?: Date;
   started_at?: Date;
   completed_at?: Date;
@@ -170,11 +174,11 @@ export class PublishingService {
     const params: any[] = [status];
     let paramIndex = 2;
 
-    if (status === 'running' && !errorMessage) {
+    if (status === 'running') {
       updates.push(`started_at = CURRENT_TIMESTAMP`);
     }
 
-    if (status === 'success' || status === 'failed') {
+    if (status === 'success' || status === 'failed' || status === 'cancelled') {
       updates.push(`completed_at = CURRENT_TIMESTAMP`);
     }
 
@@ -206,14 +210,23 @@ export class PublishingService {
 
   /**
    * 获取待执行的定时任务
+   * 包括：
+   * - 新任务（scheduled_at <= now）
+   * - 重试任务（retry_count > 0）
+   * - 立即执行任务（scheduled_at is null）
    */
   async getPendingScheduledTasks(): Promise<PublishingTask[]> {
     const result = await pool.query(
       `SELECT * FROM publishing_tasks 
        WHERE status = 'pending' 
-       AND scheduled_at IS NOT NULL 
-       AND scheduled_at <= CURRENT_TIMESTAMP 
-       ORDER BY scheduled_at ASC`
+       AND (
+         scheduled_at IS NULL 
+         OR scheduled_at <= CURRENT_TIMESTAMP
+         OR retry_count > 0
+       )
+       ORDER BY 
+         CASE WHEN retry_count > 0 THEN 0 ELSE 1 END,
+         scheduled_at ASC NULLS FIRST`
     );
 
     return result.rows.map(row => this.formatTask(row));
@@ -250,6 +263,7 @@ export class PublishingService {
         `UPDATE publishing_tasks 
          SET status = 'cancelled', 
              updated_at = CURRENT_TIMESTAMP,
+             completed_at = CURRENT_TIMESTAMP,
              error_message = '用户手动取消'
          WHERE id = $1`,
         [taskId]
@@ -266,6 +280,9 @@ export class PublishingService {
       await client.query('COMMIT');
       
       console.log(`✅ 任务 #${taskId} 已取消，文章 #${task.article_id} 已恢复可见`);
+      
+      // 记录取消日志
+      await this.logMessage(taskId, 'info', '任务已被用户手动取消');
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('取消任务失败:', error);

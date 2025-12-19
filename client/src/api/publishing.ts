@@ -106,12 +106,16 @@ export interface PublishingTask {
   platform_name?: string;
   account_id: number;
   account_name?: string;
-  status: 'pending' | 'running' | 'success' | 'failed';
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'timeout';
   scheduled_time: string | null;
   retry_count: number;
   max_retries: number;
   error_message?: string;
-  config: any;
+  config: {
+    timeout_minutes?: number;
+    headless?: boolean;
+    [key: string]: any;
+  };
   created_at: string;
   updated_at: string;
   executed_at?: string;
@@ -131,7 +135,10 @@ export interface CreatePublishingTaskInput {
   platform_id: string;
   account_id: number;
   scheduled_time?: string | null;
-  config?: any;
+  config?: {
+    headless?: boolean;
+    [key: string]: any;
+  };
   batch_id?: string;
   batch_order?: number;
   interval_minutes?: number;

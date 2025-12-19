@@ -13,9 +13,10 @@ import {
   Article, ArticleStats, getKeywordStats, KeywordStats 
 } from '../api/articles';
 import { apiClient } from '../api/client';
-import ArticleContent from '../components/ArticleContent';
+import ArticlePreview from '../components/ArticlePreview';
 import ArticleEditorModal from '../components/ArticleEditorModal';
 import PublishingConfigModal from '../components/Publishing/PublishingConfigModal';
+import { processArticleContent } from '../utils/articleUtils';
 
 const { Paragraph, Text } = Typography;
 const { Option } = Select;
@@ -223,8 +224,9 @@ export default function ArticleListPage() {
     });
   };
 
-  const handleCopy = (content: string) => {
-    navigator.clipboard.writeText(content);
+  const handleCopy = (content: string, imageUrl?: string) => {
+    const cleanContent = processArticleContent(content, imageUrl);
+    navigator.clipboard.writeText(cleanContent);
     message.success('文章已复制到剪贴板');
   };
 
@@ -516,19 +518,43 @@ export default function ArticleListPage() {
         />
       </Card>
 
-      <Modal title={<Space><span>文章详情</span>{viewModal && <Tag color="blue">{viewModal.keyword}</Tag>}</Space>} open={!!viewModal} onCancel={() => setViewModal(null)} width={900} footer={[<Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content)}>复制文章</Button>, <Button key="close" type="primary" onClick={() => setViewModal(null)}>关闭</Button>]}>
+      <Modal 
+        title={
+          <Space>
+            <EyeOutlined />
+            <span>文章预览</span>
+            {viewModal && <Tag color="blue">{viewModal.keyword}</Tag>}
+          </Space>
+        } 
+        open={!!viewModal} 
+        onCancel={() => setViewModal(null)} 
+        width={900} 
+        footer={[
+          <Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content, viewModal.imageUrl || viewModal.image_url)}>
+            复制文章
+          </Button>, 
+          <Button key="close" type="primary" onClick={() => setViewModal(null)}>
+            关闭
+          </Button>
+        ]}
+      >
         {viewModal && (
-          <div>
-            <Paragraph style={{ color: '#64748b', marginBottom: 16 }}>
-              创建时间: {new Date(viewModal.createdAt || viewModal.created_at).toLocaleString('zh-CN')}
-              {viewModal.updatedAt && viewModal.updatedAt !== viewModal.createdAt && (<Text style={{ marginLeft: 16 }}>更新时间: {new Date(viewModal.updatedAt || viewModal.updated_at).toLocaleString('zh-CN')}</Text>)}
-            </Paragraph>
-            <div>
-              {viewModal.title && (<div style={{ marginBottom: 16 }}><Text strong style={{ fontSize: 18 }}>{viewModal.title}</Text></div>)}
-              <div style={{ maxHeight: 500, overflow: 'auto', padding: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6 }}>
-                <ArticleContent content={viewModal.content} imageUrl={viewModal.imageUrl || viewModal.image_url} />
-              </div>
-            </div>
+          <div style={{ maxHeight: 600, overflow: 'auto' }}>
+            <Card size="small" style={{ marginBottom: 16 }}>
+              <Paragraph style={{ color: '#64748b', marginBottom: 0 }}>
+                创建时间: {new Date(viewModal.createdAt || viewModal.created_at).toLocaleString('zh-CN')}
+                {viewModal.updatedAt && viewModal.updatedAt !== viewModal.createdAt && (
+                  <Text style={{ marginLeft: 16 }}>
+                    更新时间: {new Date(viewModal.updatedAt || viewModal.updated_at).toLocaleString('zh-CN')}
+                  </Text>
+                )}
+              </Paragraph>
+            </Card>
+            <ArticlePreview 
+              content={viewModal.content} 
+              title={viewModal.title}
+              imageUrl={viewModal.imageUrl || viewModal.image_url}
+            />
           </div>
         )}
       </Modal>

@@ -165,56 +165,128 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 创建生成任务（单关键词多话题模式）
+   * 创建生成任务（拆分为多个独立任务，预先分配话题）
    * 
-   * 实现步骤：
-   * 1. 使用用户指定的distillationId
-   * 2. 调用selectDistillationsForTask验证并生成ID数组
-   * 3. 将选择的ID列表序列化为JSON字符串
-   * 4. 保存到generation_tasks.selected_distillation_ids字段
-   * 5. 创建任务记录
-   * 6. 异步启动任务执行
+   * 新逻辑：
+   * 1. 预先为每篇文章选择不同的话题（避免并发冲突）
+   * 2. 将一个批次拆分成多个独立的任务，每个任务生成1篇文章
+   * 3. 每个任务使用预先分配的话题ID
+   * 4. 串行执行任务，确保话题不重复
+   * 5. 返回第一个任务的ID（用于前端显示）
    */
   async createTask(config: TaskConfig): Promise<number> {
-    console.log(`[任务创建] 开始创建任务，请求生成 ${config.articleCount} 篇文章`);
+    console.log(`[任务创建] 开始创建批次任务，请求生成 ${config.articleCount} 篇文章`);
     console.log(`[任务创建] 使用蒸馏结果ID: ${config.distillationId}`);
     
-    // 1. 为指定的蒸馏结果选择话题（验证并生成重复的ID数组）
-    const selectedDistillationIds = await this.selectDistillationsForTask(
-      config.articleCount,
-      config.distillationId
-    );
+    // 1. 预先为每篇文章选择不同的话题（一次性选择，避免并发冲突）
+    console.log(`[任务创建] 预先选择 ${config.articleCount} 个不同的话题...`);
+    const topicService = new TopicSelectionService();
+    const selectedTopics: Array<{ topicId: number; question: string }> = [];
+    const usedTopicIds = new Set<number>();
     
-    // 2. 将ID数组序列化为JSON字符串
-    const selectedIdsJson = JSON.stringify(selectedDistillationIds);
-    console.log(`[任务创建] 将生成 ${config.articleCount} 篇文章，使用同一关键词的不同话题`);
+    for (let i = 0; i < config.articleCount; i++) {
+      // 查询下一个未使用的话题
+      const topicResult = await pool.query(
+        `SELECT id, question, usage_count
+         FROM topics
+         WHERE distillation_id = $1 ${usedTopicIds.size > 0 ? `AND id NOT IN (${Array.from(usedTopicIds).join(',')})` : ''}
+         ORDER BY usage_count ASC, created_at ASC
+         LIMIT 1`,
+        [config.distillationId]
+      );
+      
+      if (topicResult.rows.length === 0) {
+        console.warn(`[任务创建] 警告：没有更多可用话题，已选择 ${selectedTopics.length} 个话题`);
+        break;
+      }
+      
+      const topic = topicResult.rows[0];
+      selectedTopics.push({
+        topicId: topic.id,
+        question: topic.question
+      });
+      usedTopicIds.add(topic.id);
+      
+      console.log(`[任务创建] 选择话题 ${i + 1}/${config.articleCount}: ID=${topic.id}, 问题="${topic.question.substring(0, 30)}...", 使用次数=${topic.usage_count || 0}`);
+    }
     
-    // 3. 保存任务记录，包含selected_distillation_ids
-    const result = await pool.query(
-      `INSERT INTO generation_tasks 
-       (distillation_id, album_id, knowledge_base_id, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, status) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') 
-       RETURNING id`,
-      [
-        config.distillationId,
-        config.albumId,
-        config.knowledgeBaseId,
-        config.articleSettingId,
-        config.conversionTargetId || null,
-        config.articleCount,
-        selectedIdsJson
-      ]
-    );
-
-    const taskId = result.rows[0].id;
-    console.log(`[任务创建] 任务创建成功，ID: ${taskId}`);
-
-    // 4. 异步执行任务（不等待完成）
-    this.executeTask(taskId).catch(error => {
-      console.error(`任务 ${taskId} 执行失败:`, error);
+    if (selectedTopics.length === 0) {
+      throw new Error('没有可用的话题，无法创建任务');
+    }
+    
+    console.log(`[任务创建] 成功预选 ${selectedTopics.length} 个不同的话题`);
+    console.log(`[任务创建] 将创建 ${selectedTopics.length} 个独立任务，每个任务生成1篇文章`);
+    
+    // 2. 为每篇文章创建一个独立的任务，并保存预选的话题ID
+    const taskIds: number[] = [];
+    
+    for (let i = 0; i < selectedTopics.length; i++) {
+      const topic = selectedTopics[i];
+      
+      // 将话题ID保存到selected_distillation_ids中（虽然字段名是distillation_ids，但我们用它来存储话题ID）
+      // 注意：这里需要修改数据结构，暂时先用一个特殊格式
+      const selectedIdsJson = JSON.stringify({
+        distillationId: config.distillationId,
+        topicId: topic.topicId
+      });
+      
+      // 创建独立任务
+      const result = await pool.query(
+        `INSERT INTO generation_tasks 
+         (distillation_id, album_id, knowledge_base_id, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, status) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') 
+         RETURNING id`,
+        [
+          config.distillationId,
+          config.albumId,
+          config.knowledgeBaseId,
+          config.articleSettingId,
+          config.conversionTargetId || null,
+          1, // 每个任务只生成1篇文章
+          selectedIdsJson
+        ]
+      );
+      
+      const taskId = result.rows[0].id;
+      taskIds.push(taskId);
+      console.log(`[任务创建] 创建子任务 ${i + 1}/${selectedTopics.length}，ID: ${taskId}，话题ID: ${topic.topicId}`);
+    }
+    
+    console.log(`[任务创建] 批次任务创建成功，共创建 ${taskIds.length} 个独立任务`);
+    
+    // 3. 串行执行任务（确保话题不重复，标题多样化）
+    console.log(`[任务创建] 开始串行执行任务...`);
+    this.executeTasksSequentially(taskIds).catch(error => {
+      console.error(`批次任务执行失败:`, error);
     });
-
-    return taskId;
+    
+    // 4. 返回第一个任务的ID（用于前端显示）
+    return taskIds[0];
+  }
+  
+  /**
+   * 串行执行多个任务
+   */
+  private async executeTasksSequentially(taskIds: number[]): Promise<void> {
+    for (let i = 0; i < taskIds.length; i++) {
+      const taskId = taskIds[i];
+      console.log(`[串行执行] 开始执行任务 ${i + 1}/${taskIds.length}，ID: ${taskId}`);
+      
+      try {
+        await this.executeTask(taskId);
+        console.log(`[串行执行] 任务 ${taskId} 执行完成`);
+      } catch (error: any) {
+        console.error(`[串行执行] 任务 ${taskId} 执行失败:`, error.message);
+        // 继续执行下一个任务
+      }
+      
+      // 添加短暂延迟，确保AI调用完全独立
+      if (i < taskIds.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    console.log(`[串行执行] 所有任务执行完成`);
   }
 
   /**
@@ -434,31 +506,62 @@ export class ArticleGenerationService {
       );
       
       const selectedIdsJson = selectedIdsResult.rows[0]?.selected_distillation_ids;
-      let selectedDistillationIds: number[] = [];
+      let distillationDataArray: Array<{ distillationId: number; keyword: string; topicId: number; topic: string }> = [];
       
-      // 反序列化JSON字符串为ID数组（需求 2.1）
+      // 反序列化JSON字符串
       if (selectedIdsJson) {
         try {
-          selectedDistillationIds = JSON.parse(selectedIdsJson);
-          console.log(`[任务 ${taskId}] 读取到预选的蒸馏结果IDs: [${selectedDistillationIds.join(', ')}]`);
-        } catch (error) {
-          console.error(`[任务 ${taskId}] 解析selected_distillation_ids失败:`, error);
+          const parsedData = JSON.parse(selectedIdsJson);
+          
+          // 检查是否是新格式（包含预分配的话题ID）
+          if (parsedData && typeof parsedData === 'object' && 'distillationId' in parsedData && 'topicId' in parsedData) {
+            console.log(`[任务 ${taskId}] 检测到新格式：预分配的话题ID=${parsedData.topicId}`);
+            
+            // 加载蒸馏结果和话题数据
+            const distillationResult = await pool.query(
+              'SELECT id, keyword FROM distillations WHERE id = $1',
+              [parsedData.distillationId]
+            );
+            
+            const topicResult = await pool.query(
+              'SELECT id, question FROM topics WHERE id = $1',
+              [parsedData.topicId]
+            );
+            
+            if (distillationResult.rows.length > 0 && topicResult.rows.length > 0) {
+              distillationDataArray = [{
+                distillationId: parsedData.distillationId,
+                keyword: distillationResult.rows[0].keyword,
+                topicId: parsedData.topicId,
+                topic: topicResult.rows[0].question
+              }];
+              
+              console.log(`[任务 ${taskId}] 使用预分配的话题: ID=${parsedData.topicId}, 问题="${topicResult.rows[0].question.substring(0, 30)}..."`);
+            } else {
+              throw new Error('预分配的蒸馏结果或话题不存在');
+            }
+          } else if (Array.isArray(parsedData)) {
+            // 旧格式：数组
+            console.log(`[任务 ${taskId}] 检测到旧格式：蒸馏结果ID数组 [${parsedData.join(', ')}]`);
+            distillationDataArray = await this.loadDistillationDataArray(parsedData);
+          } else {
+            throw new Error('无法识别的selected_distillation_ids格式');
+          }
+        } catch (error: any) {
+          console.error(`[任务 ${taskId}] 解析selected_distillation_ids失败:`, error.message);
         }
       }
       
-      // 2. 向后兼容逻辑：如果selected_distillation_ids为空，使用旧逻辑（需求 9.1, 9.2）
-      if (!selectedDistillationIds || selectedDistillationIds.length === 0) {
-        console.log(`[任务 ${taskId}] selected_distillation_ids为空，使用旧的单蒸馏结果逻辑`);
+      // 2. 向后兼容逻辑：如果没有数据，使用旧逻辑（需求 9.1, 9.2）
+      if (distillationDataArray.length === 0) {
+        console.log(`[任务 ${taskId}] 没有预选数据，使用旧的单蒸馏结果逻辑`);
         await this.executeTaskLegacy(taskId, task);
         return;
       }
 
-      // 3. 批量加载所有预选蒸馏结果的数据（支持单关键词多话题）
-      console.log(`[任务 ${taskId}] 批量加载蒸馏结果数据...`);
-      const distillationDataArray = await this.loadDistillationDataArray(selectedDistillationIds);
+      // 3. 记录加载的数据
       console.log(`[任务 ${taskId}] 成功加载 ${distillationDataArray.length} 个文章数据`);
       
-      // 详细记录每个文章的数据
       for (let i = 0; i < distillationDataArray.length; i++) {
         const data = distillationDataArray[i];
         console.log(`[任务 ${taskId}] [文章 ${i + 1}] 蒸馏结果 ID=${data.distillationId}, 关键词="${data.keyword}", 话题ID=${data.topicId}, 话题="${data.topic.substring(0, 30)}..."`);
@@ -539,6 +642,7 @@ export class ArticleGenerationService {
           }
 
           // 生成单篇文章（使用单个话题，包含转化目标）
+          // 传入文章序号和总数，用于增加标题多样性
           const result = await this.generateSingleArticle(
             distillationData.keyword,
             [distillationData.topic], // 只使用一个话题
@@ -546,7 +650,12 @@ export class ArticleGenerationService {
             knowledgeContent,
             articlePrompt,
             aiConfig,
-            companyName // 传入公司名称
+            companyName, // 传入公司名称
+            companyIndustry,
+            companyWebsite,
+            companyAddress,
+            i + 1, // 当前文章序号
+            actualCount // 总文章数
           );
 
           if (result.success && result.title && result.content) {
@@ -939,7 +1048,9 @@ export class ArticleGenerationService {
     companyName?: string,
     companyIndustry?: string,
     companyWebsite?: string,
-    companyAddress?: string
+    companyAddress?: string,
+    articleIndex?: number,
+    totalArticles?: number
   ): string {
     // 检查用户提示词是否包含占位符
     const hasPlaceholders = /\{(keyword|topics|topicsList|companyName|companyIndustry|companyWebsite|companyAddress|knowledgeBase)\}/.test(basePrompt);
@@ -1016,7 +1127,9 @@ export class ArticleGenerationService {
     companyName?: string,
     companyIndustry?: string,
     companyWebsite?: string,
-    companyAddress?: string
+    companyAddress?: string,
+    articleIndex?: number, // 当前文章序号（从1开始）
+    totalArticles?: number // 总文章数
   ): Promise<{ success: boolean; title?: string; content?: string; error?: string }> {
     try {
       // 构建包含转化目标的AI prompt
@@ -1028,7 +1141,9 @@ export class ArticleGenerationService {
         companyName,
         companyIndustry,
         companyWebsite,
-        companyAddress
+        companyAddress,
+        articleIndex,
+        totalArticles
       );
 
       // 调用AI服务

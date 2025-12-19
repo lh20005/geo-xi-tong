@@ -11,6 +11,7 @@ import { articleGenerationRouter } from './articleGeneration';
 import platformAccountsRouter from './platformAccounts';
 import publishingTasksRouter from './publishingTasks';
 import publishingRecordsRouter from './publishingRecords';
+import { dashboardRouter } from './dashboard';
 
 export const apiRouter = Router();
 
@@ -26,6 +27,7 @@ apiRouter.use('/article-generation', articleGenerationRouter);
 apiRouter.use('/publishing', platformAccountsRouter);
 apiRouter.use('/publishing', publishingTasksRouter);
 apiRouter.use('/publishing', publishingRecordsRouter);
+apiRouter.use('/dashboard', dashboardRouter);
 
 apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'GEO优化系统运行正常' });

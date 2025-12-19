@@ -277,6 +277,31 @@ export class BrowserAutomationService {
   getBrowser(): Browser | null {
     return this.browser;
   }
+
+  /**
+   * 强制关闭浏览器（用于超时情况）
+   */
+  async forceCloseBrowser(): Promise<void> {
+    if (this.browser) {
+      try {
+        // 尝试正常关闭
+        await this.browser.close();
+        this.browser = null;
+        console.log('✅ 浏览器已强制关闭');
+      } catch (error) {
+        console.error('❌ 强制关闭浏览器失败:', error);
+        // 即使失败也清空引用
+        this.browser = null;
+      }
+    }
+  }
+
+  /**
+   * 检查浏览器是否正在运行
+   */
+  isBrowserRunning(): boolean {
+    return this.browser !== null;
+  }
 }
 
 export const browserAutomationService = new BrowserAutomationService();
