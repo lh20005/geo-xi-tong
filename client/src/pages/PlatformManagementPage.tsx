@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Spin, message, Typography, Table, Space, Button, Popconfirm, Tag, Statistic } from 'antd';
+import { Card, Row, Col, Spin, message, Typography, Space, Button, Popconfirm, Tag, Statistic } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined } from '@ant-design/icons';
 import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount } from '../api/publishing';
+import ResizableTable from '../components/ResizableTable';
 import AccountBindingModal from '../components/Publishing/AccountBindingModal';
 import AccountManagementModal from '../components/Publishing/AccountManagementModal';
 
@@ -115,6 +116,7 @@ export default function PlatformManagementPage() {
       title: '平台',
       dataIndex: 'platform_name',
       key: 'platform_name',
+      width: 120,
       align: 'center' as const,
       render: (_: any, record: Account) => {
         const platform = platforms.find(p => p.platform_id === record.platform_id);
@@ -122,13 +124,16 @@ export default function PlatformManagementPage() {
       }
     },
     {
-      title: '账号名称',
-      dataIndex: 'account_name',
-      key: 'account_name',
+      title: '真实用户名',
+      dataIndex: 'real_username',
+      key: 'real_username',
+      width: 180,
       align: 'center' as const,
       render: (text: string, record: Account) => (
         <Space>
-          <span style={{ fontSize: 14 }}>{text}</span>
+          <span style={{ fontSize: 14, fontWeight: 500, color: '#1890ff' }}>
+            {text || record.account_name || '未知'}
+          </span>
           {record.is_default && <StarFilled style={{ color: '#faad14' }} />}
         </Space>
       )
@@ -137,6 +142,7 @@ export default function PlatformManagementPage() {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
+      width: 100,
       align: 'center' as const,
       render: (status: string) => (
         <Tag color={status === 'active' ? 'success' : 'default'}>
@@ -148,6 +154,7 @@ export default function PlatformManagementPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
+      width: 170,
       align: 'center' as const,
       render: (date: string) => (
         <span style={{ fontSize: 14 }}>{new Date(date).toLocaleString('zh-CN')}</span>
@@ -157,6 +164,7 @@ export default function PlatformManagementPage() {
       title: '最后使用',
       dataIndex: 'last_used_at',
       key: 'last_used_at',
+      width: 170,
       align: 'center' as const,
       render: (date: string) => (
         <span style={{ fontSize: 14, color: date ? '#1e293b' : '#94a3b8' }}>
@@ -167,6 +175,7 @@ export default function PlatformManagementPage() {
     {
       title: '操作',
       key: 'action',
+      width: 100,
       align: 'center' as const,
       render: (_: any, record: Account) => (
         <Popconfirm
@@ -329,10 +338,12 @@ export default function PlatformManagementPage() {
           }
           bordered={false}
         >
-          <Table
+          <ResizableTable<Account>
+            tableId="platform-accounts-list"
             columns={columns}
             dataSource={accounts}
             rowKey="id"
+            scroll={{ x: 800 }}
             pagination={{
               pageSize: 10,
               showSizeChanger: true,

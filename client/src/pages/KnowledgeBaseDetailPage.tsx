@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Card, Button, message, Space, Modal, Upload, Empty, Table, Input, Tag, Tooltip } from 'antd';
+import { Card, Button, message, Space, Modal, Upload, Empty, Input, Tag, Tooltip } from 'antd';
 import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
+import ResizableTable from '../components/ResizableTable';
 import type { UploadFile } from 'antd';
 
 interface KnowledgeDocument {
@@ -161,6 +162,7 @@ export default function KnowledgeBaseDetailPage() {
       title: '文件名',
       dataIndex: 'filename',
       key: 'filename',
+      width: 250,
       align: 'center' as const,
       render: (text: string, record: KnowledgeDocument) => (
         <Space>
@@ -182,6 +184,7 @@ export default function KnowledgeBaseDetailPage() {
       title: '内容预览',
       dataIndex: 'content_preview',
       key: 'content_preview',
+      width: 300,
       align: 'center' as const,
       ellipsis: true,
       render: (text: string) => (
@@ -275,10 +278,12 @@ export default function KnowledgeBaseDetailPage() {
             </p>
           </Empty>
         ) : (
-          <Table
+          <ResizableTable<KnowledgeDocument>
+            tableId="knowledge-base-documents"
             columns={columns}
             dataSource={documents}
             rowKey="id"
+            scroll={{ x: 800 }}
             pagination={{
               pageSize: 20,
               showSizeChanger: true,

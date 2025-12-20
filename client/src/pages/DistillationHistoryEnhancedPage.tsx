@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Card, Button, message, Space, Table, Tag, Modal, Empty, 
+  Card, Button, message, Space, Tag, Modal, Empty, 
   Select, Row, Col, Statistic 
 } from 'antd';
 import { 
@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ResizableTable from '../components/ResizableTable';
 import UsageCountBadge from '../components/UsageCountBadge';
 import UsageHistoryModal from '../components/UsageHistoryModal';
 
@@ -363,11 +364,13 @@ export default function DistillationHistoryEnhancedPage() {
             </Button>
           </Empty>
         ) : (
-          <Table
+          <ResizableTable<DistillationWithUsage>
+            tableId="distillation-history-list"
             columns={columns}
             dataSource={data}
             rowKey="id"
             loading={loading}
+            scroll={{ x: 900 }}
             pagination={{
               current: currentPage,
               pageSize: pageSize,

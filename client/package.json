@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
+    "@types/react-resizable": "^3.0.8",
     "antd": "^5.12.2",
     "axios": "^1.6.2",
     "dayjs": "^1.11.19",
@@ -19,6 +20,7 @@
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
     "react-quill": "^2.0.0",
+    "react-resizable": "^3.0.5",
     "react-router-dom": "^6.20.1",
     "remark-gfm": "^4.0.1",
     "zustand": "^4.4.7"

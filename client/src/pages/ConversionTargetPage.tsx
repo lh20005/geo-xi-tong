@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
   Card,
-  Table,
   Button,
   message,
   Space,
@@ -19,9 +18,10 @@ import {
   EyeOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
-import type { TableProps, TablePaginationConfig } from 'antd';
+import type { TablePaginationConfig } from 'antd';
 import type { FilterValue, SorterResult } from 'antd/es/table/interface';
 import axios from 'axios';
+import ResizableTable from '../components/ResizableTable';
 
 const { TextArea } = Input;
 
@@ -314,7 +314,8 @@ export default function ConversionTargetPage() {
           </Space>
         }
       >
-        <Table
+        <ResizableTable<ConversionTarget>
+          tableId="conversion-target-list"
           columns={columns}
           dataSource={targets}
           rowKey="id"

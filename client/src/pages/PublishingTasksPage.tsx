@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Card, Row, Col, Table, Button, Space, Tag, message, 
+  Card, Row, Col, Button, Space, Tag, message, 
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
   DatePicker, Input, InputNumber, Switch
 } from 'antd';
@@ -10,7 +10,7 @@ import {
   EyeOutlined, DeleteOutlined, PlayCircleOutlined,
   FileTextOutlined, CloudUploadOutlined, HistoryOutlined,
   StopOutlined, ExclamationCircleOutlined, FieldTimeOutlined,
-  EyeInvisibleOutlined
+  EyeInvisibleOutlined, DownOutlined, RightOutlined
 } from '@ant-design/icons';
 import { 
   getArticles, getArticle, Article 
@@ -24,6 +24,7 @@ import {
   subscribeToTaskLogs
 } from '../api/publishing';
 import ArticlePreview from '../components/ArticlePreview';
+import ResizableTable from '../components/ResizableTable';
 import { processArticleContent as processArticleContentUtil } from '../utils/articleUtils';
 import dayjs, { Dayjs } from 'dayjs';
 
@@ -119,7 +120,7 @@ export default function PublishingTasksPage() {
 
   useEffect(() => {
     loadTasks();
-  }, [taskPage, taskPageSize]);
+  }, []);
 
   // 自动刷新任务列表（每5秒刷新一次）
   useEffect(() => {
@@ -183,7 +184,8 @@ export default function PublishingTasksPage() {
   const loadTasks = async () => {
     setTasksLoading(true);
     try {
-      const response = await getPublishingTasks(taskPage, taskPageSize);
+      // 加载所有任务用于批次分组显示
+      const response = await getPublishingTasks(1, 1000);
       setTasks(response.tasks || []);
       setTaskTotal(response.total || 0);
 
@@ -516,14 +518,21 @@ export default function PublishingTasksPage() {
   const handleStopBatch = async (batchId: string) => {
     Modal.confirm({
       title: '确认停止批次',
-      content: '确定要停止这个批次吗？所有待处理的任务将被取消，正在执行的任务完成后不再继续。',
+      content: '确定要停止这个批次吗？所有待处理的任务将被取消，正在执行的任务将被强制终止。',
       icon: <ExclamationCircleOutlined style={{ color: '#faad14' }} />,
       okText: '确认停止',
       okType: 'danger',
       onOk: async () => {
         try {
           const result = await stopBatch(batchId);
-          message.success(`成功停止批次，取消了 ${result.cancelledCount} 个待处理任务`);
+          const messages = [];
+          if (result.cancelledCount > 0) {
+            messages.push(`取消了 ${result.cancelledCount} 个待处理任务`);
+          }
+          if (result.terminatedCount > 0) {
+            messages.push(`终止了 ${result.terminatedCount} 个运行中任务`);
+          }
+          message.success(`成功停止批次${messages.length > 0 ? '，' + messages.join('，') : ''}`);
           loadTasks();
         } catch (error: any) {
           message.error(error.message || '停止批次失败');
@@ -681,7 +690,7 @@ export default function PublishingTasksPage() {
         />
       ),
       key: 'checkbox',
-      width: 50,
+      width: 48,
       align: 'center' as const,
       render: (_: any, record: Article) => (
         <Checkbox
@@ -694,13 +703,14 @@ export default function PublishingTasksPage() {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 80,
+      width: 50,
       align: 'center' as const,
     },
     {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',
+      width: 120,
       align: 'center' as const,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
@@ -708,8 +718,18 @@ export default function PublishingTasksPage() {
       title: '蒸馏结果',
       dataIndex: 'topicQuestion',
       key: 'topicQuestion',
+      width: 200,
       align: 'center' as const,
       render: (text: string) => text ? <Tag color="green">{text}</Tag> : <Text type="secondary">-</Text>,
+    },
+    {
+      title: '文章标题',
+      dataIndex: 'title',
+      key: 'title',
+      width: 200,
+      align: 'center' as const,
+      ellipsis: true,
+      render: (text: string) => text ? <span>{text}</span> : <Text type="secondary">-</Text>,
     },
     {
       title: '预览',
@@ -733,6 +753,7 @@ export default function PublishingTasksPage() {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      width: 170,
       align: 'center' as const,
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
@@ -759,40 +780,6 @@ export default function PublishingTasksPage() {
       ),
     },
     {
-      title: 'ID',
-      dataIndex: 'id',
-      key: 'id',
-      width: 80,
-      align: 'center' as const,
-    },
-    {
-      title: '批次',
-      dataIndex: 'batch_id',
-      key: 'batch_id',
-      width: 150,
-      align: 'center' as const,
-      render: (batchId: string, record: PublishingTask) => {
-        if (!batchId) return <Text type="secondary">-</Text>;
-        
-        const shortId = batchId.split('_').pop()?.substring(0, 8) || batchId;
-        return (
-          <Tooltip title={`批次ID: ${batchId}`}>
-            <Tag color="purple">
-              批次 #{shortId}
-              {record.batch_order !== undefined && ` [${record.batch_order + 1}]`}
-            </Tag>
-          </Tooltip>
-        );
-      },
-    },
-    {
-      title: '文章ID',
-      dataIndex: 'article_id',
-      key: 'article_id',
-      width: 100,
-      align: 'center' as const,
-    },
-    {
       title: '平台',
       dataIndex: 'platform_id',
       key: 'platform_id',
@@ -801,11 +788,16 @@ export default function PublishingTasksPage() {
       render: (platformId: string) => <Tag color="blue">{getPlatformName(platformId)}</Tag>,
     },
     {
-      title: '账号',
-      dataIndex: 'account_name',
-      key: 'account_name',
+      title: '账号名称',
+      dataIndex: 'real_username',
+      key: 'real_username',
       width: 150,
       align: 'center' as const,
+      render: (text: string, record: PublishingTask) => (
+        <span style={{ fontSize: 14 }}>
+          {text || record.account_name || '-'}
+        </span>
+      )
     },
     {
       title: '状态',
@@ -814,23 +806,6 @@ export default function PublishingTasksPage() {
       width: 120,
       align: 'center' as const,
       render: (status: string) => getStatusTag(status),
-    },
-    {
-      title: '计划时间',
-      dataIndex: 'scheduled_time',
-      key: 'scheduled_time',
-      width: 180,
-      align: 'center' as const,
-      render: (time: string | null) => 
-        time ? new Date(time).toLocaleString('zh-CN') : <Text type="secondary">立即执行</Text>,
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      width: 180,
-      align: 'center' as const,
-      render: (time: string) => new Date(time).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
@@ -992,11 +967,13 @@ export default function PublishingTasksPage() {
         {articles.length === 0 ? (
           <Empty description="暂无草稿文章" />
         ) : (
-          <Table
+          <ResizableTable<Article>
+            tableId="publishing-article-select"
             columns={articleColumns}
             dataSource={articles}
             rowKey="id"
             loading={articlesLoading}
+            scroll={{ x: 1000 }}
             pagination={{
               current: articlePage,
               pageSize: articlePageSize,
@@ -1384,120 +1361,468 @@ export default function PublishingTasksPage() {
         }
         bordered={false}
       >
-        {/* 批次分组显示 */}
         {(() => {
-          const { batches, noBatchTasks } = groupTasksByBatch();
+          const { batches } = groupTasksByBatch();
           const batchIds = Object.keys(batches);
+          
+          if (tasks.length === 0 && !tasksLoading) {
+            return <Empty description="暂无发布任务" />;
+          }
+          
+          // 将批次数据转换为表格数据源
+          const batchDataSource = batchIds.map(batchId => {
+            const batchTasks = batches[batchId];
+            const stats = getBatchStats(batchTasks);
+            const shortId = batchId.split('_').pop()?.substring(0, 8) || batchId;
+            const intervalMinutes = batchTasks[0]?.interval_minutes || 0;
+            const createdAt = batchTasks[0]?.created_at || '';
+            
+            return {
+              key: batchId,
+              batchId,
+              shortId,
+              total: stats.total,
+              pending: stats.pending,
+              running: stats.running,
+              success: stats.success,
+              failed: stats.failed,
+              cancelled: stats.cancelled,
+              intervalMinutes,
+              createdAt,
+              tasks: batchTasks
+            };
+          });
+          
+          // 批次表格列定义
+          const batchColumns = [
+            {
+              title: '批次信息',
+              key: 'batchInfo',
+              width: 280,
+              render: (_: any, record: any) => (
+                <div style={{ padding: '8px 0' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 12,
+                    marginBottom: 8
+                  }}>
+                    <div style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      flexShrink: 0
+                    }}>
+                      {record.total}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ 
+                        fontSize: 14, 
+                        fontWeight: 600, 
+                        color: '#1e293b',
+                        marginBottom: 4
+                      }}>
+                        批量发布任务
+                      </div>
+                      <div style={{ 
+                        fontSize: 12, 
+                        color: '#64748b',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8
+                      }}>
+                        <span>批次 #{record.shortId}</span>
+                        <span>•</span>
+                        <span>{record.intervalMinutes} 分钟间隔</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            },
+            {
+              title: '执行进度',
+              key: 'progress',
+              width: 450,
+              render: (_: any, record: any) => {
+                const completedCount = record.success + record.failed + record.cancelled;
+                const progressPercent = Math.round((completedCount / record.total) * 100);
+                
+                return (
+                  <div style={{ padding: '8px 0' }}>
+                    {/* 进度条 */}
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        marginBottom: 6,
+                        fontSize: 12,
+                        color: '#64748b'
+                      }}>
+                        <span>完成进度</span>
+                        <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                          {completedCount}/{record.total} ({progressPercent}%)
+                        </span>
+                      </div>
+                      <div style={{
+                        height: 8,
+                        background: '#e2e8f0',
+                        borderRadius: 4,
+                        overflow: 'hidden',
+                        position: 'relative'
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${progressPercent}%`,
+                          background: record.failed > 0 
+                            ? 'linear-gradient(90deg, #f59e0b 0%, #ef4444 100%)'
+                            : 'linear-gradient(90deg, #10b981 0%, #059669 100%)',
+                          transition: 'width 0.3s ease',
+                          borderRadius: 4
+                        }} />
+                      </div>
+                    </div>
+                    
+                    {/* 状态标签 */}
+                    <Space size={6} wrap>
+                      {record.running > 0 && (
+                        <Tag 
+                          color="processing" 
+                          icon={<SyncOutlined spin />}
+                          style={{ margin: 0, fontSize: 12 }}
+                        >
+                          执行中 {record.running}
+                        </Tag>
+                      )}
+                      {record.pending > 0 && (
+                        <Tag 
+                          color="default"
+                          icon={<ClockCircleOutlined />}
+                          style={{ margin: 0, fontSize: 12 }}
+                        >
+                          等待 {record.pending}
+                        </Tag>
+                      )}
+                      {record.success > 0 && (
+                        <Tag 
+                          color="success"
+                          icon={<CheckCircleOutlined />}
+                          style={{ margin: 0, fontSize: 12 }}
+                        >
+                          成功 {record.success}
+                        </Tag>
+                      )}
+                      {record.failed > 0 && (
+                        <Tag 
+                          color="error"
+                          icon={<CloseCircleOutlined />}
+                          style={{ margin: 0, fontSize: 12 }}
+                        >
+                          失败 {record.failed}
+                        </Tag>
+                      )}
+                      {record.cancelled > 0 && (
+                        <Tag 
+                          color="warning"
+                          icon={<StopOutlined />}
+                          style={{ margin: 0, fontSize: 12 }}
+                        >
+                          已取消 {record.cancelled}
+                        </Tag>
+                      )}
+                    </Space>
+                  </div>
+                );
+              }
+            },
+            {
+              title: '创建时间',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              width: 170,
+              align: 'center' as const,
+              render: (time: string) => (
+                <div style={{ fontSize: 13, color: '#64748b' }}>
+                  {time ? new Date(time).toLocaleString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }) : '-'}
+                </div>
+              )
+            },
+            {
+              title: '操作',
+              key: 'action',
+              width: 180,
+              align: 'center' as const,
+              render: (_: any, record: any) => (
+                <Space size="small">
+                  {(record.pending > 0 || record.running > 0) && (
+                    <Tooltip title="停止批次执行">
+                      <Button
+                        size="small"
+                        danger
+                        icon={<StopOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleStopBatch(record.batchId);
+                        }}
+                      >
+                        停止
+                      </Button>
+                    </Tooltip>
+                  )}
+                  <Tooltip title="删除整个批次">
+                    <Button
+                      size="small"
+                      danger
+                      icon={<DeleteOutlined />}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteBatch(record.batchId);
+                      }}
+                    >
+                      删除
+                    </Button>
+                  </Tooltip>
+                </Space>
+              )
+            }
+          ];
+          
+          // 展开行渲染子任务
+          const expandedRowRender = (record: any) => (
+            <div style={{ 
+              background: 'linear-gradient(to bottom, #f8fafc 0%, #ffffff 100%)',
+              padding: '20px 24px',
+              borderLeft: '4px solid #667eea',
+              margin: '0 -16px',
+              position: 'relative'
+            }}>
+              {/* 装饰线 */}
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: 4,
+                background: 'linear-gradient(180deg, #667eea 0%, #764ba2 100%)',
+                boxShadow: '2px 0 8px rgba(102, 126, 234, 0.3)'
+              }} />
+              
+              {/* 子任务标题 */}
+              <div style={{ 
+                marginBottom: 16,
+                paddingBottom: 12,
+                borderBottom: '2px solid #e2e8f0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: 6,
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#fff',
+                    fontSize: 14,
+                    fontWeight: 'bold'
+                  }}>
+                    {record.total}
+                  </div>
+                  <div>
+                    <div style={{ 
+                      fontSize: 15, 
+                      fontWeight: 600, 
+                      color: '#1e293b',
+                      marginBottom: 2
+                    }}>
+                      子任务列表
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                      批次 #{record.shortId} 包含的所有发布任务
+                    </div>
+                  </div>
+                </div>
+                
+                {/* 批次统计卡片 */}
+                <div style={{ 
+                  display: 'flex', 
+                  gap: 12,
+                  padding: '8px 16px',
+                  background: '#fff',
+                  borderRadius: 8,
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#667eea' }}>
+                      {record.total}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                      总任务
+                    </div>
+                  </div>
+                  <div style={{ width: 1, background: '#e2e8f0' }} />
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#10b981' }}>
+                      {record.success}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                      成功
+                    </div>
+                  </div>
+                  {record.failed > 0 && (
+                    <>
+                      <div style={{ width: 1, background: '#e2e8f0' }} />
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: '#ef4444' }}>
+                          {record.failed}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                          失败
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+              
+              {/* 子任务表格 */}
+              <div style={{
+                background: '#fff',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+              }}>
+                <ResizableTable<PublishingTask>
+                  tableId={`publishing-tasks-batch-${record.key}`}
+                  columns={taskColumns}
+                  dataSource={record.tasks}
+                  rowKey="id"
+                  size="small"
+                  pagination={false}
+                  scroll={{ x: 800 }}
+                  rowClassName={(task, index) => {
+                    // 为不同状态的行添加不同的背景色
+                    if (task.status === 'running') return 'task-row-running';
+                    if (task.status === 'success') return 'task-row-success';
+                    if (task.status === 'failed') return 'task-row-failed';
+                    return index % 2 === 0 ? 'task-row-even' : 'task-row-odd';
+                  }}
+                />
+              </div>
+            </div>
+          );
           
           return (
             <>
-              {/* 显示批次任务 */}
-              {batchIds.map(batchId => {
-                const batchTasks = batches[batchId];
-                const stats = getBatchStats(batchTasks);
-                const shortId = batchId.split('_').pop()?.substring(0, 8) || batchId;
-                const intervalMinutes = batchTasks[0]?.interval_minutes || 0;
-                
-                return (
-                  <Card
-                    key={batchId}
-                    size="small"
-                    style={{ marginBottom: 16 }}
-                    title={
-                      <Space>
-                        <Tag color="purple" style={{ fontSize: 14 }}>
-                          📦 批次 #{shortId}
-                        </Tag>
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {stats.total} 个任务 | 间隔 {intervalMinutes} 分钟
-                        </Text>
-                      </Space>
-                    }
-                    extra={
-                      <Space>
-                        <Tag color="default">待处理: {stats.pending}</Tag>
-                        <Tag color="processing">执行中: {stats.running}</Tag>
-                        <Tag color="success">成功: {stats.success}</Tag>
-                        <Tag color="error">失败: {stats.failed}</Tag>
-                        {stats.cancelled > 0 && <Tag color="default">已取消: {stats.cancelled}</Tag>}
-                        
-                        {stats.pending > 0 && (
-                          <Button
-                            size="small"
-                            danger
-                            icon={<StopOutlined />}
-                            onClick={() => handleStopBatch(batchId)}
-                          >
-                            停止批次
-                          </Button>
-                        )}
-                        
-                        <Button
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          onClick={() => handleDeleteBatch(batchId)}
-                        >
-                          删除批次
-                        </Button>
-                      </Space>
-                    }
-                  >
-                    <Table
-                      columns={taskColumns}
-                      dataSource={batchTasks}
-                      rowKey="id"
-                      size="small"
-                      pagination={false}
-                      scroll={{ x: 1500 }}
-                    />
-                  </Card>
-                );
-              })}
-              
-              {/* 显示非批次任务 */}
-              {noBatchTasks.length > 0 && (
-                <Card
-                  size="small"
-                  style={{ marginBottom: 16 }}
-                  title={
-                    <Space>
-                      <Tag color="default" style={{ fontSize: 14 }}>
-                        📝 单独任务
-                      </Tag>
-                      <Text type="secondary" style={{ fontSize: 12 }}>
-                        {noBatchTasks.length} 个任务
-                      </Text>
-                    </Space>
+              <style>
+                {`
+                  .task-row-running {
+                    background: #e6f7ff !important;
                   }
-                >
-                  <Table
-                    columns={taskColumns}
-                    dataSource={noBatchTasks}
-                    rowKey="id"
-                    size="small"
-                    pagination={false}
-                    scroll={{ x: 1500 }}
-                  />
-                </Card>
-              )}
-              
-              {/* 如果没有任务 */}
-              {batchIds.length === 0 && noBatchTasks.length === 0 && (
-                <Empty description="暂无发布任务" />
-              )}
+                  .task-row-success {
+                    background: #f6ffed !important;
+                  }
+                  .task-row-failed {
+                    background: #fff1f0 !important;
+                  }
+                  .task-row-even {
+                    background: #fafafa !important;
+                  }
+                  .task-row-odd {
+                    background: #ffffff !important;
+                  }
+                  .batch-expand-icon {
+                    transition: all 0.3s ease;
+                  }
+                  .batch-expand-icon:hover {
+                    transform: translateX(4px);
+                  }
+                  .batch-row {
+                    transition: all 0.2s ease;
+                  }
+                  .batch-row:hover {
+                    background: #fafafa !important;
+                  }
+                `}
+              </style>
+              <ResizableTable
+                tableId="publishing-tasks-batches"
+                columns={batchColumns}
+                dataSource={batchDataSource}
+                rowKey="key"
+                loading={tasksLoading}
+                rowClassName="batch-row"
+                expandable={{
+                  expandedRowRender,
+                  rowExpandable: (record) => record.tasks && record.tasks.length > 0,
+                  columnWidth: 140,
+                  expandIcon: ({ expanded, onExpand, record }) => (
+                    <Button
+                      type={expanded ? 'primary' : 'default'}
+                      size="middle"
+                      className="batch-expand-icon"
+                      style={{ 
+                        minWidth: 110,
+                        height: 36,
+                        borderRadius: 6,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        background: expanded 
+                          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                          : '#fff',
+                        border: expanded ? 'none' : '1px solid #d1d5db',
+                        color: expanded ? '#fff' : '#64748b',
+                        boxShadow: expanded 
+                          ? '0 2px 8px rgba(102, 126, 234, 0.3)'
+                          : '0 1px 2px rgba(0,0,0,0.05)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6
+                      }}
+                      icon={expanded ? <DownOutlined /> : <RightOutlined />}
+                      onClick={(e) => onExpand(record, e)}
+                    >
+                      {expanded ? '收起子任务' : '查看子任务'}
+                    </Button>
+                  )
+                }}
+                pagination={{
+                  current: taskPage,
+                  pageSize: taskPageSize,
+                  total: batchDataSource.length,
+                  onChange: (newPage, newPageSize) => {
+                    setTaskPage(newPage);
+                    if (newPageSize && newPageSize !== taskPageSize) {
+                      setTaskPageSize(newPageSize);
+                      setTaskPage(1);
+                    }
+                  },
+                  showSizeChanger: true,
+                  showQuickJumper: true,
+                  showTotal: (total) => `共 ${total} 个批次`,
+                  pageSizeOptions: ['10', '20', '50', '100']
+                }}
+              />
             </>
           );
         })()}
-        
-        {/* 分页 */}
-        {taskTotal > 0 && (
-          <div style={{ marginTop: 16, textAlign: 'right' }}>
-            <Space>
-              <Text type="secondary">共 {taskTotal} 个任务</Text>
-            </Space>
-          </div>
-        )}
       </Card>
 
       {/* 日志查看模态框 */}

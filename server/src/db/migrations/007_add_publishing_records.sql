@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS publishing_records (
   id SERIAL PRIMARY KEY,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
-  task_id INTEGER NOT NULL REFERENCES publishing_tasks(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES publishing_tasks(id) ON DELETE SET NULL,
   platform_id VARCHAR(50) NOT NULL,
   account_id INTEGER NOT NULL REFERENCES platform_accounts(id) ON DELETE CASCADE,
   account_name VARCHAR(100),

@@ -6,6 +6,7 @@ export interface Account {
   id: number;
   platform_id: string;
   account_name: string;
+  real_username?: string; // 平台真实用户名
   credentials?: any; // 解密后的凭证
   is_default: boolean;
   status: string;
@@ -46,6 +47,30 @@ export class AccountService {
        VALUES ($1, $2, $3, $4, $5, $6) 
        RETURNING *`,
       [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, 'active', false]
+    );
+    
+    const account = result.rows[0];
+    
+    // 返回时不包含加密的凭证
+    return this.formatAccount(account, false);
+  }
+  
+  /**
+   * 创建平台账号绑定（包含真实用户名）
+   */
+  async createAccountWithRealUsername(input: CreateAccountInput, realUsername: string): Promise<Account> {
+    // 验证凭证格式
+    this.validateCredentials(input.credentials);
+    
+    // 加密凭证
+    const encryptedCredentials = encryptionService.encryptObject(input.credentials);
+    
+    const result = await pool.query(
+      `INSERT INTO platform_accounts 
+       (platform, platform_id, account_name, credentials, real_username, status, is_default) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       RETURNING *`,
+      [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, realUsername, 'active', false]
     );
     
     const account = result.rows[0];
@@ -115,6 +140,54 @@ export class AccountService {
       const encryptedCredentials = encryptionService.encryptObject(input.credentials);
       updates.push(`credentials = $${paramIndex}`);
       values.push(encryptedCredentials);
+      paramIndex++;
+    }
+    
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+    
+    values.push(accountId);
+    
+    const result = await pool.query(
+      `UPDATE platform_accounts 
+       SET ${updates.join(', ')} 
+       WHERE id = $${paramIndex} 
+       RETURNING *`,
+      values
+    );
+    
+    if (result.rows.length === 0) {
+      throw new Error('账号不存在');
+    }
+    
+    return this.formatAccount(result.rows[0], false);
+  }
+  
+  /**
+   * 更新账号（包含真实用户名）
+   */
+  async updateAccountWithRealUsername(accountId: number, input: UpdateAccountInput, realUsername: string): Promise<Account> {
+    const updates: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+    
+    if (input.account_name) {
+      updates.push(`account_name = $${paramIndex}`);
+      values.push(input.account_name);
+      paramIndex++;
+    }
+    
+    if (input.credentials) {
+      this.validateCredentials(input.credentials);
+      const encryptedCredentials = encryptionService.encryptObject(input.credentials);
+      updates.push(`credentials = $${paramIndex}`);
+      values.push(encryptedCredentials);
+      paramIndex++;
+    }
+    
+    // 更新真实用户名
+    if (realUsername) {
+      updates.push(`real_username = $${paramIndex}`);
+      values.push(realUsername);
       paramIndex++;
     }
     
@@ -314,6 +387,31 @@ export class AccountService {
       
       console.log(`[浏览器登录] 成功获取 ${cookies.length} 个Cookie`);
       
+      // 抖音平台特殊处理：登录后需要导航到首页才能提取用户名
+      if (platform.platform_id === 'douyin') {
+        console.log(`[浏览器登录] 抖音平台：导航到创作者中心首页以提取用户名...`);
+        try {
+          await page.goto('https://creator.douyin.com/creator-micro/home', { 
+            waitUntil: 'networkidle2',
+            timeout: 30000 
+          });
+          // 额外等待页面渲染完成（增加到5秒）
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          console.log(`[浏览器登录] 抖音平台：已导航到首页，当前URL: ${page.url()}`);
+          
+          // 等待用户名元素出现
+          try {
+            await page.waitForSelector('.name-_lSSDc', { timeout: 10000 });
+            console.log(`[浏览器登录] 抖音平台：用户名元素已加载`);
+          } catch (e) {
+            console.log(`[浏览器登录] 抖音平台：等待用户名元素超时，尝试继续提取`);
+          }
+        } catch (navError: any) {
+          console.log(`[浏览器登录] 抖音平台：导航到首页失败: ${navError.message}`);
+          // 继续尝试提取，可能当前页面已经有用户名
+        }
+      }
+      
       // 尝试获取用户信息
       const userInfo = await this.extractUserInfo(page, platform.platform_id);
       
@@ -322,6 +420,7 @@ export class AccountService {
       
       // 保存账号信息
       const accountName = userInfo.username || `${platform.platform_name}_${Date.now()}`;
+      const realUsername = userInfo.username || ''; // 提取真实用户名
       
       // 将Cookie转换为凭证格式
       const credentials = {
@@ -332,14 +431,19 @@ export class AccountService {
         userInfo: userInfo
       };
       
-      console.log(`[浏览器登录] 正在保存账号信息: ${accountName}`);
+      console.log(`\n========================================`);
+      console.log(`[浏览器登录] 准备保存账号信息`);
+      console.log(`[浏览器登录] 账号名称: ${accountName}`);
+      console.log(`[浏览器登录] 真实用户名: ${realUsername || '未提取到'}`);
       console.log(`[浏览器登录] Cookie数量: ${cookies.length}`);
       console.log(`[浏览器登录] 凭证数据:`, JSON.stringify({
         username: credentials.username,
         password: credentials.password,
         cookieCount: credentials.cookies.length,
-        loginTime: credentials.loginTime
-      }));
+        loginTime: credentials.loginTime,
+        userInfo: credentials.userInfo
+      }, null, 2));
+      console.log(`========================================\n`);
       
       // 检查是否已存在相同用户名的账号
       const existingAccounts = await this.getAccountsByPlatform(platform.platform_id);
@@ -353,24 +457,24 @@ export class AccountService {
       
       try {
         if (existingAccount) {
-          // 更新现有账号
+          // 更新现有账号（包括真实用户名）
           console.log(`[浏览器登录] 更新现有账号 ID: ${existingAccount.id}`);
-          account = await this.updateAccount(existingAccount.id, {
+          account = await this.updateAccountWithRealUsername(existingAccount.id, {
             credentials
-          });
+          }, realUsername);
           console.log(`[浏览器登录] 账号更新成功`);
         } else {
-          // 创建新账号
+          // 创建新账号（包括真实用户名）
           console.log(`[浏览器登录] 创建新账号，平台: ${platform.platform_id}, 账号名: ${accountName}`);
-          account = await this.createAccount({
+          account = await this.createAccountWithRealUsername({
             platform_id: platform.platform_id,
             account_name: accountName,
             credentials
-          });
+          }, realUsername);
           console.log(`[浏览器登录] 账号创建成功 ID: ${account.id}`);
         }
         
-        console.log(`[浏览器登录] 账号保存成功 ID: ${account.id}, 平台: ${account.platform_id}, 名称: ${account.account_name}`);
+        console.log(`[浏览器登录] 账号保存成功 ID: ${account.id}, 平台: ${account.platform_id}, 名称: ${account.account_name}, 真实用户名: ${account.real_username || '未设置'}`);
         
         return {
           success: true,
@@ -445,12 +549,28 @@ export class AccountService {
     const initialUrl = page.url();
     console.log(`[等待登录] ${platformId} 平台 - 初始URL: ${initialUrl}`);
     
-    // 统一策略：等待URL变化
-    // 原理：所有平台登录后URL都会发生变化（跳转到首页、控制台等）
-    await page.waitForFunction(
-      `window.location.href !== "${initialUrl}"`,
-      { timeout: 300000 }
-    );
+    // 抖音平台特殊处理：检测登录成功元素而不是URL变化
+    if (platformId === 'douyin') {
+      console.log(`[等待登录] 抖音平台：等待登录成功元素出现...`);
+      try {
+        // 等待高清发布按钮出现（登录成功的标志）
+        await page.waitForSelector('#douyin-creator-master-side-upload-wrap', { timeout: 300000 });
+        console.log(`[等待登录] 抖音平台：检测到登录成功元素`);
+      } catch (e) {
+        // 备用方案：等待URL变化
+        console.log(`[等待登录] 抖音平台：元素检测超时，尝试URL变化检测...`);
+        await page.waitForFunction(
+          `window.location.href !== "${initialUrl}"`,
+          { timeout: 60000 }
+        );
+      }
+    } else {
+      // 其他平台：等待URL变化
+      await page.waitForFunction(
+        `window.location.href !== "${initialUrl}"`,
+        { timeout: 300000 }
+      );
+    }
     
     const finalUrl = page.url();
     console.log(`[等待登录] ${platformId} 登录成功，当前URL: ${finalUrl}`);
@@ -464,46 +584,133 @@ export class AccountService {
    */
   private async extractUserInfo(page: any, platformId: string): Promise<any> {
     try {
-      // 定义选择器映射
-      const selectors: { [key: string]: string } = {
+      console.log(`\n========================================`);
+      console.log(`[提取用户信息] 开始提取 ${platformId} 平台的用户名`);
+      console.log(`[提取用户信息] 当前页面URL: ${page.url()}`);
+      
+      // 定义选择器映射（支持多个选择器尝试）
+      const selectors: { [key: string]: string[] } = {
         // 自媒体平台
-        'wangyi': '.user-info .name',
-        'souhu': '.user-name',
-        'baijiahao': '.author-name',
-        'toutiao': '.user-name',
-        'qie': '.user-info-name',
+        'wangyi': ['.user-info .name', '.user-name', '.username'],
+        'souhu': ['.user-name', '.username', '.account-name'],
+        'baijiahao': ['.author-name', '.user-name', '.username'],
+        'toutiao': [
+          '.auth-avator-name',
+          '.user-name',
+          '.username', 
+          '.account-name',
+          '[class*="username"]',
+          '[class*="user-name"]',
+          '.semi-navigation-header-username'
+        ],
+        'qie': ['.user-info-name', '.user-name', '.username'],
         
         // 社交媒体平台
-        'wechat': '.account_info_title',
-        'xiaohongshu': '.username',
-        'douyin': '.semi-navigation-header-username',
-        'bilibili': '.user-name',
+        'wechat': ['.account_info_title', '.user-name', '.username'],
+        'xiaohongshu': ['.username', '.user-name', '.nickname'],
+        'douyin': [
+          // 优先级1: 抖音创作者中心特定选择器（从HTML快照中提取，最可靠）
+          '.name-_lSSDc',
+          '.header-_F2uzl .name-_lSSDc',
+          '.left-zEzdJX .name-_lSSDc',
+          // 优先级2: 通配符选择器（匹配动态class名）
+          '[class*="name-"][class*="_"]',
+          // 优先级3: 通用选择器（备用）
+          '.semi-navigation-header-username',
+          '.username',
+          '.user-name',
+          '[class*="username"]',
+          '[class*="user-name"]'
+        ],
+        'bilibili': ['.user-name', '.username', '.uname'],
         
         // 技术社区平台
-        'zhihu': '.AppHeader-profile',
-        'jianshu': '.user-name',
-        'csdn': '.user-name',
-        'juejin': '.username',
-        'segmentfault': '.user-name',
-        'oschina': '.user-name',
-        'cnblogs': '.user-name',
-        'v2ex': '.username'
+        'zhihu': ['.AppHeader-profile', '.username', '.user-name'],
+        'jianshu': ['.user-name', '.username', '.nickname'],
+        'csdn': ['.user-name', '.username', '.nick-name'],
+        'juejin': ['.username', '.user-name'],
+        'segmentfault': ['.user-name', '.username'],
+        'oschina': ['.user-name', '.username'],
+        'cnblogs': ['.user-name', '.username'],
+        'v2ex': ['.username', '.user-name']
       };
       
-      const selector = selectors[platformId];
+      const selectorList = selectors[platformId];
       
-      if (!selector) {
+      if (!selectorList || selectorList.length === 0) {
         console.log(`[提取用户信息] ${platformId}: 未配置选择器，跳过提取`);
+        console.log(`========================================\n`);
         return { username: '' };
       }
       
-      // 使用$eval来避免TypeScript编译错误
-      const username = await page.$eval(selector, (el: any) => el.textContent?.trim() || '').catch(() => '');
+      console.log(`[提取用户信息] ${platformId}: 尝试 ${selectorList.length} 个选择器`);
       
-      console.log(`[提取用户信息] ${platformId}: ${username || '未提取到用户名'}`);
+      // 尝试所有选择器
+      let username = '';
+      for (let i = 0; i < selectorList.length; i++) {
+        const selector = selectorList[i];
+        console.log(`[提取用户信息] 尝试选择器 ${i + 1}/${selectorList.length}: ${selector}`);
+        
+        try {
+          // 先检查元素是否存在
+          const element = await page.$(selector);
+          if (element) {
+            console.log(`[提取用户信息] ✅ 找到元素: ${selector}`);
+            username = await page.$eval(selector, (el: any) => el.textContent?.trim() || '');
+            
+            if (username) {
+              console.log(`[提取用户信息] ✅ 成功提取用户名: "${username}"`);
+              break;
+            } else {
+              console.log(`[提取用户信息] ⚠️  元素存在但内容为空`);
+            }
+          } else {
+            console.log(`[提取用户信息] ❌ 未找到元素: ${selector}`);
+          }
+        } catch (error: any) {
+          console.log(`[提取用户信息] ❌ 选择器出错: ${selector}, 错误: ${error.message}`);
+        }
+      }
+      
+      if (!username) {
+        console.log(`[提取用户信息] ⚠️  所有选择器都未能提取到用户名`);
+        console.log(`[提取用户信息] 💡 建议：检查页面HTML结构，更新选择器配置`);
+        
+        // 尝试打印页面标题作为参考
+        try {
+          const pageTitle = await page.title();
+          console.log(`[提取用户信息] 页面标题: ${pageTitle}`);
+        } catch (e) {
+          // ignore
+        }
+        
+        // 保存页面HTML用于调试
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const html = await page.content();
+          const debugDir = path.join(process.cwd(), 'debug');
+          
+          // 确保debug目录存在
+          if (!fs.existsSync(debugDir)) {
+            fs.mkdirSync(debugDir, { recursive: true });
+          }
+          
+          const filename = `${platformId}_${Date.now()}.html`;
+          const filepath = path.join(debugDir, filename);
+          fs.writeFileSync(filepath, html);
+          console.log(`[提取用户信息] 📄 已保存页面HTML: ${filepath}`);
+          console.log(`[提取用户信息] 💡 请打开此文件，搜索用户名，找到对应的HTML元素`);
+        } catch (saveError) {
+          console.error(`[提取用户信息] 保存HTML失败:`, saveError);
+        }
+      }
+      
+      console.log(`========================================\n`);
       return { username };
     } catch (error) {
       console.error('[提取用户信息] 失败:', error);
+      console.log(`========================================\n`);
       return { username: '' };
     }
   }
@@ -523,9 +730,38 @@ export class AccountService {
       last_used_at: row.last_used_at
     };
     
-    if (includeCredentials && row.credentials) {
+    // 优先从数据库字段读取真实用户名
+    if (row.real_username) {
+      account.real_username = row.real_username;
+    }
+    
+    // 如果数据库没有，尝试从凭证中提取（向后兼容）
+    if (!account.real_username && row.credentials) {
       try {
-        account.credentials = encryptionService.decryptObject(row.credentials);
+        const decryptedCredentials = encryptionService.decryptObject(row.credentials);
+        
+        // 提取真实用户名（优先使用 userInfo.username，其次使用 username）
+        if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
+          account.real_username = decryptedCredentials.userInfo.username;
+        } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
+          account.real_username = decryptedCredentials.username;
+        }
+        
+        // 如果需要包含完整凭证
+        if (includeCredentials) {
+          account.credentials = decryptedCredentials;
+        }
+      } catch (error) {
+        console.error('解密凭证失败:', error);
+        if (includeCredentials) {
+          account.credentials = null;
+        }
+      }
+    } else if (includeCredentials && row.credentials) {
+      // 如果只需要凭证但不需要提取用户名
+      try {
+        const decryptedCredentials = encryptionService.decryptObject(row.credentials);
+        account.credentials = decryptedCredentials;
       } catch (error) {
         console.error('解密凭证失败:', error);
         account.credentials = null;

@@ -308,10 +308,11 @@ export class BatchExecutor {
   }
 
   /**
-   * 停止整个批次（取消所有 pending 任务）
+   * 停止整个批次（取消所有 pending 任务，终止 running 任务）
    */
-  async stopBatch(batchId: string): Promise<{ cancelledCount: number }> {
+  async stopBatch(batchId: string): Promise<{ cancelledCount: number; terminatedCount: number }> {
     const { pool } = require('../db/database');
+    const { browserAutomationService } = require('./BrowserAutomationService');
     const client = await pool.connect();
     
     try {
@@ -319,19 +320,19 @@ export class BatchExecutor {
       
       console.log(`🛑 停止批次 ${batchId}...`);
       
-      // 获取所有待处理任务的文章ID
+      // 获取所有待处理和运行中任务的文章ID
       const articlesResult = await client.query(
         `SELECT DISTINCT article_id 
          FROM publishing_tasks 
          WHERE batch_id = $1 
-         AND status = 'pending'`,
+         AND status IN ('pending', 'running')`,
         [batchId]
       );
       
       const articleIds = articlesResult.rows.map((row: any) => row.article_id);
       
       // 取消所有 pending 状态的任务
-      const result = await client.query(
+      const pendingResult = await client.query(
         `UPDATE publishing_tasks 
          SET status = 'cancelled', 
              updated_at = CURRENT_TIMESTAMP,
@@ -343,7 +344,22 @@ export class BatchExecutor {
         [batchId]
       );
       
-      const cancelledCount = result.rows.length;
+      const cancelledCount = pendingResult.rows.length;
+      
+      // 终止所有 running 状态的任务
+      const runningResult = await client.query(
+        `UPDATE publishing_tasks 
+         SET status = 'cancelled', 
+             updated_at = CURRENT_TIMESTAMP,
+             completed_at = CURRENT_TIMESTAMP,
+             error_message = '用户手动停止批次（任务被终止）'
+         WHERE batch_id = $1 
+         AND status = 'running'
+         RETURNING id`,
+        [batchId]
+      );
+      
+      const terminatedCount = runningResult.rows.length;
       
       // 恢复所有相关文章的可见状态
       if (articleIds.length > 0) {
@@ -360,20 +376,35 @@ export class BatchExecutor {
       await client.query('COMMIT');
       
       console.log(`✅ 已取消批次 ${batchId} 中的 ${cancelledCount} 个待处理任务`);
+      console.log(`✅ 已终止批次 ${batchId} 中的 ${terminatedCount} 个运行中任务`);
       console.log(`✅ 已清除 ${articleIds.length} 篇文章的锁定状态`);
       
       // 为每个取消的任务记录日志
       const { publishingService } = require('./PublishingService');
-      for (const row of result.rows) {
+      for (const row of pendingResult.rows) {
         await publishingService.logMessage(row.id, 'info', '批次已被用户手动停止，任务已取消');
+      }
+      for (const row of runningResult.rows) {
+        await publishingService.logMessage(row.id, 'warning', '批次已被用户手动停止，任务被强制终止');
+      }
+      
+      // 如果有运行中的任务被终止，强制关闭浏览器
+      if (terminatedCount > 0) {
+        console.log(`🔄 正在强制关闭浏览器...`);
+        try {
+          await browserAutomationService.forceCloseBrowser();
+          console.log(`✅ 浏览器已强制关闭`);
+        } catch (browserError: any) {
+          console.error(`⚠️ 关闭浏览器失败:`, browserError.message);
+        }
       }
       
       // 如果批次正在执行，标记为需要停止
       if (this.executingBatches.has(batchId)) {
-        console.log(`⚠️ 批次 ${batchId} 正在执行中，将在当前任务完成后停止`);
+        console.log(`⚠️ 批次 ${batchId} 正在执行中，已标记停止`);
       }
       
-      return { cancelledCount };
+      return { cancelledCount, terminatedCount };
     } catch (error) {
       await client.query('ROLLBACK');
       console.error(`❌ 停止批次 ${batchId} 失败:`, error);

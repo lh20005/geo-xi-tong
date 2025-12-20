@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
-  Card, Table, Button, Space, Tag, Modal, Typography, message, 
+  Card, Button, Space, Tag, Modal, Typography, message, 
   Row, Col, Statistic, Select, Input, Checkbox 
 } from 'antd';
 import { 
@@ -16,6 +16,7 @@ import { apiClient } from '../api/client';
 import ArticlePreview from '../components/ArticlePreview';
 import ArticleEditorModal from '../components/ArticleEditorModal';
 import PublishingConfigModal from '../components/Publishing/PublishingConfigModal';
+import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
 
 const { Paragraph, Text } = Typography;
@@ -305,6 +306,7 @@ export default function ArticleListPage() {
       title: '转化目标',
       dataIndex: 'conversionTargetName',
       key: 'conversionTargetName',
+      width: 120,
       align: 'center' as const,
       render: (text: string) => text ? <Tag color="orange">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
     },
@@ -312,6 +314,7 @@ export default function ArticleListPage() {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',
+      width: 120,
       align: 'center' as const,
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
@@ -319,26 +322,28 @@ export default function ArticleListPage() {
       title: '蒸馏结果',
       dataIndex: 'topicQuestion',
       key: 'topicQuestion',
+      width: 200,
       align: 'center' as const,
       render: (text: string) => text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
+      title: '文章标题',
+      dataIndex: 'title',
+      key: 'title',
+      width: 200,
+      align: 'center' as const,
+      ellipsis: true,
+      render: (text: string) => text ? <span>{text}</span> : <span style={{ color: '#999' }}>-</span>,
     },
     {
       title: '发布状态',
       dataIndex: 'isPublished',
       key: 'isPublished',
+      width: 100,
       align: 'center' as const,
-      render: (isPublished: boolean, record: any) => {
+      render: (isPublished: boolean) => {
         if (isPublished) {
-          return (
-            <div>
-              <Tag color="success">已发布</Tag>
-              {record.publishedAt && (
-                <div style={{ fontSize: '12px', color: '#999', marginTop: '4px' }}>
-                  {new Date(record.publishedAt).toLocaleString('zh-CN')}
-                </div>
-              )}
-            </div>
-          );
+          return <Tag color="success">已发布</Tag>;
         }
         return <Tag color="default">草稿</Tag>;
       },
@@ -347,12 +352,14 @@ export default function ArticleListPage() {
       title: '创建时间',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      width: 170,
       align: 'center' as const,
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
+      width: 200,
       align: 'center' as const,
       render: (_: any, record: any) => (
         <Space>
@@ -494,11 +501,13 @@ export default function ArticleListPage() {
       </Card>
 
       <Card title="文章管理" bordered={false} extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
-        <Table 
+        <ResizableTable<Article>
+          tableId="article-list"
           columns={columns} 
           dataSource={articles} 
           rowKey="id" 
           loading={loading} 
+          scroll={{ x: 1200 }}
           pagination={{ 
             current: page, 
             pageSize, 

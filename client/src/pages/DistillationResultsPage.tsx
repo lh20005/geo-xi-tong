@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
-  Card, Button, message, Space, Table, Tag, Modal, Empty, 
+  Card, Button, message, Space, Tag, Modal, Empty, 
   Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Form, Popconfirm 
 } from 'antd';
 import { 
@@ -9,6 +9,7 @@ import {
   ExclamationCircleOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import ResizableTable from '../components/ResizableTable';
 import { 
   fetchResultsWithReferences, 
   fetchAllKeywords, 
@@ -318,6 +319,7 @@ export default function DistillationResultsPage() {
       title: '蒸馏结果',
       dataIndex: 'question',
       key: 'question',
+      width: 300,
       align: 'center' as const,
       ellipsis: {
         showTitle: false,
@@ -617,7 +619,8 @@ export default function DistillationResultsPage() {
           </div>
 
           {/* 数据表格 */}
-          <Table
+          <ResizableTable<TopicWithReference>
+            tableId="distillation-results-list"
             rowSelection={{
               selectedRowKeys,
               onChange: setSelectedRowKeys
@@ -626,6 +629,7 @@ export default function DistillationResultsPage() {
             dataSource={data}
             rowKey="id"
             loading={loading}
+            scroll={{ x: 800 }}
             pagination={{
               current: currentPage,
               pageSize: pageSize,

@@ -185,6 +185,11 @@ export default function AccountManagementModal({
                   title={
                     <Space>
                       <span>{account.account_name}</span>
+                      {account.real_username && (
+                        <Tag color="blue" style={{ fontSize: '12px' }}>
+                          真实用户名: {account.real_username}
+                        </Tag>
+                      )}
                       {account.is_default && <Tag color="gold">默认</Tag>}
                       <Tag color={account.status === 'active' ? 'green' : 'default'}>
                         {account.status === 'active' ? '正常' : '未激活'}
@@ -193,6 +198,11 @@ export default function AccountManagementModal({
                   }
                   description={
                     <div>
+                      {account.real_username && (
+                        <div style={{ color: '#1890ff', marginBottom: 4 }}>
+                          平台账号：{account.real_username}
+                        </div>
+                      )}
                       <div>创建时间：{new Date(account.created_at).toLocaleString()}</div>
                       {account.last_used_at && (
                         <div>最后使用：{new Date(account.last_used_at).toLocaleString()}</div>

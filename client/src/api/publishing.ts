@@ -17,6 +17,7 @@ export interface Account {
   id: number;
   platform_id: string;
   account_name: string;
+  real_username?: string; // 平台真实用户名
   credentials?: any;
   is_default: boolean;
   status: string;
@@ -106,6 +107,7 @@ export interface PublishingTask {
   platform_name?: string;
   account_id: number;
   account_name?: string;
+  real_username?: string; // 平台真实用户名
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'timeout';
   scheduled_time: string | null;
   retry_count: number;
@@ -119,6 +121,9 @@ export interface PublishingTask {
   created_at: string;
   updated_at: string;
   executed_at?: string;
+  batch_id?: string; // 批次ID
+  batch_order?: number; // 批次内的顺序
+  interval_minutes?: number; // 发布间隔（分钟）
 }
 
 export interface PublishingLog {
@@ -126,6 +131,7 @@ export interface PublishingLog {
   task_id: number;
   level: 'info' | 'warning' | 'error';
   message: string;
+  timestamp?: string; // 添加 timestamp 字段
   details?: any;
   created_at: string;
 }
@@ -252,6 +258,7 @@ export interface PublishingRecord {
   platform_name?: string;
   account_id: number;
   account_name?: string;
+  real_username?: string; // 平台真实用户名
   platform_article_id?: string;
   platform_url?: string;
   published_at: string;
@@ -326,9 +333,9 @@ export interface BatchInfo {
 }
 
 /**
- * 停止批次（取消所有待处理任务）
+ * 停止批次（取消所有待处理任务，终止运行中任务）
  */
-export async function stopBatch(batchId: string): Promise<{ cancelledCount: number }> {
+export async function stopBatch(batchId: string): Promise<{ cancelledCount: number; terminatedCount: number }> {
   const response = await apiClient.post(`/publishing/batches/${batchId}/stop`);
   return response.data.data;
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Card, Button, Table, Tag, Progress, message, Space, Modal, Popconfirm, 
+  Card, Button, Tag, Progress, message, Space, Modal, Popconfirm, 
   Tooltip, Select, Input, Row, Col, Statistic, Alert 
 } from 'antd';
 import { 
@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons';
 import axios from 'axios';
 import TaskConfigModal from '../components/TaskConfigModal';
+import ResizableTable from '../components/ResizableTable';
 import { 
   createTask, 
   fetchTasks, 
@@ -405,15 +406,16 @@ export default function ArticleGenerationPage() {
       width: 200,
       align: 'center' as const,
       render: (_: any, record: GenerationTask) => (
-        <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Progress
             percent={record.progress}
             size="small"
+            style={{ flex: 1, minWidth: 0 }}
             status={record.status === 'failed' ? 'exception' : record.status === 'completed' ? 'success' : 'active'}
           />
-          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
-            {record.generatedCount} / {record.requestedCount} 篇
-          </div>
+          <span style={{ fontSize: 12, color: '#666', whiteSpace: 'nowrap' }}>
+            {record.generatedCount}/{record.requestedCount}
+          </span>
         </div>
       )
     },
@@ -727,7 +729,8 @@ export default function ArticleGenerationPage() {
           </div>
         )}
 
-        <Table
+        <ResizableTable<GenerationTask>
+          tableId="article-generation-list"
           columns={columns}
           dataSource={tasks}
           rowKey="id"

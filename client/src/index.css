@@ -32,3 +32,99 @@ body {
 .ant-table-thead > tr > th {
   text-align: center !important;
 }
+
+/* 可调整列宽表格样式 */
+.react-resizable {
+  position: relative;
+}
+
+/* 表格使用固定布局，拖拽某列时其他列不变 */
+.ant-table table {
+  table-layout: fixed !important;
+}
+
+.react-resizable-handle {
+  position: absolute;
+  right: -5px;
+  bottom: 0;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+.react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 16px;
+  background: #d9d9d9;
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.react-resizable-handle:hover::after,
+.react-resizable-handle:active::after {
+  opacity: 1;
+  background: #1890ff;
+}
+
+/* 确保表头单元格相对定位 */
+.ant-table-thead > tr > th {
+  position: relative;
+}
+
+/* 表格单元格内容不换行，超出显示省略号 */
+.ant-table-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 表格内容区域 - 紧凑行高 */
+.ant-table-tbody > tr > td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 8px 12px !important;
+}
+
+/* 表头 - 紧凑行高 */
+.ant-table-thead > tr > th {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 10px 12px !important;
+}
+
+/* 小尺寸表格更紧凑 */
+.ant-table-small .ant-table-tbody > tr > td {
+  padding: 6px 8px !important;
+}
+
+.ant-table-small .ant-table-thead > tr > th {
+  padding: 8px 8px !important;
+}
+
+/* 复选框列固定宽度 */
+.ant-table-selection-column {
+  width: 50px !important;
+  min-width: 50px !important;
+  max-width: 50px !important;
+}
+
+/* 确保 fixed 列也能显示拖拽手柄 */
+.ant-table-cell-fix-right .react-resizable-handle,
+.ant-table-cell-fix-left .react-resizable-handle {
+  z-index: 2;
+}
+
+/* fixed 列的表头也要相对定位 */
+.ant-table-cell-fix-right,
+.ant-table-cell-fix-left {
+  position: relative;
+}

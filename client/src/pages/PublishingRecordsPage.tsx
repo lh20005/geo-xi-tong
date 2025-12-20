@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Card, Table, Tag, Button, Space, Modal, Typography, message, 
+  Card, Tag, Button, Space, Modal, Typography, message, 
   Row, Col, Statistic, Select, Tooltip, Empty 
 } from 'antd';
 import { 
@@ -18,6 +18,7 @@ import {
 } from '../api/publishing';
 import { apiClient } from '../api/client';
 import ArticlePreview from '../components/ArticlePreview';
+import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
 
 const { Text, Paragraph } = Typography;
@@ -131,12 +132,16 @@ export default function PublishingRecordsPage() {
       )
     },
     {
-      title: '账号',
-      dataIndex: 'account_name',
-      key: 'account_name',
+      title: '账号名称',
+      dataIndex: 'real_username',
+      key: 'real_username',
       width: 150,
       align: 'center' as const,
-      render: (text: string) => text || <Text type="secondary">-</Text>
+      render: (text: string, record: PublishingRecord) => (
+        <span style={{ fontSize: 14 }}>
+          {text || record.account_name || '-'}
+        </span>
+      )
     },
     {
       title: '关键词',
@@ -160,6 +165,7 @@ export default function PublishingRecordsPage() {
       dataIndex: 'article_title',
       key: 'article_title',
       width: 250,
+      align: 'center' as const,
       ellipsis: true,
       render: (text: string) => text || <Text type="secondary">无标题</Text>
     },
@@ -282,7 +288,8 @@ export default function PublishingRecordsPage() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
         ) : (
-          <Table 
+          <ResizableTable<PublishingRecord>
+            tableId="publishing-records-list"
             columns={columns} 
             dataSource={records} 
             rowKey="id" 

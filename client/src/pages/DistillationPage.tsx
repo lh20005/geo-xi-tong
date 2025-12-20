@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Card, Input, Button, message, Space, Typography, Table, Tag, Modal, Empty } from 'antd';
+import { Card, Input, Button, message, Space, Typography, Tag, Modal, Empty } from 'antd';
 import { ThunderboltOutlined, FileTextOutlined, EyeOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import ResizableTable from '../components/ResizableTable';
 import { 
   saveResultToLocalStorage, 
   loadResultFromLocalStorage, 
@@ -189,7 +190,7 @@ export default function DistillationPage() {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',
-      width: '25%',
+      width: 200,
       align: 'center' as const,
       render: (text: string) => <Tag color="blue" style={{ fontSize: 14 }}>{text}</Tag>,
     },
@@ -197,7 +198,7 @@ export default function DistillationPage() {
       title: '话题数量',
       dataIndex: 'topic_count',
       key: 'topic_count',
-      width: '15%',
+      width: 120,
       align: 'center' as const,
       render: (count: number) => (
         <span style={{ fontSize: 14, fontWeight: 500, color: '#0ea5e9' }}>{count}</span>
@@ -207,7 +208,7 @@ export default function DistillationPage() {
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
-      width: '25%',
+      width: 180,
       align: 'center' as const,
       render: (text: string) => (
         <span style={{ fontSize: 14 }}>{new Date(text).toLocaleString('zh-CN')}</span>
@@ -216,7 +217,7 @@ export default function DistillationPage() {
     {
       title: '操作',
       key: 'action',
-      width: '35%',
+      width: 300,
       align: 'center' as const,
       render: (_: any, record: any) => (
         <Space size="middle">
@@ -305,10 +306,12 @@ export default function DistillationPage() {
         }
         style={{ marginTop: 24 }}
       >
-        <Table
+        <ResizableTable
+          tableId="distillation-page-list"
           columns={columns}
           dataSource={history}
           rowKey="id"
+          scroll={{ x: 800 }}
           pagination={{
             pageSize: 10,
             showSizeChanger: true,
@@ -328,7 +331,7 @@ export default function DistillationPage() {
               </Empty>
             )
           }}
-          rowClassName={(record) => 
+          rowClassName={(record: any) => 
             record.id === selectedRecordId ? 'ant-table-row-selected' : ''
           }
         />

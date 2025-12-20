@@ -1,5 +1,6 @@
 import express from 'express';
 import { pool } from '../db/database';
+import { encryptionService } from '../services/EncryptionService';
 
 const router = express.Router();
 
@@ -65,22 +66,45 @@ router.get('/records', async (req, res) => {
         a.keyword as article_keyword,
         t.question as topic_question,
         pc.platform_name,
-        pt.status as task_status
+        pt.status as task_status,
+        pa.credentials
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
+       LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
        ${whereClause}
        ORDER BY pr.published_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...params, parseInt(pageSize as string), offset]
     );
 
+    // 解密并提取真实用户名
+    const records = dataResult.rows.map(row => {
+      const record: any = { ...row };
+      delete record.credentials; // 不返回加密的凭证
+      
+      if (row.credentials) {
+        try {
+          const decryptedCredentials = encryptionService.decryptObject(row.credentials);
+          if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
+            record.real_username = decryptedCredentials.userInfo.username;
+          } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
+            record.real_username = decryptedCredentials.username;
+          }
+        } catch (error) {
+          console.error('解密账号凭证失败:', error);
+        }
+      }
+      
+      return record;
+    });
+
     res.json({
       success: true,
       data: {
-        records: dataResult.rows,
+        records,
         total,
         page: parseInt(page as string),
         pageSize: parseInt(pageSize as string)
@@ -121,12 +145,14 @@ router.get('/records/:id', async (req, res) => {
         t.question as topic_question,
         pc.platform_name,
         pt.status as task_status,
-        pt.error_message as task_error
+        pt.error_message as task_error,
+        pa.credentials
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
+       LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
        WHERE pr.id = $1`,
       [recordId]
     );
@@ -138,9 +164,26 @@ router.get('/records/:id', async (req, res) => {
       });
     }
 
+    const record: any = { ...result.rows[0] };
+    delete record.credentials; // 不返回加密的凭证
+    
+    // 解密并提取真实用户名
+    if (result.rows[0].credentials) {
+      try {
+        const decryptedCredentials = encryptionService.decryptObject(result.rows[0].credentials);
+        if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
+          record.real_username = decryptedCredentials.userInfo.username;
+        } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
+          record.real_username = decryptedCredentials.username;
+        }
+      } catch (error) {
+        console.error('解密账号凭证失败:', error);
+      }
+    }
+
     res.json({
       success: true,
-      data: result.rows[0]
+      data: record
     });
   } catch (error: any) {
     console.error('获取发布记录详情失败:', error);
@@ -170,20 +213,43 @@ router.get('/articles/:articleId/records', async (req, res) => {
         pr.platform_url,
         pr.published_at,
         pc.platform_name,
-        pt.status as task_status
+        pt.status as task_status,
+        pa.credentials
        FROM publishing_records pr
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
+       LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
        WHERE pr.article_id = $1
        ORDER BY pr.published_at DESC`,
       [articleId]
     );
 
+    // 解密并提取真实用户名
+    const records = result.rows.map(row => {
+      const record: any = { ...row };
+      delete record.credentials; // 不返回加密的凭证
+      
+      if (row.credentials) {
+        try {
+          const decryptedCredentials = encryptionService.decryptObject(row.credentials);
+          if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
+            record.real_username = decryptedCredentials.userInfo.username;
+          } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
+            record.real_username = decryptedCredentials.username;
+          }
+        } catch (error) {
+          console.error('解密账号凭证失败:', error);
+        }
+      }
+      
+      return record;
+    });
+
     res.json({
       success: true,
       data: {
-        records: result.rows,
-        total: result.rows.length
+        records,
+        total: records.length
       }
     });
   } catch (error: any) {

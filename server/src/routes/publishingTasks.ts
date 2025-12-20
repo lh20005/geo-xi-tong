@@ -486,7 +486,7 @@ router.post('/tasks/delete-all', async (req, res) => {
 });
 
 /**
- * 停止批次（取消批次中所有待处理任务）
+ * 停止批次（取消批次中所有待处理任务，终止运行中任务）
  */
 router.post('/batches/:batchId/stop', async (req, res) => {
   try {
@@ -495,10 +495,18 @@ router.post('/batches/:batchId/stop', async (req, res) => {
     
     const result = await batchExecutor.stopBatch(batchId);
     
+    const messages = [];
+    if (result.cancelledCount > 0) {
+      messages.push(`取消了 ${result.cancelledCount} 个待处理任务`);
+    }
+    if (result.terminatedCount > 0) {
+      messages.push(`终止了 ${result.terminatedCount} 个运行中任务`);
+    }
+    
     res.json({
       success: true,
       data: result,
-      message: `成功停止批次，取消了 ${result.cancelledCount} 个待处理任务`
+      message: `成功停止批次${messages.length > 0 ? '，' + messages.join('，') : ''}`
     });
   } catch (error) {
     console.error('停止批次失败:', error);

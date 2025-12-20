@@ -1,10 +1,13 @@
 import { pool } from '../db/database';
 import { logBroadcaster } from './LogBroadcaster';
+import { encryptionService } from './EncryptionService';
 
 export interface PublishingTask {
   id: number;
   article_id: number;
   account_id: number;
+  account_name?: string;
+  real_username?: string;
   platform_id: string;
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'timeout';
   config: {
@@ -120,19 +123,19 @@ export class PublishingService {
     let paramIndex = 1;
 
     if (status) {
-      conditions.push(`status = $${paramIndex}`);
+      conditions.push(`pt.status = $${paramIndex}`);
       params.push(status);
       paramIndex++;
     }
 
     if (platform_id) {
-      conditions.push(`platform_id = $${paramIndex}`);
+      conditions.push(`pt.platform_id = $${paramIndex}`);
       params.push(platform_id);
       paramIndex++;
     }
 
     if (article_id) {
-      conditions.push(`article_id = $${paramIndex}`);
+      conditions.push(`pt.article_id = $${paramIndex}`);
       params.push(article_id);
       paramIndex++;
     }
@@ -141,17 +144,22 @@ export class PublishingService {
 
     // 获取总数
     const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM publishing_tasks ${whereClause}`,
+      `SELECT COUNT(*) as total FROM publishing_tasks pt ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].total);
 
-    // 获取数据
+    // 获取数据 - 使用LEFT JOIN获取账号信息
     const offset = (page - 1) * pageSize;
     const dataResult = await pool.query(
-      `SELECT * FROM publishing_tasks 
+      `SELECT 
+        pt.*,
+        pa.account_name,
+        pa.credentials
+       FROM publishing_tasks pt
+       LEFT JOIN platform_accounts pa ON pt.account_id = pa.id
        ${whereClause} 
-       ORDER BY created_at DESC 
+       ORDER BY pt.created_at DESC 
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
       [...params, pageSize, offset]
     );
@@ -563,10 +571,11 @@ export class PublishingService {
    * 格式化任务数据
    */
   private formatTask(row: any): PublishingTask {
-    return {
+    const task: PublishingTask = {
       id: row.id,
       article_id: row.article_id,
       account_id: row.account_id,
+      account_name: row.account_name,
       platform_id: row.platform_id,
       status: row.status,
       config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
@@ -582,6 +591,23 @@ export class PublishingService {
       created_at: row.created_at,
       updated_at: row.updated_at
     };
+
+    // 解密并提取真实用户名
+    if (row.credentials) {
+      try {
+        const decryptedCredentials = encryptionService.decryptObject(row.credentials);
+        if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
+          task.real_username = decryptedCredentials.userInfo.username;
+        } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
+          task.real_username = decryptedCredentials.username;
+        }
+      } catch (error) {
+        // 解密失败时忽略，使用 account_name 作为后备
+        console.error('解密账号凭证失败:', error);
+      }
+    }
+
+    return task;
   }
 }
 
