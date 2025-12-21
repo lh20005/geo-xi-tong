@@ -26,7 +26,7 @@ function App() {
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sidebar />
-      <Layout>
+      <Layout style={{ marginLeft: 240 }}>
         <Header />
         <Content style={{ margin: '24px', background: '#fff', borderRadius: 8 }}>
           <Routes>

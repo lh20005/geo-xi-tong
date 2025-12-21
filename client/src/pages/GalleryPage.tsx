@@ -209,9 +209,9 @@ export default function GalleryPage() {
                   onClick={() => navigate(`/gallery/${album.id}`)}
                 >
                   <Card.Meta
-                    title={album.name}
+                    title={<div style={{ textAlign: 'center' }}>{album.name}</div>}
                     description={
-                      <Space direction="vertical" style={{ width: '100%' }}>
+                      <Space direction="vertical" style={{ width: '100%' }} align="center">
                         <div>
                           <Tag color="blue">{album.image_count} 张图片</Tag>
                         </div>

@@ -96,6 +96,12 @@ export default function Sidebar() {
       style={{
         background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
         boxShadow: '2px 0 8px rgba(0,0,0,0.15)',
+        overflow: 'auto',
+        height: '100vh',
+        position: 'fixed',
+        left: 0,
+        top: 0,
+        bottom: 0,
       }}
     >
       <div

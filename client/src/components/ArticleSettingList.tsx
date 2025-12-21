@@ -1,7 +1,8 @@
-import { Table, Button, Space, Empty } from 'antd';
+import { Button, Space, Empty } from 'antd';
 import { EyeOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import type { ArticleSetting } from '../types/articleSettings';
+import ResizableTable from './ResizableTable';
 
 interface ArticleSettingListProps {
   settings: ArticleSetting[];
@@ -23,6 +24,7 @@ export default function ArticleSettingList({
       title: '设置名称',
       dataIndex: 'name',
       key: 'name',
+      width: 200,
       align: 'center',
       ellipsis: true,
     },
@@ -30,6 +32,7 @@ export default function ArticleSettingList({
       title: '提示词预览',
       dataIndex: 'prompt',
       key: 'prompt',
+      width: 400,
       align: 'center',
       ellipsis: true,
       render: (text: string) => {
@@ -41,12 +44,14 @@ export default function ArticleSettingList({
       title: '创建时间',
       dataIndex: 'created_at',
       key: 'created_at',
+      width: 180,
       align: 'center',
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
+      width: 280,
       align: 'center',
       render: (_, record) => (
         <Space>
@@ -78,12 +83,14 @@ export default function ArticleSettingList({
   ];
 
   return (
-    <Table
+    <ResizableTable<ArticleSetting>
+      tableId="article-settings-list"
       columns={columns}
       dataSource={settings}
       loading={loading}
       rowKey="id"
       pagination={false}
+      scroll={{ x: 1060 }}
       locale={{
         emptyText: (
           <Empty

@@ -3,6 +3,7 @@ import { Table } from 'antd';
 import type { TableProps, ColumnsType } from 'antd/es/table';
 import { Resizable, ResizeCallbackData } from 'react-resizable';
 import 'react-resizable/css/styles.css';
+import './ResizableTable.css';
 
 // 阻尼系数：值越小，拖拽越慢（0.3 = 30% 的移动速度）
 const DAMPING_FACTOR = 0.4;
@@ -66,6 +67,8 @@ const ResizableTitle: React.FC<ResizableTitleProps> = (props) => {
             height: '100%',
             cursor: 'col-resize',
             zIndex: 1,
+            // 隐藏手柄的视觉样式，仅保留功能
+            background: 'transparent',
           }}
         />
       }

@@ -175,13 +175,13 @@ export default function KnowledgeBasePage() {
                   style={{ height: '100%' }}
                   onClick={() => navigate(`/knowledge-base/${kb.id}`)}
                 >
-                  <div style={{ marginBottom: 16 }}>
+                  <div style={{ marginBottom: 16, textAlign: 'center' }}>
                     <BookOutlined style={{ fontSize: 32, color: '#1890ff' }} />
                   </div>
                   <Card.Meta
-                    title={<div style={{ fontSize: 16, fontWeight: 600 }}>{kb.name}</div>}
+                    title={<div style={{ fontSize: 16, fontWeight: 600, textAlign: 'center' }}>{kb.name}</div>}
                     description={
-                      <Space direction="vertical" style={{ width: '100%' }} size="small">
+                      <Space direction="vertical" style={{ width: '100%' }} size="small" align="center">
                         {kb.description && (
                           <div style={{ 
                             color: '#666', 
@@ -190,7 +190,8 @@ export default function KnowledgeBasePage() {
                             textOverflow: 'ellipsis',
                             display: '-webkit-box',
                             WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical'
+                            WebkitBoxOrient: 'vertical',
+                            textAlign: 'center'
                           }}>
                             {kb.description}
                           </div>
