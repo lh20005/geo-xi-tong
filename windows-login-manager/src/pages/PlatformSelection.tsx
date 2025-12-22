@@ -11,8 +11,6 @@ interface Platform {
 
 const PlatformSelection: React.FC = () => {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [filteredPlatforms, setFilteredPlatforms] = useState<Platform[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
@@ -20,10 +18,6 @@ const PlatformSelection: React.FC = () => {
   useEffect(() => {
     loadPlatforms();
   }, []);
-
-  useEffect(() => {
-    filterPlatforms();
-  }, [searchQuery, platforms]);
 
   const loadPlatforms = async () => {
     try {
@@ -45,21 +39,6 @@ const PlatformSelection: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const filterPlatforms = () => {
-    if (!searchQuery.trim()) {
-      setFilteredPlatforms(platforms);
-      return;
-    }
-
-    const query = searchQuery.toLowerCase();
-    const filtered = platforms.filter(
-      (p) =>
-        p.platform_name.toLowerCase().includes(query) ||
-        p.platform_id.toLowerCase().includes(query)
-    );
-    setFilteredPlatforms(filtered);
   };
 
   const handlePlatformClick = async (platformId: string) => {
@@ -115,16 +94,6 @@ const PlatformSelection: React.FC = () => {
         <p>选择一个平台进行账号登录</p>
       </div>
 
-      <div className="search-box">
-        <input
-          type="text"
-          placeholder="搜索平台..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          disabled={isLoggingIn}
-        />
-      </div>
-
       {isLoggingIn && (
         <div className="login-progress">
           <div className="progress-content">
@@ -139,12 +108,12 @@ const PlatformSelection: React.FC = () => {
       )}
 
       <div className="platforms-grid">
-        {filteredPlatforms.length === 0 ? (
+        {platforms.length === 0 ? (
           <div className="no-results">
             <p>未找到匹配的平台</p>
           </div>
         ) : (
-          filteredPlatforms.map((platform) => (
+          platforms.map((platform) => (
             <div
               key={platform.platform_id}
               className={`platform-card ${!platform.enabled ? 'disabled' : ''} ${

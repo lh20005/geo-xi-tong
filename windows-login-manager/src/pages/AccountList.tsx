@@ -55,6 +55,20 @@ const AccountList: React.FC = () => {
     return new Date(date).toLocaleString('zh-CN');
   };
 
+  const getPlatformInfo = (platformId: string) => {
+    const platforms: Record<string, { shortName: string }> = {
+      douyin: { shortName: '抖音' },
+      toutiao: { shortName: '头条' },
+      baijia: { shortName: '百家' },
+      wangyi: { shortName: '网易' },
+      sohu: { shortName: '搜狐' },
+      weibo: { shortName: '微博' },
+      zhihu: { shortName: '知乎' },
+      bilibili: { shortName: 'B站' },
+    };
+    return platforms[platformId] || { shortName: platformId.substring(0, 2) };
+  };
+
   if (isLoading) {
     return (
       <div className="account-list">
@@ -89,45 +103,25 @@ const AccountList: React.FC = () => {
         <div className="accounts-grid">
           {accounts.map((account) => {
             const statusBadge = getStatusBadge(account.status);
+            const platformInfo = getPlatformInfo(account.platform_id);
             return (
               <div key={account.id} className="account-card">
                 {account.is_default && (
                   <div className="default-badge">默认</div>
                 )}
                 
-                <div className="account-header">
-                  <div className="account-avatar">
-                    {account.account_name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="account-info">
-                    <h3>{account.account_name}</h3>
-                    <p className="platform-name">{account.platform_id}</p>
-                  </div>
+                <div className="platform-avatar">
+                  {platformInfo.shortName}
                 </div>
-
-                <div className="account-details">
-                  {account.real_username && (
-                    <div className="detail-item">
-                      <span className="detail-label">真实用户名:</span>
-                      <span className="detail-value">{account.real_username}</span>
-                    </div>
-                  )}
-                  <div className="detail-item">
-                    <span className="detail-label">状态:</span>
-                    <span className={`status-badge ${statusBadge.className}`}>
-                      {statusBadge.text}
-                    </span>
-                  </div>
-                  <div className="detail-item">
-                    <span className="detail-label">创建时间:</span>
-                    <span className="detail-value">{formatDate(account.created_at)}</span>
-                  </div>
-                  {account.last_used_at && (
-                    <div className="detail-item">
-                      <span className="detail-label">最后使用:</span>
-                      <span className="detail-value">{formatDate(account.last_used_at)}</span>
-                    </div>
-                  )}
+                
+                <div className="account-name">{account.account_name}</div>
+                
+                {account.real_username && (
+                  <div className="real-username">{account.real_username}</div>
+                )}
+                
+                <div className={`status-badge ${statusBadge.className}`}>
+                  {statusBadge.text}
                 </div>
 
                 <div className="account-actions">
@@ -137,15 +131,17 @@ const AccountList: React.FC = () => {
                       onClick={() =>
                         handleSetDefault(account.platform_id, account.id, account.account_name)
                       }
+                      title="设为默认"
                     >
-                      设为默认
+                      ⭐
                     </button>
                   )}
                   <button
                     className="action-btn delete"
                     onClick={() => handleDelete(account.id, account.account_name)}
+                    title="删除账号"
                   >
-                    删除
+                    🗑️
                   </button>
                 </div>
               </div>
