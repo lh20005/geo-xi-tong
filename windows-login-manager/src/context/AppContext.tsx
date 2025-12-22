@@ -26,7 +26,6 @@ interface AppContextType {
   error: string | null;
   refreshAccounts: () => Promise<void>;
   deleteAccount: (accountId: number) => Promise<void>;
-  setDefaultAccount: (platformId: string, accountId: number) => Promise<void>;
   updateConfig: (config: AppConfig) => Promise<void>;
 }
 
@@ -76,28 +75,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const deleteAccount = async (accountId: number) => {
     try {
       setError(null);
-      await ipcBridge.deleteAccount(accountId);
+      const result = await ipcBridge.deleteAccount(accountId);
+      
+      if (!result.success) {
+        throw new Error(result.error || '删除失败');
+      }
+      
+      // 后端删除成功，更新本地状态
       setAccounts((prev) => prev.filter((a) => a.id !== accountId));
+      return result;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete account');
-      throw err;
-    }
-  };
-
-  const setDefaultAccount = async (platformId: string, accountId: number) => {
-    try {
-      setError(null);
-      await ipcBridge.setDefaultAccount(platformId, accountId);
-      
-      // 更新本地状态
-      setAccounts((prev) =>
-        prev.map((a) => ({
-          ...a,
-          is_default: a.platform_id === platformId ? a.id === accountId : a.is_default,
-        }))
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to set default account');
       throw err;
     }
   };
@@ -120,7 +108,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     error,
     refreshAccounts,
     deleteAccount,
-    setDefaultAccount,
     updateConfig,
   };
 

@@ -230,7 +230,12 @@ class SyncService {
           await apiClient.createAccount(item.data);
           break;
         case 'update':
-          await apiClient.updateAccount(item.data.id, item.data);
+          // 检查是否是设置默认账号操作
+          if (item.data.type === 'set-default') {
+            await apiClient.setDefaultAccount(item.data.platformId, item.data.accountId);
+          } else {
+            await apiClient.updateAccount(item.data.id, item.data);
+          }
           break;
         case 'delete':
           await apiClient.deleteAccount(item.data.id);

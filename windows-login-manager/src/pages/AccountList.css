@@ -90,18 +90,6 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-.default-badge {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  background: #27ae60;
-  color: white;
-  font-size: 0.7rem;
-  padding: 0.2rem 0.6rem;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
 .platform-avatar {
   width: 70px;
   height: 70px;
@@ -175,23 +163,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ecf0f1;
+  background: #ffe5e5;
 }
 
 .action-btn:hover {
   transform: scale(1.1);
-}
-
-.action-btn.set-default {
-  background: #fff3cd;
-}
-
-.action-btn.set-default:hover {
-  background: #ffc107;
-}
-
-.action-btn.delete {
-  background: #ffe5e5;
 }
 
 .action-btn.delete:hover {

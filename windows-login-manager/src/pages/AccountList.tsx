@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import './AccountList.css';
 
 const AccountList: React.FC = () => {
-  const { accounts, isLoading, refreshAccounts, deleteAccount, setDefaultAccount } = useApp();
+  const { accounts, isLoading, refreshAccounts, deleteAccount } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = async () => {
@@ -19,7 +19,7 @@ const AccountList: React.FC = () => {
   };
 
   const handleDelete = async (accountId: number, accountName: string) => {
-    if (!confirm(`确定要删除账号 "${accountName}" 吗？`)) {
+    if (!confirm(`确定要删除账号 "${accountName}" 吗？\n\n注意：此操作需要连接到服务器才能完成。`)) {
       return;
     }
 
@@ -28,17 +28,8 @@ const AccountList: React.FC = () => {
       alert('账号已删除');
     } catch (error) {
       console.error('Failed to delete account:', error);
-      alert('删除失败，请重试');
-    }
-  };
-
-  const handleSetDefault = async (platformId: string, accountId: number, accountName: string) => {
-    try {
-      await setDefaultAccount(platformId, accountId);
-      alert(`已将 "${accountName}" 设为默认账号`);
-    } catch (error) {
-      console.error('Failed to set default account:', error);
-      alert('设置失败，请重试');
+      const errorMessage = error instanceof Error ? error.message : '删除失败，请重试';
+      alert(`删除失败\n\n${errorMessage}`);
     }
   };
 
@@ -106,10 +97,6 @@ const AccountList: React.FC = () => {
             const platformInfo = getPlatformInfo(account.platform_id);
             return (
               <div key={account.id} className="account-card">
-                {account.is_default && (
-                  <div className="default-badge">默认</div>
-                )}
-                
                 <div className="platform-avatar">
                   {platformInfo.shortName}
                 </div>
@@ -125,17 +112,6 @@ const AccountList: React.FC = () => {
                 </div>
 
                 <div className="account-actions">
-                  {!account.is_default && (
-                    <button
-                      className="action-btn set-default"
-                      onClick={() =>
-                        handleSetDefault(account.platform_id, account.id, account.account_name)
-                      }
-                      title="设为默认"
-                    >
-                      ⭐
-                    </button>
-                  )}
                   <button
                     className="action-btn delete"
                     onClick={() => handleDelete(account.id, account.account_name)}

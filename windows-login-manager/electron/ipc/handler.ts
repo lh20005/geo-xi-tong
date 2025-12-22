@@ -147,24 +147,28 @@ class IPCHandler {
       try {
         log.info(`IPC: delete-account - ${accountId}`);
 
-        // 从后端删除
+        // 必须先从后端删除，确保数据同步
         try {
           await apiClient.deleteAccount(accountId);
+          log.info(`Account ${accountId} deleted from backend`);
         } catch (error) {
-          log.warn('Failed to delete from backend:', error);
+          log.error('Failed to delete from backend:', error);
+          // 后端删除失败，不删除本地数据，直接抛出错误
+          throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，删除操作已取消。');
         }
 
-        // 从本地缓存删除
+        // 只有后端删除成功，才删除本地缓存
         const accounts = await storageManager.getAccountsCache();
         const filtered = accounts.filter((a) => a.id !== accountId);
         await storageManager.saveAccountsCache(filtered);
+        log.info(`Account ${accountId} removed from local cache`);
 
         return { success: true };
       } catch (error) {
         log.error('IPC: delete-account failed:', error);
         return {
           success: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
+          error: error instanceof Error ? error.message : '删除失败，请重试',
         };
       }
     });
@@ -176,14 +180,17 @@ class IPCHandler {
         try {
           log.info(`IPC: set-default-account - ${platformId}, ${accountId}`);
 
-          // 更新后端
+          // 必须先更新后端，确保数据同步
           try {
             await apiClient.setDefaultAccount(platformId, accountId);
+            log.info(`Default account set on backend: ${platformId} -> ${accountId}`);
           } catch (error) {
-            log.warn('Failed to set default on backend:', error);
+            log.error('Failed to set default on backend:', error);
+            // 后端更新失败，不更新本地数据，直接抛出错误
+            throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，设置操作已取消。');
           }
 
-          // 更新本地缓存
+          // 只有后端更新成功，才更新本地缓存
           const accounts = await storageManager.getAccountsCache();
           accounts.forEach((a) => {
             if (a.platform_id === platformId) {
@@ -191,13 +198,14 @@ class IPCHandler {
             }
           });
           await storageManager.saveAccountsCache(accounts);
+          log.info(`Default account updated in local cache`);
 
           return { success: true };
         } catch (error) {
           log.error('IPC: set-default-account failed:', error);
           return {
             success: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.message : '设置失败，请重试',
           };
         }
       }
