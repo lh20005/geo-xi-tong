@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Spin, message, Typography, Space, Button, Popconfirm, Tag, Statistic } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Spin, message, Typography, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
+import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined } from '@ant-design/icons';
 import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
 import AccountBindingModal from '../components/Publishing/AccountBindingModal';
 import AccountManagementModal from '../components/Publishing/AccountManagementModal';
+import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 
 const { Title } = Typography;
 
@@ -15,10 +16,83 @@ export default function PlatformManagementPage() {
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
   const [managementModalVisible, setManagementModalVisible] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     loadData();
+    initializeWebSocketConnection();
+
+    return () => {
+      // Cleanup WebSocket on unmount
+      try {
+        const wsClient = getWebSocketClient();
+        wsClient.disconnect();
+      } catch (error) {
+        // WebSocket not initialized
+      }
+    };
   }, []);
+
+  const initializeWebSocketConnection = () => {
+    try {
+      // Get WebSocket URL from environment or use default
+      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
+      
+      // Get auth token from localStorage
+      const token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        console.warn('No auth token found, WebSocket will not connect');
+        return;
+      }
+
+      const wsClient = initializeWebSocket(wsUrl);
+
+      // Set up event listeners
+      wsClient.on('connected', () => {
+        console.log('WebSocket connected');
+        setWsConnected(true);
+      });
+
+      wsClient.on('disconnected', () => {
+        console.log('WebSocket disconnected');
+        setWsConnected(false);
+      });
+
+      wsClient.on('authenticated', () => {
+        console.log('WebSocket authenticated');
+        // Subscribe to account events
+        wsClient.subscribe(['accounts']);
+      });
+
+      wsClient.on('account.created', (data) => {
+        console.log('Account created:', data);
+        message.success('检测到新账号创建');
+        loadData(); // Refresh account list
+      });
+
+      wsClient.on('account.updated', (data) => {
+        console.log('Account updated:', data);
+        message.info('账号信息已更新');
+        loadData(); // Refresh account list
+      });
+
+      wsClient.on('account.deleted', (data) => {
+        console.log('Account deleted:', data);
+        message.warning('账号已被删除');
+        loadData(); // Refresh account list
+      });
+
+      wsClient.on('error', (error) => {
+        console.error('WebSocket error:', error);
+      });
+
+      // Connect to WebSocket
+      wsClient.connect(token);
+    } catch (error) {
+      console.error('Failed to initialize WebSocket:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -243,15 +317,25 @@ export default function PlatformManagementPage() {
           <Space>
             <LoginOutlined style={{ color: '#0ea5e9' }} />
             <span>平台登录</span>
+            {wsConnected && (
+              <Badge status="success" text="实时同步" />
+            )}
           </Space>
         }
         extra={
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={loadData}
-          >
-            刷新
-          </Button>
+          <Space>
+            {wsConnected ? (
+              <Tag icon={<WifiOutlined />} color="success">已连接</Tag>
+            ) : (
+              <Tag icon={<WifiOutlined />} color="default">未连接</Tag>
+            )}
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={loadData}
+            >
+              刷新
+            </Button>
+          </Space>
         }
         bordered={false}
         style={{ marginBottom: 24 }}

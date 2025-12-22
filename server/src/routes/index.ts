@@ -12,9 +12,15 @@ import platformAccountsRouter from './platformAccounts';
 import publishingTasksRouter from './publishingTasks';
 import publishingRecordsRouter from './publishingRecords';
 import { dashboardRouter } from './dashboard';
+import authRouter from './auth';
+import platformsRouter from './platforms';
+import accountsRouter from './accounts';
 
 export const apiRouter = Router();
 
+apiRouter.use('/auth', authRouter);
+apiRouter.use('/platforms', platformsRouter);
+apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);
 apiRouter.use('/distillation', distillationRouter);
 apiRouter.use('/topics', topicRouter);

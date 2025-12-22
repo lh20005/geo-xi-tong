@@ -2,10 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import { createServer } from 'http';
 import { apiRouter } from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { encryptionService } from './services/EncryptionService';
 import { taskScheduler } from './services/TaskScheduler';
+import { webSocketService } from './services/WebSocketService';
 
 dotenv.config({ path: '../.env' });
 
@@ -35,8 +37,15 @@ async function startServer() {
     // 启动任务调度器
     taskScheduler.start();
     
-    app.listen(PORT, () => {
+    // 创建HTTP服务器
+    const server = createServer(app);
+    
+    // 初始化WebSocket服务
+    webSocketService.initialize(server);
+    
+    server.listen(PORT, () => {
       console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
+      console.log(`🔌 WebSocket服务运行在 ws://localhost:${PORT}/ws`);
     });
   } catch (error) {
     console.error('❌ 服务器启动失败:', error);
@@ -48,12 +57,14 @@ async function startServer() {
 process.on('SIGTERM', () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
   taskScheduler.stop();
+  webSocketService.close();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('收到 SIGINT 信号，正在关闭服务器...');
   taskScheduler.stop();
+  webSocketService.close();
   process.exit(0);
 });
 
