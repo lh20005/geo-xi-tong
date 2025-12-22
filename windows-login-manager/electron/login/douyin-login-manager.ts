@@ -1,21 +1,21 @@
-import { BrowserWindow, BrowserView, session } from 'electron';
+import { BrowserWindow, session } from 'electron';
 import log from 'electron-log';
 import { cookieManager, Cookie, StorageData } from './cookie-manager';
 import { storageManager } from '../storage/manager';
 import { syncService } from '../sync/service';
 
 /**
- * 头条号专用登录管理器
- * 基于最佳实践重新实现，确保稳定性和可靠性
+ * 抖音号专用登录管理器
+ * 基于头条登录器的成功经验实现
  * 
  * 核心策略：
- * 1. 使用独立的 session 确保隔离
+ * 1. 使用独立的 BrowserWindow 确保稳定性
  * 2. 简单的 URL 变化检测（最可靠）
  * 3. 完整的错误处理和资源清理
  * 4. 详细的日志记录
  */
 
-interface ToutiaoLoginResult {
+interface DouyinLoginResult {
   success: boolean;
   account?: {
     platform_id: string;
@@ -31,48 +31,50 @@ interface ToutiaoLoginResult {
   error?: string;
 }
 
-interface ToutiaoUserInfo {
+interface DouyinUserInfo {
   username: string;
   avatar?: string;
 }
 
-class ToutiaoLoginManager {
-  private static instance: ToutiaoLoginManager;
+class DouyinLoginManager {
+  private static instance: DouyinLoginManager;
   private loginWindow: BrowserWindow | null = null;
   private isLoginInProgress = false;
   private isCancelled = false;
 
-  // 头条号配置
-  private readonly PLATFORM_ID = 'toutiao';
-  private readonly PLATFORM_NAME = '头条号';
-  private readonly LOGIN_URL = 'https://mp.toutiao.com/auth/page/login';
+  // 抖音号配置
+  private readonly PLATFORM_ID = 'douyin';
+  private readonly PLATFORM_NAME = '抖音号';
+  private readonly LOGIN_URL = 'https://creator.douyin.com/';
   private readonly SUCCESS_URL_PATTERNS = [
-    'mp.toutiao.com/profile_v4',
-    'mp.toutiao.com/creator'
+    'creator.douyin.com/creator-micro',
+    'creator.douyin.com/home'
   ];
   private readonly USERNAME_SELECTORS = [
-    '.auth-avator-name',
-    '.user-name',
+    '.name-_lSSDc',
+    '.header-_F2uzl .name-_lSSDc',
+    '.left-zEzdJX .name-_lSSDc',
+    '[class*="name-"][class*="_"]',
+    '.semi-navigation-header-username',
     '.username',
-    '.account-name',
+    '.user-name',
     '[class*="username"]',
-    '[class*="user-name"]',
-    '.semi-navigation-header-username'
+    '[class*="user-name"]'
   ];
 
   private constructor() {}
 
-  static getInstance(): ToutiaoLoginManager {
-    if (!ToutiaoLoginManager.instance) {
-      ToutiaoLoginManager.instance = new ToutiaoLoginManager();
+  static getInstance(): DouyinLoginManager {
+    if (!DouyinLoginManager.instance) {
+      DouyinLoginManager.instance = new DouyinLoginManager();
     }
-    return ToutiaoLoginManager.instance;
+    return DouyinLoginManager.instance;
   }
 
   /**
    * 开始登录流程
    */
-  async login(parentWindow: BrowserWindow): Promise<ToutiaoLoginResult> {
+  async login(parentWindow: BrowserWindow): Promise<DouyinLoginResult> {
     if (this.isLoginInProgress) {
       return {
         success: false,
@@ -82,7 +84,7 @@ class ToutiaoLoginManager {
 
     this.isLoginInProgress = true;
     this.isCancelled = false;
-    log.info(`[Toutiao] 开始登录流程`);
+    log.info(`[Douyin] 开始登录流程`);
 
     try {
       // 1. 创建登录窗口
@@ -119,7 +121,7 @@ class ToutiaoLoginManager {
         throw new Error('无法提取用户信息');
       }
 
-      log.info(`[Toutiao] 用户信息提取成功: ${userInfo.username}`);
+      log.info(`[Douyin] 用户信息提取成功: ${userInfo.username}`);
 
       // 6. 捕获登录凭证
       const credentials = await this.captureCredentials();
@@ -144,7 +146,7 @@ class ToutiaoLoginManager {
       // 10. 清理资源
       this.cleanup();
 
-      log.info(`[Toutiao] 登录成功完成`);
+      log.info(`[Douyin] 登录成功完成`);
       return {
         success: true,
         account,
@@ -152,7 +154,7 @@ class ToutiaoLoginManager {
       };
 
     } catch (error) {
-      log.error('[Toutiao] 登录失败:', error);
+      log.error('[Douyin] 登录失败:', error);
       this.cleanup();
 
       if (this.isCancelled) {
@@ -174,7 +176,7 @@ class ToutiaoLoginManager {
    * 取消登录
    */
   async cancelLogin(): Promise<void> {
-    log.info('[Toutiao] 取消登录');
+    log.info('[Douyin] 取消登录');
     this.isCancelled = true;
     this.cleanup();
   }
@@ -183,7 +185,7 @@ class ToutiaoLoginManager {
    * 创建登录窗口
    */
   private async createLoginWindow(parent: BrowserWindow): Promise<void> {
-    log.info('[Toutiao] 创建登录窗口');
+    log.info('[Douyin] 创建登录窗口');
 
     // 使用临时 session（每次登录都是全新的）
     // 使用时间戳确保每次都是新的 session
@@ -197,9 +199,9 @@ class ToutiaoLoginManager {
       storages: ['cookies', 'localstorage', 'cachestorage']
     });
 
-    log.info('[Toutiao] 已清除 session 数据，确保全新登录');
+    log.info('[Douyin] 已清除 session 数据，确保全新登录');
 
-    // 配置 session
+    // 配置 session - 使用移动端 User-Agent（抖音创作者平台推荐）
     ses.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
@@ -211,7 +213,7 @@ class ToutiaoLoginManager {
       parent: parent,
       modal: false, // 改为非模态，允许独立操作
       show: false,
-      title: '头条号登录',
+      title: '抖音号登录',
       // 显示标题栏和关闭按钮
       frame: true,
       titleBarStyle: 'default',
@@ -228,13 +230,13 @@ class ToutiaoLoginManager {
     this.loginWindow.once('ready-to-show', () => {
       if (this.loginWindow && !this.isCancelled) {
         this.loginWindow.show();
-        log.info('[Toutiao] 登录窗口已显示');
+        log.info('[Douyin] 登录窗口已显示');
       }
     });
 
     // 监听窗口关闭
     this.loginWindow.on('closed', () => {
-      log.info('[Toutiao] 登录窗口已关闭');
+      log.info('[Douyin] 登录窗口已关闭');
       if (this.isLoginInProgress) {
         this.isCancelled = true;
         this.isLoginInProgress = false; // 重置登录状态
@@ -251,7 +253,7 @@ class ToutiaoLoginManager {
       throw new Error('登录窗口不存在');
     }
 
-    log.info(`[Toutiao] 加载登录页面: ${this.LOGIN_URL}`);
+    log.info(`[Douyin] 加载登录页面: ${this.LOGIN_URL}`);
 
     return new Promise((resolve, reject) => {
       if (!this.loginWindow) {
@@ -280,7 +282,7 @@ class ToutiaoLoginManager {
         if (this.loginWindow) {
           this.loginWindow.removeListener('closed', handleClose);
         }
-        log.info('[Toutiao] 登录页面加载完成');
+        log.info('[Douyin] 登录页面加载完成');
         resolve();
       });
 
@@ -289,7 +291,7 @@ class ToutiaoLoginManager {
         if (this.loginWindow) {
           this.loginWindow.removeListener('closed', handleClose);
         }
-        log.error(`[Toutiao] 页面加载失败: ${errorCode} - ${errorDescription}`);
+        log.error(`[Douyin] 页面加载失败: ${errorCode} - ${errorDescription}`);
         // 不拒绝，因为某些错误不影响登录
         resolve();
       });
@@ -307,7 +309,7 @@ class ToutiaoLoginManager {
       return false;
     }
 
-    log.info('[Toutiao] 等待登录成功...');
+    log.info('[Douyin] 等待登录成功...');
     const startTime = Date.now();
     const timeout = 300000; // 5分钟
 
@@ -321,7 +323,7 @@ class ToutiaoLoginManager {
 
       // 监听窗口关闭事件
       const handleWindowClose = () => {
-        log.info('[Toutiao] 用户关闭了登录窗口');
+        log.info('[Douyin] 用户关闭了登录窗口');
         if (checkInterval) {
           clearInterval(checkInterval);
         }
@@ -346,7 +348,7 @@ class ToutiaoLoginManager {
           if (checkInterval) {
             clearInterval(checkInterval);
           }
-          log.warn('[Toutiao] 登录超时');
+          log.warn('[Douyin] 登录超时');
           resolve(false);
           return;
         }
@@ -361,7 +363,7 @@ class ToutiaoLoginManager {
               if (checkInterval) {
                 clearInterval(checkInterval);
               }
-              log.info(`[Toutiao] 登录成功检测到 URL: ${currentUrl}`);
+              log.info(`[Douyin] 登录成功检测到 URL: ${currentUrl}`);
               resolve(true);
               return;
             }
@@ -382,19 +384,19 @@ class ToutiaoLoginManager {
    * 等待页面稳定
    */
   private async waitForPageStable(): Promise<void> {
-    log.info('[Toutiao] 等待页面稳定...');
+    log.info('[Douyin] 等待页面稳定...');
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   /**
    * 提取用户信息
    */
-  private async extractUserInfo(): Promise<ToutiaoUserInfo | null> {
+  private async extractUserInfo(): Promise<DouyinUserInfo | null> {
     if (!this.loginWindow) {
       return null;
     }
 
-    log.info('[Toutiao] 提取用户信息...');
+    log.info('[Douyin] 提取用户信息...');
 
     // 尝试所有选择器
     for (const selector of this.USERNAME_SELECTORS) {
@@ -407,15 +409,15 @@ class ToutiaoLoginManager {
         `);
 
         if (username) {
-          log.info(`[Toutiao] 用户名提取成功 (${selector}): ${username}`);
+          log.info(`[Douyin] 用户名提取成功 (${selector}): ${username}`);
           return { username };
         }
       } catch (error) {
-        log.debug(`[Toutiao] 选择器失败: ${selector}`);
+        log.debug(`[Douyin] 选择器失败: ${selector}`);
       }
     }
 
-    log.warn('[Toutiao] 无法提取用户信息');
+    log.warn('[Douyin] 无法提取用户信息');
     return null;
   }
 
@@ -427,7 +429,7 @@ class ToutiaoLoginManager {
       throw new Error('登录窗口不存在');
     }
 
-    log.info('[Toutiao] 捕获登录凭证...');
+    log.info('[Douyin] 捕获登录凭证...');
 
     // 捕获 Cookies
     const ses = this.loginWindow.webContents.session;
@@ -444,7 +446,7 @@ class ToutiaoLoginManager {
       sameSite: this.convertSameSite(cookie.sameSite)
     }));
 
-    log.info(`[Toutiao] 捕获 ${cookies.length} 个 Cookies`);
+    log.info(`[Douyin] 捕获 ${cookies.length} 个 Cookies`);
 
     // 捕获 Storage
     const localStorage = await this.loginWindow.webContents.executeJavaScript(`
@@ -477,7 +479,7 @@ class ToutiaoLoginManager {
       })()
     `);
 
-    log.info(`[Toutiao] 捕获 Storage - localStorage: ${Object.keys(localStorage).length}, sessionStorage: ${Object.keys(sessionStorage).length}`);
+    log.info(`[Douyin] 捕获 Storage - localStorage: ${Object.keys(localStorage).length}, sessionStorage: ${Object.keys(sessionStorage).length}`);
 
     return {
       cookies,
@@ -493,7 +495,7 @@ class ToutiaoLoginManager {
    */
   private async saveAccount(account: any): Promise<void> {
     try {
-      log.info('[Toutiao] 保存账号到本地...');
+      log.info('[Douyin] 保存账号到本地...');
 
       const existingAccounts = await storageManager.getAccountsCache();
       const existingIndex = existingAccounts.findIndex(
@@ -507,7 +509,7 @@ class ToutiaoLoginManager {
           ...account,
           updated_at: new Date()
         };
-        log.info('[Toutiao] 更新现有账号');
+        log.info('[Douyin] 更新现有账号');
       } else {
         // 添加新账号
         existingAccounts.push({
@@ -518,13 +520,13 @@ class ToutiaoLoginManager {
           created_at: new Date(),
           updated_at: new Date()
         });
-        log.info('[Toutiao] 添加新账号');
+        log.info('[Douyin] 添加新账号');
       }
 
       await storageManager.saveAccountsCache(existingAccounts);
-      log.info('[Toutiao] 账号保存成功');
+      log.info('[Douyin] 账号保存成功');
     } catch (error) {
-      log.error('[Toutiao] 保存账号失败:', error);
+      log.error('[Douyin] 保存账号失败:', error);
       throw error;
     }
   }
@@ -534,16 +536,16 @@ class ToutiaoLoginManager {
    */
   private async syncToBackend(account: any): Promise<void> {
     try {
-      log.info('[Toutiao] 同步账号到后端...');
+      log.info('[Douyin] 同步账号到后端...');
       const result = await syncService.syncAccount(account);
       
       if (result.success) {
-        log.info('[Toutiao] 账号同步成功');
+        log.info('[Douyin] 账号同步成功');
       } else {
-        log.warn('[Toutiao] 账号同步失败，已加入队列:', result.error);
+        log.warn('[Douyin] 账号同步失败，已加入队列:', result.error);
       }
     } catch (error) {
-      log.error('[Toutiao] 同步账号失败:', error);
+      log.error('[Douyin] 同步账号失败:', error);
       // 不抛出错误，因为已经保存到本地
     }
   }
@@ -552,7 +554,7 @@ class ToutiaoLoginManager {
    * 清理资源
    */
   private cleanup(): void {
-    log.info('[Toutiao] 清理资源...');
+    log.info('[Douyin] 清理资源...');
 
     if (this.loginWindow && !this.loginWindow.isDestroyed()) {
       this.loginWindow.close();
@@ -588,5 +590,5 @@ class ToutiaoLoginManager {
   }
 }
 
-export const toutiaoLoginManager = ToutiaoLoginManager.getInstance();
-export { ToutiaoLoginManager, ToutiaoLoginResult };
+export const douyinLoginManager = DouyinLoginManager.getInstance();
+export { DouyinLoginManager, DouyinLoginResult };

@@ -3,6 +3,7 @@ import log from 'electron-log';
 import { appManager } from '../main';
 import { loginManager, Platform, LoginResult } from '../login/login-manager';
 import { toutiaoLoginManager } from '../login/toutiao-login-manager';
+import { douyinLoginManager } from '../login/douyin-login-manager';
 import { storageManager, AppConfig } from '../storage/manager';
 import { apiClient } from '../api/client';
 import { syncService } from '../sync/service';
@@ -153,6 +154,13 @@ class IPCHandler {
           return result;
         }
 
+        // 抖音号使用专用登录管理器
+        if (platformId === 'douyin') {
+          log.info('IPC: 使用抖音号专用登录管理器');
+          const result = await douyinLoginManager.login(mainWindow);
+          return result;
+        }
+
         // 其他平台使用通用登录管理器
         const platforms = await apiClient.getPlatforms();
         const platform = platforms.find((p) => p.platform_id === platformId);
@@ -181,6 +189,8 @@ class IPCHandler {
         // 如果是头条号，使用专用管理器
         if (platformId === 'toutiao') {
           await toutiaoLoginManager.cancelLogin();
+        } else if (platformId === 'douyin') {
+          await douyinLoginManager.cancelLogin();
         } else {
           await loginManager.cancelLogin();
         }
