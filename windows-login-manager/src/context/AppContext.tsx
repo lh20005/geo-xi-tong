@@ -42,6 +42,46 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     loadInitialData();
   }, []);
 
+  // 监听WebSocket账号事件
+  useEffect(() => {
+    console.log('Setting up WebSocket account event listener...');
+    
+    const cleanup = window.electronAPI.onAccountEvent((event: any) => {
+      console.log('Received account event:', event.type, event.data);
+      
+      switch (event.type) {
+        case 'account.created':
+          // 添加新账号到列表
+          setAccounts((prev) => {
+            // 检查是否已存在（避免重复）
+            if (prev.some(a => a.id === event.data.id)) {
+              return prev;
+            }
+            return [...prev, event.data];
+          });
+          break;
+          
+        case 'account.updated':
+          // 更新现有账号
+          setAccounts((prev) =>
+            prev.map((a) => (a.id === event.data.id ? event.data : a))
+          );
+          break;
+          
+        case 'account.deleted':
+          // 删除账号
+          setAccounts((prev) => prev.filter((a) => a.id !== event.data.id));
+          break;
+      }
+    });
+    
+    // 清理函数
+    return () => {
+      console.log('Cleaning up WebSocket account event listener');
+      cleanup();
+    };
+  }, []);
+
   const loadInitialData = async () => {
     try {
       setIsLoading(true);

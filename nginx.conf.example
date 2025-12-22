@@ -1,0 +1,101 @@
+# Nginx配置示例 - 用于腾讯云生产环境部署
+# 
+# 使用说明：
+# 1. 将此文件复制到 /etc/nginx/sites-available/geo-system
+# 2. 修改 your-domain.com 为你的实际域名
+# 3. 修改SSL证书路径
+# 4. 创建软链接: sudo ln -s /etc/nginx/sites-available/geo-system /etc/nginx/sites-enabled/
+# 5. 测试配置: sudo nginx -t
+# 6. 重启Nginx: sudo systemctl restart nginx
+
+server {
+    listen 80;
+    server_name your-domain.com;
+    
+    # 重定向HTTP到HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+    
+    # SSL证书配置（使用腾讯云SSL证书）
+    ssl_certificate /path/to/your/cert.pem;
+    ssl_certificate_key /path/to/your/key.pem;
+    
+    # SSL安全配置
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    
+    # 日志配置
+    access_log /var/log/nginx/geo-system-access.log;
+    error_log /var/log/nginx/geo-system-error.log;
+    
+    # API代理
+    location /api {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+    
+    # WebSocket代理（WSS）
+    location /ws {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        
+        # WebSocket升级
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # 代理头
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket超时设置（24小时）
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        
+        # 禁用缓冲
+        proxy_buffering off;
+    }
+    
+    # 静态文件（前端构建产物）
+    location / {
+        root /var/www/geo-system/client/dist;
+        try_files $uri $uri/ /index.html;
+        
+        # 缓存配置
+        expires 1d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # 静态资源缓存
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        root /var/www/geo-system/client/dist;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # 安全头
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+    
+    # 文件上传大小限制
+    client_max_body_size 50M;
+}

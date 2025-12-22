@@ -187,7 +187,13 @@ export class WebSocketService {
     };
 
     this.broadcast(message);
-    console.log(`广播账号事件: account.${event}`);
+    
+    const authenticatedCount = this.getAuthenticatedClientCount();
+    console.log(`[WebSocket] 广播账号事件: account.${event}`, {
+      accountId: account.id,
+      authenticatedClients: authenticatedCount,
+      totalClients: this.getClientCount()
+    });
   }
 
   /**

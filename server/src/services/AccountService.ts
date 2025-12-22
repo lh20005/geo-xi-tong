@@ -80,6 +80,74 @@ export class AccountService {
   }
   
   /**
+   * 创建或更新账号（去重逻辑）
+   * 如果同一平台的同一用户名已存在，则更新；否则创建新账号
+   */
+  async createOrUpdateAccount(input: CreateAccountInput, realUsername: string): Promise<{ account: Account; isNew: boolean }> {
+    // 验证凭证格式
+    this.validateCredentials(input.credentials);
+    
+    // 检查是否已存在相同的账号
+    // 使用 real_username 作为唯一标识（如果提供），否则使用 account_name
+    const uniqueIdentifier = realUsername || input.account_name;
+    
+    const existingResult = await pool.query(
+      `SELECT * FROM platform_accounts 
+       WHERE platform_id = $1 
+       AND (real_username = $2 OR (real_username IS NULL AND account_name = $2))
+       LIMIT 1`,
+      [input.platform_id, uniqueIdentifier]
+    );
+    
+    if (existingResult.rows.length > 0) {
+      // 账号已存在，更新凭证和时间
+      const existingAccount = existingResult.rows[0];
+      console.log(`[账号去重] 发现已存在账号 ID: ${existingAccount.id}, 平台: ${input.platform_id}, 用户名: ${uniqueIdentifier}`);
+      
+      const encryptedCredentials = encryptionService.encryptObject(input.credentials);
+      
+      const updateResult = await pool.query(
+        `UPDATE platform_accounts 
+         SET credentials = $1, 
+             real_username = $2,
+             account_name = $3,
+             updated_at = CURRENT_TIMESTAMP,
+             last_used_at = CURRENT_TIMESTAMP
+         WHERE id = $4
+         RETURNING *`,
+        [encryptedCredentials, realUsername, input.account_name, existingAccount.id]
+      );
+      
+      console.log(`[账号去重] 已更新账号 ID: ${existingAccount.id}`);
+      
+      return {
+        account: this.formatAccount(updateResult.rows[0], false),
+        isNew: false
+      };
+    } else {
+      // 账号不存在，创建新账号
+      console.log(`[账号去重] 创建新账号，平台: ${input.platform_id}, 用户名: ${uniqueIdentifier}`);
+      
+      const encryptedCredentials = encryptionService.encryptObject(input.credentials);
+      
+      const insertResult = await pool.query(
+        `INSERT INTO platform_accounts 
+         (platform, platform_id, account_name, credentials, real_username, status, is_default) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+         RETURNING *`,
+        [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, realUsername, 'active', false]
+      );
+      
+      console.log(`[账号去重] 已创建新账号 ID: ${insertResult.rows[0].id}`);
+      
+      return {
+        account: this.formatAccount(insertResult.rows[0], false),
+        isNew: true
+      };
+    }
+  }
+  
+  /**
    * 获取所有账号（不返回凭证）
    */
   async getAllAccounts(): Promise<Account[]> {

@@ -207,20 +207,27 @@ class APIClient {
    */
   async login(username: string, password: string): Promise<AuthResponse> {
     try {
-      const response = await this.axiosInstance.post<AuthResponse>('/api/auth/login', {
+      const response = await this.axiosInstance.post('/api/auth/login', {
         username,
         password,
       });
 
+      // 服务端返回格式: { success: true, data: { token, refreshToken, expiresIn, user } }
+      const { token, refreshToken, expiresIn } = response.data.data;
+
       // 保存Token
       await storageManager.saveTokens(
-        response.data.accessToken,
-        response.data.refreshToken,
-        response.data.expiresIn
+        token,
+        refreshToken,
+        expiresIn
       );
 
       log.info('Login successful');
-      return response.data;
+      return {
+        accessToken: token,
+        refreshToken,
+        expiresIn
+      };
     } catch (error) {
       log.error('Login failed:', error);
       throw error;
@@ -240,19 +247,26 @@ class APIClient {
         return null;
       }
 
-      const response = await this.axiosInstance.post<AuthResponse>('/api/auth/refresh', {
+      const response = await this.axiosInstance.post('/api/auth/refresh', {
         refreshToken: tokens.refreshToken,
       });
 
+      // 服务端返回格式: { success: true, data: { token, expiresIn } }
+      const { token, expiresIn } = response.data.data;
+
       // 保存新Token
       await storageManager.saveTokens(
-        response.data.accessToken,
-        response.data.refreshToken,
-        response.data.expiresIn
+        token,
+        tokens.refreshToken, // 保持原有的refreshToken
+        expiresIn
       );
 
       log.info('Token refreshed successfully');
-      return response.data;
+      return {
+        accessToken: token,
+        refreshToken: tokens.refreshToken,
+        expiresIn
+      };
     } catch (error) {
       log.error('Token refresh failed:', error);
       return null;
@@ -280,9 +294,9 @@ class APIClient {
    */
   async createAccount(account: CreateAccountInput): Promise<Account> {
     try {
-      const response = await this.axiosInstance.post<Account>('/api/accounts', account);
-      log.info(`Account created: ${account.platform_id}`);
-      return response.data;
+      const response = await this.axiosInstance.post<{ success: boolean; data: Account; message?: string; isNew?: boolean }>('/api/publishing/accounts', account);
+      log.info(`Account ${response.data.isNew ? 'created' : 'updated'}: ${account.platform_id}`);
+      return response.data.data;
     } catch (error) {
       log.error('Failed to create account:', error);
       throw error;
@@ -295,12 +309,12 @@ class APIClient {
    */
   async updateAccount(accountId: number, account: UpdateAccountInput): Promise<Account> {
     try {
-      const response = await this.axiosInstance.put<Account>(
-        `/api/accounts/${accountId}`,
+      const response = await this.axiosInstance.put<{ success: boolean; data: Account; message?: string }>(
+        `/api/publishing/accounts/${accountId}`,
         account
       );
       log.info(`Account updated: ${accountId}`);
-      return response.data;
+      return response.data.data;
     } catch (error) {
       log.error('Failed to update account:', error);
       throw error;
@@ -313,7 +327,7 @@ class APIClient {
    */
   async deleteAccount(accountId: number): Promise<void> {
     try {
-      await this.axiosInstance.delete(`/api/accounts/${accountId}`);
+      await this.axiosInstance.delete(`/api/publishing/accounts/${accountId}`);
       log.info(`Account deleted: ${accountId}`);
     } catch (error) {
       log.error('Failed to delete account:', error);
@@ -327,9 +341,9 @@ class APIClient {
    */
   async getAccounts(): Promise<Account[]> {
     try {
-      const response = await this.axiosInstance.get<Account[]>('/api/accounts');
-      log.info(`Retrieved ${response.data.length} accounts`);
-      return response.data;
+      const response = await this.axiosInstance.get<{ success: boolean; data: Account[] }>('/api/publishing/accounts');
+      log.info(`Retrieved ${response.data.data.length} accounts`);
+      return response.data.data;
     } catch (error) {
       log.error('Failed to get accounts:', error);
       throw error;
@@ -342,8 +356,8 @@ class APIClient {
    */
   async getAccount(accountId: number): Promise<Account> {
     try {
-      const response = await this.axiosInstance.get<Account>(`/api/accounts/${accountId}`);
-      return response.data;
+      const response = await this.axiosInstance.get<{ success: boolean; data: Account }>(`/api/publishing/accounts/${accountId}`);
+      return response.data.data;
     } catch (error) {
       log.error('Failed to get account:', error);
       throw error;
@@ -356,7 +370,7 @@ class APIClient {
    */
   async setDefaultAccount(platformId: string, accountId: number): Promise<void> {
     try {
-      await this.axiosInstance.post(`/api/accounts/${accountId}/set-default`, {
+      await this.axiosInstance.post(`/api/publishing/accounts/${accountId}/set-default`, {
         platform_id: platformId,
       });
       log.info(`Set default account: ${accountId} for platform: ${platformId}`);

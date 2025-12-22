@@ -1,6 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/database';
+import { authService } from '../services/AuthService';
 
 const router = express.Router();
 
@@ -47,12 +48,10 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    // 查询用户（这里简化处理，实际应该有用户表）
-    // 临时方案：使用环境变量或固定用户
-    const validUsername = process.env.ADMIN_USERNAME || 'admin';
-    const validPassword = process.env.ADMIN_PASSWORD || 'admin123';
-
-    if (username !== validUsername || password !== validPassword) {
+    // 验证用户
+    const user = await authService.validateUser(username, password);
+    
+    if (!user) {
       return res.status(401).json({
         success: false,
         message: '用户名或密码错误'
@@ -60,15 +59,10 @@ router.post('/login', async (req, res) => {
     }
 
     // 生成令牌
-    const userId = 1; // 临时用户ID
-    const accessToken = generateAccessToken(userId, username);
-    const refreshToken = generateRefreshToken(userId);
+    const accessToken = generateAccessToken(user.id, user.username);
+    const refreshToken = generateRefreshToken(user.id);
 
-    // 保存刷新令牌到数据库（可选）
-    // await pool.query(
-    //   'INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)',
-    //   [userId, refreshToken, new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)]
-    // );
+    console.log(`[Auth] 用户登录成功: ${username}`);
 
     res.json({
       success: true,
@@ -77,13 +71,15 @@ router.post('/login', async (req, res) => {
         refreshToken,
         expiresIn: 3600, // 1小时（秒）
         user: {
-          id: userId,
-          username
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          role: user.role
         }
       }
     });
   } catch (error) {
-    console.error('登录失败:', error);
+    console.error('[Auth] 登录失败:', error);
     res.status(500).json({
       success: false,
       message: '登录失败'

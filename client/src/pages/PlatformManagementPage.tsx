@@ -42,55 +42,61 @@ export default function PlatformManagementPage() {
       const token = localStorage.getItem('auth_token');
       
       if (!token) {
-        console.warn('No auth token found, WebSocket will not connect');
+        console.warn('[WebSocket] 没有auth token，无法连接WebSocket');
         return;
       }
 
+      console.log('[WebSocket] 初始化WebSocket连接');
       const wsClient = initializeWebSocket(wsUrl);
 
       // Set up event listeners
       wsClient.on('connected', () => {
-        console.log('WebSocket connected');
+        console.log('[WebSocket] 连接成功');
         setWsConnected(true);
       });
 
       wsClient.on('disconnected', () => {
-        console.log('WebSocket disconnected');
+        console.log('[WebSocket] 连接断开');
         setWsConnected(false);
       });
 
       wsClient.on('authenticated', () => {
-        console.log('WebSocket authenticated');
+        console.log('[WebSocket] 认证成功');
         // Subscribe to account events
         wsClient.subscribe(['accounts']);
       });
 
       wsClient.on('account.created', (data) => {
-        console.log('Account created:', data);
+        console.log('[WebSocket] 收到账号创建事件:', data);
         message.success('检测到新账号创建');
         loadData(); // Refresh account list
       });
 
       wsClient.on('account.updated', (data) => {
-        console.log('Account updated:', data);
+        console.log('[WebSocket] 收到账号更新事件:', data);
         message.info('账号信息已更新');
         loadData(); // Refresh account list
       });
 
       wsClient.on('account.deleted', (data) => {
-        console.log('Account deleted:', data);
+        console.log('[WebSocket] 收到账号删除事件:', data);
         message.warning('账号已被删除');
         loadData(); // Refresh account list
       });
 
       wsClient.on('error', (error) => {
-        console.error('WebSocket error:', error);
+        console.error('[WebSocket] 错误:', error);
       });
 
-      // Connect to WebSocket
+      wsClient.on('server_error', (message) => {
+        console.error('[WebSocket] 服务端错误:', message);
+      });
+
+      // Connect to WebSocket with token
+      console.log('[WebSocket] 使用token连接');
       wsClient.connect(token);
     } catch (error) {
-      console.error('Failed to initialize WebSocket:', error);
+      console.error('[WebSocket] 初始化失败:', error);
     }
   };
 

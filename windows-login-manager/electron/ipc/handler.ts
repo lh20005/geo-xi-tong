@@ -1,10 +1,12 @@
-import { ipcMain, app } from 'electron';
+import { ipcMain, app, BrowserWindow } from 'electron';
 import log from 'electron-log';
 import { appManager } from '../main';
 import { loginManager, Platform, LoginResult } from '../login/login-manager';
 import { storageManager, AppConfig } from '../storage/manager';
 import { apiClient } from '../api/client';
 import { syncService } from '../sync/service';
+import { wsManager, WebSocketManager } from '../websocket/manager';
+import { AccountEvent } from '../websocket/client';
 import path from 'path';
 import fs from 'fs/promises';
 
@@ -50,6 +52,14 @@ class IPCHandler {
     // 同步管理
     this.registerSyncHandlers();
 
+    // WebSocket管理
+    this.registerWebSocketHandlers();
+    
+    // 设置WebSocket事件转发回调
+    wsManager.setEventForwardCallback((event: AccountEvent) => {
+      this.broadcastAccountEvent(event);
+    });
+
     log.info('IPC handlers registered');
   }
 
@@ -57,6 +67,73 @@ class IPCHandler {
    * 注册登录相关处理器
    */
   private registerLoginHandlers(): void {
+    // 系统登录
+    ipcMain.handle('login', async (event, username: string, password: string) => {
+      try {
+        log.info(`IPC: login - ${username}`);
+        
+        // 调用API登录
+        await apiClient.login(username, password);
+        
+        // 登录成功后初始化WebSocket
+        const config = await storageManager.getConfig();
+        if (config) {
+          const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
+          const tokens = await storageManager.getTokens();
+          
+          if (tokens?.accessToken) {
+            await wsManager.initialize({
+              serverUrl: wsUrl,
+              token: tokens.accessToken
+            });
+            log.info('WebSocket initialized after login');
+          }
+        }
+        
+        return { success: true };
+      } catch (error) {
+        log.error('IPC: login failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '登录失败',
+        };
+      }
+    });
+
+    // 系统登出
+    ipcMain.handle('logout', async () => {
+      try {
+        log.info('IPC: logout');
+        
+        // 断开WebSocket
+        wsManager.disconnect();
+        
+        // 调用API登出
+        await apiClient.logout();
+        
+        return { success: true };
+      } catch (error) {
+        log.error('IPC: logout failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '登出失败',
+        };
+      }
+    });
+
+    // 检查认证状态
+    ipcMain.handle('check-auth', async () => {
+      try {
+        const tokens = await storageManager.getTokens();
+        return {
+          isAuthenticated: !!tokens?.accessToken
+        };
+      } catch (error) {
+        log.error('IPC: check-auth failed:', error);
+        return { isAuthenticated: false };
+      }
+    });
+
     // 平台登录
     ipcMain.handle('login-platform', async (event, platformId: string) => {
       try {
@@ -249,6 +326,22 @@ class IPCHandler {
         // 更新API客户端的baseURL
         if (config.serverUrl) {
           await apiClient.setBaseURL(config.serverUrl);
+          
+          // 重新连接WebSocket（如果有token）
+          const tokens = await storageManager.getTokens();
+          if (tokens?.accessToken) {
+            try {
+              const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
+              await wsManager.reconnect({
+                serverUrl: wsUrl,
+                token: tokens.accessToken
+              });
+              log.info('WebSocket reconnected with new server URL');
+            } catch (error) {
+              log.error('Failed to reconnect WebSocket:', error);
+              // 不阻止配置保存
+            }
+          }
         }
 
         return { success: true };
@@ -386,6 +479,84 @@ class IPCHandler {
         };
       }
     });
+  }
+
+  /**
+   * 注册WebSocket管理处理器
+   * Requirements: 3.1, 3.2, 3.3
+   */
+  private registerWebSocketHandlers(): void {
+    // 获取WebSocket状态
+    ipcMain.handle('get-websocket-status', async () => {
+      try {
+        log.info('IPC: get-websocket-status');
+        return wsManager.getStatus();
+      } catch (error) {
+        log.error('IPC: get-websocket-status failed:', error);
+        return {
+          connected: false,
+          authenticated: false,
+          reconnectAttempts: 0,
+          lastError: error instanceof Error ? error.message : 'Unknown error'
+        };
+      }
+    });
+
+    // 手动重新连接WebSocket
+    ipcMain.handle('reconnect-websocket', async () => {
+      try {
+        log.info('IPC: reconnect-websocket');
+        
+        const config = await storageManager.getConfig();
+        const tokens = await storageManager.getTokens();
+        
+        if (!config || !config.serverUrl) {
+          return {
+            success: false,
+            error: 'No server URL configured'
+          };
+        }
+        
+        if (!tokens?.accessToken) {
+          return {
+            success: false,
+            error: 'No access token available'
+          };
+        }
+        
+        const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
+        await wsManager.reconnect({
+          serverUrl: wsUrl,
+          token: tokens.accessToken
+        });
+        
+        return { success: true };
+      } catch (error) {
+        log.error('IPC: reconnect-websocket failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    });
+  }
+
+  /**
+   * 广播账号事件到所有渲染进程
+   * Requirements: 3.1, 3.2
+   */
+  broadcastAccountEvent(event: AccountEvent): void {
+    try {
+      log.info(`Broadcasting account event to renderers: ${event.type}`);
+      
+      BrowserWindow.getAllWindows().forEach(window => {
+        if (!window.isDestroyed()) {
+          window.webContents.send('account-event', event);
+        }
+      });
+    } catch (error) {
+      log.error('Failed to broadcast account event:', error);
+    }
   }
 
   /**

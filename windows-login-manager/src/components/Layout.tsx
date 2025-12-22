@@ -4,9 +4,10 @@ import './Layout.css';
 
 interface LayoutProps {
   children: ReactNode;
+  onLogout?: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children }) => {
+const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
   const location = useLocation();
 
   const isActive = (path: string) => {
@@ -39,6 +40,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Link>
           </li>
         </ul>
+        {onLogout && (
+          <div className="sidebar-footer">
+            <button onClick={onLogout} className="logout-button">
+              <span className="icon">🚪</span>
+              <span>退出登录</span>
+            </button>
+          </div>
+        )}
       </nav>
       <main className="main-content">{children}</main>
     </div>

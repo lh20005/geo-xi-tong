@@ -103,7 +103,7 @@ router.get('/accounts/:id', async (req, res) => {
  */
 router.post('/accounts', async (req, res) => {
   try {
-    const { platform_id, account_name, credentials } = req.body;
+    const { platform_id, account_name, credentials, real_username } = req.body;
     
     if (!platform_id || !account_name || !credentials) {
       return res.status(400).json({
@@ -112,25 +112,43 @@ router.post('/accounts', async (req, res) => {
       });
     }
     
-    const account = await accountService.createAccount({
-      platform_id,
-      account_name,
-      credentials
-    });
+    // 使用 createOrUpdateAccount 实现去重
+    let result;
+    if (real_username) {
+      result = await accountService.createOrUpdateAccount({
+        platform_id,
+        account_name,
+        credentials
+      }, real_username);
+    } else {
+      // 如果没有 real_username，使用 account_name 作为唯一标识
+      result = await accountService.createOrUpdateAccount({
+        platform_id,
+        account_name,
+        credentials
+      }, account_name);
+    }
     
-    // 广播账号创建事件
-    webSocketService.broadcastAccountEvent('created', account);
+    const { account, isNew } = result;
+    
+    // 广播账号事件
+    if (isNew) {
+      webSocketService.broadcastAccountEvent('created', account);
+    } else {
+      webSocketService.broadcastAccountEvent('updated', account);
+    }
     
     res.json({
       success: true,
       data: account,
-      message: '账号创建成功'
+      message: isNew ? '账号创建成功' : '账号已更新',
+      isNew
     });
   } catch (error: any) {
-    console.error('创建账号失败:', error);
+    console.error('创建/更新账号失败:', error);
     res.status(400).json({
       success: false,
-      message: error.message || '创建账号失败'
+      message: error.message || '创建/更新账号失败'
     });
   }
 });
@@ -172,17 +190,23 @@ router.delete('/accounts/:id', async (req, res) => {
   try {
     const accountId = parseInt(req.params.id);
     
+    console.log(`[DELETE] 收到删除账号请求: ID=${accountId}`);
+    
     await accountService.deleteAccount(accountId);
+    
+    console.log(`[DELETE] 账号删除成功: ID=${accountId}`);
     
     // 广播账号删除事件
     webSocketService.broadcastAccountEvent('deleted', { id: accountId });
+    
+    console.log(`[DELETE] WebSocket事件已广播: account.deleted, ID=${accountId}`);
     
     res.json({
       success: true,
       message: '账号删除成功'
     });
   } catch (error: any) {
-    console.error('删除账号失败:', error);
+    console.error('[DELETE] 删除账号失败:', error);
     res.status(400).json({
       success: false,
       message: error.message || '删除账号失败'

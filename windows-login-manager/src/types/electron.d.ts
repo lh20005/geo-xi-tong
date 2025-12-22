@@ -1,5 +1,10 @@
 // Electron API类型定义
 export interface ElectronAPI {
+  // 系统登录
+  login: (username: string, password: string) => Promise<AuthResult>;
+  logout: () => Promise<void>;
+  checkAuth: () => Promise<{ isAuthenticated: boolean }>;
+  
   // 平台登录
   loginPlatform: (platformId: string) => Promise<LoginResult>;
   
@@ -21,6 +26,17 @@ export interface LoginResult {
   success: boolean;
   account?: Account;
   message?: string;
+}
+
+export interface AuthResult {
+  success: boolean;
+  error?: string;
+  user?: {
+    id: number;
+    username: string;
+    email?: string;
+    role: string;
+  };
 }
 
 export interface Account {

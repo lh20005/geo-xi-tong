@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // 定义暴露给渲染进程的API类型
 export interface ElectronAPI {
+  // 系统登录
+  login: (username: string, password: string) => Promise<any>;
+  logout: () => Promise<any>;
+  checkAuth: () => Promise<{ isAuthenticated: boolean }>;
+  
   // 平台登录
   loginPlatform: (platformId: string) => Promise<any>;
   cancelLogin: () => Promise<any>;
@@ -28,10 +33,21 @@ export interface ElectronAPI {
   getSyncStatus: () => Promise<any>;
   triggerSync: () => Promise<any>;
   clearSyncQueue: () => Promise<any>;
+  
+  // WebSocket管理
+  getWebSocketStatus: () => Promise<any>;
+  reconnectWebSocket: () => Promise<any>;
+  onAccountEvent: (callback: (event: any) => void) => () => void;
 }
 
 // 通过contextBridge安全地暴露API
 contextBridge.exposeInMainWorld('electronAPI', {
+  // 系统登录
+  login: (username: string, password: string) =>
+    ipcRenderer.invoke('login', username, password),
+  logout: () => ipcRenderer.invoke('logout'),
+  checkAuth: () => ipcRenderer.invoke('check-auth'),
+  
   // 平台登录
   loginPlatform: (platformId: string) =>
     ipcRenderer.invoke('login-platform', platformId),
@@ -61,6 +77,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
   triggerSync: () => ipcRenderer.invoke('trigger-sync'),
   clearSyncQueue: () => ipcRenderer.invoke('clear-sync-queue'),
+  
+  // WebSocket管理
+  getWebSocketStatus: () => ipcRenderer.invoke('get-websocket-status'),
+  reconnectWebSocket: () => ipcRenderer.invoke('reconnect-websocket'),
+  onAccountEvent: (callback: (event: any) => void) => {
+    const listener = (_event: any, data: any) => callback(data);
+    ipcRenderer.on('account-event', listener);
+    // 返回清理函数
+    return () => {
+      ipcRenderer.removeListener('account-event', listener);
+    };
+  },
 } as ElectronAPI);
 
 // 声明全局类型

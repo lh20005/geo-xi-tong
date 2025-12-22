@@ -64,3 +64,33 @@
   overflow-y: auto;
   background: #ecf0f1;
 }
+
+.sidebar-footer {
+  padding: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.logout-button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(231, 76, 60, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.logout-button:hover {
+  background: rgba(231, 76, 60, 0.2);
+  color: white;
+  border-color: rgba(231, 76, 60, 0.5);
+}
+
+.logout-button .icon {
+  margin-right: 0.75rem;
+  font-size: 1.2rem;
+}

@@ -84,25 +84,20 @@ class LoginManager {
 
       log.info('BrowserView created, waiting for user login...');
 
-      // 2. 等待页面加载
-      try {
-        await browserViewManager.waitForLoad();
-      } catch (error) {
-        // 如果是因为取消导致的错误，直接返回
-        if (!this.isLoginInProgress) {
-          log.info('Login was cancelled during page load');
-          return {
-            success: false,
-            message: 'Login cancelled',
-          };
-        }
-        throw error;
-      }
+      // 2. 等待页面开始加载并记录初始URL
+      // 等待一小段时间让页面开始加载到登录页面
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // 记录初始登录URL（用于检测URL变化）
+      const initialLoginUrl = view.webContents.getURL();
+      log.info(`Initial login URL recorded: ${initialLoginUrl}`);
 
       // 3. 配置登录检测
       const detectionConfig: LoginDetectionConfig = {
+        initialUrl: initialLoginUrl, // 传递初始登录URL
         successSelectors: platform.selectors.loginSuccess,
-        successUrls: platform.detection?.successUrls,
+        // 优先从 selectors.successUrls 读取（新格式），其次从 detection.successUrls（旧格式）
+        successUrls: (platform.selectors as any).successUrls || platform.detection?.successUrls,
         failureSelectors: platform.detection?.failureSelectors,
         timeout: platform.detection?.timeout || 300000, // 默认5分钟
       };

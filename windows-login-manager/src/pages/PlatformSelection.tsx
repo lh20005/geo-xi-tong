@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ipcBridge from '../services/ipc';
+import { useApp } from '../context/AppContext';
 import './PlatformSelection.css';
 
 interface Platform {
@@ -10,6 +11,7 @@ interface Platform {
 }
 
 const PlatformSelection: React.FC = () => {
+  const { refreshAccounts } = useApp();
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -52,6 +54,14 @@ const PlatformSelection: React.FC = () => {
 
       if (result.success) {
         alert(`登录成功！账号：${result.account?.account_name}`);
+        
+        // 刷新账号列表
+        try {
+          await refreshAccounts();
+          console.log('Accounts refreshed after successful login');
+        } catch (refreshError) {
+          console.error('Failed to refresh accounts:', refreshError);
+        }
       } else {
         // 如果是用户取消登录，不显示错误提示
         if (result.message === 'Login cancelled') {

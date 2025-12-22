@@ -6,6 +6,19 @@
 class IPCBridge {
   private api = window.electronAPI;
 
+  // 系统登录
+  async login(username: string, password: string): Promise<any> {
+    return await this.api.login(username, password);
+  }
+
+  async logout(): Promise<any> {
+    return await this.api.logout();
+  }
+
+  async checkAuth(): Promise<{ isAuthenticated: boolean }> {
+    return await this.api.checkAuth();
+  }
+
   // 平台登录
   async loginPlatform(platformId: string): Promise<any> {
     return await this.api.loginPlatform(platformId);

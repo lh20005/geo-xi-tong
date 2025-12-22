@@ -13,6 +13,7 @@ interface LoginDetectionConfig {
   successSelectors?: string[]; // 登录成功后出现的元素选择器
   failureSelectors?: string[]; // 登录失败时出现的元素选择器
   timeout?: number; // 超时时间（毫秒）
+  initialUrl?: string; // 初始登录URL（可选，如果不提供则自动获取）
 }
 
 interface LoginDetectionResult {
@@ -58,6 +59,11 @@ class LoginDetector {
   /**
    * 等待登录成功
    * Requirements: 2.3, 13.4
+   * 
+   * 策略：参考网页端成功经验，优先使用简单的URL变化检测
+   * 1. 记录初始登录URL
+   * 2. 检测URL是否发生变化（任何变化都视为登录成功）
+   * 3. 备用方案：检测成功元素
    */
   async waitForLoginSuccess(
     view: BrowserView,
@@ -69,7 +75,10 @@ class LoginDetector {
     // 重置取消标志
     this.resetCancellation();
 
-    log.info('Starting login detection...');
+    // 记录初始URL（关键：用于检测URL变化）
+    // 如果配置中提供了初始URL，使用它；否则获取当前URL
+    const initialUrl = config.initialUrl || view.webContents.getURL();
+    log.info(`Starting login detection... Initial URL: ${initialUrl}`);
 
     return new Promise((resolve) => {
       let resolved = false;
@@ -105,17 +114,45 @@ class LoginDetector {
         return false;
       };
 
-      // 监听URL变化
+      // 监听URL变化 - 参考网页端：任何URL变化都视为登录成功
       const urlChangeHandler = () => {
         if (resolved || checkCancellation()) return;
 
+        // 检查 view 是否仍然存在（防止 null 引用错误）
+        if (!view || !view.webContents || view.webContents.isDestroyed()) {
+          log.debug('BrowserView no longer available, stopping URL detection');
+          return;
+        }
+
         const currentUrl = view.webContents.getURL();
         
+        // 策略1：检测URL是否发生变化（最可靠，参考网页端）
+        if (currentUrl !== initialUrl) {
+          // 排除错误页面
+          if (currentUrl.includes('about:blank') || currentUrl.includes('chrome-error://')) {
+            log.debug(`Ignoring URL change to error page: ${currentUrl}`);
+            return;
+          }
+          
+          resolved = true;
+          clearTimeout(timeoutTimer);
+          this.stopDetection();
+          log.info(`Login success detected by URL change: ${initialUrl} -> ${currentUrl}`);
+          resolve({
+            success: true,
+            method: 'url',
+            message: 'Login successful (URL changed)',
+            url: currentUrl,
+          });
+          return;
+        }
+        
+        // 策略2：如果配置了特定的成功URL模式，也检查一下
         if (config.successUrls && this.matchesUrlPattern(currentUrl, config.successUrls)) {
           resolved = true;
           clearTimeout(timeoutTimer);
           this.stopDetection();
-          log.info('Login success detected by URL change');
+          log.info('Login success detected by URL pattern match');
           resolve({
             success: true,
             method: 'url',
@@ -129,11 +166,45 @@ class LoginDetector {
       view.webContents.on('did-navigate', urlChangeHandler);
       view.webContents.on('did-navigate-in-page', urlChangeHandler);
 
-      // 定期检查元素
+      // 定期检查元素（备用方案）
       this.detectionInterval = setInterval(async () => {
         if (resolved || checkCancellation()) return;
 
+        // 检查 view 是否仍然存在
+        if (!view || !view.webContents || view.webContents.isDestroyed()) {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutTimer);
+            this.stopDetection();
+            log.info('BrowserView destroyed during detection');
+            resolve({
+              success: false,
+              method: 'timeout',
+              message: 'Login cancelled',
+            });
+          }
+          return;
+        }
+
         try {
+          // 再次检查URL变化（防止事件丢失）
+          const currentUrl = view.webContents.getURL();
+          if (currentUrl !== initialUrl && 
+              !currentUrl.includes('about:blank') && 
+              !currentUrl.includes('chrome-error://')) {
+            resolved = true;
+            clearTimeout(timeoutTimer);
+            this.stopDetection();
+            log.info(`Login success detected by URL change (polling): ${initialUrl} -> ${currentUrl}`);
+            resolve({
+              success: true,
+              method: 'url',
+              message: 'Login successful (URL changed)',
+              url: currentUrl,
+            });
+            return;
+          }
+          
           // 检查失败元素
           if (config.failureSelectors) {
             for (const selector of config.failureSelectors) {
@@ -153,7 +224,7 @@ class LoginDetector {
             }
           }
 
-          // 检查成功元素
+          // 检查成功元素（备用方案）
           if (config.successSelectors) {
             for (const selector of config.successSelectors) {
               const exists = await userInfoExtractor.elementExists(view, selector);
