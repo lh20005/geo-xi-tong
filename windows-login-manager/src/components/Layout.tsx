@@ -21,12 +21,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
         <ul className="nav-menu">
           <li>
-            <Link to="/dashboard" className={isActive('/dashboard')}>
-              <span className="icon">📊</span>
-              <span>仪表板</span>
-            </Link>
-          </li>
-          <li>
             <Link to="/platforms" className={isActive('/platforms')}>
               <span className="icon">🚀</span>
               <span>平台登录</span>
