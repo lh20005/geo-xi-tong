@@ -425,16 +425,39 @@ export class DouyinAdapter extends PlatformAdapter {
       const addDeclarationButton = '.content-right-ik9gts .addUserDeclaration-dq21tU';
       
       try {
-        console.log(`[抖音号] 添加自主声明按钮选择器（简化）: ${addDeclarationButton}`);
+        console.log(`[抖音号] 添加自主声明按钮选择器: ${addDeclarationButton}`);
         console.log('[抖音号] ⏳ 等待"添加自主声明"按钮出现（5秒）...');
         await page.waitForSelector(addDeclarationButton, { timeout: 5000 });
         console.log('[抖音号] ✅ 找到"添加自主声明"按钮');
         
         console.log('[抖音号] 🖱️  点击"添加自主声明"按钮...');
         await page.click(addDeclarationButton);
-        console.log('[抖音号] ⏳ 等待侧滑页弹出和完全加载（8秒）...');
-        await new Promise(resolve => setTimeout(resolve, 8000));
-        console.log('[抖音号] ✅ 侧滑页应该已完全加载');
+        console.log('[抖音号] ⏳ 等待侧滑页容器出现...');
+        
+        // 等待侧滑页容器出现
+        const sidesheetSelector = '.semi-sidesheet-inner.semi-sidesheet-inner-wrap';
+        await page.waitForSelector(sidesheetSelector, { timeout: 5000 });
+        console.log('[抖音号] ✅ 侧滑页容器已出现');
+        
+        // 使用waitForFunction等待动画真正完成
+        console.log('[抖音号] ⏳ 等待侧滑动画完全完成...');
+        await page.waitForFunction(() => {
+          const sidesheet = document.querySelector('.semi-sidesheet-inner.semi-sidesheet-inner-wrap');
+          if (!sidesheet) return false;
+          
+          // 检查transform是否已经完成
+          const style = window.getComputedStyle(sidesheet);
+          const transform = style.transform;
+          
+          // 如果transform是none或者translate(0px)，说明动画完成
+          return transform === 'none' || 
+                 transform.includes('matrix(1, 0, 0, 1, 0, 0)') ||
+                 !transform.includes('translate');
+        }, { timeout: 10000 });
+        console.log('[抖音号] ✅ 侧滑动画已完成');
+        
+        // 额外等待确保内容稳定
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 截图查看侧边栏状态
         try {
@@ -444,54 +467,183 @@ export class DouyinAdapter extends PlatformAdapter {
           console.log('[抖音号] 截图失败:', e);
         }
         
-        // 点击"内容由AI生成"选项 - 使用XPath精确查找
-        console.log('[抖音号] 🔍 查找"内容由AI生成"选项...');
-        
-        // 获取所有元素，查找包含"内容由AI生成"的元素
-        const allElements = await page.$$('*');
-        let aiElement = null;
-        
-        for (const element of allElements) {
-          const text = await page.evaluate(el => el.textContent?.trim(), element);
-          if (text && text.includes('内容由AI生成')) {
-            const isVisible = await page.evaluate(el => {
-              const style = window.getComputedStyle(el);
-              const rect = el.getBoundingClientRect();
+        // 打印所有可见的label元素，用于调试
+        console.log('[抖音号] 🔍 调试：列出所有可见的label元素...');
+        const debugLabels = await page.evaluate(() => {
+          const labels = Array.from(document.querySelectorAll('label'));
+          return labels
+            .filter(label => {
+              const style = window.getComputedStyle(label);
+              const rect = label.getBoundingClientRect();
               return style.display !== 'none' && 
                      style.visibility !== 'hidden' && 
                      rect.width > 0 && 
                      rect.height > 0;
-            }, element);
-            
-            if (isVisible) {
-              aiElement = element;
-              console.log(`[抖音号] ✅ 找到"内容由AI生成"选项: "${text}"`);
-              break;
+            })
+            .map(label => ({
+              text: label.textContent?.trim(),
+              className: label.className,
+              visible: true
+            }));
+        });
+        console.log('[抖音号] 可见的label元素:', JSON.stringify(debugLabels, null, 2));
+        
+        // 查找"内容由AI生成"选项 - 使用JavaScript直接点击
+        console.log('[抖音号] 🔍 查找并点击"内容由AI生成"选项...');
+        const aiClicked = await page.evaluate(() => {
+          const labels = Array.from(document.querySelectorAll('label'));
+          
+          for (const label of labels) {
+            const text = label.textContent?.trim() || '';
+            if (text.includes('内容由AI生成') || text.includes('内容由ai生成')) {
+              const style = window.getComputedStyle(label);
+              const rect = label.getBoundingClientRect();
+              
+              if (style.display !== 'none' && 
+                  style.visibility !== 'hidden' && 
+                  rect.width > 0 && 
+                  rect.height > 0) {
+                
+                console.log('找到目标label:', text);
+                
+                // 尝试多种点击方式
+                // 方式1：直接点击label
+                label.click();
+                
+                // 方式2：点击label内的input/checkbox
+                const input = label.querySelector('input');
+                if (input) {
+                  input.click();
+                  input.checked = true;
+                }
+                
+                // 方式3：触发change事件
+                const changeEvent = new Event('change', { bubbles: true });
+                if (input) {
+                  input.dispatchEvent(changeEvent);
+                }
+                
+                // 方式4：触发click事件
+                const clickEvent = new MouseEvent('click', {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true
+                });
+                label.dispatchEvent(clickEvent);
+                
+                return true;
+              }
             }
           }
+          return false;
+        });
+        
+        if (!aiClicked) {
+          throw new Error('未找到或无法点击"内容由AI生成"选项');
         }
         
-        if (aiElement) {
-          console.log('[抖音号] 🖱️  点击"内容由AI生成"选项...');
-          await aiElement.click();
-          console.log('[抖音号] ⏳ 等待选项选中（1秒）...');
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          console.log('[抖音号] ✅ 选项应该已选中');
-        } else {
-          throw new Error('未找到"内容由AI生成"选项');
-        }
-        
-        // 点击确定按钮
-        const confirmButton = '.semi-sidesheet-body > footer > button.semi-button-primary';
-        console.log(`[抖音号] 确定按钮选择器（简化）: ${confirmButton}`);
-        console.log('[抖音号] ⏳ 等待"确定"按钮出现（5秒）...');
-        await page.waitForSelector(confirmButton, { timeout: 5000 });
-        console.log('[抖音号] ✅ 找到"确定"按钮');
-        
-        console.log('[抖音号] 🖱️  点击"确定"按钮...');
-        await page.click(confirmButton);
-        console.log('[抖音号] ⏳ 等待侧边栏关闭（1秒）...');
+        console.log('[抖音号] ✅ 已点击"内容由AI生成"选项');
+        console.log('[抖音号] ⏳ 等待选项选中（1秒）...');
         await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // 打印所有可见的按钮，用于调试
+        console.log('[抖音号] 🔍 调试：列出所有可见的按钮...');
+        const debugButtons = await page.evaluate(() => {
+          const buttons = Array.from(document.querySelectorAll('button'));
+          return buttons
+            .filter(btn => {
+              const style = window.getComputedStyle(btn);
+              const rect = btn.getBoundingClientRect();
+              return style.display !== 'none' && 
+                     style.visibility !== 'hidden' && 
+                     rect.width > 0 && 
+                     rect.height > 0;
+            })
+            .map(btn => ({
+              text: btn.textContent?.trim(),
+              className: btn.className,
+              visible: true
+            }));
+        });
+        console.log('[抖音号] 可见的按钮:', JSON.stringify(debugButtons, null, 2));
+        
+        // 查找并点击确定按钮 - 使用JavaScript直接点击
+        console.log('[抖音号] 🔍 查找并点击"确定"按钮...');
+        const confirmClicked = await page.evaluate(() => {
+          // 查找侧边栏footer中的主按钮
+          const footer = document.querySelector('.semi-sidesheet-body > footer');
+          if (!footer) {
+            console.log('未找到footer');
+            return false;
+          }
+          
+          const buttons = Array.from(footer.querySelectorAll('button'));
+          console.log('footer中的按钮数量:', buttons.length);
+          
+          for (const button of buttons) {
+            const text = button.textContent?.trim() || '';
+            const className = button.className || '';
+            
+            console.log('检查按钮:', text, className);
+            
+            // 查找包含"确定"或"确认"文字，且是primary按钮的
+            if ((text.includes('确定') || text.includes('确认')) && 
+                className.includes('semi-button-primary')) {
+              
+              const style = window.getComputedStyle(button);
+              const rect = button.getBoundingClientRect();
+              
+              if (style.display !== 'none' && 
+                  style.visibility !== 'hidden' && 
+                  rect.width > 0 && 
+                  rect.height > 0) {
+                
+                console.log('找到目标按钮，准备点击:', text);
+                
+                // 移除可能的pointer-events限制
+                button.style.pointerEvents = 'auto';
+                
+                // 尝试多种点击方式
+                // 方式1：直接点击
+                button.click();
+                
+                // 方式2：触发click事件
+                const clickEvent = new MouseEvent('click', {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true
+                });
+                button.dispatchEvent(clickEvent);
+                
+                // 方式3：触发mousedown和mouseup
+                const mousedownEvent = new MouseEvent('mousedown', {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true
+                });
+                const mouseupEvent = new MouseEvent('mouseup', {
+                  view: window,
+                  bubbles: true,
+                  cancelable: true
+                });
+                button.dispatchEvent(mousedownEvent);
+                button.dispatchEvent(mouseupEvent);
+                
+                return true;
+              }
+            }
+          }
+          
+          return false;
+        });
+        
+        if (!confirmClicked) {
+          throw new Error('未找到或无法点击"确定"按钮');
+        }
+        
+        console.log('[抖音号] ✅ 已点击"确定"按钮');
+        console.log('[抖音号] ⏳ 等待侧边栏关闭（2秒）...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
         console.log('[抖音号] ✅ 自主声明已添加');
       } catch (error: any) {
         console.log('[抖音号] ⚠️ 添加自主声明失败:', error.message);
