@@ -2,6 +2,7 @@ import { ipcMain, app, BrowserWindow } from 'electron';
 import log from 'electron-log';
 import { appManager } from '../main';
 import { loginManager, Platform, LoginResult } from '../login/login-manager';
+import { toutiaoLoginManager } from '../login/toutiao-login-manager';
 import { storageManager, AppConfig } from '../storage/manager';
 import { apiClient } from '../api/client';
 import { syncService } from '../sync/service';
@@ -139,18 +140,25 @@ class IPCHandler {
       try {
         log.info(`IPC: login-platform - ${platformId}`);
 
-        // 获取平台配置
+        // 获取主窗口
+        const mainWindow = appManager.getMainWindow();
+        if (!mainWindow) {
+          throw new Error('Main window not available');
+        }
+
+        // 头条号使用专用登录管理器
+        if (platformId === 'toutiao') {
+          log.info('IPC: 使用头条号专用登录管理器');
+          const result = await toutiaoLoginManager.login(mainWindow);
+          return result;
+        }
+
+        // 其他平台使用通用登录管理器
         const platforms = await apiClient.getPlatforms();
         const platform = platforms.find((p) => p.platform_id === platformId);
 
         if (!platform) {
           throw new Error(`Platform not found: ${platformId}`);
-        }
-
-        // 获取主窗口
-        const mainWindow = appManager.getMainWindow();
-        if (!mainWindow) {
-          throw new Error('Main window not available');
         }
 
         // 执行登录
@@ -166,10 +174,17 @@ class IPCHandler {
     });
 
     // 取消登录
-    ipcMain.handle('cancel-login', async () => {
+    ipcMain.handle('cancel-login', async (event, platformId?: string) => {
       try {
-        log.info('IPC: cancel-login');
-        await loginManager.cancelLogin();
+        log.info(`IPC: cancel-login - ${platformId || 'all'}`);
+        
+        // 如果是头条号，使用专用管理器
+        if (platformId === 'toutiao') {
+          await toutiaoLoginManager.cancelLogin();
+        } else {
+          await loginManager.cancelLogin();
+        }
+        
         return { success: true };
       } catch (error) {
         log.error('IPC: cancel-login failed:', error);
