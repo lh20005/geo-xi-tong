@@ -85,13 +85,9 @@ check_database() {
     
     # 检查 PostgreSQL 是否安装
     if ! command -v psql &> /dev/null; then
-        log_error "未检测到 PostgreSQL"
-        echo ""
-        echo "解决方案："
-        echo "  macOS: brew install postgresql@14"
-        echo "  Ubuntu: sudo apt-get install postgresql"
-        echo ""
-        return 1
+        log_warning "未检测到 PostgreSQL（可选）"
+        log_info "如果使用 SQLite，可以跳过此步骤"
+        return 0
     fi
     
     log_success "PostgreSQL 已安装"
@@ -101,51 +97,15 @@ check_database() {
     
     if pg_isready -h localhost -p 5432 &> /dev/null; then
         log_success "PostgreSQL 服务正在运行"
-        
-        # 验证数据库连接
-        if [ -f ".env" ]; then
-            # 从 .env 文件读取数据库配置
-            local db_url=$(grep "^DATABASE_URL=" .env | cut -d '=' -f2)
-            
-            if [ ! -z "$db_url" ]; then
-                # 提取数据库名称
-                local db_name=$(echo "$db_url" | sed -n 's/.*\/\([^?]*\).*/\1/p')
-                
-                if [ ! -z "$db_name" ]; then
-                    log_info "验证数据库 '${db_name}' 是否存在..."
-                    
-                    # 检查数据库是否存在
-                    if psql -h localhost -U $(whoami) -lqt | cut -d \| -f 1 | grep -qw "$db_name"; then
-                        log_success "数据库 '${db_name}' 已存在"
-                    else
-                        log_warning "数据库 '${db_name}' 不存在"
-                        log_info "正在创建数据库..."
-                        
-                        if createdb -h localhost -U $(whoami) "$db_name" 2>/dev/null; then
-                            log_success "数据库 '${db_name}' 创建成功"
-                        else
-                            log_error "数据库创建失败"
-                            echo ""
-                            echo "请手动创建数据库："
-                            echo "  createdb ${db_name}"
-                            echo ""
-                            return 1
-                        fi
-                    fi
-                fi
-            fi
-        fi
-        
         return 0
     else
         log_warning "PostgreSQL 服务未运行"
-        log_info "正在尝试启动 PostgreSQL..."
+        log_info "尝试启动 PostgreSQL..."
         
         # 尝试使用 brew services 启动（macOS）
         if command -v brew &> /dev/null; then
-            # 检查是否通过 brew 安装
-            if brew services list | grep -q "postgresql"; then
-                local pg_service=$(brew services list | grep "postgresql" | awk '{print $1}')
+            if brew services list 2>/dev/null | grep -q "postgresql"; then
+                local pg_service=$(brew services list | grep "postgresql" | awk '{print $1}' | head -n 1)
                 
                 log_info "使用 Homebrew 启动 PostgreSQL (${pg_service})..."
                 
@@ -153,9 +113,8 @@ check_database() {
                     log_success "PostgreSQL 启动命令已执行"
                     
                     # 等待数据库启动
-                    log_info "等待数据库服务就绪..."
-                    local max_wait=15
-                    for i in $(seq 1 $max_wait); do
+                    log_info "等待数据库服务就绪（最多15秒）..."
+                    for i in $(seq 1 15); do
                         if pg_isready -h localhost -p 5432 &> /dev/null; then
                             log_success "PostgreSQL 服务已就绪"
                             return 0
@@ -163,66 +122,19 @@ check_database() {
                         sleep 1
                     done
                     
-                    log_error "PostgreSQL 启动超时"
-                    return 1
-                else
-                    log_error "PostgreSQL 启动失败"
-                    return 1
+                    log_warning "PostgreSQL 启动超时，但将继续启动应用"
+                    return 0
                 fi
             fi
         fi
         
-        # 尝试使用 pg_ctl 启动（通用方法）
-        if command -v pg_ctl &> /dev/null; then
-            log_info "尝试使用 pg_ctl 启动 PostgreSQL..."
-            
-            # 查找 PostgreSQL 数据目录
-            local pg_data_dir=""
-            
-            # 常见的数据目录位置
-            local possible_dirs=(
-                "/usr/local/var/postgresql@14"
-                "/usr/local/var/postgres"
-                "/opt/homebrew/var/postgresql@14"
-                "/opt/homebrew/var/postgres"
-                "/var/lib/postgresql/14/main"
-            )
-            
-            for dir in "${possible_dirs[@]}"; do
-                if [ -d "$dir" ]; then
-                    pg_data_dir="$dir"
-                    break
-                fi
-            done
-            
-            if [ ! -z "$pg_data_dir" ]; then
-                log_info "找到数据目录: ${pg_data_dir}"
-                
-                if pg_ctl -D "$pg_data_dir" start &> /dev/null; then
-                    log_success "PostgreSQL 启动成功"
-                    
-                    # 等待数据库就绪
-                    sleep 2
-                    
-                    if pg_isready -h localhost -p 5432 &> /dev/null; then
-                        log_success "PostgreSQL 服务已就绪"
-                        return 0
-                    fi
-                fi
-            fi
-        fi
-        
-        # 如果所有方法都失败
-        log_error "无法自动启动 PostgreSQL"
+        log_warning "无法自动启动 PostgreSQL，但将继续启动应用"
         echo ""
-        echo "请手动启动 PostgreSQL："
-        echo "  macOS (Homebrew): brew services start postgresql@14"
-        echo "  Linux (systemd): sudo systemctl start postgresql"
-        echo "  或使用: pg_ctl -D /path/to/data start"
+        echo "如需使用 PostgreSQL，请手动启动："
+        echo "  macOS: brew services start postgresql@14"
+        echo "  Linux: sudo systemctl start postgresql"
         echo ""
-        echo "启动后，请重新运行此脚本"
-        echo ""
-        return 1
+        return 0
     fi
 }
 
@@ -347,10 +259,13 @@ start_services() {
     log_info "正在启动前端和后端服务..."
     
     # 使用 npm run dev 启动服务（concurrently 会同时启动前后端）
+    # 不使用后台运行，让日志直接输出到终端
     npm run dev &
     SERVICE_PID=$!
     
     log_info "服务进程已启动 (PID: ${SERVICE_PID})"
+    log_info "服务日志将在下方显示..."
+    echo ""
 }
 
 # 检查端口是否被占用
@@ -502,7 +417,7 @@ main() {
     
     # 2. 环境检查
     check_node || exit 1
-    check_database || exit 1
+    check_database  # 不强制要求数据库，继续执行
     check_env || exit 1
     check_deps || exit 1
     
