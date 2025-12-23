@@ -6,6 +6,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import ConfigPage from './pages/ConfigPage';
+import UserManualPage from './pages/UserManualPage';
 import DistillationPage from './pages/DistillationPage';
 import DistillationResultsPage from './pages/DistillationResultsPage';
 import TopicsPage from './pages/TopicsPage';
@@ -44,6 +45,7 @@ function App() {
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/conversion-targets" element={<ConversionTargetPage />} />
                     <Route path="/config" element={<ConfigPage />} />
+                    <Route path="/user-manual" element={<UserManualPage />} />
                     <Route path="/distillation" element={<DistillationPage />} />
                     <Route path="/distillation-results" element={<DistillationResultsPage />} />
                     <Route path="/topics/:distillationId" element={<TopicsPage />} />

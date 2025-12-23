@@ -88,6 +88,11 @@ export default function Sidebar() {
       icon: <SettingOutlined />,
       label: '系统配置',
     },
+    {
+      key: '/user-manual',
+      icon: <BookOutlined />,
+      label: '使用说明书',
+    },
   ];
 
   return (
