@@ -14,7 +14,7 @@ export default function CasesPage() {
       company: '杭州XX私房菜',
       category: '江浙菜·家常菜',
       location: '浙江杭州',
-      image: 'https://images.unsplash.com/photo-1585032226651-759b368d7246?w=800&q=80',
+      image: 'https://images.unsplash.com/photo-1552566626-52f8b828add9?w=800&q=80',
       results: [
         { label: 'AI推荐率', value: '+86%', color: 'blue' },
         { label: '到店客流', value: '+118%', color: 'green' },
@@ -345,37 +345,118 @@ export default function CasesPage() {
         
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
           <h2 className="text-5xl md:text-6xl font-bold mb-6 text-white">
-            开启您的GEO优化之旅
+            准备好抢占AI搜索先机了吗？
           </h2>
-          <p className="text-xl md:text-2xl mb-12 text-gray-400">
-            让您的品牌在AI平台被主动推荐
+          <p className="text-xl md:text-2xl mb-12 text-gray-400 leading-relaxed">
+            让您的品牌在豆包、DeepSeek、ChatGPT等AI平台被主动推荐
           </p>
-          <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <Link
-              to="/login"
-              className="inline-flex items-center justify-center px-10 py-5 bg-white text-black text-lg font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 shadow-2xl shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
-            >
-              免费试用
-              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </Link>
-            <a
-              href="mailto:contact@example.com"
-              className="inline-flex items-center justify-center px-10 py-5 bg-transparent border-2 border-gray-700 text-white text-lg font-semibold rounded-xl hover:border-gray-500 hover:bg-gray-900/50 transition-all duration-300"
-            >
-              预约演示
-            </a>
-          </div>
+          <Link
+            to="/login"
+            className="inline-flex items-center px-10 py-5 bg-white text-black text-lg font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 shadow-2xl shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
+          >
+            立即免费开始
+            <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </Link>
         </div>
       </section>
 
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-gray-400">
-            © 2024 GEO优化系统. All rights reserved.
-          </p>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-4 gap-12 mb-12">
+            {/* 品牌介绍 */}
+            <div className="text-center">
+              <div className="flex items-center justify-center space-x-2 mb-4">
+                <img 
+                  src="/images/logo.png" 
+                  alt="JZ Logo" 
+                  className="w-8 h-8 rounded-lg"
+                />
+                <span className="text-xl font-bold">GEO优化SaaS系统</span>
+              </div>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                基于普林斯顿大学GEO研究方法论的SaaS系统，让您的品牌在AI时代被主动推荐
+              </p>
+            </div>
+            
+            {/* 产品功能 */}
+            <div className="text-center">
+              <h4 className="font-bold mb-4 text-lg">产品功能</h4>
+              <ul className="space-y-3 text-sm text-gray-400">
+                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>智能关键词蒸馏
+                </Link></li>
+                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>AI内容生成引擎
+                </Link></li>
+                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>企业知识库管理
+                </Link></li>
+                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>多平台智能发布
+                </Link></li>
+                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>数据监控工作台
+                </Link></li>
+              </ul>
+            </div>
+            
+            {/* 快速链接 */}
+            <div className="text-center">
+              <h4 className="font-bold mb-4 text-lg">快速链接</h4>
+              <ul className="space-y-3 text-sm text-gray-400">
+                <li><Link to="/#advantages" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>产品优势
+                </Link></li>
+                <li><Link to="/cases" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>应用案例
+                </Link></li>
+                <li><Link to="/#pricing" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>价格方案
+                </Link></li>
+                <li><Link to="/login" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>立即登录
+                </Link></li>
+                <li><a href="#" className="hover:text-white transition-colors inline-flex items-center">
+                  <span className="mr-2">→</span>帮助中心
+                </a></li>
+              </ul>
+            </div>
+            
+            {/* 联系我们 */}
+            <div className="text-center">
+              <h4 className="font-bold mb-4 text-lg">联系我们</h4>
+              <div className="space-y-4 flex flex-col items-center">
+                {/* 二维码 */}
+                <div className="bg-white p-3 rounded-lg inline-block">
+                  <img 
+                    src="/images/qrcode.jpg" 
+                    alt="微信二维码" 
+                    className="w-32 h-32"
+                  />
+                  <p className="text-xs text-gray-900 text-center mt-2">扫码咨询</p>
+                </div>
+                
+                {/* 公司信息 */}
+                <div className="text-sm text-gray-400">
+                  <p className="font-semibold text-white">深圳微暖教育科技有限公司</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* 底部版权 */}
+          <div className="border-t border-gray-800 pt-8">
+            <div className="flex justify-center items-center text-sm text-gray-400">
+              <div className="flex space-x-6">
+                <Link to="/privacy" className="hover:text-white transition-colors">隐私政策</Link>
+                <Link to="/terms" className="hover:text-white transition-colors">服务条款</Link>
+                <a href="#" className="hover:text-white transition-colors">ICP备案号</a>
+              </div>
+            </div>
+          </div>
         </div>
       </footer>
     </div>

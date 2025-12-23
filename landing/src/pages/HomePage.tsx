@@ -164,7 +164,7 @@ export default function HomePage() {
                 <svg className="w-3.5 h-3.5 mr-1.5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                   <path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z" />
                 </svg>
-                基于普林斯顿大学GEO研究方法论
+                基于普林斯顿大学GEO研究方法论的SaaS系统
               </div>
               
               {/* 主标题 */}
@@ -210,7 +210,7 @@ export default function HomePage() {
               {/* 信任标识 */}
               <div className="pt-6 border-t border-gray-200 w-full max-w-xl">
                 <p className="text-sm text-gray-500 mb-4">适用于所有行业，从本地生活到B2B企业</p>
-                <div className="flex flex-wrap items-center justify-center gap-4 text-gray-400">
+                <div className="flex flex-wrap items-center justify-center gap-4 text-gray-500">
                   <div className="flex items-center gap-1.5">
                     <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                       <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -317,21 +317,21 @@ export default function HomePage() {
               全流程<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">AI</span>优化<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">SaaS</span>系统
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              从关键词分析到内容生成，从AI优化到多平台发布，一站式解决品牌AI曝光难题
+              从关键词分析到内容生成，从AI优化到多平台自动发布，一站式解决品牌AI曝光难题
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {/* 功能1：智能关键词蒸馏 */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <span className="text-3xl">🎯</span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">智能关键词蒸馏</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
                 AI驱动的关键词意图分析，自动生成真实用户提问场景，精准把握搜索需求，覆盖用户真实查询路径
               </p>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-600 text-left inline-block">
                 <li className="flex items-start">
                   <span className="text-blue-600 mr-2">✓</span>
                   <span>自动分析关键词背后的用户意图</span>
@@ -348,15 +348,15 @@ export default function HomePage() {
             </div>
 
             {/* 功能2：AI内容生成引擎 */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <span className="text-3xl">✨</span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">AI内容生成引擎</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
                 集成AI大模型，结合专业GEO优化流程和内容要求，批量生成高质量GEO优化文章，自动融合企业知识库和品牌信息
               </p>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-600 text-left inline-block">
                 <li className="flex items-start">
                   <span className="text-purple-600 mr-2">✓</span>
                   <span>AI模型自动调用最新GEO知识库</span>
@@ -373,15 +373,15 @@ export default function HomePage() {
             </div>
 
             {/* 功能3：企业知识库管理 */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <span className="text-3xl">📚</span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">企业知识库管理</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
                 统一管理企业知识内容和图片资源，AI生成文章时自动引用，确保品牌信息准确传达，提升内容专业度和可信度
               </p>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-600 text-left inline-block">
                 <li className="flex items-start">
                   <span className="text-green-600 mr-2">✓</span>
                   <span>企业知识库分类管理</span>
@@ -398,15 +398,15 @@ export default function HomePage() {
             </div>
 
             {/* 功能4：转化目标设置 */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-              <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-pink-500 to-pink-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <span className="text-3xl">🎪</span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">转化目标设置</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
                 配置企业信息（官网、电话、地址），AI生成内容时自动嵌入转化目标，从AI推荐到客户咨询，形成完整营销闭环
               </p>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-600 text-left inline-block">
                 <li className="flex items-start">
                   <span className="text-pink-600 mr-2">✓</span>
                   <span>设置公司名称和行业信息</span>
@@ -423,15 +423,15 @@ export default function HomePage() {
             </div>
 
             {/* 功能5：多平台智能发布 */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <span className="text-3xl">🚀</span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">多平台智能发布</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
-                一键发布到头条、抖音、微信等主流平台，支持定时发布、批量发布、静默模式，全流程自动化运营，解放人力
+                一键发布到头条、抖音、网易号等主流平台，支持定时发布、批量发布、静默模式，全流程自动化运营，解放人力
               </p>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-600 text-left inline-block">
                 <li className="flex items-start">
                   <span className="text-orange-600 mr-2">✓</span>
                   <span>支持头条、抖音、微信等平台</span>
@@ -448,15 +448,15 @@ export default function HomePage() {
             </div>
 
             {/* 功能6：数据监控工作台 */}
-            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100">
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6">
+            <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 border border-gray-100 text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
                 <span className="text-3xl">📊</span>
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-4">数据监控工作台</h3>
               <p className="text-gray-600 mb-6 leading-relaxed">
                 实时展示关键指标和趋势图表，文章生成、发布状态一目了然，数据驱动优化决策，持续提升GEO效果
               </p>
-              <ul className="space-y-2 text-sm text-gray-600">
+              <ul className="space-y-2 text-sm text-gray-600 text-left inline-block">
                 <li className="flex items-start">
                   <span className="text-indigo-600 mr-2">✓</span>
                   <span>核心指标卡片实时更新</span>
@@ -494,7 +494,7 @@ export default function HomePage() {
               <div className="flex-1 text-center">
                 <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">3</div>
                 <h4 className="font-bold text-gray-900 mb-2">知识融合</h4>
-                <p className="text-sm text-gray-600">引用企业资源</p>
+                <p className="text-sm text-gray-600">引用企业专属知识库</p>
               </div>
               <div className="hidden md:block text-gray-400 text-2xl">→</div>
               <div className="flex-1 text-center">
@@ -518,31 +518,31 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              为什么选择<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">我们的系统</span>？
+              为什么选择<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">我们的SaaS系统</span>？
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              基于科学方法论，融合AI技术，打造全流程自动化的GEO优化解决方案
+              基于科学方法论，融合AI技术，打造全流程的GEO优化SaaS系统解决方案
             </p>
           </div>
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
             {/* 第一行 */}
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">🧠</span>
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">科学的GEO方法论</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    基于2023年普林斯顿大学GEO研究论文，采用经过验证的优化策略，显著提升品牌在AI平台的推荐频率
+                    基于普林斯顿大学GEO研究论文，采用经过验证的优化策略，显著提升品牌在AI平台的推荐频率
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">🎯</span>
                 </div>
@@ -556,14 +556,14 @@ export default function HomePage() {
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">🤖</span>
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">多模型AI引擎</h3>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">大模型AI引擎</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    支持DeepSeek、Gemini、本地Ollama等多种AI模型，灵活切换，数据安全可控，满足不同场景需求
+                    应用DeepSeek大模型，为关键词蒸馏及文章撰写提供强大支持，融合GEO专业数据训练，大模型性能更优，满足不同场景需求
                   </p>
                 </div>
               </div>
@@ -571,7 +571,7 @@ export default function HomePage() {
 
             {/* 第二行 */}
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-yellow-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">✨</span>
                 </div>
@@ -585,7 +585,7 @@ export default function HomePage() {
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-red-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">🎪</span>
                 </div>
@@ -599,7 +599,7 @@ export default function HomePage() {
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">⚡</span>
                 </div>
@@ -614,21 +614,21 @@ export default function HomePage() {
 
             {/* 第三行 */}
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">🚀</span>
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">多平台智能发布</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    一键发布到头条、抖音、微信等主流平台，支持定时发布、批量发布、静默模式，全自动运营
+                    一键发布到头条、抖音、网易号等主流平台，支持定时发布、批量发布、静默模式，全自动运营
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-teal-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">📊</span>
                 </div>
@@ -642,14 +642,14 @@ export default function HomePage() {
             </div>
 
             <div className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 border border-gray-100">
-              <div className="flex items-start space-x-4">
+              <div className="flex items-center space-x-4">
                 <div className="flex-shrink-0 w-14 h-14 bg-orange-100 rounded-2xl flex items-center justify-center">
                   <span className="text-2xl">🔒</span>
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-gray-900 mb-3">数据安全可控</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    支持本地Ollama模型，企业数据不出网，平台登录信息加密存储，Cookie自动管理，安全无忧
+                    使用国产大模型，企业数据安全有保障，平台登录信息加密存储，Cookie自动管理，安全无忧
                   </p>
                 </div>
               </div>
@@ -701,15 +701,15 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-8 mb-12">
             <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300">
               <img
-                src="https://images.unsplash.com/photo-1585032226651-759b368d7246?w=600&q=80"
+                src="https://images.unsplash.com/photo-1552566626-52f8b828add9?w=600&q=80"
                 alt="餐饮美食"
                 className="w-full h-48 object-cover"
               />
-              <div className="p-6">
+              <div className="p-6 text-center">
                 <div className="text-sm text-red-600 font-semibold mb-2">餐饮美食</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">杭州XX私房菜</h3>
                 <p className="text-gray-600 mb-4">AI推荐率提升86%，到店客流增长118%</p>
-                <div className="flex items-center text-sm text-gray-500">
+                <div className="flex items-center justify-center text-sm text-gray-500">
                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   </svg>
@@ -724,11 +724,11 @@ export default function HomePage() {
                 alt="民宿客栈"
                 className="w-full h-48 object-cover"
               />
-              <div className="p-6">
+              <div className="p-6 text-center">
                 <div className="text-sm text-orange-600 font-semibold mb-2">民宿客栈</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">丽江XX精品民宿</h3>
                 <p className="text-gray-600 mb-4">AI推荐率提升92%，预订量增长156%</p>
-                <div className="flex items-center text-sm text-gray-500">
+                <div className="flex items-center justify-center text-sm text-gray-500">
                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   </svg>
@@ -743,11 +743,11 @@ export default function HomePage() {
                 alt="健身运动"
                 className="w-full h-48 object-cover"
               />
-              <div className="p-6">
+              <div className="p-6 text-center">
                 <div className="text-sm text-green-600 font-semibold mb-2">健身运动</div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">上海XX健身工作室</h3>
                 <p className="text-gray-600 mb-4">AI推荐率提升76%，会员增长94%</p>
-                <div className="flex items-center text-sm text-gray-500">
+                <div className="flex items-center justify-center text-sm text-gray-500">
                   <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                   </svg>
@@ -1030,8 +1030,8 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-12 mb-12">
             {/* 品牌介绍 */}
-            <div>
-              <div className="flex items-center space-x-2 mb-4">
+            <div className="text-center">
+              <div className="flex items-center justify-center space-x-2 mb-4">
                 <img 
                   src="/images/logo.png" 
                   alt="JZ Logo" 
@@ -1040,58 +1040,58 @@ export default function HomePage() {
                 <span className="text-xl font-bold">GEO优化SaaS系统</span>
               </div>
               <p className="text-gray-400 text-sm leading-relaxed">
-                基于普林斯顿大学GEO研究方法论，让您的品牌在AI时代被主动推荐
+                基于普林斯顿大学GEO研究方法论的SaaS系统，让您的品牌在AI时代被主动推荐
               </p>
             </div>
             
             {/* 产品功能 */}
-            <div>
+            <div className="text-center">
               <h4 className="font-bold mb-4 text-lg">产品功能</h4>
               <ul className="space-y-3 text-sm text-gray-400">
-                <li><a href="#features" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#features" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>智能关键词蒸馏
                 </a></li>
-                <li><a href="#features" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#features" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>AI内容生成引擎
                 </a></li>
-                <li><a href="#features" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#features" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>企业知识库管理
                 </a></li>
-                <li><a href="#features" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#features" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>多平台智能发布
                 </a></li>
-                <li><a href="#features" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#features" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>数据监控工作台
                 </a></li>
               </ul>
             </div>
             
             {/* 快速链接 */}
-            <div>
+            <div className="text-center">
               <h4 className="font-bold mb-4 text-lg">快速链接</h4>
               <ul className="space-y-3 text-sm text-gray-400">
-                <li><a href="#advantages" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#advantages" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>产品优势
                 </a></li>
-                <li><Link to="/cases" className="hover:text-white transition-colors flex items-center">
+                <li><Link to="/cases" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>应用案例
                 </Link></li>
-                <li><a href="#pricing" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#pricing" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>价格方案
                 </a></li>
-                <li><Link to="/login" className="hover:text-white transition-colors flex items-center">
+                <li><Link to="/login" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>立即登录
                 </Link></li>
-                <li><a href="#" className="hover:text-white transition-colors flex items-center">
+                <li><a href="#" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>帮助中心
                 </a></li>
               </ul>
             </div>
             
             {/* 联系我们 */}
-            <div>
+            <div className="text-center">
               <h4 className="font-bold mb-4 text-lg">联系我们</h4>
-              <div className="space-y-4">
+              <div className="space-y-4 flex flex-col items-center">
                 {/* 二维码 */}
                 <div className="bg-white p-3 rounded-lg inline-block">
                   <img 
@@ -1112,9 +1112,8 @@ export default function HomePage() {
           
           {/* 底部版权 */}
           <div className="border-t border-gray-800 pt-8">
-            <div className="flex flex-col md:flex-row justify-between items-center text-sm text-gray-400">
-              <p>© 2024 深圳微暖教育科技有限公司. All rights reserved.</p>
-              <div className="flex space-x-6 mt-4 md:mt-0">
+            <div className="flex justify-center items-center text-sm text-gray-400">
+              <div className="flex space-x-6">
                 <Link to="/privacy" className="hover:text-white transition-colors">隐私政策</Link>
                 <Link to="/terms" className="hover:text-white transition-colors">服务条款</Link>
                 <a href="#" className="hover:text-white transition-colors">ICP备案号</a>
