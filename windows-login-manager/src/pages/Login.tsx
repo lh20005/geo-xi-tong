@@ -3,7 +3,7 @@ import { ipcBridge } from '../services/ipc';
 import './Login.css';
 
 interface LoginProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (user: any) => void;
 }
 
 export default function Login({ onLoginSuccess }: LoginProps) {
@@ -26,9 +26,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     try {
       const result = await ipcBridge.login(username, password);
       
-      if (result.success) {
-        console.log('登录成功');
-        onLoginSuccess();
+      if (result.success && result.user) {
+        console.log('登录成功:', result.user);
+        onLoginSuccess(result.user);
       } else {
         setError(result.error || '登录失败');
       }

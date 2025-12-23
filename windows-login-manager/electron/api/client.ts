@@ -13,6 +13,12 @@ interface AuthResponse {
   accessToken: string;
   refreshToken: string;
   expiresIn: number;
+  user?: {
+    id: number;
+    username: string;
+    email?: string;
+    role: string;
+  };
 }
 
 interface Account {
@@ -213,7 +219,7 @@ class APIClient {
       });
 
       // 服务端返回格式: { success: true, data: { token, refreshToken, expiresIn, user } }
-      const { token, refreshToken, expiresIn } = response.data.data;
+      const { token, refreshToken, expiresIn, user } = response.data.data;
 
       // 保存Token
       await storageManager.saveTokens(
@@ -226,7 +232,8 @@ class APIClient {
       return {
         accessToken: token,
         refreshToken,
-        expiresIn
+        expiresIn,
+        user
       };
     } catch (error) {
       log.error('Login failed:', error);

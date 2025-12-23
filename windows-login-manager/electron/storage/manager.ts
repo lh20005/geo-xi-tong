@@ -282,6 +282,54 @@ class StorageManager {
   }
 
   /**
+   * 保存用户信息
+   * Requirements: 7.1, 7.7
+   */
+  async saveUser(user: { id: number; username: string; email?: string; role: string }): Promise<void> {
+    try {
+      store.set('user', user);
+      log.info(`User info saved: ${user.username}`);
+    } catch (error) {
+      log.error('Failed to save user info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取用户信息
+   * Requirements: 7.4
+   */
+  async getUser(): Promise<{ id: number; username: string; email?: string; role: string } | null> {
+    try {
+      const user = store.get('user') as { id: number; username: string; email?: string; role: string } | undefined;
+      
+      if (!user) {
+        log.info('No user info found');
+        return null;
+      }
+
+      return user;
+    } catch (error) {
+      log.error('Failed to get user info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 清除用户信息
+   * Requirements: 7.5
+   */
+  async clearUser(): Promise<void> {
+    try {
+      store.delete('user');
+      log.info('User info cleared');
+    } catch (error) {
+      log.error('Failed to clear user info:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 清除所有缓存
    * Requirements: 7.5
    */

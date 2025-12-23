@@ -15,7 +15,7 @@ class IPCBridge {
     return await this.api.logout();
   }
 
-  async checkAuth(): Promise<{ isAuthenticated: boolean }> {
+  async checkAuth(): Promise<{ isAuthenticated: boolean; user?: any }> {
     return await this.api.checkAuth();
   }
 

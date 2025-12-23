@@ -36,8 +36,11 @@ class IPCHandler {
   /**
    * 注册所有IPC处理器
    */
-  registerHandlers(): void {
+  async registerHandlers(): Promise<void> {
     log.info('Registering IPC handlers...');
+
+    // 初始化API客户端的baseURL
+    await this.initializeAPIClient();
 
     // 平台登录
     this.registerLoginHandlers();
@@ -66,6 +69,28 @@ class IPCHandler {
   }
 
   /**
+   * 初始化API客户端
+   */
+  private async initializeAPIClient(): Promise<void> {
+    try {
+      const config = await storageManager.getConfig();
+      if (config && config.serverUrl) {
+        await apiClient.setBaseURL(config.serverUrl);
+        log.info(`API client initialized with baseURL: ${config.serverUrl}`);
+      } else {
+        // 使用默认配置
+        const defaultUrl = 'http://localhost:3000';
+        await apiClient.setBaseURL(defaultUrl);
+        log.info(`API client initialized with default baseURL: ${defaultUrl}`);
+      }
+    } catch (error) {
+      log.error('Failed to initialize API client:', error);
+      // 使用默认配置作为后备
+      await apiClient.setBaseURL('http://localhost:3000');
+    }
+  }
+
+  /**
    * 注册登录相关处理器
    */
   private registerLoginHandlers(): void {
@@ -75,7 +100,12 @@ class IPCHandler {
         log.info(`IPC: login - ${username}`);
         
         // 调用API登录
-        await apiClient.login(username, password);
+        const loginResult = await apiClient.login(username, password);
+        
+        // 保存用户信息
+        if (loginResult.user) {
+          await storageManager.saveUser(loginResult.user);
+        }
         
         // 登录成功后初始化WebSocket
         const config = await storageManager.getConfig();
@@ -92,7 +122,10 @@ class IPCHandler {
           }
         }
         
-        return { success: true };
+        return { 
+          success: true,
+          user: loginResult.user
+        };
       } catch (error) {
         log.error('IPC: login failed:', error);
         return {
@@ -109,6 +142,9 @@ class IPCHandler {
         
         // 断开WebSocket
         wsManager.disconnect();
+        
+        // 清除用户信息
+        await storageManager.clearUser();
         
         // 调用API登出
         await apiClient.logout();
@@ -127,12 +163,18 @@ class IPCHandler {
     ipcMain.handle('check-auth', async () => {
       try {
         const tokens = await storageManager.getTokens();
+        const user = await storageManager.getUser();
+        
         return {
-          isAuthenticated: !!tokens?.accessToken
+          isAuthenticated: !!tokens?.accessToken,
+          user: user || undefined
         };
       } catch (error) {
         log.error('IPC: check-auth failed:', error);
-        return { isAuthenticated: false };
+        return { 
+          isAuthenticated: false,
+          user: undefined
+        };
       }
     });
 

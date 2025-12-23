@@ -3,7 +3,7 @@ export interface ElectronAPI {
   // 系统登录
   login: (username: string, password: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
-  checkAuth: () => Promise<{ isAuthenticated: boolean }>;
+  checkAuth: () => Promise<{ isAuthenticated: boolean; user?: { id: number; username: string; email?: string; role: string } }>;
   
   // 平台登录
   loginPlatform: (platformId: string) => Promise<LoginResult>;

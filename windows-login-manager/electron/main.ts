@@ -57,7 +57,7 @@ class ApplicationManager {
       csp.configure();
       
       // 注册IPC处理器
-      ipcHandler.registerHandlers();
+      await ipcHandler.registerHandlers();
       
       // 设置应用菜单
       this.setupApplicationMenu();

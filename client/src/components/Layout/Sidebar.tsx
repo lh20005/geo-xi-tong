@@ -15,12 +15,14 @@ import {
   SendOutlined,
   HistoryOutlined,
 } from '@ant-design/icons';
+import { isAdmin } from '../../utils/auth';
 
 const { Sider } = Layout;
 
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
+  const userIsAdmin = isAdmin();
 
   const menuItems = [
     {
@@ -83,11 +85,12 @@ export default function Sidebar() {
       icon: <HistoryOutlined />,
       label: '发布记录',
     },
-    {
+    // 系统配置 - 仅管理员可见
+    ...(userIsAdmin ? [{
       key: '/config',
       icon: <SettingOutlined />,
       label: '系统配置',
-    },
+    }] : []),
     {
       key: '/user-manual',
       icon: <BookOutlined />,

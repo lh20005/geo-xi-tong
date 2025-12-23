@@ -3,6 +3,7 @@ import { Layout } from 'antd';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminRoute } from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import ConfigPage from './pages/ConfigPage';
@@ -44,7 +45,7 @@ function App() {
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/conversion-targets" element={<ConversionTargetPage />} />
-                    <Route path="/config" element={<ConfigPage />} />
+                    <Route path="/config" element={<AdminRoute><ConfigPage /></AdminRoute>} />
                     <Route path="/user-manual" element={<UserManualPage />} />
                     <Route path="/distillation" element={<DistillationPage />} />
                     <Route path="/distillation-results" element={<DistillationResultsPage />} />

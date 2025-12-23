@@ -12,6 +12,13 @@ interface Account {
   updated_at: Date;
 }
 
+interface UserInfo {
+  id: number;
+  username: string;
+  email?: string;
+  role: string;
+}
+
 interface AppConfig {
   serverUrl: string;
   autoSync: boolean;
@@ -22,11 +29,13 @@ interface AppConfig {
 interface AppContextType {
   accounts: Account[];
   config: AppConfig | null;
+  user: UserInfo | null;
   isLoading: boolean;
   error: string | null;
   refreshAccounts: () => Promise<void>;
   deleteAccount: (accountId: number) => Promise<void>;
   updateConfig: (config: AppConfig) => Promise<void>;
+  setUser: (user: UserInfo | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -34,6 +43,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [config, setConfig] = useState<AppConfig | null>(null);
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -144,11 +154,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const value: AppContextType = {
     accounts,
     config,
+    user,
     isLoading,
     error,
     refreshAccounts,
     deleteAccount,
     updateConfig,
+    setUser,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

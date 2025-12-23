@@ -91,7 +91,7 @@ export default function LoginPage() {
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-2">
               欢迎登录
             </h1>
-            <p className="text-gray-600">登录开始您的AI优化之旅</p>
+            <p className="text-gray-600">登录开始您的GEO优化之旅</p>
           </div>
 
           {/* 登录表单 */}
