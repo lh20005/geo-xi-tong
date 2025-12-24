@@ -1,5 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import UserMenu from './UserMenu';
+import MobileUserMenu from './MobileUserMenu';
 import { config } from '../config/env';
 
 interface HeaderProps {
@@ -12,7 +14,6 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // 判断导航项是否激活
   const isActive = (path: string) => {
@@ -46,22 +47,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
 
   useEffect(() => {
     // 检查登录状态
-    const token = localStorage.getItem('auth_token');
-    const userInfo = localStorage.getItem('user_info');
-    
-    if (token && userInfo) {
-      setIsLoggedIn(true);
-      try {
-        const user = JSON.parse(userInfo);
-        setUsername(user.username || '用户');
-        setIsAdmin(user.role === 'admin');
-      } catch (e) {
-        console.error('解析用户信息失败:', e);
-      }
-    }
-    
-    // 监听 storage 事件，当其他标签页登录/退出时同步状态
-    const handleStorageChange = () => {
+    const checkLoginStatus = () => {
       const token = localStorage.getItem('auth_token');
       const userInfo = localStorage.getItem('user_info');
       
@@ -81,16 +67,19 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
       }
     };
     
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    checkLoginStatus();
+    
+    // 监听 storage 事件（跨标签页）和自定义 auth-change 事件（同标签页）
+    window.addEventListener('storage', checkLoginStatus);
+    window.addEventListener('auth-change', checkLoginStatus);
+    
+    return () => {
+      window.removeEventListener('storage', checkLoginStatus);
+      window.removeEventListener('auth-change', checkLoginStatus);
+    };
   }, []);
 
   const handleLogout = () => {
-    // 显示确认对话框
-    setShowLogoutConfirm(true);
-  };
-
-  const confirmLogout = () => {
     // 清除登录信息
     localStorage.removeItem('auth_token');
     localStorage.removeItem('refresh_token');
@@ -99,35 +88,16 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
     setIsLoggedIn(false);
     setUsername('');
     setIsAdmin(false);
-    setShowLogoutConfirm(false);
+    
+    // 触发自定义事件，通知其他组件登录状态已改变
+    window.dispatchEvent(new Event('auth-change'));
     
     // 跳转到首页
     navigate('/');
   };
 
-  const cancelLogout = () => {
-    setShowLogoutConfirm(false);
-  };
-
-  const handleEnterSystem = () => {
-    // 跳转到前端系统
-    const token = localStorage.getItem('auth_token');
-    const refreshToken = localStorage.getItem('refresh_token');
-    const userInfo = localStorage.getItem('user_info');
-    
-    if (token && refreshToken && userInfo) {
-      const params = new URLSearchParams({
-        token,
-        refresh_token: refreshToken,
-        user_info: userInfo
-      });
-      window.location.href = `${config.clientUrl}?${params.toString()}`;
-    }
-  };
-
   return (
-    <>
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+    <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           <Link to="/" className="flex items-center space-x-3">
@@ -192,36 +162,41 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
             {/* 根据登录状态显示不同按钮 */}
             {isLoggedIn ? (
               <>
-                {isAdmin && (
-                  <Link
-                    to="/admin/users"
-                    className={`px-4 py-2 font-semibold transition-colors ${
-                      isActive('/admin/users') ? 'text-purple-700' : 'text-purple-600 hover:text-purple-700'
-                    }`}
-                  >
-                    用户管理
-                  </Link>
-                )}
-                <Link
-                  to="/profile"
-                  className={`px-6 py-2.5 font-semibold transition-colors ${
-                    isActive('/profile') ? 'text-gray-900' : 'text-gray-700 hover:text-gray-900'
-                  }`}
-                >
-                  个人中心
-                </Link>
+                {/* 进入系统按钮 */}
                 <button
-                  onClick={handleEnterSystem}
+                  onClick={() => {
+                    const token = localStorage.getItem('auth_token');
+                    const refreshToken = localStorage.getItem('refresh_token');
+                    const userInfo = localStorage.getItem('user_info');
+                    
+                    if (token && refreshToken && userInfo) {
+                      const params = new URLSearchParams({
+                        token,
+                        refresh_token: refreshToken,
+                        user_info: userInfo
+                      });
+                      window.location.href = `${config.clientUrl}?${params.toString()}`;
+                    }
+                  }}
                   className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all duration-300 transform hover:scale-105"
                 >
                   进入系统
                 </button>
-                <button
-                  onClick={handleLogout}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors"
-                >
-                  退出
-                </button>
+                
+                {/* 桌面端用户菜单 */}
+                <div className="hidden md:block">
+                  <UserMenu 
+                    username={username}
+                    isAdmin={isAdmin}
+                    onLogout={handleLogout}
+                  />
+                </div>
+                {/* 移动端用户菜单 */}
+                <MobileUserMenu 
+                  username={username}
+                  isAdmin={isAdmin}
+                  onLogout={handleLogout}
+                />
               </>
             ) : (
               <Link
@@ -239,40 +214,5 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
         </div>
       </div>
     </nav>
-
-    {/* 退出确认对话框 */}
-    {showLogoutConfirm && (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4 transform transition-all">
-          <div className="text-center mb-6">
-            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">确认退出登录</h3>
-            <p className="text-gray-600">
-              您确定要退出登录吗？退出后需要重新登录才能使用系统功能。
-            </p>
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={cancelLogout}
-              className="flex-1 px-6 py-3 bg-gray-100 text-gray-700 font-semibold rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              取消
-            </button>
-            <button
-              onClick={confirmLogout}
-              className="flex-1 px-6 py-3 bg-red-600 text-white font-semibold rounded-lg hover:bg-red-700 transition-colors"
-            >
-              确认退出
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
-  </>
   );
 }

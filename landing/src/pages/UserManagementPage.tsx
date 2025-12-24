@@ -5,6 +5,7 @@ import type { User } from '../types/user';
 import UserDetailModal from '../components/UserDetailModal';
 import { getWebSocketService } from '../services/WebSocketService';
 import Header from '../components/Header';
+import { formatDateTime } from '../utils/dateFormat';
 
 export default function UserManagementPage() {
   const navigate = useNavigate();
@@ -66,6 +67,7 @@ export default function UserManagementPage() {
         setTotal(response.data.total);
       }
     } catch (error: any) {
+      console.error('[UserManagement] Load users error:', error);
       if (error.response?.status === 401) {
         navigate('/login');
       } else if (error.response?.status === 403) {
@@ -197,7 +199,7 @@ export default function UserManagementPage() {
                           <span className="text-sm text-gray-900">{user.invitedCount}</span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(user.createdAt).toLocaleDateString('zh-CN')}
+                          {formatDateTime(user.createdAt)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button

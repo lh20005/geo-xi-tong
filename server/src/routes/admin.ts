@@ -10,6 +10,25 @@ router.use(authenticate);
 router.use(requireAdmin);
 
 /**
+ * 转换数据库字段名（蛇形）为前端字段名（驼峰）
+ */
+function convertUserFields(user: any) {
+  return {
+    id: user.id,
+    username: user.username,
+    invitationCode: user.invitation_code,
+    invitedByCode: user.invited_by_code,
+    role: user.role,
+    isTempPassword: user.is_temp_password,
+    createdAt: user.created_at ? (user.created_at instanceof Date ? user.created_at.toISOString() : user.created_at) : null,
+    updatedAt: user.updated_at ? (user.updated_at instanceof Date ? user.updated_at.toISOString() : user.updated_at) : null,
+    lastLoginAt: user.last_login_at ? (user.last_login_at instanceof Date ? user.last_login_at.toISOString() : user.last_login_at) : null,
+    invitedCount: user.invitedCount,
+    invitedUsers: user.invitedUsers
+  };
+}
+
+/**
  * 获取用户列表（分页和搜索）
  * GET /api/admin/users
  */
@@ -21,9 +40,17 @@ router.get('/users', async (req, res) => {
 
     const result = await userService.getUsers(page, pageSize, search);
 
+    // 转换字段名
+    const convertedUsers = result.users.map(convertUserFields);
+
     res.json({
       success: true,
-      data: result
+      data: {
+        users: convertedUsers,
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize
+      }
     });
   } catch (error: any) {
     console.error('[Admin] 获取用户列表失败:', error);
@@ -58,9 +85,12 @@ router.get('/users/:id', async (req, res) => {
       });
     }
 
+    // 转换字段名
+    const convertedUser = convertUserFields(user);
+
     res.json({
       success: true,
-      data: user
+      data: convertedUser
     });
   } catch (error: any) {
     console.error('[Admin] 获取用户详情失败:', error);
@@ -89,11 +119,14 @@ router.put('/users/:id', async (req, res) => {
 
     const updatedUser = await userService.updateUser(userId, { username, role });
 
+    // 转换字段名
+    const convertedUser = convertUserFields(updatedUser);
+
     // 广播用户更新事件
     try {
       const wsService = getWebSocketService();
       wsService.broadcast(userId, 'user:updated', {
-        user: updatedUser,
+        user: convertedUser,
         timestamp: new Date().toISOString()
       });
     } catch (error) {
@@ -102,7 +135,7 @@ router.put('/users/:id', async (req, res) => {
 
     res.json({
       success: true,
-      data: updatedUser,
+      data: convertedUser,
       message: '用户信息更新成功'
     });
   } catch (error: any) {

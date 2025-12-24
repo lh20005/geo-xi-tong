@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiClient } from '../services/api';
 import type { User } from '../types/user';
+import { formatDateTime } from '../utils/dateFormat';
 
 interface UserDetailModalProps {
   userId: number;
@@ -215,14 +216,14 @@ export default function UserDetailModal({ userId, onClose, onUpdate }: UserDetai
               <div className="flex items-center justify-between py-2">
                 <span className="text-gray-600">注册时间</span>
                 <span className="text-gray-900">
-                  {user?.createdAt ? new Date(user.createdAt).toLocaleString('zh-CN') : '-'}
+                  {formatDateTime(user?.createdAt)}
                 </span>
               </div>
 
               <div className="flex items-center justify-between py-2">
                 <span className="text-gray-600">最后登录</span>
                 <span className="text-gray-900">
-                  {user?.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString('zh-CN') : '从未登录'}
+                  {user?.lastLoginAt ? formatDateTime(user.lastLoginAt) : '从未登录'}
                 </span>
               </div>
 

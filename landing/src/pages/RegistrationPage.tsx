@@ -89,6 +89,9 @@ export default function RegistrationPage() {
         localStorage.setItem('refresh_token', response.data.refreshToken);
         localStorage.setItem('user_info', JSON.stringify(response.data.user));
 
+        // 触发自定义事件，通知其他组件登录状态已改变
+        window.dispatchEvent(new Event('auth-change'));
+
         setSuccess(true);
 
         // 跳转到营销网站首页（与登录流程一致）

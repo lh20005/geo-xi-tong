@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import { config } from '../config/env';
 
 export default function HomePage() {
   const [activeSection, setActiveSection] = useState('home');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // 轮播图片列表
   const carouselImages = [
@@ -36,6 +38,44 @@ export default function HomePage() {
   // 手动切换到指定图片
   const goToImage = (index: number) => {
     setCurrentImageIndex(index);
+  };
+
+  // 检查登录状态
+  useEffect(() => {
+    const checkLoginStatus = () => {
+      const token = localStorage.getItem('auth_token');
+      const userInfo = localStorage.getItem('user_info');
+      setIsLoggedIn(!!(token && userInfo));
+    };
+    
+    checkLoginStatus();
+    
+    // 监听 storage 事件（跨标签页）和自定义 auth-change 事件（同标签页）
+    window.addEventListener('storage', checkLoginStatus);
+    window.addEventListener('auth-change', checkLoginStatus);
+    
+    return () => {
+      window.removeEventListener('storage', checkLoginStatus);
+      window.removeEventListener('auth-change', checkLoginStatus);
+    };
+  }, []);
+
+  // 处理进入系统按钮点击
+  const handleEnterSystem = () => {
+    if (isLoggedIn) {
+      const token = localStorage.getItem('auth_token');
+      const refreshToken = localStorage.getItem('refresh_token');
+      const userInfo = localStorage.getItem('user_info');
+      
+      if (token && refreshToken && userInfo) {
+        const params = new URLSearchParams({
+          token,
+          refresh_token: refreshToken,
+          user_info: userInfo
+        });
+        window.location.href = `${config.clientUrl}?${params.toString()}`;
+      }
+    }
   };
 
   // 处理URL hash跳转
@@ -130,15 +170,27 @@ export default function HomePage() {
               
               {/* CTA按钮 */}
               <div className="flex flex-col sm:flex-row gap-3 mb-10">
-                <Link
-                  to="/login"
-                  className="group px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-base font-semibold rounded-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center"
-                >
-                  免费开始
-                  <svg className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                </Link>
+                {isLoggedIn ? (
+                  <button
+                    onClick={handleEnterSystem}
+                    className="group px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-base font-semibold rounded-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center"
+                  >
+                    进入GEO系统
+                    <svg className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </button>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="group px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-base font-semibold rounded-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center"
+                  >
+                    免费开始
+                    <svg className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </Link>
+                )}
               </div>
 
               {/* 信任标识 */}
@@ -727,12 +779,21 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥0</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                <Link
-                  to="/login"
-                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  免费试用
-                </Link>
+                {isLoggedIn ? (
+                  <button
+                    onClick={handleEnterSystem}
+                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    进入系统
+                  </button>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    免费试用
+                  </Link>
+                )}
               </div>
               
               {/* 功能列表 */}
@@ -796,12 +857,21 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥99</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                <Link
-                  to="/login"
-                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  点击购买
-                </Link>
+                {isLoggedIn ? (
+                  <button
+                    onClick={handleEnterSystem}
+                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    进入系统
+                  </button>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    点击购买
+                  </Link>
+                )}
               </div>
               
               {/* 功能列表 */}
@@ -865,12 +935,21 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥299</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                <Link
-                  to="/login"
-                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  点击购买
-                </Link>
+                {isLoggedIn ? (
+                  <button
+                    onClick={handleEnterSystem}
+                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    进入系统
+                  </button>
+                ) : (
+                  <Link
+                    to="/login"
+                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    点击购买
+                  </Link>
+                )}
               </div>
               
               {/* 功能列表 */}
@@ -947,15 +1026,27 @@ export default function HomePage() {
           <p className="text-xl md:text-2xl mb-12 text-gray-400 leading-relaxed">
             让您的品牌在豆包、DeepSeek、ChatGPT等AI平台被主动推荐
           </p>
-          <Link
-            to="/login"
-            className="inline-flex items-center px-10 py-5 bg-white text-black text-lg font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 shadow-2xl shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
-          >
-            立即免费开始
-            <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </Link>
+          {isLoggedIn ? (
+            <button
+              onClick={handleEnterSystem}
+              className="inline-flex items-center px-10 py-5 bg-white text-black text-lg font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 shadow-2xl shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
+            >
+              进入GEO系统
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </button>
+          ) : (
+            <Link
+              to="/login"
+              className="inline-flex items-center px-10 py-5 bg-white text-black text-lg font-semibold rounded-xl hover:bg-gray-100 transition-all duration-300 shadow-2xl shadow-blue-500/20 hover:shadow-blue-500/40 hover:-translate-y-0.5"
+            >
+              立即免费开始
+              <svg className="w-5 h-5 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+              </svg>
+            </Link>
+          )}
         </div>
       </section>
 

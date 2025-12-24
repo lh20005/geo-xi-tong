@@ -63,6 +63,9 @@ export default function LoginPage() {
         
         console.log('[Landing Login] Token已保存到localStorage');
         
+        // 触发自定义事件，通知其他组件登录状态已改变
+        window.dispatchEvent(new Event('auth-change'));
+        
         // 检查是否是临时密码
         if (response.data.data.user.isTempPassword) {
           console.log('[Landing Login] 检测到临时密码，要求修改密码');
