@@ -779,21 +779,12 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥0</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                {isLoggedIn ? (
-                  <button
-                    onClick={handleEnterSystem}
-                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    进入系统
-                  </button>
-                ) : (
-                  <Link
-                    to="/login"
-                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    免费试用
-                  </Link>
-                )}
+                <Link
+                  to="/login"
+                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  免费试用
+                </Link>
               </div>
               
               {/* 功能列表 */}
@@ -857,21 +848,12 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥99</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                {isLoggedIn ? (
-                  <button
-                    onClick={handleEnterSystem}
-                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    进入系统
-                  </button>
-                ) : (
-                  <Link
-                    to="/login"
-                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    点击购买
-                  </Link>
-                )}
+                <Link
+                  to="/login"
+                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  点击购买
+                </Link>
               </div>
               
               {/* 功能列表 */}
@@ -935,21 +917,12 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥299</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                {isLoggedIn ? (
-                  <button
-                    onClick={handleEnterSystem}
-                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    进入系统
-                  </button>
-                ) : (
-                  <Link
-                    to="/login"
-                    className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    点击购买
-                  </Link>
-                )}
+                <Link
+                  to="/login"
+                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  点击购买
+                </Link>
               </div>
               
               {/* 功能列表 */}
