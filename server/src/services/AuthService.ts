@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import { pool } from '../db/database';
+import { invitationService } from './InvitationService';
 
 interface User {
   id: number;
@@ -7,6 +8,9 @@ interface User {
   password_hash: string;
   email?: string;
   role: 'admin' | 'user';
+  invitation_code: string;
+  invited_by_code?: string;
+  is_temp_password: boolean;
   created_at: Date;
   updated_at: Date;
   last_login_at?: Date;
@@ -45,13 +49,83 @@ export class AuthService {
   async createUser(username: string, password: string, email?: string, role: 'admin' | 'user' = 'user'): Promise<User> {
     const passwordHash = await this.hashPassword(password);
     
+    // 生成唯一的邀请码
+    const invitationCode = await invitationService.generate();
+    
     const result = await pool.query(
-      'INSERT INTO users (username, password_hash, email, role) VALUES ($1, $2, $3, $4) RETURNING *',
-      [username, passwordHash, email, role]
+      'INSERT INTO users (username, password_hash, email, role, invitation_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [username, passwordHash, email, role, invitationCode]
     );
     
-    console.log(`[Auth] 用户创建成功: ${username}`);
+    console.log(`[Auth] 用户创建成功: ${username}, 邀请码: ${invitationCode}`);
     return result.rows[0];
+  }
+
+  /**
+   * 注册新用户
+   * 支持可选的邀请码
+   */
+  async registerUser(
+    username: string, 
+    password: string, 
+    invitedByCode?: string
+  ): Promise<User> {
+    // 验证用户名格式（3-20字符，字母数字和下划线）
+    if (!username || username.length < 3 || username.length > 20) {
+      throw new Error('用户名必须是3-20个字符');
+    }
+    
+    const usernameRegex = /^[a-zA-Z0-9_]+$/;
+    if (!usernameRegex.test(username)) {
+      throw new Error('用户名只能包含字母、数字和下划线');
+    }
+    
+    // 验证密码长度（最少6个字符）
+    if (!password || password.length < 6) {
+      throw new Error('密码必须至少6个字符');
+    }
+    
+    // 检查用户名是否已存在
+    const existingUser = await this.getUserByUsername(username);
+    if (existingUser) {
+      throw new Error('用户名已存在');
+    }
+    
+    // 如果提供了邀请码，验证其存在性
+    if (invitedByCode) {
+      if (!invitationService.validateFormat(invitedByCode)) {
+        console.log(`[Auth] 邀请码格式无效: ${invitedByCode}`);
+        // 格式无效，但允许注册继续（不建立邀请关系）
+        invitedByCode = undefined;
+      } else {
+        const codeExists = await invitationService.exists(invitedByCode);
+        if (!codeExists) {
+          console.log(`[Auth] 邀请码不存在: ${invitedByCode}`);
+          // 邀请码不存在，但允许注册继续（不建立邀请关系）
+          invitedByCode = undefined;
+        }
+      }
+    }
+    
+    // 哈希密码
+    const passwordHash = await this.hashPassword(password);
+    
+    // 生成唯一的邀请码
+    const invitationCode = await invitationService.generate();
+    
+    // 创建用户
+    const result = await pool.query(
+      `INSERT INTO users (username, password_hash, invitation_code, invited_by_code, role, is_temp_password) 
+       VALUES ($1, $2, $3, $4, $5, $6) 
+       RETURNING *`,
+      [username, passwordHash, invitationCode, invitedByCode || null, 'user', false]
+    );
+    
+    const user = result.rows[0];
+    
+    console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}`);
+    
+    return user;
   }
 
   /**

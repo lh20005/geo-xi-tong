@@ -1,10 +1,12 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Layout } from 'antd';
+import { Layout, message } from 'antd';
 import { useEffect } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminRoute } from './components/AdminRoute';
+import { getUserWebSocketService } from './services/UserWebSocketService';
+import { getCurrentUser } from './utils/auth';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import ConfigPage from './pages/ConfigPage';
@@ -50,6 +52,100 @@ function App() {
       navigate('/', { replace: true });
     }
   }, [location, navigate]);
+
+  // Initialize WebSocket for user management events
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    
+    if (!currentUser) {
+      console.log('[Client] No user logged in, skipping WebSocket initialization');
+      return;
+    }
+
+    const wsService = getUserWebSocketService();
+
+    // Connect to WebSocket
+    wsService.connect().catch((error) => {
+      console.error('[Client] Failed to connect to WebSocket:', error);
+    });
+
+    // Handle user:updated event
+    const handleUserUpdated = (data: any) => {
+      console.log('[Client] User updated:', data);
+      
+      if (data.userId === currentUser.id) {
+        // Update local user info
+        const updatedUser = {
+          ...currentUser,
+          username: data.username,
+          role: data.role
+        };
+        localStorage.setItem('user_info', JSON.stringify(updatedUser));
+        
+        message.info('您的账户信息已更新');
+        
+        // Refresh the page to reflect changes
+        window.location.reload();
+      }
+    };
+
+    // Handle user:deleted event
+    const handleUserDeleted = (data: any) => {
+      console.log('[Client] User deleted:', data);
+      
+      if (data.userId === currentUser.id) {
+        message.error('您的账户已被删除，即将退出登录');
+        
+        // Clear local storage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_info');
+        
+        // Disconnect WebSocket
+        wsService.disconnect();
+        
+        // Redirect to login page
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 2000);
+      }
+    };
+
+    // Handle user:password-changed event
+    const handlePasswordChanged = (data: any) => {
+      console.log('[Client] Password changed:', data);
+      
+      if (data.userId === currentUser.id) {
+        message.warning('您的密码已被修改，请重新登录');
+        
+        // Clear local storage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_info');
+        
+        // Disconnect WebSocket
+        wsService.disconnect();
+        
+        // Redirect to login page
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 2000);
+      }
+    };
+
+    // Subscribe to events
+    wsService.on('user:updated', handleUserUpdated);
+    wsService.on('user:deleted', handleUserDeleted);
+    wsService.on('user:password-changed', handlePasswordChanged);
+
+    // Cleanup on unmount
+    return () => {
+      wsService.off('user:updated', handleUserUpdated);
+      wsService.off('user:deleted', handleUserDeleted);
+      wsService.off('user:password-changed', handlePasswordChanged);
+      wsService.disconnect();
+    };
+  }, [navigate]);
 
   return (
     <Routes>

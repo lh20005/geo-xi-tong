@@ -1,31 +1,10 @@
-import { Link } from 'react-router-dom';
+import Header from '../components/Header';
 
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* 导航栏 */}
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <Link to="/" className="flex items-center space-x-3">
-              <img 
-                src="/images/logo.png" 
-                alt="JZ Logo" 
-                className="w-10 h-10 rounded-lg"
-              />
-              <span className="text-2xl font-bold text-gray-900">
-                GEO优化SaaS系统
-              </span>
-            </Link>
-            <Link
-              to="/"
-              className="text-gray-600 hover:text-gray-900 font-medium transition-colors"
-            >
-              返回首页
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <Header />
 
       {/* 内容区域 */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">

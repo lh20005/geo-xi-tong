@@ -15,10 +15,16 @@ import { dashboardRouter } from './dashboard';
 import authRouter from './auth';
 import platformsRouter from './platforms';
 import accountsRouter from './accounts';
+import adminRouter from './admin';
+import usersRouter from './users';
+import invitationsRouter from './invitations';
 
 export const apiRouter = Router();
 
 apiRouter.use('/auth', authRouter);
+apiRouter.use('/admin', adminRouter);
+apiRouter.use('/users', usersRouter);
+apiRouter.use('/invitations', invitationsRouter);
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);

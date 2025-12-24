@@ -7,6 +7,7 @@ import { CrashRecovery } from './crash/recovery';
 import { CertificateValidator } from './security/certificate';
 import { ContentSecurityPolicy } from './security/csp';
 import { wsManager, WebSocketManager } from './websocket/manager';
+import { userWsManager, UserWebSocketManager } from './websocket/userManager';
 import { storageManager } from './storage/manager';
 
 // 初始化核心服务
@@ -72,6 +73,9 @@ class ApplicationManager {
       
       // 初始化WebSocket连接
       await this.initializeWebSocket();
+      
+      // 初始化用户管理WebSocket连接
+      await this.initializeUserWebSocket();
       
       // 处理应用激活（macOS）
       app.on('activate', () => {
@@ -316,6 +320,14 @@ class ApplicationManager {
       logger.error('Failed to disconnect WebSocket:', error);
     }
     
+    // 断开用户管理WebSocket连接
+    try {
+      userWsManager.disconnect();
+      logger.info('User WebSocket disconnected');
+    } catch (error) {
+      logger.error('Failed to disconnect User WebSocket:', error);
+    }
+    
     // 清理资源
     if (this.window && !this.window.isDestroyed()) {
       this.window.destroy();
@@ -366,6 +378,51 @@ class ApplicationManager {
     } catch (error) {
       logger.error('Failed to initialize WebSocket connection:', error);
       // 不抛出错误，允许应用继续运行（降级到手动刷新模式）
+    }
+  }
+
+  /**
+   * 初始化用户管理WebSocket连接
+   * Requirements: 7.1, 7.2, 7.3, 7.5
+   */
+  private async initializeUserWebSocket(): Promise<void> {
+    try {
+      logger.info('Initializing User WebSocket connection...');
+      
+      // 获取配置
+      const config = await storageManager.getConfig();
+      
+      if (!config || !config.serverUrl) {
+        logger.warn('No server URL configured, skipping User WebSocket initialization');
+        return;
+      }
+      
+      // 获取认证令牌
+      const tokens = await storageManager.getTokens();
+      
+      if (!tokens?.accessToken) {
+        logger.warn('No access token available, skipping User WebSocket initialization');
+        return;
+      }
+      
+      // 派生WebSocket URL
+      const wsUrl = UserWebSocketManager.deriveWebSocketUrl(config.serverUrl);
+      
+      // Set main window reference
+      if (this.window) {
+        userWsManager.setMainWindow(this.window);
+      }
+      
+      // 初始化用户管理WebSocket管理器
+      await userWsManager.initialize({
+        serverUrl: wsUrl,
+        token: tokens.accessToken
+      });
+      
+      logger.info('User WebSocket connection initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize User WebSocket connection:', error);
+      // 不抛出错误，允许应用继续运行
     }
   }
 

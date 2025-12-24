@@ -1,11 +1,26 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useEffect } from 'react';
+import Header from '../components/Header';
 
 export default function CasesPage() {
+  const navigate = useNavigate();
+
   // 页面加载时滚动到顶部
   useEffect(() => {
     window.scrollTo(0, 0);
   }, []);
+
+  // 处理导航到首页锚点
+  const handleNavigateToSection = (sectionId: string) => {
+    navigate('/');
+    // 延迟滚动，确保页面已加载
+    setTimeout(() => {
+      const element = document.getElementById(sectionId);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 100);
+  };
 
   const cases = [
     {
@@ -157,45 +172,7 @@ export default function CasesPage() {
   return (
     <div className="min-h-screen bg-white">
       {/* 导航栏 */}
-      <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <Link to="/" className="flex items-center space-x-3">
-              <img 
-                src="/images/logo.png" 
-                alt="JZ Logo" 
-                className="w-10 h-10 rounded-lg"
-              />
-              <span className="text-2xl font-bold text-gray-900">
-                GEO优化SaaS系统
-              </span>
-            </Link>
-            <div className="hidden md:flex items-center space-x-8">
-              <Link to="/" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">
-                首页
-              </Link>
-              <Link to="/#features" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">
-                核心功能
-              </Link>
-              <Link to="/#advantages" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">
-                产品优势
-              </Link>
-              <Link to="/cases" className="text-blue-600 font-medium transition-colors">
-                应用示例
-              </Link>
-              <Link to="/#pricing" className="text-gray-600 hover:text-gray-900 font-medium transition-colors">
-                价格方案
-              </Link>
-              <Link
-                to="/login"
-                className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all duration-300 transform hover:scale-105"
-              >
-                立即登录
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+      <Header />
 
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-gray-50 to-blue-50 py-20">
@@ -385,21 +362,21 @@ export default function CasesPage() {
             <div className="text-center">
               <h4 className="font-bold mb-4 text-lg">产品功能</h4>
               <ul className="space-y-3 text-sm text-gray-400">
-                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                <li><button onClick={() => handleNavigateToSection('features')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>智能关键词蒸馏
-                </Link></li>
-                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                </button></li>
+                <li><button onClick={() => handleNavigateToSection('features')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>AI内容生成引擎
-                </Link></li>
-                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                </button></li>
+                <li><button onClick={() => handleNavigateToSection('features')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>企业知识库管理
-                </Link></li>
-                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                </button></li>
+                <li><button onClick={() => handleNavigateToSection('features')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>多平台智能发布
-                </Link></li>
-                <li><Link to="/#features" className="hover:text-white transition-colors inline-flex items-center">
+                </button></li>
+                <li><button onClick={() => handleNavigateToSection('features')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>数据监控工作台
-                </Link></li>
+                </button></li>
               </ul>
             </div>
             
@@ -407,15 +384,15 @@ export default function CasesPage() {
             <div className="text-center">
               <h4 className="font-bold mb-4 text-lg">快速链接</h4>
               <ul className="space-y-3 text-sm text-gray-400">
-                <li><Link to="/#advantages" className="hover:text-white transition-colors inline-flex items-center">
+                <li><button onClick={() => handleNavigateToSection('advantages')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>产品优势
-                </Link></li>
+                </button></li>
                 <li><Link to="/cases" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>应用案例
                 </Link></li>
-                <li><Link to="/#pricing" className="hover:text-white transition-colors inline-flex items-center">
+                <li><button onClick={() => handleNavigateToSection('pricing')} className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>价格方案
-                </Link></li>
+                </button></li>
                 <li><Link to="/login" className="hover:text-white transition-colors inline-flex items-center">
                   <span className="mr-2">→</span>立即登录
                 </Link></li>
