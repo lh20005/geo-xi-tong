@@ -1,39 +1,70 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import axios from 'axios';
+import { config } from '../config/env';
 
 export default function LoginPage() {
-  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     username: '',
     password: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
   // 页面加载时滚动到顶部
   useEffect(() => {
     window.scrollTo(0, 0);
+    
+    // 输出配置信息用于调试
+    console.log('[Landing Login] 页面加载');
+    console.log('[Landing Login] API URL:', config.apiUrl);
+    console.log('[Landing Login] Client URL:', config.clientUrl);
+    console.log('[Landing Login] 当前 localStorage:', {
+      auth_token: localStorage.getItem('auth_token'),
+      refresh_token: localStorage.getItem('refresh_token'),
+      user_info: localStorage.getItem('user_info')
+    });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setSuccess(false);
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:3000/api/auth/login', formData);
+      console.log('[Landing Login] 开始登录，API URL:', config.apiUrl);
+      const response = await axios.post(`${config.apiUrl}/auth/login`, formData);
+      
+      console.log('[Landing Login] 登录响应:', response.data);
       
       if (response.data.success) {
-        // 保存token
-        localStorage.setItem('token', response.data.data.token);
-        localStorage.setItem('refreshToken', response.data.data.refreshToken);
-        localStorage.setItem('user', JSON.stringify(response.data.data.user));
+        // 保存token到localStorage（使用与client一致的key）
+        localStorage.setItem('auth_token', response.data.data.token);
+        localStorage.setItem('refresh_token', response.data.data.refreshToken);
+        localStorage.setItem('user_info', JSON.stringify(response.data.data.user));
         
-        // 跳转到系统应用
-        window.location.href = 'http://localhost:5173';
+        console.log('[Landing Login] Token已保存到localStorage');
+        console.log('[Landing Login] 准备跳转到:', config.clientUrl);
+        
+        // 显示成功提示
+        setSuccess(true);
+        
+        // 延迟跳转，让用户看到成功提示
+        setTimeout(() => {
+          console.log('[Landing Login] 正在跳转到 Client 应用...');
+          // 通过 URL 参数传递 token 到 Client 应用
+          const params = new URLSearchParams({
+            token: response.data.data.token,
+            refresh_token: response.data.data.refreshToken,
+            user_info: JSON.stringify(response.data.data.user)
+          });
+          window.location.href = `${config.clientUrl}?${params.toString()}`;
+        }, 800);
       }
     } catch (err: any) {
+      console.error('[Landing Login] 登录失败:', err);
       setError(err.response?.data?.message || '登录失败，请检查用户名和密码');
     } finally {
       setLoading(false);
@@ -98,8 +129,20 @@ export default function LoginPage() {
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                  </svg>
                   {error}
+                </div>
+              )}
+
+              {success && (
+                <div className="bg-green-50 border border-green-200 text-green-600 px-4 py-3 rounded-lg text-sm flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                  </svg>
+                  登录成功！正在跳转...
                 </div>
               )}
 
@@ -133,19 +176,32 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={loading || success}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
               >
-                {loading ? '登录中...' : '登录'}
+                {loading ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    登录中...
+                  </span>
+                ) : success ? '登录成功' : '登录'}
               </button>
             </form>
 
-            <div className="mt-6 text-center">
+            <div className="mt-6 text-center space-y-2">
               <p className="text-sm text-gray-600">
                 还没有账号？
                 <a href="mailto:contact@example.com" className="text-blue-600 hover:text-blue-700 font-medium ml-1">
                   联系我们试用
                 </a>
+              </p>
+              <p className="text-sm">
+                <Link to="/" className="text-gray-500 hover:text-gray-700 transition-colors">
+                  ← 返回首页
+                </Link>
               </p>
             </div>
           </div>

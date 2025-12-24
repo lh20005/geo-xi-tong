@@ -1,9 +1,10 @@
-import { Layout, Space, Tag, Avatar, Dropdown, Typography } from 'antd';
+import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
 import { ApiOutlined, UserOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import type { MenuProps } from 'antd';
+import { config } from '../../config/env';
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -29,14 +30,28 @@ export default function Header() {
   };
 
   const handleLogout = () => {
-    console.log('[Auth] 用户退出登录');
-    // 清除所有认证信息
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('refresh_token');
-    localStorage.removeItem('user_info');
-    
-    // 跳转到登录页
-    navigate('/login');
+    Modal.confirm({
+      title: '确认退出',
+      content: '确定要退出登录吗？',
+      okText: '确认退出',
+      cancelText: '取消',
+      onOk: () => {
+        console.log('[Auth] 用户退出登录');
+        
+        // 清除所有认证信息
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_info');
+        
+        message.success('已退出登录');
+        
+        // 延迟跳转，让用户看到提示
+        setTimeout(() => {
+          // 跳转到 Landing 首页（营销网站）
+          window.location.href = config.landingUrl;
+        }, 500);
+      }
+    });
   };
 
   const menuItems: MenuProps['items'] = [

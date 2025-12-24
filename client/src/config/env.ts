@@ -15,6 +15,10 @@ export const config = {
   wsUrl: import.meta.env.VITE_WS_URL || 
     (isProduction ? 'wss://your-domain.com/ws' : 'ws://localhost:3000/ws'),
   
+  // Landing页面URL（退出登录时跳转）
+  landingUrl: import.meta.env.VITE_LANDING_URL || 
+    (isProduction ? 'https://your-domain.com' : 'http://localhost:8080'),
+  
   // 环境标识
   isDevelopment,
   isProduction,

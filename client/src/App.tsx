@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Layout } from 'antd';
+import { useEffect } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -27,6 +28,29 @@ import PublishingRecordsPage from './pages/PublishingRecordsPage';
 const { Content } = Layout;
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // 处理从 Landing 跳转过来的 token
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    const refreshToken = params.get('refresh_token');
+    const userInfo = params.get('user_info');
+
+    if (token && refreshToken && userInfo) {
+      console.log('[Client] 从 URL 参数接收到 token，保存到 localStorage');
+      
+      // 保存 token 到 localStorage
+      localStorage.setItem('auth_token', token);
+      localStorage.setItem('refresh_token', refreshToken);
+      localStorage.setItem('user_info', userInfo);
+      
+      // 清除 URL 参数，跳转到首页
+      navigate('/', { replace: true });
+    }
+  }, [location, navigate]);
+
   return (
     <Routes>
       {/* 公开路由 */}
