@@ -127,6 +127,45 @@ GEO（Generative Engine Optimization）优化系统是一个专业的品牌AI推
   - 配置版本历史
   - 配置导出/导入
 
+### 1️⃣3️⃣ 订阅套餐系统 **（新增）**
+- ✅ **套餐管理** - 灵活的订阅计划
+  - 三种套餐：体验版、专业版、企业版
+  - 功能配额管理（文章生成数、发布数、账号数、蒸馏数）
+  - 价格和计费周期配置
+  - 套餐启用/停用控制
+  - 配置历史记录和回滚
+- ✅ **订单管理** - 完整的订单处理流程
+  - 订单创建和状态跟踪
+  - 订单统计（今日/本月收入和订单数）
+  - 订单筛选（按状态、日期范围）
+  - 异常订单处理（手动完成、退款）
+  - 待支付订单监控
+- ✅ **用户订阅** - 个人中心订阅管理
+  - 当前订阅信息查看
+  - 使用量统计和配额监控
+  - 订单历史记录
+  - 套餐升级功能
+  - 自动续费管理
+- ✅ **支付集成** - 微信支付支持
+  - 微信Native支付（扫码支付）
+  - 支付回调处理
+  - 订单状态同步
+  - 支付安全验证
+
+### 1️⃣4️⃣ 商品管理系统 **（新增）**
+- ✅ **套餐配置管理** - 管理员专用
+  - 可视化套餐列表
+  - 价格和功能配额编辑
+  - 价格变动二次确认（超过20%需确认）
+  - 配置历史记录查看
+  - 配置回滚功能
+  - 套餐启用/停用控制
+- ✅ **安全控制**
+  - 管理员权限验证
+  - 配置变更审计日志
+  - IP地址和操作人记录
+  - 配置变更通知
+
 ## 🛠️ 技术栈
 
 ### 前端
@@ -155,6 +194,294 @@ DeepSeek API      - 中文优化的AI模型
 Gemini API        - Google的多模态AI
 Ollama            - 本地AI模型运行（新增）
 ```
+
+## 📦 系统依赖和环境要求
+
+### 运行环境要求
+
+#### 必需软件
+- **Node.js**: 18.x 或更高版本
+- **npm**: 9.x 或更高版本
+- **PostgreSQL**: 12.x 或更高版本
+
+#### 可选软件
+- **Redis**: 6.x 或更高版本（用于缓存和会话管理，可选）
+- **Ollama**: 最新版本（用于本地AI模型，可选）
+
+### 系统资源要求
+
+#### 最低配置
+- CPU: 2核
+- 内存: 4GB RAM
+- 磁盘: 20GB 可用空间
+- 网络: 稳定的互联网连接
+
+#### 推荐配置
+- CPU: 4核或更多
+- 内存: 8GB RAM 或更多
+- 磁盘: 50GB SSD
+- 网络: 高速互联网连接
+
+### 项目依赖清单
+
+#### 根目录依赖 (`package.json`)
+```json
+{
+  "devDependencies": {
+    "concurrently": "^8.2.2"  // 并发运行多个命令
+  }
+}
+```
+
+#### 后端依赖 (`server/package.json`)
+
+**生产依赖**
+```json
+{
+  "dependencies": {
+    // 核心框架
+    "express": "^4.18.2",           // Web框架
+    "cors": "^2.8.5",               // 跨域支持
+    "dotenv": "^16.3.1",            // 环境变量管理
+    
+    // 数据库
+    "pg": "^8.11.3",                // PostgreSQL客户端
+    
+    // 认证和安全
+    "bcrypt": "^6.0.0",             // 密码哈希
+    "jsonwebtoken": "^9.0.3",       // JWT令牌
+    "helmet": "^8.1.0",             // 安全头部
+    "validator": "^13.15.26",       // 数据验证
+    "cookie-parser": "^1.4.7",      // Cookie解析
+    
+    // 支付
+    "wechatpay-axios-plugin": "^0.9.5",  // 微信支付
+    
+    // 文件处理
+    "multer": "^2.0.2",             // 文件上传
+    "mammoth": "^1.6.0",            // Word文档解析
+    "pdf-parse": "^1.1.1",          // PDF解析
+    
+    // 网络和爬虫
+    "axios": "^1.6.2",              // HTTP客户端
+    "puppeteer": "^24.33.0",        // 浏览器自动化
+    
+    // WebSocket
+    "ws": "^8.18.3",                // WebSocket服务器
+    
+    // 缓存和队列
+    "ioredis": "^5.8.2",            // Redis客户端
+    "redis": "^5.10.0",             // Redis客户端（备选）
+    
+    // 定时任务
+    "node-cron": "^4.2.1",          // 定时任务调度
+    
+    // 数据验证
+    "zod": "^3.22.4",               // Schema验证
+    "ajv": "^8.17.1",               // JSON Schema验证
+    "ajv-formats": "^3.0.1",        // AJV格式扩展
+    
+    // 工具库
+    "netmask": "^2.0.2"             // IP地址处理
+  }
+}
+```
+
+**开发依赖**
+```json
+{
+  "devDependencies": {
+    // TypeScript
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0",                // TypeScript执行器
+    
+    // 类型定义
+    "@types/node": "^20.10.5",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/bcrypt": "^6.0.0",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
+    "@types/pg": "^8.10.9",
+    "@types/ws": "^8.18.1",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/puppeteer": "^5.4.7",
+    "@types/validator": "^13.15.10",
+    "@types/netmask": "^2.0.6",
+    "@types/ioredis": "^4.28.10",
+    "@types/node-cron": "^3.0.11",
+    
+    // 测试
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "@types/jest": "^30.0.0",
+    "supertest": "^7.1.4",
+    "@types/supertest": "^6.0.3",
+    "fast-check": "^4.5.2"          // 属性测试
+  }
+}
+```
+
+#### 前端依赖 (`client/package.json`)
+
+**生产依赖**
+```json
+{
+  "dependencies": {
+    // React核心
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    
+    // UI组件库
+    "antd": "^5.12.2",              // Ant Design
+    "@ant-design/icons": "^5.2.6",  // 图标库
+    
+    // 状态管理
+    "zustand": "^4.4.7",            // 轻量级状态管理
+    
+    // HTTP客户端
+    "axios": "^1.6.2",
+    
+    // 工具库
+    "dayjs": "^1.11.19",            // 日期处理
+    "dompurify": "^3.3.1",          // XSS防护
+    
+    // 富文本编辑器
+    "react-quill": "^2.0.0",
+    
+    // Markdown
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",         // GitHub风格Markdown
+    
+    // 图表
+    "echarts": "^6.0.0",
+    "echarts-for-react": "^3.0.5",
+    
+    // 布局
+    "react-resizable": "^3.0.5"     // 可调整大小组件
+  }
+}
+```
+
+**开发依赖**
+```json
+{
+  "devDependencies": {
+    // TypeScript
+    "typescript": "^5.3.3",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "@types/dompurify": "^3.0.5",
+    "@types/react-resizable": "^3.0.8",
+    
+    // 构建工具
+    "vite": "^5.0.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    
+    // CSS
+    "tailwindcss": "^3.3.6",
+    "postcss": "^8.4.32",
+    "autoprefixer": "^10.4.16"
+  }
+}
+```
+
+#### 营销网站依赖 (`landing/package.json`)
+
+**生产依赖**
+```json
+{
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.1",
+    "axios": "^1.6.2"
+  }
+}
+```
+
+**开发依赖**
+```json
+{
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/react": "^18.2.43",
+    "@types/react-dom": "^18.2.17",
+    "vite": "^5.0.8",
+    "@vitejs/plugin-react": "^4.2.1",
+    "tailwindcss": "^3.3.6",
+    "postcss": "^8.4.32",
+    "autoprefixer": "^10.4.16"
+  }
+}
+```
+
+### 数据库依赖
+
+#### PostgreSQL扩展
+```sql
+-- 全文搜索（中文支持）
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+-- UUID支持
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+```
+
+#### 数据库表结构
+系统需要以下数据库表（通过迁移脚本自动创建）：
+
+**核心表**
+- `api_configs` - AI API配置
+- `distillations` - 关键词蒸馏记录
+- `topics` - 话题管理
+- `articles` - 文章管理
+- `article_generation_tasks` - 文章生成任务
+- `article_settings` - 文章设置模板
+- `conversion_targets` - 转化目标
+
+**资源管理表**
+- `albums` - 相册管理
+- `images` - 图片管理
+- `image_usage_tracking` - 图片使用追踪
+- `knowledge_bases` - 知识库
+- `knowledge_base_documents` - 知识库文档
+
+**用户和权限表**
+- `users` - 用户信息
+- `invitations` - 邀请码
+- `user_tokens` - 用户令牌
+- `login_attempts` - 登录尝试记录
+- `permissions` - 权限定义
+- `user_permissions` - 用户权限关联
+
+**订阅和支付表**
+- `subscription_plans` - 订阅套餐
+- `plan_features` - 套餐功能配额
+- `user_subscriptions` - 用户订阅
+- `orders` - 订单
+- `usage_records` - 使用记录
+- `product_config_history` - 商品配置历史
+
+**安全和审计表**
+- `audit_logs` - 审计日志
+- `security_configs` - 安全配置
+- `security_config_history` - 安全配置历史
+
+**发布管理表**
+- `platform_accounts` - 平台账号
+- `publishing_tasks` - 发布任务
+- `publishing_records` - 发布记录
+
+### 系统端口占用
+
+- **3000**: 后端API服务器
+- **5173**: 前端开发服务器（Vite）
+- **8080**: 营销网站开发服务器
+- **5432**: PostgreSQL数据库（默认）
+- **6379**: Redis缓存（可选）
+- **11434**: Ollama本地AI服务（可选）
 
 ## 🚀 快速开始
 
@@ -312,7 +639,10 @@ geo-optimization-system/
 │   │   │   ├── AlbumDetailPage.tsx            # 相册详情
 │   │   │   ├── KnowledgeBasePage.tsx          # 企业知识库
 │   │   │   ├── KnowledgeBaseDetailPage.tsx    # 知识库详情
-│   │   │   └── LoginPage.tsx                  # 登录页面
+│   │   │   ├── LoginPage.tsx                  # 登录页面
+│   │   │   ├── ProductManagementPage.tsx      # 商品管理（管理员）
+│   │   │   ├── OrderManagementPage.tsx        # 订单管理（管理员）
+│   │   │   └── UserCenterPage.tsx             # 个人中心
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   └── package.json
@@ -346,7 +676,13 @@ geo-optimization-system/
 │   │   │   ├── auth.ts                # 认证路由
 │   │   │   ├── users.ts               # 用户路由
 │   │   │   ├── admin.ts               # 管理员路由
-│   │   │   └── invitations.ts         # 邀请路由
+│   │   │   ├── invitations.ts         # 邀请路由
+│   │   │   ├── subscription.ts        # 订阅路由
+│   │   │   ├── payment.ts             # 支付路由
+│   │   │   ├── orders.ts              # 订单路由
+│   │   │   └── admin/                 # 管理员子路由
+│   │   │       ├── products.ts        # 商品管理
+│   │   │       └── orders.ts          # 订单管理
 │   │   ├── services/          # 业务服务
 │   │   │   ├── aiService.ts           # AI服务集成
 │   │   │   ├── documentParser.ts      # 文档解析
@@ -356,7 +692,11 @@ geo-optimization-system/
 │   │   │   ├── InvitationService.ts   # 邀请服务
 │   │   │   ├── TokenService.ts        # 令牌服务
 │   │   │   ├── RateLimitService.ts    # 限流服务
-│   │   │   └── WebSocketService.ts    # WebSocket服务
+│   │   │   ├── WebSocketService.ts    # WebSocket服务
+│   │   │   ├── SubscriptionService.ts # 订阅服务
+│   │   │   ├── PaymentService.ts      # 支付服务
+│   │   │   ├── OrderService.ts        # 订单服务
+│   │   │   └── ProductService.ts      # 商品服务
 │   │   ├── middleware/        # 中间件
 │   │   │   ├── adminAuth.ts           # 管理员认证
 │   │   │   ├── rateLimit.ts           # 限流中间件
@@ -448,6 +788,14 @@ geo-optimization-system/
 - [🔍 安全配置指南](./SECURITY_CONFIG_GUIDE.md) - 安全配置详细指南
 - [📊 安全最佳实践](./SECURITY_BEST_PRACTICES.md) - 安全使用建议
 - [🚨 安全故障排除](./SECURITY_TROUBLESHOOTING.md) - 常见问题解决
+
+### 💳 订阅和支付文档
+订阅套餐和支付系统使用指南：
+
+- [📦 订阅系统设计](./PRODUCT_SUBSCRIPTION_DESIGN.md) - 订阅系统架构和设计
+- [🔒 商品配置安全](./PRODUCT_CONFIG_SECURITY.md) - 商品管理安全机制
+- [🚀 订阅系统快速开始](./QUICK_START_SUBSCRIPTION.md) - 快速上手指南
+- [✅ 订阅系统完成报告](./SUBSCRIPTION_SYSTEM_FINAL.md) - 功能完成情况
 
 ### 🔧 开发文档（dev-docs/）
 开发过程中的记录和参考文档：
@@ -568,7 +916,38 @@ cd server && npm run db:migrate:ollama
 6. 复制或下载文章
 ```
 
-### 6. 安全管理（管理员）
+### 6. 订阅和支付
+```
+查看订阅信息：
+1. 登录用户账号
+2. 进入"个人中心"
+3. 查看当前订阅套餐和到期时间
+4. 查看使用量统计（文章生成、发布等）
+5. 查看订单历史
+
+升级套餐：
+1. 在个人中心点击"升级套餐"
+2. 选择目标套餐
+3. 确认订单信息
+4. 使用微信扫码支付
+5. 支付成功后自动激活
+
+管理订单（管理员）：
+1. 登录管理员账号
+2. 进入"订单管理"
+3. 查看订单统计（今日/本月收入和订单数）
+4. 筛选订单（按状态、日期）
+5. 处理异常订单（手动完成、退款）
+
+管理商品（管理员）：
+1. 进入"商品管理"
+2. 查看所有套餐配置
+3. 编辑套餐价格和功能配额
+4. 启用/停用套餐
+5. 查看配置历史和回滚
+```
+
+### 7. 安全管理（管理员）
 ```
 安全仪表板：
 1. 登录管理员账号
@@ -669,6 +1048,11 @@ cd server && npm run db:migrate:ollama
 - [x] 邀请码推荐系统
 - [x] 实时跨平台同步（WebSocket）
 - [x] 限流保护和安全加固
+- [x] 订阅套餐系统
+- [x] 商品管理系统
+- [x] 订单管理系统
+- [x] 微信支付集成
+- [x] 用户个人中心
 
 ### 进行中 🚧
 - [ ] 完整文档系统
@@ -782,6 +1166,474 @@ npm run migrate
    - 列出数据库表结构
 
 更多详情请查看 [scripts/README.md](scripts/README.md)
+
+---
+
+## ☁️ 腾讯云部署指南
+
+### 部署前准备
+
+#### 1. 服务器要求
+- **操作系统**: Ubuntu 20.04 LTS 或 CentOS 8+
+- **配置**: 至少2核4GB（推荐4核8GB）
+- **磁盘**: 至少50GB SSD
+- **网络**: 公网IP和域名
+
+#### 2. 安装基础软件
+
+```bash
+# 更新系统
+sudo apt update && sudo apt upgrade -y  # Ubuntu
+# 或
+sudo yum update -y  # CentOS
+
+# 安装Node.js 18.x
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs  # Ubuntu
+# 或
+curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+sudo yum install -y nodejs  # CentOS
+
+# 验证安装
+node --version  # 应显示 v18.x.x
+npm --version   # 应显示 9.x.x
+
+# 安装PostgreSQL 14
+sudo apt install -y postgresql postgresql-contrib  # Ubuntu
+# 或
+sudo yum install -y postgresql14-server postgresql14-contrib  # CentOS
+
+# 启动PostgreSQL
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# 安装Nginx（用于反向代理）
+sudo apt install -y nginx  # Ubuntu
+# 或
+sudo yum install -y nginx  # CentOS
+
+# 安装PM2（进程管理器）
+sudo npm install -g pm2
+
+# 安装Git
+sudo apt install -y git  # Ubuntu
+# 或
+sudo yum install -y git  # CentOS
+```
+
+#### 3. 配置PostgreSQL
+
+```bash
+# 切换到postgres用户
+sudo -u postgres psql
+
+# 在PostgreSQL中执行
+CREATE DATABASE geo_system;
+CREATE USER geo_user WITH ENCRYPTED PASSWORD 'your_secure_password';
+GRANT ALL PRIVILEGES ON DATABASE geo_system TO geo_user;
+\q
+
+# 配置PostgreSQL允许远程连接（如需要）
+sudo nano /etc/postgresql/14/main/postgresql.conf
+# 修改: listen_addresses = '*'
+
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+# 添加: host all all 0.0.0.0/0 md5
+
+# 重启PostgreSQL
+sudo systemctl restart postgresql
+```
+
+### 部署步骤
+
+#### 1. 克隆项目
+
+```bash
+# 创建项目目录
+sudo mkdir -p /var/www
+cd /var/www
+
+# 克隆代码
+sudo git clone <your-repository-url> geo-system
+cd geo-system
+
+# 设置权限
+sudo chown -R $USER:$USER /var/www/geo-system
+```
+
+#### 2. 安装依赖
+
+```bash
+# 安装所有依赖
+npm run install:all
+
+# 如果遇到权限问题
+sudo npm run install:all --unsafe-perm
+```
+
+#### 3. 配置环境变量
+
+```bash
+# 复制环境变量模板
+cp .env.example .env
+
+# 编辑环境变量
+nano .env
+```
+
+**生产环境配置示例**：
+```env
+# 数据库配置
+DATABASE_URL=postgresql://geo_user:your_secure_password@localhost:5432/geo_system
+
+# JWT密钥（使用强密钥）
+JWT_SECRET=your-very-strong-secret-key-change-this-in-production
+JWT_REFRESH_SECRET=your-very-strong-refresh-secret-key-change-this
+
+# 管理员账号
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-admin-password
+
+# AI API配置
+DEEPSEEK_API_KEY=your_deepseek_api_key
+GEMINI_API_KEY=your_gemini_api_key
+
+# 微信支付配置
+WECHAT_PAY_MCHID=your_merchant_id
+WECHAT_PAY_SERIAL_NO=your_certificate_serial_number
+WECHAT_PAY_PRIVATE_KEY_PATH=/path/to/apiclient_key.pem
+WECHAT_PAY_APIV3_KEY=your_apiv3_key
+
+# 服务器配置
+PORT=3000
+NODE_ENV=production
+
+# 域名配置
+CLIENT_URL=https://your-domain.com
+LANDING_URL=https://your-domain.com
+```
+
+#### 4. 运行数据库迁移
+
+```bash
+cd server
+npm run db:migrate
+cd ..
+```
+
+#### 5. 构建项目
+
+```bash
+# 构建前端
+cd client
+npm run build
+cd ..
+
+# 构建营销网站
+cd landing
+npm run build
+cd ..
+
+# 构建后端
+cd server
+npm run build
+cd ..
+```
+
+#### 6. 配置Nginx
+
+```bash
+# 创建Nginx配置
+sudo nano /etc/nginx/sites-available/geo-system
+```
+
+**Nginx配置示例**：
+```nginx
+# 后端API服务器
+upstream api_backend {
+    server 127.0.0.1:3000;
+}
+
+# 主站点配置
+server {
+    listen 80;
+    server_name your-domain.com www.your-domain.com;
+
+    # 强制HTTPS（生产环境推荐）
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com www.your-domain.com;
+
+    # SSL证书配置（使用腾讯云SSL证书）
+    ssl_certificate /path/to/your/certificate.crt;
+    ssl_certificate_key /path/to/your/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # 安全头部
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+
+    # 客户端最大上传大小
+    client_max_body_size 50M;
+
+    # 营销网站（根路径）
+    location / {
+        root /var/www/geo-system/landing/dist;
+        try_files $uri $uri/ /index.html;
+        
+        # 缓存静态资源
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+
+    # 客户端应用（/app路径）
+    location /app {
+        alias /var/www/geo-system/client/dist;
+        try_files $uri $uri/ /app/index.html;
+        
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+
+    # API代理
+    location /api {
+        proxy_pass http://api_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        
+        # 超时设置
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+    }
+
+    # WebSocket支持
+    location /ws {
+        proxy_pass http://api_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket超时
+        proxy_read_timeout 86400;
+    }
+
+    # 上传文件路径
+    location /uploads {
+        alias /var/www/geo-system/server/uploads;
+        
+        location ~* \.(jpg|jpeg|png|gif|ico|svg|webp)$ {
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+
+    # 日志
+    access_log /var/log/nginx/geo-system-access.log;
+    error_log /var/log/nginx/geo-system-error.log;
+}
+```
+
+```bash
+# 启用站点
+sudo ln -s /etc/nginx/sites-available/geo-system /etc/nginx/sites-enabled/
+
+# 测试配置
+sudo nginx -t
+
+# 重启Nginx
+sudo systemctl restart nginx
+```
+
+#### 7. 使用PM2启动应用
+
+```bash
+# 创建PM2配置文件
+nano ecosystem.config.js
+```
+
+**PM2配置示例**：
+```javascript
+module.exports = {
+  apps: [{
+    name: 'geo-api',
+    script: './server/dist/index.js',
+    cwd: '/var/www/geo-system',
+    instances: 2,  // 使用2个实例（根据CPU核心数调整）
+    exec_mode: 'cluster',
+    env: {
+      NODE_ENV: 'production',
+      PORT: 3000
+    },
+    error_file: './logs/api-error.log',
+    out_file: './logs/api-out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    merge_logs: true,
+    autorestart: true,
+    max_memory_restart: '1G',
+    watch: false
+  }]
+};
+```
+
+```bash
+# 创建日志目录
+mkdir -p logs
+
+# 启动应用
+pm2 start ecosystem.config.js
+
+# 查看状态
+pm2 status
+
+# 查看日志
+pm2 logs geo-api
+
+# 设置开机自启
+pm2 startup
+pm2 save
+```
+
+#### 8. 配置防火墙
+
+```bash
+# Ubuntu (UFW)
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw enable
+
+# CentOS (firewalld)
+sudo firewall-cmd --permanent --add-service=ssh
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
+
+#### 9. 配置SSL证书（推荐）
+
+使用腾讯云SSL证书或Let's Encrypt：
+
+```bash
+# 使用Let's Encrypt（免费）
+sudo apt install certbot python3-certbot-nginx  # Ubuntu
+# 或
+sudo yum install certbot python3-certbot-nginx  # CentOS
+
+# 获取证书
+sudo certbot --nginx -d your-domain.com -d www.your-domain.com
+
+# 自动续期
+sudo certbot renew --dry-run
+```
+
+### 部署后检查
+
+```bash
+# 1. 检查服务状态
+pm2 status
+sudo systemctl status nginx
+sudo systemctl status postgresql
+
+# 2. 检查端口监听
+sudo netstat -tlnp | grep -E ':(80|443|3000|5432)'
+
+# 3. 检查日志
+pm2 logs geo-api --lines 50
+sudo tail -f /var/log/nginx/geo-system-error.log
+
+# 4. 测试API
+curl http://localhost:3000/api/health
+
+# 5. 测试前端
+curl -I https://your-domain.com
+```
+
+### 常用运维命令
+
+```bash
+# PM2管理
+pm2 restart geo-api      # 重启应用
+pm2 stop geo-api         # 停止应用
+pm2 delete geo-api       # 删除应用
+pm2 logs geo-api         # 查看日志
+pm2 monit                # 监控面板
+
+# Nginx管理
+sudo systemctl restart nginx    # 重启Nginx
+sudo systemctl reload nginx     # 重新加载配置
+sudo nginx -t                   # 测试配置
+
+# 数据库备份
+pg_dump -U geo_user geo_system > backup_$(date +%Y%m%d).sql
+
+# 数据库恢复
+psql -U geo_user geo_system < backup_20240101.sql
+
+# 更新代码
+cd /var/www/geo-system
+git pull
+npm run install:all
+npm run build
+pm2 restart geo-api
+```
+
+### 监控和日志
+
+```bash
+# 安装监控工具
+pm2 install pm2-logrotate  # 日志轮转
+
+# 配置日志轮转
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 30
+
+# 查看系统资源
+pm2 monit
+htop
+```
+
+### 性能优化建议
+
+1. **启用Gzip压缩**（Nginx配置）
+2. **配置CDN**（腾讯云CDN）
+3. **数据库索引优化**
+4. **Redis缓存**（可选）
+5. **定期备份数据库**
+6. **监控系统资源**
+
+### 安全加固
+
+1. **定期更新系统和依赖**
+2. **配置防火墙规则**
+3. **使用强密码**
+4. **启用HTTPS**
+5. **定期审查日志**
+6. **限制SSH访问**
+7. **配置fail2ban**（防止暴力破解）
+
+更多详细信息请参考：
+- [腾讯EdgeOne部署方案](./docs/腾讯EdgeOne部署方案.md)
+- [部署指南](./docs/部署指南.md)
 
 ---
 

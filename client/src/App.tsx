@@ -31,6 +31,9 @@ import AuditLogsPage from './pages/AuditLogsPage';
 import IPWhitelistPage from './pages/IPWhitelistPage';
 import PermissionsPage from './pages/PermissionsPage';
 import SecurityConfigPage from './pages/SecurityConfigPage';
+import ProductManagementPage from './pages/ProductManagementPage';
+import OrderManagementPage from './pages/OrderManagementPage';
+import UserCenterPage from './pages/UserCenterPage';
 
 const { Content } = Layout;
 
@@ -191,6 +194,9 @@ function App() {
                     <Route path="/security/ip-whitelist" element={<AdminRoute><IPWhitelistPage /></AdminRoute>} />
                     <Route path="/security/permissions" element={<AdminRoute><PermissionsPage /></AdminRoute>} />
                     <Route path="/security/config" element={<AdminRoute><SecurityConfigPage /></AdminRoute>} />
+                    <Route path="/products" element={<AdminRoute><ProductManagementPage /></AdminRoute>} />
+                    <Route path="/admin/orders" element={<AdminRoute><OrderManagementPage /></AdminRoute>} />
+                    <Route path="/user-center" element={<UserCenterPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Content>

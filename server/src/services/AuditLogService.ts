@@ -1,63 +1,21 @@
-/**
- * 审计日志服务
- * 负责记录和查询所有敏感操作的审计日志
- */
-
 import { pool } from '../db/database';
 
-export interface AuditLogEntry {
-  id: number;
-  adminId: number;
-  action: string;
-  targetType: 'user' | 'config' | 'system' | null;
-  targetId: number | null;
-  details: Record<string, any>;
-  ipAddress: string;
-  userAgent: string | null;
-  createdAt: Date;
-}
-
-export interface AuditLogFilters {
-  adminId?: number;
-  action?: string;
-  targetType?: string;
-  startDate?: Date;
-  endDate?: Date;
-  page?: number;
-  pageSize?: number;
-}
-
-export interface AuditLogQueryResult {
-  logs: AuditLogEntry[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
-
+/**
+ * 审计日志服务
+ * 记录所有管理员的敏感操作
+ */
 export class AuditLogService {
-  private static instance: AuditLogService;
-
-  private constructor() {}
-
-  public static getInstance(): AuditLogService {
-    if (!AuditLogService.instance) {
-      AuditLogService.instance = new AuditLogService();
-    }
-    return AuditLogService.instance;
-  }
-
   /**
-   * 记录操作日志
-   * 立即持久化到数据库
+   * 记录管理员操作日志
    */
   async logAction(
     adminId: number,
     action: string,
-    targetType: 'user' | 'config' | 'system' | null,
-    targetId: number | null,
-    details: Record<string, any>,
-    ipAddress: string,
-    userAgent: string | null = null
+    targetType: string | null,
+    targetId: string | null,
+    details: any,
+    ipAddress?: string,
+    userAgent?: string
   ): Promise<void> {
     try {
       await pool.query(
@@ -69,24 +27,31 @@ export class AuditLogService {
           action,
           targetType,
           targetId,
-          JSON.stringify(details),
-          ipAddress,
-          userAgent
+          details ? JSON.stringify(details) : null,
+          ipAddress || null,
+          userAgent || null,
         ]
       );
 
-      console.log(`[AuditLog] 记录操作: ${action} by admin ${adminId}`);
+      console.log(`[AUDIT] Admin ${adminId} performed ${action} on ${targetType}${targetId ? ` (${targetId})` : ''}`);
     } catch (error) {
-      console.error('[AuditLog] 记录日志失败:', error);
-      // 不抛出错误,避免影响主业务流程
+      console.error('Failed to log admin action:', error);
+      // 不抛出错误，避免影响主业务流程
     }
   }
 
   /**
-   * 查询日志
-   * 支持多种筛选条件和分页
+   * 查询审计日志
    */
-  async queryLogs(filters: AuditLogFilters = {}): Promise<AuditLogQueryResult> {
+  async queryLogs(filters: {
+    adminId?: number;
+    action?: string;
+    targetType?: string;
+    startDate?: Date;
+    endDate?: Date;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ logs: any[]; total: number }> {
     const {
       adminId,
       action,
@@ -94,229 +59,207 @@ export class AuditLogService {
       startDate,
       endDate,
       page = 1,
-      pageSize = 20
+      pageSize = 20,
     } = filters;
 
-    // 构建WHERE条件
     const conditions: string[] = [];
-    const params: any[] = [];
+    const values: any[] = [];
     let paramIndex = 1;
 
-    if (adminId !== undefined) {
-      conditions.push(`admin_id = $${paramIndex++}`);
-      params.push(adminId);
+    if (adminId) {
+      conditions.push(`al.admin_id = $${paramIndex++}`);
+      values.push(adminId);
     }
 
     if (action) {
-      conditions.push(`action = $${paramIndex++}`);
-      params.push(action);
+      conditions.push(`al.action = $${paramIndex++}`);
+      values.push(action);
     }
 
     if (targetType) {
-      conditions.push(`target_type = $${paramIndex++}`);
-      params.push(targetType);
+      conditions.push(`al.target_type = $${paramIndex++}`);
+      values.push(targetType);
     }
 
     if (startDate) {
-      conditions.push(`created_at >= $${paramIndex++}`);
-      params.push(startDate);
+      conditions.push(`al.created_at >= $${paramIndex++}`);
+      values.push(startDate);
     }
 
     if (endDate) {
-      conditions.push(`created_at <= $${paramIndex++}`);
-      params.push(endDate);
+      conditions.push(`al.created_at <= $${paramIndex++}`);
+      values.push(endDate);
     }
 
-    const whereClause = conditions.length > 0
-      ? `WHERE ${conditions.join(' AND ')}`
-      : '';
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // 计算偏移量
-    const offset = (page - 1) * pageSize;
-
-    // 查询总数
+    // 获取总数
     const countQuery = `
       SELECT COUNT(*) as total
-      FROM audit_logs
+      FROM audit_logs al
       ${whereClause}
     `;
-
-    const countResult = await pool.query(countQuery, params);
+    const countResult = await pool.query(countQuery, values);
     const total = parseInt(countResult.rows[0].total);
 
-    // 查询数据
-    const dataQuery = `
+    // 获取日志列表
+    const offset = (page - 1) * pageSize;
+    const query = `
       SELECT 
-        id,
-        admin_id as "adminId",
-        action,
-        target_type as "targetType",
-        target_id as "targetId",
-        details,
-        ip_address as "ipAddress",
-        user_agent as "userAgent",
-        created_at as "createdAt"
-      FROM audit_logs
+        al.*,
+        u.username as admin_username
+      FROM audit_logs al
+      LEFT JOIN users u ON al.admin_id = u.id
       ${whereClause}
-      ORDER BY created_at DESC
-      LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      ORDER BY al.created_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex}
     `;
 
-    params.push(pageSize, offset);
-    const dataResult = await pool.query(dataQuery, params);
+    values.push(pageSize, offset);
+    const result = await pool.query(query, values);
 
     return {
-      logs: dataResult.rows.map(row => ({
-        ...row,
-        details: typeof row.details === 'string' ? JSON.parse(row.details) : row.details
-      })),
-      total,
-      page,
-      pageSize
+      logs: result.rows,
+      total
     };
   }
 
   /**
-   * 导出日志
-   * 支持JSON和CSV格式
+   * 导出审计日志
    */
-  async exportLogs(filters: AuditLogFilters, format: 'json' | 'csv'): Promise<string> {
-    // 获取所有匹配的日志(不分页)
-    const result = await this.queryLogs({
-      ...filters,
-      page: 1,
-      pageSize: 10000 // 最多导出10000条
-    });
+  async exportLogs(
+    filters: {
+      adminId?: number;
+      action?: string;
+      targetType?: string;
+      startDate?: Date;
+      endDate?: Date;
+    },
+    format: 'json' | 'csv'
+  ): Promise<string> {
+    const { logs } = await this.queryLogs({ ...filters, page: 1, pageSize: 10000 });
 
     if (format === 'json') {
-      return JSON.stringify(result.logs, null, 2);
+      return JSON.stringify(logs, null, 2);
+    } else {
+      // CSV格式
+      const headers = ['ID', 'Admin ID', 'Admin Username', 'Action', 'Target Type', 'Target ID', 'Details', 'IP Address', 'Created At'];
+      const rows = logs.map(log => [
+        log.id,
+        log.admin_id,
+        log.admin_username || '',
+        log.action,
+        log.target_type || '',
+        log.target_id || '',
+        log.details || '',
+        log.ip_address || '',
+        log.created_at
+      ]);
+
+      const csv = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n');
+
+      return csv;
     }
-
-    // CSV格式
-    const headers = ['ID', 'Admin ID', 'Action', 'Target Type', 'Target ID', 'IP Address', 'Created At'];
-    const rows = result.logs.map(log => [
-      log.id,
-      log.adminId,
-      log.action,
-      log.targetType || '',
-      log.targetId || '',
-      log.ipAddress,
-      log.createdAt.toISOString()
-    ]);
-
-    const csvLines = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ];
-
-    return csvLines.join('\n');
   }
 
   /**
-   * 获取操作统计
-   * 按操作类型统计数量
+   * 记录管理员操作日志（兼容旧方法）
    */
-  async getActionStatistics(
-    startDate?: Date,
-    endDate?: Date
-  ): Promise<Array<{ action: string; count: number }>> {
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
+  static async logAdminAction(params: {
+    adminId: number;
+    actionType: string;
+    resourceType: string;
+    resourceId?: string;
+    details?: any;
+    ipAddress?: string;
+    userAgent?: string;
+  }): Promise<void> {
+    const instance = new AuditLogService();
+    await instance.logAction(
+      params.adminId,
+      params.actionType,
+      params.resourceType,
+      params.resourceId || null,
+      params.details,
+      params.ipAddress,
+      params.userAgent
+    );
+  }
 
-    if (startDate) {
-      conditions.push(`created_at >= $${paramIndex++}`);
-      params.push(startDate);
-    }
-
-    if (endDate) {
-      conditions.push(`created_at <= $${paramIndex++}`);
-      params.push(endDate);
-    }
-
-    const whereClause = conditions.length > 0
-      ? `WHERE ${conditions.join(' AND ')}`
-      : '';
-
-    const query = `
-      SELECT action, COUNT(*) as count
-      FROM audit_logs
-      ${whereClause}
-      GROUP BY action
-      ORDER BY count DESC
-    `;
-
-    const result = await pool.query(query, params);
-    return result.rows.map(row => ({
-      action: row.action,
-      count: parseInt(row.count)
-    }));
+  /**
+   * 获取管理员操作日志（兼容旧方法）
+   */
+  static async getAdminLogs(params: {
+    adminId?: number;
+    actionType?: string;
+    resourceType?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    const instance = new AuditLogService();
+    const { logs } = await instance.queryLogs({
+      adminId: params.adminId,
+      action: params.actionType,
+      targetType: params.resourceType,
+      startDate: params.startDate,
+      endDate: params.endDate,
+      page: params.offset ? Math.floor(params.offset / (params.limit || 50)) + 1 : 1,
+      pageSize: params.limit || 50
+    });
+    return logs;
   }
 
   /**
    * 获取管理员操作统计
-   * 按管理员统计操作数量
    */
-  async getAdminStatistics(
-    startDate?: Date,
-    endDate?: Date
-  ): Promise<Array<{ adminId: number; username: string; count: number }>> {
+  static async getAdminActionStats(params: {
+    adminId?: number;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<any> {
+    const { adminId, startDate, endDate } = params;
+
     const conditions: string[] = [];
-    const params: any[] = [];
+    const values: any[] = [];
     let paramIndex = 1;
 
+    if (adminId) {
+      conditions.push(`admin_id = $${paramIndex++}`);
+      values.push(adminId);
+    }
+
     if (startDate) {
-      conditions.push(`a.created_at >= $${paramIndex++}`);
-      params.push(startDate);
+      conditions.push(`created_at >= $${paramIndex++}`);
+      values.push(startDate);
     }
 
     if (endDate) {
-      conditions.push(`a.created_at <= $${paramIndex++}`);
-      params.push(endDate);
+      conditions.push(`created_at <= $${paramIndex++}`);
+      values.push(endDate);
     }
 
-    const whereClause = conditions.length > 0
-      ? `WHERE ${conditions.join(' AND ')}`
-      : '';
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const query = `
       SELECT 
-        a.admin_id as "adminId",
-        u.username,
+        action,
+        target_type,
         COUNT(*) as count
-      FROM audit_logs a
-      LEFT JOIN users u ON a.admin_id = u.id
+      FROM audit_logs
       ${whereClause}
-      GROUP BY a.admin_id, u.username
+      GROUP BY action, target_type
       ORDER BY count DESC
     `;
 
-    const result = await pool.query(query, params);
-    return result.rows.map(row => ({
-      adminId: row.adminId,
-      username: row.username,
-      count: parseInt(row.count)
-    }));
-  }
-
-  /**
-   * 清理旧日志
-   * 删除指定天数之前的日志
-   */
-  async cleanupOldLogs(daysToKeep: number = 90): Promise<number> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
-
-    const result = await pool.query(
-      'DELETE FROM audit_logs WHERE created_at < $1',
-      [cutoffDate]
-    );
-
-    const deletedCount = result.rowCount || 0;
-    console.log(`[AuditLog] 清理旧日志: 删除了 ${deletedCount} 条记录`);
-
-    return deletedCount;
+    const result = await pool.query(query, values);
+    return result.rows;
   }
 }
 
-export const auditLogService = AuditLogService.getInstance();
+// 导出单例实例
+export const auditLogService = new AuditLogService();

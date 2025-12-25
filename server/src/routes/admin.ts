@@ -4,12 +4,24 @@ import { userService } from '../services/UserService';
 import { getWebSocketService } from '../services/WebSocketService';
 import { createRateLimitMiddleware } from '../middleware/rateLimit';
 import { requireConfirmation } from '../middleware/requireConfirmation';
+import productsRouter from './admin/products';
+import ordersRouter from './admin/orders';
+import auditLogsRouter from './admin/audit-logs';
 
 const router = express.Router();
 
 // 所有管理员路由都需要认证和管理员权限
 router.use(authenticate);
 router.use(requireAdmin);
+
+// 商品管理路由
+router.use('/products', productsRouter);
+
+// 订单管理路由
+router.use('/orders', ordersRouter);
+
+// 审计日志路由
+router.use('/audit-logs', auditLogsRouter);
 
 // 用户管理操作限流: 每小时10次
 const userManagementRateLimit = createRateLimitMiddleware(

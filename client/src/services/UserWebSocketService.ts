@@ -2,7 +2,7 @@
  * User Management WebSocket Service for Client App
  * 
  * Handles real-time user management events from the backend
- * Requirements: 7.1, 7.2, 7.3, 7.5
+ * Requirements: 7.1, 7.2, 7.3, 7.5, 6.10 (quota updates)
  */
 
 import { config } from '../config/env';
@@ -177,6 +177,18 @@ export class UserWebSocketService {
         break;
       case 'pong':
         // Heartbeat response
+        break;
+      case 'quota_updated':
+        // Quota update notification
+        console.log('[UserWebSocket] Quota updated:', message.data);
+        break;
+      case 'subscription_updated':
+        // Subscription update notification
+        console.log('[UserWebSocket] Subscription updated:', message.data);
+        break;
+      case 'order_status_changed':
+        // Order status change notification
+        console.log('[UserWebSocket] Order status changed:', message.data);
         break;
       default:
         // Other messages handled by subscribers

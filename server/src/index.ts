@@ -12,6 +12,8 @@ import { getWebSocketService } from './services/WebSocketService';
 import { rateLimitService } from './services/RateLimitService';
 import { tokenService } from './services/TokenService';
 import { securityCheckService } from './services/SecurityCheckService';
+import { schedulerService } from './services/SchedulerService';
+import { SecurityService } from './services/SecurityService';
 
 dotenv.config({ path: '../.env' });
 
@@ -38,11 +40,18 @@ app.use(errorHandler);
 // 初始化加密服务并启动服务器
 async function startServer() {
   try {
+    // 启动时验证支付配置
+    console.log('🔒 验证支付配置...');
+    SecurityService.validatePaymentConfig();
+    
     // EncryptionService已在导入时初始化，无需调用initialize
     console.log('✅ 加密服务初始化成功');
     
     // 启动任务调度器
     taskScheduler.start();
+    
+    // 启动订阅系统定时任务
+    schedulerService.start();
     
     // 启动登录尝试清理任务（每小时运行一次）
     setInterval(async () => {
@@ -124,6 +133,7 @@ async function startServer() {
 process.on('SIGTERM', () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
   taskScheduler.stop();
+  schedulerService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();
   process.exit(0);
@@ -132,6 +142,7 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('收到 SIGINT 信号，正在关闭服务器...');
   taskScheduler.stop();
+  schedulerService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();
   process.exit(0);

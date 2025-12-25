@@ -56,12 +56,16 @@ const PermissionsPage: React.FC = () => {
         axios.get(`${API_BASE_URL}/security/user-permissions`, { headers })
       ]);
 
-      setPermissions(permsRes.data || []);
+      if (permsRes.data.success) {
+        setPermissions(permsRes.data.data || []);
+      } else {
+        setPermissions(permsRes.data || []);
+      }
       setUsers(usersRes.data?.data?.users || []);
       setUserPermissions(userPermsRes.data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch data:', error);
-      message.error('获取数据失败');
+      message.error(error.response?.data?.message || '获取数据失败');
     } finally {
       setLoading(false);
     }
@@ -75,7 +79,7 @@ const PermissionsPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('auth_token');
-      await axios.post(
+      const response = await axios.post(
         `${API_BASE_URL}/security/permissions/grant`,
         {
           userId: selectedUser,
@@ -84,21 +88,25 @@ const PermissionsPage: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      message.success('权限授予成功');
-      setModalVisible(false);
-      setSelectedUser(null);
-      setSelectedPermission(null);
-      fetchData();
-    } catch (error) {
+      if (response.data.success) {
+        message.success(response.data.message || '权限授予成功');
+        setModalVisible(false);
+        setSelectedUser(null);
+        setSelectedPermission(null);
+        fetchData();
+      } else {
+        message.error(response.data.message || '授予权限失败');
+      }
+    } catch (error: any) {
       console.error('Failed to grant permission:', error);
-      message.error('授予权限失败');
+      message.error(error.response?.data?.message || '授予权限失败');
     }
   };
 
   const handleRevokePermission = async (userId: number, permissionName: string) => {
     try {
       const token = localStorage.getItem('auth_token');
-      await axios.post(
+      const response = await axios.post(
         `${API_BASE_URL}/security/permissions/revoke`,
         {
           userId,
@@ -107,11 +115,15 @@ const PermissionsPage: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      message.success('权限撤销成功');
-      fetchData();
-    } catch (error) {
+      if (response.data.success) {
+        message.success(response.data.message || '权限撤销成功');
+        fetchData();
+      } else {
+        message.error(response.data.message || '撤销权限失败');
+      }
+    } catch (error: any) {
       console.error('Failed to revoke permission:', error);
-      message.error('撤销权限失败');
+      message.error(error.response?.data?.message || '撤销权限失败');
     }
   };
 

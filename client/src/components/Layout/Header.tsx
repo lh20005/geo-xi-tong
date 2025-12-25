@@ -56,6 +56,14 @@ export default function Header() {
 
   const menuItems: MenuProps['items'] = [
     {
+      key: 'user-center',
+      icon: <UserOutlined />,
+      label: '个人中心',
+      onClick: () => {
+        navigate('/user-center');
+      }
+    },
+    {
       key: 'profile',
       icon: <UserOutlined />,
       label: '个人设置',

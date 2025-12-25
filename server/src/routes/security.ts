@@ -63,10 +63,22 @@ router.get('/audit-logs', async (req, res) => {
     };
 
     const result = await auditLogService.queryLogs(filters);
-    res.json(result);
-  } catch (error) {
+    
+    // 确保返回格式正确
+    res.json({
+      success: true,
+      logs: result.logs || [],
+      total: result.total || 0,
+      page: filters.page,
+      pageSize: filters.pageSize
+    });
+  } catch (error: any) {
     console.error('Error getting audit logs:', error);
-    res.status(500).json({ error: 'Failed to get audit logs' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get audit logs',
+      message: error.message 
+    });
   }
 });
 
@@ -104,10 +116,17 @@ router.get('/audit-logs/export', async (req, res) => {
 router.get('/permissions', async (req, res) => {
   try {
     const permissions = await permissionService.getAllPermissions();
-    res.json(permissions);
-  } catch (error) {
+    res.json({
+      success: true,
+      data: permissions
+    });
+  } catch (error: any) {
     console.error('Error getting permissions:', error);
-    res.status(500).json({ error: 'Failed to get permissions' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get permissions',
+      message: error.message 
+    });
   }
 });
 
@@ -145,13 +164,17 @@ router.get('/user-permissions', async (req, res) => {
 router.post('/permissions/grant', async (req, res) => {
   try {
     const { userId, permissionName } = req.body;
-    const grantedBy = (req as any).user.id;
+    const grantedBy = (req as any).user.userId;  // 修正：使用userId而不是id
 
     await permissionService.grantPermission(userId, permissionName, grantedBy);
-    res.json({ success: true });
-  } catch (error) {
+    res.json({ success: true, message: '权限授予成功' });
+  } catch (error: any) {
     console.error('Error granting permission:', error);
-    res.status(500).json({ error: 'Failed to grant permission' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to grant permission',
+      message: error.message 
+    });
   }
 });
 
@@ -161,13 +184,17 @@ router.post('/permissions/grant', async (req, res) => {
 router.post('/permissions/revoke', async (req, res) => {
   try {
     const { userId, permissionName } = req.body;
-    const revokedBy = (req as any).user.id;
+    const revokedBy = (req as any).user.userId;  // 修正：使用userId而不是id
 
     await permissionService.revokePermission(userId, permissionName, revokedBy);
-    res.json({ success: true });
-  } catch (error) {
+    res.json({ success: true, message: '权限撤销成功' });
+  } catch (error: any) {
     console.error('Error revoking permission:', error);
-    res.status(500).json({ error: 'Failed to revoke permission' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to revoke permission',
+      message: error.message 
+    });
   }
 });
 
@@ -177,10 +204,17 @@ router.post('/permissions/revoke', async (req, res) => {
 router.get('/config', async (req, res) => {
   try {
     const configs = await securityConfigService.getAllConfigs();
-    res.json(configs);
-  } catch (error) {
+    res.json({
+      success: true,
+      data: configs
+    });
+  } catch (error: any) {
     console.error('Error getting security config:', error);
-    res.status(500).json({ error: 'Failed to get security config' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to get security config',
+      message: error.message 
+    });
   }
 });
 
@@ -191,13 +225,20 @@ router.put('/config/:key', async (req, res) => {
   try {
     const { key } = req.params;
     const { value, reason } = req.body;
-    const updatedBy = (req as any).user.id;
+    const updatedBy = (req as any).user.userId;  // 修正：使用userId而不是id
 
     const config = await securityConfigService.updateConfig(key, value, updatedBy, reason);
-    res.json(config);
-  } catch (error) {
+    res.json({
+      success: true,
+      data: config
+    });
+  } catch (error: any) {
     console.error('Error updating security config:', error);
-    res.status(500).json({ error: 'Failed to update security config' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to update security config',
+      message: error.message 
+    });
   }
 });
 

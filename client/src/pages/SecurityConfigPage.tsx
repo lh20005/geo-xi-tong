@@ -47,10 +47,15 @@ const SecurityConfigPage: React.FC = () => {
       const response = await axios.get(`${API_BASE_URL}/security/config`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setConfigs(response.data || []);
-    } catch (error) {
+      
+      if (response.data.success) {
+        setConfigs(response.data.data || []);
+      } else {
+        setConfigs(response.data || []);
+      }
+    } catch (error: any) {
       console.error('Failed to fetch configs:', error);
-      message.error('获取配置失败');
+      message.error(error.response?.data?.message || '获取配置失败');
     } finally {
       setLoading(false);
     }
@@ -70,7 +75,7 @@ const SecurityConfigPage: React.FC = () => {
       const values = await form.validateFields();
       const token = localStorage.getItem('auth_token');
       
-      await axios.put(
+      const response = await axios.put(
         `${API_BASE_URL}/security/config/${selectedConfig?.config_key}`,
         {
           value: values.config_value,
@@ -79,14 +84,18 @@ const SecurityConfigPage: React.FC = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      message.success('配置更新成功');
-      setEditModalVisible(false);
-      setSelectedConfig(null);
-      form.resetFields();
-      fetchConfigs();
-    } catch (error) {
+      if (response.data.success) {
+        message.success('配置更新成功');
+        setEditModalVisible(false);
+        setSelectedConfig(null);
+        form.resetFields();
+        fetchConfigs();
+      } else {
+        message.error(response.data.message || '更新配置失败');
+      }
+    } catch (error: any) {
       console.error('Failed to update config:', error);
-      message.error('更新配置失败');
+      message.error(error.response?.data?.message || '更新配置失败');
     }
   };
 

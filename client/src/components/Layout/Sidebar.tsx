@@ -18,6 +18,7 @@ import {
   FileTextOutlined as AuditOutlined,
   LockOutlined,
   TeamOutlined,
+  ShoppingOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 
@@ -127,6 +128,18 @@ export default function Sidebar() {
       key: '/config',
       icon: <SettingOutlined />,
       label: '系统配置',
+    }] : []),
+    // 商品管理 - 仅管理员可见
+    ...(userIsAdmin ? [{
+      key: '/products',
+      icon: <ShoppingOutlined />,
+      label: '商品管理',
+    }] : []),
+    // 订单管理 - 仅管理员可见
+    ...(userIsAdmin ? [{
+      key: '/admin/orders',
+      icon: <ShoppingOutlined />,
+      label: '订单管理',
     }] : []),
     {
       key: '/user-manual',

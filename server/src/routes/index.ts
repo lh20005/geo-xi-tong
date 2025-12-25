@@ -21,6 +21,9 @@ import invitationsRouter from './invitations';
 import confirmationRouter from './confirmation';
 import securityConfigRouter from './securityConfig';
 import securityRouter from './security';
+import paymentRouter from './payment';
+import ordersRouter from './orders';
+import subscriptionRouter from './subscription';
 
 export const apiRouter = Router();
 
@@ -31,6 +34,9 @@ apiRouter.use('/invitations', invitationsRouter);
 apiRouter.use('/confirm', confirmationRouter);
 apiRouter.use('/security-config', securityConfigRouter);
 apiRouter.use('/security', securityRouter);
+apiRouter.use('/payment', paymentRouter);
+apiRouter.use('/orders', ordersRouter);
+apiRouter.use('/subscription', subscriptionRouter);
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);

@@ -1,258 +1,254 @@
 import { pool } from '../db/database';
+import { redisClient } from '../db/redis';
 
 /**
  * 异常检测服务
- * Requirements: 10.1, 10.2, 10.4
+ * 检测可疑的支付行为和配额使用模式
  */
-
-export interface AnomalyEvent {
-  type: 'suspicious_login' | 'high_frequency' | 'unusual_location' | 'privilege_escalation';
-  userId: number;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  details: Record<string, any>;
-  detectedAt: Date;
-}
-
 export class AnomalyDetectionService {
-  // 高频操作阈值：5分钟内50次操作
-  private static readonly HIGH_FREQUENCY_THRESHOLD = 50;
-  private static readonly HIGH_FREQUENCY_WINDOW = 5 * 60 * 1000; // 5 minutes in ms
-
-  // 用户操作计数器（内存存储，生产环境应使用Redis）
-  private operationCounts: Map<number, { count: number; windowStart: number }> = new Map();
-
   /**
-   * 检测登录异常（新IP）
-   * Requirement 10.1
+   * 记录支付失败
    */
-  async detectLoginAnomaly(
-    userId: number,
-    ipAddress: string,
-    userAgent: string
-  ): Promise<AnomalyEvent | null> {
-    try {
-      // 查询用户历史登录IP
-      const result = await pool.query(
-        `SELECT DISTINCT ip_address 
-         FROM audit_logs 
-         WHERE admin_id = $1 
-           AND action = 'LOGIN' 
-           AND created_at > NOW() - INTERVAL '30 days'`,
-        [userId]
-      );
-
-      const knownIPs = result.rows.map(row => row.ip_address);
-
-      // 如果是新IP，记录异常
-      if (!knownIPs.includes(ipAddress)) {
-        return {
-          type: 'suspicious_login',
-          userId,
-          severity: 'medium',
-          details: {
-            ipAddress,
-            userAgent,
-            knownIPs: knownIPs.length,
-            message: 'Login from new IP address'
-          },
-          detectedAt: new Date()
-        };
-      }
-
-      return null;
-    } catch (error) {
-      console.error('[AnomalyDetection] Error detecting login anomaly:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 检测操作频率异常
-   * Requirement 10.2
-   */
-  async detectHighFrequency(
-    userId: number,
-    timeWindow: number = AnomalyDetectionService.HIGH_FREQUENCY_WINDOW
-  ): Promise<AnomalyEvent | null> {
+  static async recordPaymentFailure(userId: number, orderNo: string): Promise<void> {
+    const key = `payment:failures:${userId}`;
     const now = Date.now();
-    const userOps = this.operationCounts.get(userId);
 
-    if (!userOps) {
-      // 首次操作，初始化计数器
-      this.operationCounts.set(userId, { count: 1, windowStart: now });
-      return null;
-    }
-
-    // 检查是否在时间窗口内
-    if (now - userOps.windowStart > timeWindow) {
-      // 超出时间窗口，重置计数器
-      this.operationCounts.set(userId, { count: 1, windowStart: now });
-      return null;
-    }
-
-    // 增加计数
-    userOps.count++;
-
-    // 检查是否超过阈值
-    if (userOps.count > AnomalyDetectionService.HIGH_FREQUENCY_THRESHOLD) {
-      return {
-        type: 'high_frequency',
-        userId,
-        severity: 'high',
-        details: {
-          operationCount: userOps.count,
-          timeWindow: timeWindow / 1000, // seconds
-          threshold: AnomalyDetectionService.HIGH_FREQUENCY_THRESHOLD,
-          message: `User performed ${userOps.count} operations in ${timeWindow / 60000} minutes`
-        },
-        detectedAt: new Date()
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * 检测权限滥用
-   * Requirement 10.2
-   */
-  async detectPrivilegeAbuse(
-    userId: number,
-    action: string
-  ): Promise<AnomalyEvent | null> {
     try {
-      // 查询最近的权限变更
-      const result = await pool.query(
-        `SELECT COUNT(*) as count
-         FROM audit_logs
-         WHERE admin_id = $1
-           AND action IN ('GRANT_PERMISSION', 'REVOKE_PERMISSION', 'CHANGE_ROLE')
-           AND created_at > NOW() - INTERVAL '1 hour'`,
-        [userId]
-      );
+      // 记录失败时间戳
+      await redisClient.zadd(key, now, orderNo);
+      
+      // 设置过期时间（1小时）
+      await redisClient.expire(key, 3600);
 
-      const recentPrivilegeChanges = parseInt(result.rows[0].count);
-
-      // 如果1小时内有超过5次权限变更，标记为可疑
-      if (recentPrivilegeChanges > 5) {
-        return {
-          type: 'privilege_escalation',
-          userId,
-          severity: 'critical',
-          details: {
-            action,
-            recentChanges: recentPrivilegeChanges,
-            message: 'Unusual number of privilege changes detected'
-          },
-          detectedAt: new Date()
-        };
-      }
-
-      return null;
+      // 检查是否异常
+      await this.checkPaymentFailures(userId);
     } catch (error) {
-      console.error('[AnomalyDetection] Error detecting privilege abuse:', error);
-      return null;
+      console.error('记录支付失败时出错:', error);
     }
   }
 
   /**
-   * 处理异常事件
-   * Requirement 10.4
+   * 检查支付失败次数
    */
-  async handleAnomaly(event: AnomalyEvent): Promise<void> {
-    try {
-      // 记录到安全事件表
-      await pool.query(
-        `INSERT INTO security_events (event_type, severity, user_id, message, details, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          event.type,
-          event.severity,
-          event.userId,
-          event.details.message || 'Anomaly detected',
-          JSON.stringify(event.details),
-          event.detectedAt
-        ]
-      );
-
-      // 如果是严重事件，发送告警
-      if (event.severity === 'critical' || event.severity === 'high') {
-        await this.sendAlert(event);
-      }
-
-      // 根据事件类型采取行动
-      if (event.type === 'privilege_escalation' && event.severity === 'critical') {
-        // 锁定账户
-        await this.lockAccount(event.userId, 'Suspicious privilege escalation detected');
-      }
-
-      console.log(`[AnomalyDetection] Handled ${event.type} anomaly for user ${event.userId}`);
-    } catch (error) {
-      console.error('[AnomalyDetection] Error handling anomaly:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 发送告警
-   */
-  private async sendAlert(event: AnomalyEvent): Promise<void> {
-    // 实际实现应该发送邮件或其他通知
-    console.log(`[ALERT] ${event.severity.toUpperCase()}: ${event.type} detected for user ${event.userId}`);
-    console.log(`[ALERT] Details:`, event.details);
-  }
-
-  /**
-   * 锁定账户
-   */
-  private async lockAccount(userId: number, reason: string): Promise<void> {
-    try {
-      // 注意：实际的users表可能没有is_locked字段，这里仅作演示
-      // 生产环境应该使用实际的锁定机制
-      console.log(`[AnomalyDetection] Would lock account ${userId}: ${reason}`);
-
-      // 记录审计日志
-      await pool.query(
-        `INSERT INTO audit_logs (admin_id, action, target_type, target_id, details, ip_address, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
-        [
-          0, // 系统操作
-          'LOCK_ACCOUNT',
-          'user',
-          userId,
-          JSON.stringify({ reason, automated: true }),
-          '127.0.0.1'
-        ]
-      );
-
-      console.log(`[AnomalyDetection] Logged lock attempt for account ${userId}`);
-    } catch (error) {
-      console.error('[AnomalyDetection] Error locking account:', error);
-      // 不抛出错误，避免影响主流程
-    }
-  }
-
-  /**
-   * 重置操作计数器（用于测试）
-   */
-  resetOperationCounts(): void {
-    this.operationCounts.clear();
-  }
-
-  /**
-   * 记录操作（用于频率检测）
-   */
-  recordOperation(userId: number): void {
+  static async checkPaymentFailures(userId: number): Promise<void> {
+    const key = `payment:failures:${userId}`;
     const now = Date.now();
-    const userOps = this.operationCounts.get(userId);
+    const oneHourAgo = now - 3600000; // 1小时前
 
-    if (!userOps || now - userOps.windowStart > AnomalyDetectionService.HIGH_FREQUENCY_WINDOW) {
-      this.operationCounts.set(userId, { count: 1, windowStart: now });
-    } else {
-      userOps.count++;
+    try {
+      // 获取1小时内的失败次数
+      const failures = await redisClient.zcount(key, oneHourAgo, now);
+
+      if (typeof failures === 'number' && failures >= 5) {
+        // 触发告警
+        await this.triggerAlert({
+          type: 'payment_failures',
+          userId,
+          severity: 'high',
+          message: `用户 ${userId} 在1小时内支付失败 ${failures} 次`,
+          details: { failures, timeWindow: '1h' },
+        });
+
+        // 临时锁定用户支付功能（可选）
+        await redisClient.setex(`payment:locked:${userId}`, 3600, '1');
+      }
+    } catch (error) {
+      console.error('检查支付失败时出错:', error);
+    }
+  }
+
+  /**
+   * 检查配额使用异常
+   */
+  static async checkQuotaUsageAnomaly(
+    userId: number,
+    featureCode: string,
+    usageCount: number
+  ): Promise<void> {
+    const key = `quota:usage:${userId}:${featureCode}`;
+    const now = Date.now();
+
+    try {
+      // 记录使用时间戳
+      await redisClient.zadd(key, now, now.toString());
+      await redisClient.expire(key, 3600);
+
+      // 获取最近1小时的使用次数
+      const oneHourAgo = now - 3600000;
+      const recentUsage = await redisClient.zcount(key, oneHourAgo, now);
+
+      // 获取用户配额限制
+      const quotaResult = await pool.query(
+        `SELECT pf.feature_value
+         FROM user_subscriptions us
+         JOIN plan_features pf ON us.plan_id = pf.plan_id
+         WHERE us.user_id = $1 
+         AND us.status = 'active'
+         AND pf.feature_code = $2`,
+        [userId, featureCode]
+      );
+
+      if (quotaResult.rows.length > 0 && typeof recentUsage === 'number') {
+        const quota = quotaResult.rows[0].feature_value;
+
+        // 如果1小时内使用量超过配额的80%，触发告警
+        if (recentUsage > quota * 0.8) {
+          await this.triggerAlert({
+            type: 'quota_usage_spike',
+            userId,
+            severity: 'medium',
+            message: `用户 ${userId} 的 ${featureCode} 使用量异常`,
+            details: {
+              featureCode,
+              recentUsage,
+              quota,
+              percentage: Math.round((recentUsage / quota) * 100),
+            },
+          });
+        }
+      }
+    } catch (error) {
+      console.error('检查配额使用异常时出错:', error);
+    }
+  }
+
+  /**
+   * 检查短时间内大量订单创建
+   */
+  static async checkOrderCreationSpike(userId: number): Promise<void> {
+    const key = `orders:created:${userId}`;
+    const now = Date.now();
+    const fiveMinutesAgo = now - 300000; // 5分钟前
+
+    try {
+      // 记录订单创建时间
+      await redisClient.zadd(key, now, now.toString());
+      await redisClient.expire(key, 3600);
+
+      // 获取5分钟内创建的订单数
+      const recentOrders = await redisClient.zcount(key, fiveMinutesAgo, now);
+
+      if (typeof recentOrders === 'number' && recentOrders >= 10) {
+        await this.triggerAlert({
+          type: 'order_creation_spike',
+          userId,
+          severity: 'high',
+          message: `用户 ${userId} 在5分钟内创建了 ${recentOrders} 个订单`,
+          details: { recentOrders, timeWindow: '5m' },
+        });
+
+        // 临时限制订单创建（可选）
+        await redisClient.setex(`order:locked:${userId}`, 300, '1');
+      }
+    } catch (error) {
+      console.error('检查订单创建异常时出错:', error);
+    }
+  }
+
+  /**
+   * 触发安全告警
+   */
+  static async triggerAlert(alert: {
+    type: string;
+    userId: number;
+    severity: 'low' | 'medium' | 'high';
+    message: string;
+    details?: any;
+  }): Promise<void> {
+    const { type, userId, severity, message, details } = alert;
+
+    console.warn(`🚨 [SECURITY ALERT] ${severity.toUpperCase()}: ${message}`);
+    console.warn(`   Type: ${type}, User: ${userId}`);
+    if (details) {
+      console.warn(`   Details:`, JSON.stringify(details));
+    }
+
+    // 记录到数据库
+    try {
+      await pool.query(
+        `INSERT INTO security_alerts (user_id, alert_type, severity, message, details, created_at)
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+        [userId, type, severity, message, details ? JSON.stringify(details) : null]
+      );
+    } catch (error) {
+      console.error('记录安全告警失败:', error);
+    }
+
+    // TODO: 发送通知给管理员
+    // - 邮件通知
+    // - 短信通知
+    // - WebSocket 实时推送
+    // - 钉钉/企业微信机器人
+  }
+
+  /**
+   * 获取安全告警列表
+   */
+  static async getAlerts(params: {
+    userId?: number;
+    alertType?: string;
+    severity?: string;
+    startDate?: Date;
+    endDate?: Date;
+    limit?: number;
+    offset?: number;
+  }): Promise<any[]> {
+    const {
+      userId,
+      alertType,
+      severity,
+      startDate,
+      endDate,
+      limit = 50,
+      offset = 0,
+    } = params;
+
+    const conditions: string[] = [];
+    const values: any[] = [];
+    let paramIndex = 1;
+
+    if (userId) {
+      conditions.push(`user_id = $${paramIndex++}`);
+      values.push(userId);
+    }
+
+    if (alertType) {
+      conditions.push(`alert_type = $${paramIndex++}`);
+      values.push(alertType);
+    }
+
+    if (severity) {
+      conditions.push(`severity = $${paramIndex++}`);
+      values.push(severity);
+    }
+
+    if (startDate) {
+      conditions.push(`created_at >= $${paramIndex++}`);
+      values.push(startDate);
+    }
+
+    if (endDate) {
+      conditions.push(`created_at <= $${paramIndex++}`);
+      values.push(endDate);
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const query = `
+      SELECT * FROM security_alerts
+      ${whereClause}
+      ORDER BY created_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex}
+    `;
+
+    values.push(limit, offset);
+
+    try {
+      const result = await pool.query(query, values);
+      return result.rows;
+    } catch (error) {
+      console.error('获取安全告警失败:', error);
+      return [];
     }
   }
 }
-
-// 导出单例
-export const anomalyDetectionService = new AnomalyDetectionService();

@@ -157,7 +157,7 @@ router.post('/login', loginRateLimit, async (req, res) => {
       success: true,
       data: {
         token: accessToken,
-        refreshToken,
+        refreshToken: refreshToken,
         expiresIn: 3600, // 1小时（秒）
         user: {
           id: user.id,

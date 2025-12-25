@@ -59,11 +59,15 @@ const AuditLogsPage: React.FC = () => {
         params
       });
 
-      setLogs(response.data.logs || []);
-      setTotal(response.data.total || 0);
-    } catch (error) {
+      if (response.data.success) {
+        setLogs(response.data.logs || []);
+        setTotal(response.data.total || 0);
+      } else {
+        message.error(response.data.message || '获取审计日志失败');
+      }
+    } catch (error: any) {
       console.error('Failed to fetch audit logs:', error);
-      message.error('获取审计日志失败');
+      message.error(error.response?.data?.message || '获取审计日志失败');
     } finally {
       setLoading(false);
     }
