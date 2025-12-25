@@ -134,13 +134,14 @@ const SecurityConfigPage: React.FC = () => {
       title: '配置项',
       dataIndex: 'config_key',
       key: 'config_key',
-      width: 250
+      width: 250,
+      fixed: 'left'
     },
     {
       title: '当前值',
       dataIndex: 'config_value',
       key: 'config_value',
-      width: 200,
+      width: 150,
       ellipsis: true
     },
     {
@@ -154,6 +155,7 @@ const SecurityConfigPage: React.FC = () => {
       title: '描述',
       dataIndex: 'description',
       key: 'description',
+      width: 250,
       ellipsis: true
     },
     {
@@ -173,6 +175,7 @@ const SecurityConfigPage: React.FC = () => {
       title: '操作',
       key: 'action',
       width: 150,
+      fixed: 'right',
       render: (_, record: SecurityConfig) => (
         <Space>
           <Button
@@ -260,6 +263,7 @@ const SecurityConfigPage: React.FC = () => {
           rowKey="id"
           loading={loading}
           pagination={{ pageSize: 20 }}
+          scroll={{ x: 1200 }}
         />
       </Card>
 

@@ -75,18 +75,20 @@ export function createRateLimitMiddleware(
 
 /**
  * 登录限流中间件
- * 限制：每个IP地址在15分钟内最多5次登录尝试
+ * 限制：每个IP+用户名组合在5分钟内最多5次登录尝试
+ * 这样可以防止暴力破解单个账号，同时不影响同一IP下的其他用户
  */
 export const loginRateLimit = createRateLimitMiddleware(
   (req: Request) => {
     const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
-    return `login:${ipAddress}`;
+    const username = req.body?.username || 'unknown';
+    return `login:${ipAddress}:${username}`;
   },
   {
-    windowMs: 15 * 60 * 1000,  // 15分钟
+    windowMs: 5 * 60 * 1000,   // 5分钟
     maxRequests: 5              // 最多5次
   },
-  '登录尝试次数过多,请15分钟后再试'
+  '登录尝试次数过多,请5分钟后再试'
 );
 
 /**
