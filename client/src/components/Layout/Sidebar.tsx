@@ -161,7 +161,16 @@ export default function Sidebar() {
           borderBottom: '1px solid rgba(255,255,255,0.1)',
         }}
       >
-        <ThunderboltOutlined style={{ marginRight: 8, color: '#0ea5e9' }} />
+        <img 
+          src="/images/logo.png" 
+          alt="Logo" 
+          style={{ 
+            width: 32, 
+            height: 32, 
+            marginRight: 8,
+            borderRadius: 6
+          }} 
+        />
         GEO优化系统
       </div>
       <Menu

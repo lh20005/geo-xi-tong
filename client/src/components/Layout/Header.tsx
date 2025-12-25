@@ -1,5 +1,5 @@
 import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
-import { ApiOutlined, UserOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons';
+import { ApiOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -58,19 +58,10 @@ export default function Header() {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: '个人信息',
+      label: '个人设置',
       onClick: () => {
-        // 跳转到个人信息页面（可选）
-        console.log('个人信息');
-      }
-    },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: '设置',
-      onClick: () => {
-        // 跳转到设置页面（可选）
-        console.log('设置');
+        // 跳转到 Landing 网站的个人页面
+        window.location.href = `${config.landingUrl}/profile`;
       }
     },
     {
@@ -79,8 +70,7 @@ export default function Header() {
     {
       key: 'logout',
       icon: <LogoutOutlined />,
-      label: '退出登录',
-      danger: true,
+      label: '返回主页',
       onClick: handleLogout
     }
   ];
@@ -97,7 +87,7 @@ export default function Header() {
       }}
     >
       <div style={{ fontSize: 16, fontWeight: 500, color: '#1e293b' }}>
-        品牌AI推荐优化工具
+        欢迎来到GEO-SaaS系统
       </div>
       <Space size="large">
         {apiConfig?.configured ? (
