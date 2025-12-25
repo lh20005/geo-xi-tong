@@ -2,7 +2,6 @@ import { Wechatpay } from 'wechatpay-axios-plugin';
 import fs from 'fs';
 import { orderService } from './OrderService';
 import { subscriptionService } from './SubscriptionService';
-import { WeChatPayParams } from '../types/subscription';
 import { getWebSocketService } from './WebSocketService';
 import { pool } from '../db/database';
 import { AnomalyDetectionService } from './AnomalyDetectionService';
@@ -68,42 +67,52 @@ export class PaymentService {
   /**
    * 创建微信支付订单
    */
-  async createWeChatPayOrder(userId: number, planId: number): Promise<{
+  async createWeChatPayOrder(
+    userId: number, 
+    planId: number, 
+    orderType: 'purchase' | 'upgrade' = 'purchase'
+  ): Promise<{
     order_no: string;
     amount: number;
-    payment_params: WeChatPayParams;
+    plan_name: string;
+    qr_code_url: string;
   }> {
     if (!this.isConfigured) {
-      throw new Error('微信支付未配置，无法创建订单');
+      throw new Error('微信支付未配置，无法创建订单。请先配置微信支付参数，详见 WECHAT_PAY_SETUP_GUIDE.md');
     }
 
-    // 创建订单
-    const order = await orderService.createOrder(userId, planId);
+    // 创建订单（支持升级订单）
+    const order = await orderService.createOrder(userId, planId, orderType);
+    
+    // 获取套餐信息
+    const planResult = await pool.query(
+      'SELECT plan_name FROM subscription_plans WHERE id = $1',
+      [planId]
+    );
+    const planName = planResult.rows[0]?.plan_name || '未知套餐';
 
     try {
       // 调用微信支付 API 创建预支付订单
-      const response = await this.wechatpay.v3.pay.transactions.jsapi.post({
+      const response = await this.wechatpay.v3.pay.transactions.native.post({
         appid: process.env.WECHAT_PAY_APP_ID,
         mchid: process.env.WECHAT_PAY_MCH_ID,
-        description: `购买套餐 - 订单号: ${order.order_no}`,
+        description: `${orderType === 'upgrade' ? '升级' : '购买'}${planName} - 订单号: ${order.order_no}`,
         out_trade_no: order.order_no,
         notify_url: process.env.WECHAT_PAY_NOTIFY_URL,
         amount: {
           total: Math.round(order.amount * 100), // 转换为分
           currency: 'CNY'
-        },
-        payer: {
-          openid: 'user_openid_placeholder' // 实际使用时需要获取用户的 openid
         }
       });
 
-      // 生成支付参数
-      const paymentParams = this.generatePaymentParams(response.data.prepay_id);
+      // 获取二维码链接
+      const qrCodeUrl = response.data.code_url;
 
       return {
         order_no: order.order_no,
         amount: order.amount,
-        payment_params: paymentParams
+        plan_name: planName,
+        qr_code_url: qrCodeUrl
       };
     } catch (error) {
       console.error('创建微信支付订单失败:', error);
@@ -113,31 +122,8 @@ export class PaymentService {
       // 记录支付失败，检测异常
       await AnomalyDetectionService.recordPaymentFailure(userId, order.order_no);
       
-      throw new Error('创建支付订单失败');
+      throw new Error('创建支付订单失败，请稍后重试');
     }
-  }
-
-  /**
-   * 生成支付参数（用于前端调起支付）
-   */
-  private generatePaymentParams(prepayId: string): WeChatPayParams {
-    const appId = process.env.WECHAT_PAY_APP_ID!;
-    const timeStamp = Math.floor(Date.now() / 1000).toString();
-    const nonceStr = this.generateNonceStr();
-    const packageStr = `prepay_id=${prepayId}`;
-
-    // 生成签名
-    const signStr = `${appId}\n${timeStamp}\n${nonceStr}\n${packageStr}\n`;
-    const paySign = this.wechatpay.sign(signStr);
-
-    return {
-      appId,
-      timeStamp,
-      nonceStr,
-      package: packageStr,
-      signType: 'RSA',
-      paySign
-    };
   }
 
   /**

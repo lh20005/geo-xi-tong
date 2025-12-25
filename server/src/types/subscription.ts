@@ -89,15 +89,6 @@ export interface ConfigHistory {
   created_at: Date;
 }
 
-export interface WeChatPayParams {
-  appId: string;
-  timeStamp: string;
-  nonceStr: string;
-  package: string;
-  signType: string;
-  paySign: string;
-}
-
 // API 请求/响应模型
 export interface CreateOrderRequest {
   plan_id: number;
@@ -108,7 +99,8 @@ export interface CreateOrderResponse {
   data: {
     order_no: string;
     amount: number;
-    payment_params: WeChatPayParams;
+    plan_name: string;
+    qr_code_url: string;
   };
 }
 

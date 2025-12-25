@@ -21,23 +21,65 @@ export class OrderService {
   }
 
   /**
-   * 创建订单
+   * 创建订单（支持购买和升级）
    */
-  async createOrder(userId: number, planId: number): Promise<Order> {
+  async createOrder(
+    userId: number, 
+    planId: number, 
+    orderType: 'purchase' | 'upgrade' = 'purchase'
+  ): Promise<Order> {
     // 检测订单创建异常
     await AnomalyDetectionService.checkOrderCreationSpike(userId);
     
-    // 获取套餐价格
-    const planResult = await pool.query(
-      'SELECT price FROM subscription_plans WHERE id = $1',
-      [planId]
-    );
+    let amount: number;
+    
+    if (orderType === 'upgrade') {
+      // 升级订单：计算差价
+      const subscription = await this.getUserActiveSubscription(userId);
+      if (!subscription) {
+        throw new Error('当前没有激活的订阅');
+      }
+      
+      // 获取当前套餐和新套餐价格
+      const currentPlanResult = await pool.query(
+        'SELECT price FROM subscription_plans WHERE id = $1',
+        [subscription.plan_id]
+      );
+      const newPlanResult = await pool.query(
+        'SELECT price FROM subscription_plans WHERE id = $1',
+        [planId]
+      );
+      
+      if (newPlanResult.rows.length === 0) {
+        throw new Error('套餐不存在');
+      }
+      
+      const currentPrice = currentPlanResult.rows[0].price;
+      const newPrice = newPlanResult.rows[0].price;
+      
+      // 计算剩余天数
+      const now = new Date();
+      const endDate = new Date(subscription.end_date);
+      const daysRemaining = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // 计算差价（按剩余天数比例）
+      const dailyOldPrice = currentPrice / 30;
+      const dailyNewPrice = newPrice / 30;
+      amount = Math.max(0, (dailyNewPrice - dailyOldPrice) * daysRemaining);
+    } else {
+      // 购买订单：使用套餐价格
+      const planResult = await pool.query(
+        'SELECT price FROM subscription_plans WHERE id = $1',
+        [planId]
+      );
 
-    if (planResult.rows.length === 0) {
-      throw new Error('套餐不存在');
+      if (planResult.rows.length === 0) {
+        throw new Error('套餐不存在');
+      }
+
+      amount = planResult.rows[0].price;
     }
 
-    const amount = planResult.rows[0].price;
     const orderNo = this.generateOrderNo();
     
     // 订单30分钟后过期
@@ -45,13 +87,26 @@ export class OrderService {
     expiredAt.setMinutes(expiredAt.getMinutes() + 30);
 
     const result = await pool.query(
-      `INSERT INTO orders (order_no, user_id, plan_id, amount, status, payment_method, expired_at)
-       VALUES ($1, $2, $3, $4, 'pending', 'wechat', $5)
+      `INSERT INTO orders (order_no, user_id, plan_id, amount, status, payment_method, order_type, expired_at)
+       VALUES ($1, $2, $3, $4, 'pending', 'wechat', $5, $6)
        RETURNING *`,
-      [orderNo, userId, planId, amount, expiredAt]
+      [orderNo, userId, planId, amount, orderType, expiredAt]
     );
 
     return result.rows[0];
+  }
+  
+  /**
+   * 获取用户当前订阅（用于升级订单）
+   */
+  private async getUserActiveSubscription(userId: number): Promise<any> {
+    const result = await pool.query(
+      `SELECT * FROM user_subscriptions 
+       WHERE user_id = $1 AND status = 'active' AND end_date > CURRENT_TIMESTAMP
+       ORDER BY end_date DESC LIMIT 1`,
+      [userId]
+    );
+    return result.rows[0] || null;
   }
 
   /**

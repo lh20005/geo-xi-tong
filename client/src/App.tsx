@@ -7,6 +7,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminRoute } from './components/AdminRoute';
 import { getUserWebSocketService } from './services/UserWebSocketService';
 import { getCurrentUser } from './utils/auth';
+import { initTokenChecker } from './utils/tokenChecker';
 import LoginPage from './pages/LoginPage';
 import Dashboard from './pages/Dashboard';
 import ConfigPage from './pages/ConfigPage';
@@ -34,12 +35,18 @@ import SecurityConfigPage from './pages/SecurityConfigPage';
 import ProductManagementPage from './pages/ProductManagementPage';
 import OrderManagementPage from './pages/OrderManagementPage';
 import UserCenterPage from './pages/UserCenterPage';
+import PaymentPage from './pages/PaymentPage';
 
 const { Content } = Layout;
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  // 初始化 token 检查器（自动检测并清除过期 token）
+  useEffect(() => {
+    initTokenChecker();
+  }, []);
 
   // 处理从 Landing 跳转过来的 token
   useEffect(() => {
@@ -159,6 +166,7 @@ function App() {
     <Routes>
       {/* 公开路由 */}
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/payment/:orderNo" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
       
       {/* 受保护的路由 */}
       <Route

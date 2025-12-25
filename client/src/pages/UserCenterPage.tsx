@@ -193,19 +193,20 @@ const UserCenterPage = () => {
     try {
       const token = localStorage.getItem('auth_token');
       const response = await axios.post(
-        `${API_BASE_URL}/api/subscription/upgrade`,
+        `${API_BASE_URL}/api/orders`,
         { plan_id: planId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (response.data.success) {
-        message.success('升级订单已创建，请完成支付');
+        message.success('订单创建成功，正在跳转支付页面...');
         setUpgradeModalVisible(false);
-        // TODO: 跳转到支付页面
-        console.log('订单信息:', response.data.data);
+        // 跳转到支付页面
+        const orderNo = response.data.data.order_no;
+        window.location.href = `/payment/${orderNo}`;
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || '升级失败');
+      message.error(error.response?.data?.message || '创建订单失败');
     }
   };
 

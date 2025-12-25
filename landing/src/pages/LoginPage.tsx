@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { config } from '../config/env';
 import ChangePasswordModal from '../components/ChangePasswordModal';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [formData, setFormData] = useState({
     username: '',
     password: ''
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [tempPasswordUser, setTempPasswordUser] = useState<any>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [expiredMessage, setExpiredMessage] = useState('');
 
   // 处理导航到首页锚点
   const handleNavigateToSection = (sectionId: string) => {
@@ -28,9 +30,21 @@ export default function LoginPage() {
     }, 100);
   };
 
-  // 页面加载时滚动到顶部
+  // 页面加载时滚动到顶部并检查是否有过期提示
   useEffect(() => {
     window.scrollTo(0, 0);
+    
+    // 检查是否是因为 token 过期跳转过来的
+    const expired = searchParams.get('expired');
+    const message = searchParams.get('message');
+    
+    if (expired === 'true' && message) {
+      setExpiredMessage(decodeURIComponent(message));
+      // 3秒后清除提示
+      setTimeout(() => {
+        setExpiredMessage('');
+      }, 5000);
+    }
     
     // 输出配置信息用于调试
     console.log('[Landing Login] 页面加载');
@@ -41,12 +55,13 @@ export default function LoginPage() {
       refresh_token: localStorage.getItem('refresh_token'),
       user_info: localStorage.getItem('user_info')
     });
-  }, []);
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess(false);
+    setExpiredMessage('');
     setLoading(true);
 
     try {
@@ -151,6 +166,15 @@ export default function LoginPage() {
           {/* 登录表单 */}
           <div className="bg-white rounded-2xl shadow-xl p-8">
             <form onSubmit={handleSubmit} className="space-y-6">
+              {expiredMessage && (
+                <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                  {expiredMessage}
+                </div>
+              )}
+
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm flex items-center">
                   <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">

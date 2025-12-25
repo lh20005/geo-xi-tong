@@ -42,29 +42,52 @@ apiClient.interceptors.response.use(
       const refreshToken = localStorage.getItem('refresh_token');
       if (refreshToken) {
         try {
+          console.log('[Auth] Access token 过期，尝试刷新...');
           const response = await axios.post('/api/auth/refresh', { refreshToken });
-          const newToken = response.data.data.token;
-          localStorage.setItem('auth_token', newToken);
           
-          console.log('[Auth] Token刷新成功');
+          if (response.data.success) {
+            const newToken = response.data.data.token;
+            localStorage.setItem('auth_token', newToken);
+            
+            console.log('[Auth] Token 刷新成功，重试原始请求');
+            
+            // 重试原始请求
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            return apiClient.request(originalRequest);
+          } else {
+            throw new Error('Token 刷新失败');
+          }
+        } catch (refreshError: any) {
+          console.error('[Auth] Token 刷新失败:', refreshError.response?.data?.message || refreshError.message);
           
-          // 重试原始请求
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          return apiClient.request(originalRequest);
-        } catch (refreshError) {
-          console.error('[Auth] Token刷新失败:', refreshError);
-          // 刷新失败，清除token并跳转到登录页
+          // 刷新失败，清除所有认证信息
           localStorage.removeItem('auth_token');
           localStorage.removeItem('refresh_token');
           localStorage.removeItem('user_info');
-          window.location.href = '/login';
-          return Promise.reject(refreshError);
+          
+          // 显示友好提示
+          const message = refreshError.response?.data?.message || '登录已过期，请重新登录';
+          
+          // 使用 setTimeout 确保在当前请求完成后再跳转
+          setTimeout(() => {
+            // 跳转到落地页登录页面
+            const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+            window.location.href = `${landingUrl}/login?expired=true&message=${encodeURIComponent(message)}`;
+          }, 100);
+          
+          return Promise.reject(new Error(message));
         }
       } else {
-        // 没有refreshToken，跳转到登录页
-        console.log('[Auth] 没有refresh token，跳转到登录页');
+        // 没有refreshToken，清除并跳转到登录页
+        console.log('[Auth] 没有 refresh token，跳转到登录页');
         localStorage.clear();
-        window.location.href = '/login';
+        
+        setTimeout(() => {
+          const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+          window.location.href = `${landingUrl}/login?expired=true&message=${encodeURIComponent('请先登录')}`;
+        }, 100);
+        
+        return Promise.reject(new Error('请先登录'));
       }
     }
     
