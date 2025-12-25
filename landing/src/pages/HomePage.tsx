@@ -762,19 +762,19 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-              灵活的<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">价格方案</span>
+              灵活的<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">使用方案</span>
             </h2>
           </div>
 
           <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* 体验版 */}
+            {/* 免费版 */}
             <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 shadow-2xl transform scale-105 relative">
               <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
                 入门首选
               </div>
               <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-white mb-2">体验版</h3>
-                <p className="text-blue-100 mb-6">适合体验</p>
+                <h3 className="text-2xl font-bold text-white mb-2">免费版</h3>
+                <p className="text-blue-100 mb-6">适合个人用户</p>
                 <div className="mb-6">
                   <span className="text-5xl font-bold text-white">¥0</span>
                   <span className="text-blue-100">/月</span>

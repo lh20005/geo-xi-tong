@@ -2,6 +2,8 @@ import { pool } from '../db/database';
 import { authService } from './AuthService';
 import { invitationService } from './InvitationService';
 import { tokenService } from './TokenService';
+import { sessionService } from './SessionService';
+import { passwordService } from './PasswordService';
 
 interface User {
   id: number;
@@ -32,6 +34,16 @@ export class UserService {
       UserService.instance = new UserService();
     }
     return UserService.instance;
+  }
+
+  /**
+   * 统计管理员数量
+   */
+  private async countAdmins(): Promise<number> {
+    const result = await pool.query(
+      `SELECT COUNT(*) as count FROM users WHERE role = 'admin'`
+    );
+    return parseInt(result.rows[0].count);
   }
 
   /**
@@ -75,6 +87,24 @@ export class UserService {
     id: number, 
     data: { username?: string; role?: 'admin' | 'user' }
   ): Promise<User> {
+    // 如果要修改角色,检查是否是最后一个管理员
+    if (data.role !== undefined) {
+      const user = await this.getUserById(id);
+      
+      if (!user) {
+        throw new Error('用户不存在');
+      }
+      
+      // 如果当前用户是管理员且要降权为普通用户
+      if (user.role === 'admin' && data.role === 'user') {
+        const adminCount = await this.countAdmins();
+        
+        if (adminCount <= 1) {
+          throw new Error('不能降权最后一个管理员');
+        }
+      }
+    }
+    
     const updates: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -147,9 +177,16 @@ export class UserService {
       throw new Error('当前密码不正确');
     }
     
-    // 验证新密码长度
-    if (!newPassword || newPassword.length < 6) {
-      throw new Error('新密码必须至少6个字符');
+    // 验证新密码强度
+    const validation = passwordService.validatePasswordStrength(newPassword);
+    if (!validation.valid) {
+      throw new Error(validation.errors.join('; '));
+    }
+    
+    // 检查密码重用
+    const isReused = await passwordService.checkPasswordReuse(id, newPassword);
+    if (isReused) {
+      throw new Error('新密码不能与最近3次使用的密码相同');
     }
     
     // 哈希新密码
@@ -163,11 +200,14 @@ export class UserService {
       [newPasswordHash, id]
     );
     
-    // 使旧令牌失效（保留当前会话）
+    // 保存密码历史
+    await passwordService.savePasswordHistory(id, newPasswordHash);
+    
+    // 使旧会话失效（保留当前会话）
     if (currentRefreshToken) {
-      await tokenService.invalidateUserTokensExcept(id, currentRefreshToken);
+      await sessionService.revokeAllSessionsExcept(id, currentRefreshToken);
     } else {
-      await tokenService.invalidateUserTokens(id);
+      await sessionService.revokeAllSessions(id);
     }
     
     console.log(`[User] 密码修改成功: ID ${id}`);
@@ -177,17 +217,28 @@ export class UserService {
    * 删除用户
    */
   async deleteUser(id: number): Promise<void> {
-    // 先使所有令牌失效
-    await tokenService.invalidateUserTokens(id);
+    // 检查是否是最后一个管理员
+    const user = await this.getUserById(id);
+    
+    if (!user) {
+      throw new Error('用户不存在');
+    }
+    
+    if (user.role === 'admin') {
+      const adminCount = await this.countAdmins();
+      
+      if (adminCount <= 1) {
+        throw new Error('不能删除最后一个管理员');
+      }
+    }
+    
+    // 先使所有会话失效
+    await sessionService.revokeAllSessions(id);
     
     const result = await pool.query(
       'DELETE FROM users WHERE id = $1',
       [id]
     );
-    
-    if (result.rowCount === 0) {
-      throw new Error('用户不存在');
-    }
     
     console.log(`[User] 用户删除成功: ID ${id}`);
   }
@@ -211,8 +262,11 @@ export class UserService {
       [passwordHash, userId]
     );
     
-    // 使所有旧令牌失效
-    await tokenService.invalidateUserTokens(userId);
+    // 保存密码历史
+    await passwordService.savePasswordHistory(userId, passwordHash);
+    
+    // 使所有旧会话失效
+    await sessionService.revokeAllSessions(userId);
     
     console.log(`[User] 管理员重置密码成功: ID ${userId}`);
     

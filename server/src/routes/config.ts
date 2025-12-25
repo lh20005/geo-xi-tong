@@ -1,8 +1,24 @@
 import { Router } from 'express';
 import { pool } from '../db/database';
 import { OllamaService } from '../services/ollamaService';
+import { authenticate, requireAdmin } from '../middleware/adminAuth';
+import { requireConfirmation } from '../middleware/requireConfirmation';
+import { createRateLimitMiddleware } from '../middleware/rateLimit';
 
 export const configRouter = Router();
+
+// 配置修改操作限流: 每小时20次
+const configRateLimit = createRateLimitMiddleware(
+  (req) => {
+    const userId = (req as any).user?.userId || 'unknown';
+    return `config-change:${userId}`;
+  },
+  {
+    windowMs: 60 * 60 * 1000,  // 1小时
+    maxRequests: 20             // 最多20次
+  },
+  '配置修改操作过于频繁,请1小时后再试'
+);
 
 // ==================== 关键词蒸馏配置 API ====================
 
@@ -38,7 +54,8 @@ configRouter.get('/distillation', async (req, res) => {
 });
 
 // 保存关键词蒸馏配置
-configRouter.post('/distillation', async (req, res) => {
+// 需要管理员权限和确认令牌
+configRouter.post('/distillation', authenticate, requireAdmin, configRateLimit, requireConfirmation('update-distillation-config'), async (req, res) => {
   try {
     const { prompt, topicCount } = req.body;
     
@@ -126,7 +143,8 @@ configRouter.get('/active', async (req, res) => {
 });
 
 // 保存API配置
-configRouter.post('/', async (req, res) => {
+// 需要管理员权限和确认令牌
+configRouter.post('/', authenticate, requireAdmin, configRateLimit, requireConfirmation('update-api-config'), async (req, res) => {
   try {
     const { provider, apiKey, ollamaBaseUrl, ollamaModel } = req.body;
     

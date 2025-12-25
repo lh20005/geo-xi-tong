@@ -1,41 +1,40 @@
-import { pool } from '../database';
-import { authService } from '../../services/AuthService';
+/**
+ * 数据库迁移执行脚本
+ * 用于执行SQL迁移文件
+ */
 
-async function runMigration() {
+import { pool } from '../database';
+import fs from 'fs';
+import path from 'path';
+
+async function runMigration(migrationFile: string) {
+  console.log(`\n🚀 开始执行迁移: ${migrationFile}`);
+  
   try {
-    console.log('开始执行数据库迁移...');
+    const sqlPath = path.join(__dirname, migrationFile);
+    const sql = fs.readFileSync(sqlPath, 'utf8');
     
-    // 创建users表
-    console.log('创建users表...');
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        email VARCHAR(100),
-        role VARCHAR(20) DEFAULT 'user',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_login_at TIMESTAMP
-      )
-    `);
+    await pool.query(sql);
     
-    // 创建索引
-    console.log('创建索引...');
-    await pool.query(`
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)
-    `);
-    
-    // 使用AuthService初始化默认管理员
-    console.log('初始化默认管理员账号...');
-    await authService.initializeDefaultAdmin();
-    
-    console.log('✅ 数据库迁移完成！');
+    console.log(`✅ 迁移执行成功: ${migrationFile}\n`);
+  } catch (error) {
+    console.error(`❌ 迁移执行失败: ${migrationFile}`);
+    console.error(error);
+    throw error;
+  }
+}
+
+async function main() {
+  const migrationFile = process.argv[2] || '001_create_security_tables.sql';
+  
+  try {
+    await runMigration(migrationFile);
+    console.log('✅ 所有迁移执行完成');
     process.exit(0);
   } catch (error) {
-    console.error('❌ 数据库迁移失败:', error);
+    console.error('❌ 迁移执行失败');
     process.exit(1);
   }
 }
 
-runMigration();
+main();

@@ -19,3 +19,48 @@ if (!process.env.DATABASE_URL) {
 jest.setTimeout(30000);
 
 // Global test utilities can be added here
+
+// Track if cleanup has been done
+let cleanupDone = false;
+
+// Global cleanup to prevent resource leaks
+// This runs after ALL tests in ALL files
+global.afterAll(async () => {
+  if (cleanupDone) return;
+  cleanupDone = true;
+
+  // Stop any running timers from singleton services
+  try {
+    const { RateLimitService } = await import('../services/RateLimitService');
+    RateLimitService.getInstance().stopCleanupTimer();
+  } catch (e) {
+    // Service might not be initialized
+  }
+
+  try {
+    const { SessionService } = await import('../services/SessionService');
+    SessionService.getInstance().stopCleanupTimer();
+  } catch (e) {
+    // Service might not be initialized
+  }
+
+  // Close Redis connection
+  try {
+    const { redisClient } = await import('../db/redis');
+    if (redisClient.isOpen) {
+      await redisClient.quit();
+    }
+  } catch (e) {
+    // Redis might not be initialized or already closed
+  }
+
+  // Close database pool
+  try {
+    const { pool } = await import('../db/database');
+    await pool.end();
+  } catch (e) {
+    // Pool might already be closed
+  }
+});
+
+

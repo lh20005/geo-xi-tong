@@ -18,6 +18,9 @@ import accountsRouter from './accounts';
 import adminRouter from './admin';
 import usersRouter from './users';
 import invitationsRouter from './invitations';
+import confirmationRouter from './confirmation';
+import securityConfigRouter from './securityConfig';
+import securityRouter from './security';
 
 export const apiRouter = Router();
 
@@ -25,6 +28,9 @@ apiRouter.use('/auth', authRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/invitations', invitationsRouter);
+apiRouter.use('/confirm', confirmationRouter);
+apiRouter.use('/security-config', securityConfigRouter);
+apiRouter.use('/security', securityRouter);
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);

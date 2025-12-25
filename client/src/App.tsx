@@ -26,6 +26,11 @@ import ArticleGenerationPage from './pages/ArticleGenerationPage';
 import PlatformManagementPage from './pages/PlatformManagementPage';
 import PublishingTasksPage from './pages/PublishingTasksPage';
 import PublishingRecordsPage from './pages/PublishingRecordsPage';
+import SecurityDashboardPage from './pages/SecurityDashboardPage';
+import AuditLogsPage from './pages/AuditLogsPage';
+import IPWhitelistPage from './pages/IPWhitelistPage';
+import PermissionsPage from './pages/PermissionsPage';
+import SecurityConfigPage from './pages/SecurityConfigPage';
 
 const { Content } = Layout;
 
@@ -181,6 +186,11 @@ function App() {
                     <Route path="/knowledge-base/:id" element={<KnowledgeBaseDetailPage />} />
                     <Route path="/article-settings" element={<ArticleSettingsPage />} />
                     <Route path="/article-generation" element={<ArticleGenerationPage />} />
+                    <Route path="/security/dashboard" element={<AdminRoute><SecurityDashboardPage /></AdminRoute>} />
+                    <Route path="/security/audit-logs" element={<AdminRoute><AuditLogsPage /></AdminRoute>} />
+                    <Route path="/security/ip-whitelist" element={<AdminRoute><IPWhitelistPage /></AdminRoute>} />
+                    <Route path="/security/permissions" element={<AdminRoute><PermissionsPage /></AdminRoute>} />
+                    <Route path="/security/config" element={<AdminRoute><SecurityConfigPage /></AdminRoute>} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Content>

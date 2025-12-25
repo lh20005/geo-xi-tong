@@ -2,9 +2,10 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { pool } from '../db/database';
 import { authService } from '../services/AuthService';
-import { rateLimitService } from '../services/RateLimitService';
 import { tokenService } from '../services/TokenService';
-import { loginRateLimit, registrationRateLimit, recordLoginAttempt } from '../middleware/rateLimit';
+import { sessionService } from '../services/SessionService';
+import { passwordService } from '../services/PasswordService';
+import { loginRateLimit, registrationRateLimit } from '../middleware/rateLimit';
 
 const router = express.Router();
 
@@ -39,8 +40,9 @@ router.post('/register', registrationRateLimit, async (req, res) => {
     const accessToken = tokenService.generateAccessToken(user.id, user.username, user.role);
     const refreshToken = tokenService.generateRefreshToken(user.id);
     
-    // 保存刷新令牌到数据库
-    await tokenService.saveRefreshToken(user.id, refreshToken);
+    // 创建会话（包含IP和user agent）
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    await sessionService.createSession(user.id, refreshToken, ipAddress, userAgent);
 
     console.log(`[Auth] 用户注册成功: ${username}`);
 
@@ -83,17 +85,19 @@ router.post('/login', loginRateLimit, async (req, res) => {
       });
     }
 
-    // 获取 IP 地址
-    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+    // 先获取用户ID用于账户锁定检查
+    const userCheck = await authService.getUserByUsername(username);
     
-    // 检查速率限制
-    const canAttempt = await rateLimitService.checkRateLimit(username, ipAddress);
-    
-    if (!canAttempt) {
-      return res.status(429).json({
-        success: false,
-        message: '登录尝试次数过多，请15分钟后再试'
-      });
+    if (userCheck) {
+      // 检查账户是否被锁定
+      const lockStatus = passwordService.isAccountLocked(userCheck.id);
+      if (lockStatus.locked) {
+        const minutesLeft = Math.ceil((lockStatus.unlockAt!.getTime() - Date.now()) / 60000);
+        return res.status(403).json({
+          success: false,
+          message: `账户已被锁定，请在${minutesLeft}分钟后重试`
+        });
+      }
     }
 
     // 验证用户
@@ -101,7 +105,9 @@ router.post('/login', loginRateLimit, async (req, res) => {
     
     if (!user) {
       // 记录失败的登录尝试
-      await rateLimitService.recordLoginAttempt(username, ipAddress, false);
+      if (userCheck) {
+        passwordService.recordLoginAttempt(userCheck.id, false);
+      }
       
       return res.status(401).json({
         success: false,
@@ -109,17 +115,43 @@ router.post('/login', loginRateLimit, async (req, res) => {
       });
     }
 
-    // 记录成功的登录尝试
-    await rateLimitService.recordLoginAttempt(username, ipAddress, true);
+    // 记录成功的登录尝试并重置失败计数
+    passwordService.recordLoginAttempt(user.id, true);
+    passwordService.resetLoginAttempts(user.id);
 
     // 生成令牌
     const accessToken = tokenService.generateAccessToken(user.id, user.username, user.role);
     const refreshToken = tokenService.generateRefreshToken(user.id);
     
-    // 保存刷新令牌到数据库
-    await tokenService.saveRefreshToken(user.id, refreshToken);
+    // 创建会话（包含IP和user agent）
+    const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    await sessionService.createSession(user.id, refreshToken, ipAddress, userAgent);
 
     console.log(`[Auth] 用户登录成功: ${username}`);
+
+    // 检查是否使用临时密码
+    if (user.is_temp_password) {
+      console.log(`[Auth] 用户使用临时密码登录: ${username}`);
+      return res.json({
+        success: true,
+        requirePasswordChange: true,
+        message: '您正在使用临时密码，请立即修改密码',
+        data: {
+          token: accessToken,
+          refreshToken,
+          expiresIn: 3600,
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            role: user.role,
+            invitationCode: user.invitation_code,
+            isTempPassword: true
+          }
+        }
+      });
+    }
 
     res.json({
       success: true,
@@ -172,8 +204,8 @@ router.post('/refresh', async (req, res) => {
       });
     }
     
-    // 检查刷新令牌是否在数据库中
-    const isValid = await tokenService.isRefreshTokenValid(refreshToken);
+    // 验证会话（同时更新last_used_at）
+    const isValid = await sessionService.validateSession(refreshToken);
     if (!isValid) {
       return res.status(401).json({
         success: false,
@@ -217,9 +249,9 @@ router.post('/logout', async (req, res) => {
   try {
     const { refreshToken } = req.body;
 
-    // 从数据库删除刷新令牌
+    // 撤销会话
     if (refreshToken) {
-      await tokenService.deleteRefreshToken(refreshToken);
+      await sessionService.revokeSession(refreshToken);
     }
 
     res.json({

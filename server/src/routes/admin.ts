@@ -2,12 +2,27 @@ import express from 'express';
 import { authenticate, requireAdmin } from '../middleware/adminAuth';
 import { userService } from '../services/UserService';
 import { getWebSocketService } from '../services/WebSocketService';
+import { createRateLimitMiddleware } from '../middleware/rateLimit';
+import { requireConfirmation } from '../middleware/requireConfirmation';
 
 const router = express.Router();
 
 // 所有管理员路由都需要认证和管理员权限
 router.use(authenticate);
 router.use(requireAdmin);
+
+// 用户管理操作限流: 每小时10次
+const userManagementRateLimit = createRateLimitMiddleware(
+  (req) => {
+    const userId = (req as any).user?.userId || 'unknown';
+    return `user-management:${userId}`;
+  },
+  {
+    windowMs: 60 * 60 * 1000,  // 1小时
+    maxRequests: 10             // 最多10次
+  },
+  '用户管理操作过于频繁,请1小时后再试'
+);
 
 /**
  * 转换数据库字段名（蛇形）为前端字段名（驼峰）
@@ -104,8 +119,9 @@ router.get('/users/:id', async (req, res) => {
 /**
  * 更新用户信息
  * PUT /api/admin/users/:id
+ * 需要确认令牌（角色变更时）
  */
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', userManagementRateLimit, requireConfirmation('update-user'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
     const { username, role } = req.body;
@@ -150,8 +166,9 @@ router.put('/users/:id', async (req, res) => {
 /**
  * 重置用户密码
  * POST /api/admin/users/:id/reset-password
+ * 需要确认令牌
  */
-router.post('/users/:id/reset-password', async (req, res) => {
+router.post('/users/:id/reset-password', userManagementRateLimit, requireConfirmation('reset-password'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
 
@@ -195,8 +212,9 @@ router.post('/users/:id/reset-password', async (req, res) => {
 /**
  * 删除用户
  * DELETE /api/admin/users/:id
+ * 需要确认令牌
  */
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', userManagementRateLimit, requireConfirmation('delete-user'), async (req, res) => {
   try {
     const userId = parseInt(req.params.id);
 

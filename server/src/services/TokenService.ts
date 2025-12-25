@@ -41,8 +41,10 @@ export class TokenService {
    * 生成刷新令牌
    */
   generateRefreshToken(userId: number): string {
+    // Add random nonce to ensure uniqueness even for same userId at same timestamp
+    const nonce = Math.random().toString(36).substring(2, 15);
     return jwt.sign(
-      { userId },
+      { userId, nonce },
       JWT_REFRESH_SECRET,
       { expiresIn: REFRESH_TOKEN_EXPIRES_IN }
     );

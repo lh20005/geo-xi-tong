@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import { pool } from '../db/database';
 import { invitationService } from './InvitationService';
+import { passwordService } from './PasswordService';
 
 interface User {
   id: number;
@@ -80,9 +81,10 @@ export class AuthService {
       throw new Error('用户名只能包含字母、数字和下划线');
     }
     
-    // 验证密码长度（最少6个字符）
-    if (!password || password.length < 6) {
-      throw new Error('密码必须至少6个字符');
+    // 验证密码强度
+    const validation = passwordService.validatePasswordStrength(password);
+    if (!validation.valid) {
+      throw new Error(validation.errors.join('; '));
     }
     
     // 检查用户名是否已存在
@@ -123,6 +125,9 @@ export class AuthService {
     
     const user = result.rows[0];
     
+    // 保存密码历史
+    await passwordService.savePasswordHistory(user.id, passwordHash);
+    
     console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}`);
     
     return user;
@@ -143,6 +148,7 @@ export class AuthService {
     }
     
     const user = result.rows[0];
+    
     const isValid = await this.verifyPassword(password, user.password_hash);
     
     if (!isValid) {

@@ -14,6 +14,10 @@ import {
   CloudUploadOutlined,
   SendOutlined,
   HistoryOutlined,
+  SafetyOutlined,
+  FileTextOutlined as AuditOutlined,
+  LockOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 
@@ -85,6 +89,39 @@ export default function Sidebar() {
       icon: <HistoryOutlined />,
       label: '发布记录',
     },
+    // 安全管理 - 仅管理员可见
+    ...(userIsAdmin ? [{
+      key: 'security',
+      icon: <SafetyOutlined />,
+      label: '安全管理',
+      children: [
+        {
+          key: '/security/dashboard',
+          icon: <SafetyOutlined />,
+          label: '安全仪表板',
+        },
+        {
+          key: '/security/audit-logs',
+          icon: <AuditOutlined />,
+          label: '审计日志',
+        },
+        {
+          key: '/security/permissions',
+          icon: <TeamOutlined />,
+          label: '权限管理',
+        },
+        {
+          key: '/security/ip-whitelist',
+          icon: <LockOutlined />,
+          label: 'IP白名单',
+        },
+        {
+          key: '/security/config',
+          icon: <SettingOutlined />,
+          label: '安全配置',
+        },
+      ],
+    }] : []),
     // 系统配置 - 仅管理员可见
     ...(userIsAdmin ? [{
       key: '/config',

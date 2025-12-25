@@ -11,6 +11,7 @@ import { taskScheduler } from './services/TaskScheduler';
 import { getWebSocketService } from './services/WebSocketService';
 import { rateLimitService } from './services/RateLimitService';
 import { tokenService } from './services/TokenService';
+import { securityCheckService } from './services/SecurityCheckService';
 
 dotenv.config({ path: '../.env' });
 
@@ -37,7 +38,7 @@ app.use(errorHandler);
 // 初始化加密服务并启动服务器
 async function startServer() {
   try {
-    await encryptionService.initialize();
+    // EncryptionService已在导入时初始化，无需调用initialize
     console.log('✅ 加密服务初始化成功');
     
     // 启动任务调度器
@@ -60,6 +61,46 @@ async function startServer() {
         console.error('[Cleanup] 清理过期令牌失败:', error);
       }
     }, 60 * 60 * 1000); // 每小时
+    
+    // 启动每日安全检查任务（每天凌晨2点运行）
+    // Requirement 19.1, 19.2
+    const scheduleSecurityCheck = () => {
+      const now = new Date();
+      const next2AM = new Date(now);
+      next2AM.setHours(2, 0, 0, 0);
+      
+      // 如果今天的2点已过，设置为明天的2点
+      if (now.getHours() >= 2) {
+        next2AM.setDate(next2AM.getDate() + 1);
+      }
+      
+      const timeUntilNext = next2AM.getTime() - now.getTime();
+      
+      setTimeout(async () => {
+        try {
+          console.log('[SecurityCheck] 开始每日安全检查...');
+          await securityCheckService.runAllChecks();
+          console.log('[SecurityCheck] 每日安全检查完成');
+        } catch (error) {
+          console.error('[SecurityCheck] 每日安全检查失败:', error);
+        }
+        
+        // 安排下一次检查（24小时后）
+        setInterval(async () => {
+          try {
+            console.log('[SecurityCheck] 开始每日安全检查...');
+            await securityCheckService.runAllChecks();
+            console.log('[SecurityCheck] 每日安全检查完成');
+          } catch (error) {
+            console.error('[SecurityCheck] 每日安全检查失败:', error);
+          }
+        }, 24 * 60 * 60 * 1000); // 每24小时
+      }, timeUntilNext);
+      
+      console.log(`✅ 每日安全检查已安排，下次运行时间: ${next2AM.toLocaleString('zh-CN')}`);
+    };
+    
+    scheduleSecurityCheck();
     
     // 创建HTTP服务器
     const server = createServer(app);

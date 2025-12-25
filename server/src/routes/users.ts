@@ -93,4 +93,65 @@ router.put('/password', async (req, res) => {
   }
 });
 
+/**
+ * 修改临时密码
+ * POST /api/users/change-temporary-password
+ * 用于首次登录时修改管理员重置的临时密码
+ */
+router.post('/change-temporary-password', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { currentPassword, newPassword, refreshToken } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: '当前密码和新密码不能为空'
+      });
+    }
+
+    // 验证用户确实使用临时密码
+    const user = await userService.getUserById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    if (!user.is_temp_password) {
+      return res.status(400).json({
+        success: false,
+        message: '您没有使用临时密码，请使用普通密码修改功能'
+      });
+    }
+
+    // 使用相同的changePassword方法，它会清除is_temp_password标记
+    await userService.changePassword(userId, currentPassword, newPassword, refreshToken);
+
+    // 广播密码修改事件
+    try {
+      const wsService = getWebSocketService();
+      wsService.broadcast(userId, 'user:password-changed', {
+        userId,
+        isTemporary: true,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('[User] WebSocket 广播失败:', error);
+    }
+
+    res.json({
+      success: true,
+      message: '临时密码修改成功，您现在可以正常使用系统'
+    });
+  } catch (error: any) {
+    console.error('[User] 修改临时密码失败:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || '修改临时密码失败'
+    });
+  }
+});
+
 export default router;

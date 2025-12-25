@@ -1,13 +1,31 @@
-import { pool } from '../db/database';
+/**
+ * 频率限制服务
+ * 使用滑动窗口算法实现频率限制
+ * 当前使用内存存储,生产环境可替换为Redis
+ */
+
+export interface RateLimitConfig {
+  windowMs: number;      // 时间窗口(毫秒)
+  maxRequests: number;   // 最大请求数
+}
+
+interface RequestRecord {
+  timestamps: number[];  // 请求时间戳数组
+}
 
 export class RateLimitService {
   private static instance: RateLimitService;
-  private readonly LOGIN_ATTEMPT_LIMIT = 5;
-  private readonly LOGIN_ATTEMPT_WINDOW_MINUTES = 15;
-  private readonly REGISTRATION_LIMIT = 3;
-  private readonly REGISTRATION_WINDOW_HOURS = 1;
+  private records: Map<string, RequestRecord>;
+  private cleanupTimer?: NodeJS.Timeout;
 
-  private constructor() {}
+  private constructor() {
+    this.records = new Map();
+    
+    // 定期清理过期记录(每5分钟)
+    // 使用 unref() 防止阻止进程退出
+    this.cleanupTimer = setInterval(() => this.cleanup(), 5 * 60 * 1000);
+    this.cleanupTimer.unref();
+  }
 
   public static getInstance(): RateLimitService {
     if (!RateLimitService.instance) {
@@ -17,109 +35,174 @@ export class RateLimitService {
   }
 
   /**
-   * 记录登录尝试
+   * 检查是否超过频率限制
+   * 使用滑动窗口算法
    */
-  async recordLoginAttempt(
-    username: string,
-    ipAddress: string,
-    success: boolean
-  ): Promise<void> {
-    await pool.query(
-      'INSERT INTO login_attempts (username, ip_address, success) VALUES ($1, $2, $3)',
-      [username, ipAddress, success]
-    );
-    
-    console.log(`[RateLimit] 记录登录尝试: ${username} from ${ipAddress}, 成功: ${success}`);
-  }
+  async checkLimit(
+    key: string,
+    config: RateLimitConfig
+  ): Promise<{ allowed: boolean; retryAfter?: number }> {
+    const now = Date.now();
+    const windowStart = now - config.windowMs;
 
-  /**
-   * 检查是否超过速率限制
-   * 返回 true 表示允许继续，false 表示已超过限制
-   */
-  async checkRateLimit(username: string, ipAddress: string): Promise<boolean> {
-    const windowStart = new Date();
-    windowStart.setMinutes(windowStart.getMinutes() - this.LOGIN_ATTEMPT_WINDOW_MINUTES);
-    
-    // 查询在时间窗口内的失败尝试次数
-    const result = await pool.query(
-      `SELECT COUNT(*) as count 
-       FROM login_attempts 
-       WHERE (username = $1 OR ip_address = $2) 
-       AND success = FALSE 
-       AND attempted_at > $3`,
-      [username, ipAddress, windowStart]
-    );
-    
-    const failedAttempts = parseInt(result.rows[0].count);
-    
-    if (failedAttempts >= this.LOGIN_ATTEMPT_LIMIT) {
-      console.log(`[RateLimit] 速率限制触发: ${username} from ${ipAddress}, 失败次数: ${failedAttempts}`);
-      return false;
+    // 获取或创建记录
+    let record = this.records.get(key);
+    if (!record) {
+      record = { timestamps: [] };
+      this.records.set(key, record);
     }
-    
-    return true;
-  }
 
-  /**
-   * 清理旧的登录尝试记录（超过1小时）
-   */
-  async cleanup(): Promise<number> {
-    const oneHourAgo = new Date();
-    oneHourAgo.setHours(oneHourAgo.getHours() - 1);
-    
-    const result = await pool.query(
-      'DELETE FROM login_attempts WHERE attempted_at < $1',
-      [oneHourAgo]
-    );
-    
-    const deletedCount = result.rowCount || 0;
-    
-    if (deletedCount > 0) {
-      console.log(`[RateLimit] 清理旧记录: ${deletedCount} 条`);
+    // 移除窗口外的旧请求
+    record.timestamps = record.timestamps.filter(ts => ts > windowStart);
+
+    // 检查是否超过限制
+    if (record.timestamps.length >= config.maxRequests) {
+      // 计算需要等待的时间
+      const oldestTimestamp = record.timestamps[0];
+      const retryAfter = Math.ceil((oldestTimestamp + config.windowMs - now) / 1000);
+      
+      console.log(`[RateLimit] 超过限制: key=${key}, count=${record.timestamps.length}, max=${config.maxRequests}`);
+      
+      return {
+        allowed: false,
+        retryAfter: Math.max(retryAfter, 1)
+      };
     }
-    
-    return deletedCount;
+
+    return { allowed: true };
   }
 
   /**
-   * 检查注册速率限制
-   * 限制：每个 IP 地址每小时最多 3 次注册
+   * 检查并记录请求(原子操作,用于并发场景)
+   * 如果允许则记录请求,否则拒绝
    */
-  async checkRegistrationRateLimit(ipAddress: string): Promise<boolean> {
-    const windowStart = new Date();
-    windowStart.setHours(windowStart.getHours() - this.REGISTRATION_WINDOW_HOURS);
-    
-    // 查询在时间窗口内的注册尝试次数
-    // 使用特殊的用户名前缀来标识注册尝试
-    const result = await pool.query(
-      `SELECT COUNT(*) as count 
-       FROM login_attempts 
-       WHERE ip_address = $1 
-       AND username LIKE 'registration_%'
-       AND attempted_at > $2`,
-      [ipAddress, windowStart]
-    );
-    
-    const registrationAttempts = parseInt(result.rows[0].count);
-    
-    if (registrationAttempts >= this.REGISTRATION_LIMIT) {
-      console.log(`[RateLimit] 注册速率限制触发: ${ipAddress}, 尝试次数: ${registrationAttempts}`);
-      return false;
+  async checkAndRecordRequest(
+    key: string,
+    config: RateLimitConfig
+  ): Promise<{ allowed: boolean; retryAfter?: number }> {
+    const now = Date.now();
+    const windowStart = now - config.windowMs;
+
+    // 获取或创建记录
+    let record = this.records.get(key);
+    if (!record) {
+      record = { timestamps: [] };
+      this.records.set(key, record);
     }
-    
-    return true;
+
+    // 移除窗口外的旧请求
+    record.timestamps = record.timestamps.filter(ts => ts > windowStart);
+
+    // 检查是否超过限制
+    if (record.timestamps.length >= config.maxRequests) {
+      // 计算需要等待的时间
+      const oldestTimestamp = record.timestamps[0];
+      const retryAfter = Math.ceil((oldestTimestamp + config.windowMs - now) / 1000);
+      
+      console.log(`[RateLimit] 超过限制: key=${key}, count=${record.timestamps.length}, max=${config.maxRequests}`);
+      
+      return {
+        allowed: false,
+        retryAfter: Math.max(retryAfter, 1)
+      };
+    }
+
+    // 允许请求,立即记录
+    record.timestamps.push(now);
+    console.log(`[RateLimit] 允许并记录请求: key=${key}, count=${record.timestamps.length}`);
+
+    return { allowed: true };
   }
 
   /**
-   * 记录注册尝试
+   * 记录请求
    */
-  async recordRegistrationAttempt(ipAddress: string, success: boolean): Promise<void> {
-    await pool.query(
-      'INSERT INTO login_attempts (username, ip_address, success) VALUES ($1, $2, $3)',
-      [`registration_${ipAddress}`, ipAddress, success]
-    );
+  async recordRequest(key: string): Promise<void> {
+    const now = Date.now();
+
+    let record = this.records.get(key);
+    if (!record) {
+      record = { timestamps: [] };
+      this.records.set(key, record);
+    }
+
+    record.timestamps.push(now);
     
-    console.log(`[RateLimit] 记录注册尝试: ${ipAddress}, 成功: ${success}`);
+    console.log(`[RateLimit] 记录请求: key=${key}, count=${record.timestamps.length}`);
+  }
+
+  /**
+   * 获取剩余配额
+   */
+  async getRemainingQuota(key: string, config: RateLimitConfig): Promise<number> {
+    const now = Date.now();
+    const windowStart = now - config.windowMs;
+
+    const record = this.records.get(key);
+    if (!record) {
+      return config.maxRequests;
+    }
+
+    // 计算窗口内的请求数
+    const validTimestamps = record.timestamps.filter(ts => ts > windowStart);
+    const remaining = Math.max(0, config.maxRequests - validTimestamps.length);
+
+    return remaining;
+  }
+
+  /**
+   * 重置限制
+   */
+  async resetLimit(key: string): Promise<void> {
+    this.records.delete(key);
+    console.log(`[RateLimit] 重置限制: key=${key}`);
+  }
+
+  /**
+   * 清理过期记录
+   * 删除超过1小时没有活动的记录
+   */
+  private cleanup(): void {
+    const now = Date.now();
+    const expiryTime = 60 * 60 * 1000; // 1小时
+
+    let cleanedCount = 0;
+    for (const [key, record] of this.records.entries()) {
+      // 如果最后一个请求超过1小时,删除记录
+      if (record.timestamps.length === 0 || 
+          now - record.timestamps[record.timestamps.length - 1] > expiryTime) {
+        this.records.delete(key);
+        cleanedCount++;
+      }
+    }
+
+    if (cleanedCount > 0) {
+      console.log(`[RateLimit] 清理了 ${cleanedCount} 条过期记录`);
+    }
+  }
+
+  /**
+   * 获取当前记录数(用于测试)
+   */
+  getRecordCount(): number {
+    return this.records.size;
+  }
+
+  /**
+   * 清空所有记录(用于测试)
+   */
+  clearAll(): void {
+    this.records.clear();
+  }
+
+  /**
+   * 停止清理定时器(用于测试清理)
+   */
+  stopCleanupTimer(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = undefined;
+    }
   }
 }
 

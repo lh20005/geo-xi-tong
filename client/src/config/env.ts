@@ -28,6 +28,10 @@ export const config = {
   version: '1.0.0',
 };
 
+// 导出常用的URL常量（向后兼容）
+export const API_BASE_URL = config.apiUrl;
+export const WS_URL = config.wsUrl;
+
 // 开发环境日志
 if (isDevelopment) {
   console.log('[Config] 环境配置:', config);
