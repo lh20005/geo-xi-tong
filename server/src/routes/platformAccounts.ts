@@ -1,7 +1,7 @@
 import express from 'express';
 import { accountService } from '../services/AccountService';
 import { pool } from '../db/database';
-import { webSocketService } from '../services/WebSocketService';
+import { getWebSocketService } from '../services/WebSocketService';
 
 const router = express.Router();
 
@@ -133,9 +133,9 @@ router.post('/accounts', async (req, res) => {
     
     // 广播账号事件
     if (isNew) {
-      webSocketService.broadcastAccountEvent('created', account);
+      getWebSocketService().broadcastAccountEvent('created', account);
     } else {
-      webSocketService.broadcastAccountEvent('updated', account);
+      getWebSocketService().broadcastAccountEvent('updated', account);
     }
     
     res.json({
@@ -167,7 +167,7 @@ router.put('/accounts/:id', async (req, res) => {
     });
     
     // 广播账号更新事件
-    webSocketService.broadcastAccountEvent('updated', account);
+    getWebSocketService().broadcastAccountEvent('updated', account);
     
     res.json({
       success: true,
@@ -197,7 +197,7 @@ router.delete('/accounts/:id', async (req, res) => {
     console.log(`[DELETE] 账号删除成功: ID=${accountId}`);
     
     // 广播账号删除事件
-    webSocketService.broadcastAccountEvent('deleted', { id: accountId });
+    getWebSocketService().broadcastAccountEvent('deleted', { id: accountId });
     
     console.log(`[DELETE] WebSocket事件已广播: account.deleted, ID=${accountId}`);
     

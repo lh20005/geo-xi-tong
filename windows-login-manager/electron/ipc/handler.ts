@@ -295,10 +295,21 @@ class IPCHandler {
         try {
           await apiClient.deleteAccount(accountId);
           log.info(`Account ${accountId} deleted from backend`);
-        } catch (error) {
+        } catch (error: any) {
           log.error('Failed to delete from backend:', error);
-          // 后端删除失败，不删除本地数据，直接抛出错误
-          throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，删除操作已取消。');
+          
+          // 区分不同类型的错误
+          if (error.response) {
+            // 后端返回了错误响应（如 400, 404 等）
+            const message = error.response.data?.message || error.message || '删除失败';
+            throw new Error(message);
+          } else if (error.request) {
+            // 请求已发送但没有收到响应（网络问题）
+            throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，删除操作已取消。');
+          } else {
+            // 其他错误
+            throw new Error(error.message || '删除失败，请重试');
+          }
         }
 
         // 只有后端删除成功，才删除本地缓存
@@ -328,10 +339,21 @@ class IPCHandler {
           try {
             await apiClient.setDefaultAccount(platformId, accountId);
             log.info(`Default account set on backend: ${platformId} -> ${accountId}`);
-          } catch (error) {
+          } catch (error: any) {
             log.error('Failed to set default on backend:', error);
-            // 后端更新失败，不更新本地数据，直接抛出错误
-            throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，设置操作已取消。');
+            
+            // 区分不同类型的错误
+            if (error.response) {
+              // 后端返回了错误响应
+              const message = error.response.data?.message || error.message || '设置失败';
+              throw new Error(message);
+            } else if (error.request) {
+              // 网络问题
+              throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，设置操作已取消。');
+            } else {
+              // 其他错误
+              throw new Error(error.message || '设置失败，请重试');
+            }
           }
 
           // 只有后端更新成功，才更新本地缓存

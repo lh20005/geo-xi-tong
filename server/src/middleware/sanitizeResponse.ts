@@ -32,6 +32,11 @@ function sanitizeObject(obj: any, skipRefreshToken: boolean = false): any {
     return obj;
   }
 
+  // 保留 Date 对象
+  if (obj instanceof Date) {
+    return obj;
+  }
+
   if (Array.isArray(obj)) {
     return obj.map(item => sanitizeObject(item, skipRefreshToken));
   }

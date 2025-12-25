@@ -218,6 +218,13 @@ export class WebSocketService {
   }
 
   /**
+   * 广播账号事件给所有连接的用户
+   */
+  broadcastAccountEvent(eventType: 'created' | 'updated' | 'deleted', account: any): void {
+    this.broadcastToAll(`account.${eventType}`, account);
+  }
+
+  /**
    * 获取在线用户数
    */
   getOnlineUsersCount(): number {

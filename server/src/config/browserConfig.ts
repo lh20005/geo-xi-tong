@@ -20,15 +20,18 @@ export function getStandardBrowserConfig(options: {
   headless?: boolean;
   executablePath?: string;
 } = {}): BrowserLaunchOptions {
+  // 检测是否在服务器环境（无显示器的 Linux）
+  const isServer = !process.env.DISPLAY && process.platform === 'linux';
+  
   return {
-    headless: options.headless ?? false, // 默认显示浏览器窗口
+    headless: options.headless ?? isServer, // 服务器环境自动使用 headless
     executablePath: options.executablePath, // 可选：指定Chrome路径
     defaultViewport: null, // 关键：不设置viewport，使用浏览器默认大小（最大化）
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      '--start-maximized', // 启动时最大化窗口
+      ...(isServer ? [] : ['--start-maximized']), // 本地才最大化，服务器不需要
       '--disable-blink-features=AutomationControlled', // 隐藏自动化特征
       '--disable-infobars' // 禁用信息栏
     ],

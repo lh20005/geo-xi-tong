@@ -1,6 +1,6 @@
 import express from 'express';
 import { accountService } from '../services/AccountService';
-import { webSocketService } from '../services/WebSocketService';
+import { getWebSocketService } from '../services/WebSocketService';
 
 const router = express.Router();
 
@@ -76,7 +76,7 @@ router.post('/', async (req, res) => {
     }
     
     // 广播账号创建事件
-    webSocketService.broadcastAccountEvent('created', account);
+    getWebSocketService().broadcastAccountEvent('created', account);
     
     res.status(201).json(account);
   } catch (error: any) {
@@ -109,7 +109,7 @@ router.put('/:id', async (req, res) => {
     }
     
     // 广播账号更新事件
-    webSocketService.broadcastAccountEvent('updated', account);
+    getWebSocketService().broadcastAccountEvent('updated', account);
     
     res.json(account);
   } catch (error: any) {
@@ -131,7 +131,7 @@ router.delete('/:id', async (req, res) => {
     await accountService.deleteAccount(accountId);
     
     // 广播账号删除事件
-    webSocketService.broadcastAccountEvent('deleted', { id: accountId });
+    getWebSocketService().broadcastAccountEvent('deleted', { id: accountId });
     
     res.status(204).send();
   } catch (error: any) {

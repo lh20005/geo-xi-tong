@@ -15,7 +15,7 @@ import { securityCheckService } from './services/SecurityCheckService';
 import { schedulerService } from './services/SchedulerService';
 import { SecurityService } from './services/SecurityService';
 
-dotenv.config({ path: '../.env' });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3000;

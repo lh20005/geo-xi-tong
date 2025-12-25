@@ -166,6 +166,22 @@ export class EncryptionService {
   generateSalt(): string {
     return crypto.randomBytes(EncryptionService.SALT_LENGTH).toString('hex');
   }
+
+  /**
+   * 加密对象（用于加密账号凭证等）
+   */
+  encryptObject(obj: any): string {
+    const jsonString = JSON.stringify(obj);
+    return this.encryptConfig(jsonString);
+  }
+
+  /**
+   * 解密对象
+   */
+  decryptObject(encrypted: string): any {
+    const jsonString = this.decryptConfig(encrypted);
+    return JSON.parse(jsonString);
+  }
 }
 
 // 导出单例
