@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Spin, message, Typography, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
+import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined } from '@ant-design/icons';
 import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
@@ -7,7 +7,7 @@ import AccountBindingModal from '../components/Publishing/AccountBindingModal';
 import AccountManagementModal from '../components/Publishing/AccountManagementModal';
 import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 
-const { Title } = Typography;
+// const { Title } = Typography;
 
 export default function PlatformManagementPage() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
@@ -15,7 +15,7 @@ export default function PlatformManagementPage() {
   const [loading, setLoading] = useState(true);
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
   const [managementModalVisible, setManagementModalVisible] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<Platform | null>(null);
+  const [selectedPlatform] = useState<Platform | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Table, Button, Modal, Input, message, Space, Tag, Form } from 'antd';
-import { SettingOutlined, EditOutlined, HistoryOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { SettingOutlined, EditOutlined, HistoryOutlined, DownloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 import type { ColumnsType } from 'antd/es/table';

@@ -46,6 +46,7 @@ export interface Order {
   amount: number;
   status: 'pending' | 'paid' | 'failed' | 'closed';
   payment_method: 'wechat';
+  order_type?: string;
   transaction_id?: string;
   paid_at?: Date;
   expired_at: Date;

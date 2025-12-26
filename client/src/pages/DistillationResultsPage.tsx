@@ -254,9 +254,9 @@ export default function DistillationResultsPage() {
   };
 
   // 删除单个话题
-  const handleDeleteSingle = async (topicId: number, question: string) => {
+  const handleDeleteSingle = async (topicId: number, _question: string) => {
     try {
-      const result = await deleteTopics([topicId]);
+      await deleteTopics([topicId]);
       message.success('删除成功');
       loadData();
       loadAllKeywords();

@@ -50,8 +50,8 @@ export class PaymentService {
         mchid: mchId,
         serial: serialNo,
         privateKey: privateKey,
-        key: apiV3Key,
-      });
+        // key: apiV3Key, // 注释掉可能不兼容的配置
+      } as any);
 
       this.isConfigured = true;
       SecurityService.secureLog('info', '微信支付初始化成功', {
@@ -296,8 +296,5 @@ export class PaymentService {
     return result;
   }
 }
-
-// 需要导入 pool
-import { pool } from '../db/database';
 
 export const paymentService = new PaymentService();

@@ -1,5 +1,5 @@
 import { pool } from '../db/database';
-import { anomalyDetectionService, AnomalyEvent } from './AnomalyDetectionService';
+import { AnomalyDetectionService } from './AnomalyDetectionService';
 import { notificationService } from './NotificationService';
 
 /**
@@ -375,7 +375,12 @@ export class SecurityResponseService {
   /**
    * 处理异常事件（集成AnomalyDetectionService）
    */
-  async handleAnomalyEvent(event: AnomalyEvent): Promise<void> {
+  async handleAnomalyEvent(event: {
+    type: string;
+    userId: number;
+    severity: 'low' | 'medium' | 'high' | 'critical';
+    details?: any;
+  }): Promise<void> {
     try {
       // 根据异常类型采取相应措施
       switch (event.type) {

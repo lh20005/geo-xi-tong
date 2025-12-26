@@ -4,10 +4,20 @@
   "description": "GEO优化系统 - 品牌AI推荐优化工具",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:all": "concurrently \"npm run server:dev\" \"npm run client:dev\" \"npm run landing:dev\" \"npm run windows:dev\"",
     "server:dev": "cd server && npm run dev",
     "client:dev": "cd client && npm run dev",
-    "build": "npm run client:build && npm run server:build",
-    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+    "landing:dev": "cd landing && npm run dev",
+    "windows:dev": "cd windows-login-manager && npm run electron:dev",
+    "build": "npm run client:build && npm run server:build && npm run landing:build",
+    "client:build": "cd client && npm run build",
+    "server:build": "cd server && npm run build",
+    "landing:build": "cd landing && npm run build",
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install && cd ../landing && npm install && cd ../windows-login-manager && npm install",
+    "start:services": "brew services start postgresql@14 && brew services start redis",
+    "stop:services": "brew services stop postgresql@14 && brew services stop redis",
+    "db:migrate": "cd server && npm run db:migrate",
+    "setup": "npm run install:all && npm run start:services && npm run db:migrate"
   },
   "keywords": ["geo", "optimization", "ai"],
   "author": "",

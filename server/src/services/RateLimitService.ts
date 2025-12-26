@@ -162,7 +162,7 @@ export class RateLimitService {
    * 清理过期记录
    * 删除超过1小时没有活动的记录
    */
-  private cleanup(): void {
+  public async cleanup(): Promise<number> {
     const now = Date.now();
     const expiryTime = 60 * 60 * 1000; // 1小时
 
@@ -179,6 +179,8 @@ export class RateLimitService {
     if (cleanedCount > 0) {
       console.log(`[RateLimit] 清理了 ${cleanedCount} 条过期记录`);
     }
+
+    return cleanedCount;
   }
 
   /**

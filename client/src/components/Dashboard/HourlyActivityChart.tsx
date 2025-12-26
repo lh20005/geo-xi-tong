@@ -64,7 +64,7 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
       {
         name: '活动',
         type: 'bar',
-        data: data.activities.map((value, index) => ({
+        data: data.activities.map((value) => ({
           value,
           itemStyle: {
             color: {

@@ -156,7 +156,7 @@ export class XiaohongshuAdapter extends PlatformAdapter {
           try {
             const fileInput = await page.$(selectors.coverImageUpload);
             if (fileInput) {
-              await fileInput.uploadFile(imagePath);
+              await (fileInput as any).uploadFile(imagePath);
               console.log(`[小红书] ✅ 图片 ${i + 1} 上传完成`);
               await new Promise(resolve => setTimeout(resolve, 3000));
             }

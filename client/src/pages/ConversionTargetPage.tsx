@@ -84,7 +84,7 @@ export default function ConversionTargetPage() {
   };
 
   // 表格列定义
-  const columns: TableProps<ConversionTarget>['columns'] = [
+  const columns: any = [
     {
       title: '公司名称',
       dataIndex: 'company_name',
@@ -173,7 +173,7 @@ export default function ConversionTargetPage() {
   // 处理表格变化
   const handleTableChange = (
     pagination: TablePaginationConfig,
-    filters: Record<string, FilterValue | null>,
+    _filters: Record<string, FilterValue | null>,
     sorter: SorterResult<ConversionTarget> | SorterResult<ConversionTarget>[]
   ) => {
     if (pagination.current) setCurrentPage(pagination.current);

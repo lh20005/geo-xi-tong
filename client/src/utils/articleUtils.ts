@@ -6,7 +6,7 @@
  * 处理文章内容，移除HTML标签和图片标记，保留纯文本格式
  * 用于复制、预览等场景
  */
-export function processArticleContent(content: string, imageUrl?: string): string {
+export function processArticleContent(content: string, _imageUrl?: string): string {
   if (!content) return '';
   
   let processed = content;

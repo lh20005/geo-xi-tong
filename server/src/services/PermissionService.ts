@@ -97,7 +97,7 @@ export class PermissionService {
         grantedBy,
         'GRANT_PERMISSION',
         'user',
-        userId,
+        userId.toString(),
         {
           permission: permissionName,
           grantee: userId
@@ -151,7 +151,7 @@ export class PermissionService {
         revokedBy,
         'REVOKE_PERMISSION',
         'user',
-        userId,
+        userId.toString(),
         {
           permission: permissionName,
           revokee: userId

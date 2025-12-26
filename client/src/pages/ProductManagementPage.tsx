@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, Input, InputNumber, Switch, message, Tag, Space, Tooltip } from 'antd';
+import { Card, Table, Button, Modal, Form, InputNumber, Switch, message, Tag, Space, Tooltip } from 'antd';
 import { EditOutlined, HistoryOutlined, RollbackOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';

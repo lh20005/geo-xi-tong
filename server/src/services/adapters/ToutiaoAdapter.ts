@@ -158,7 +158,7 @@ export class ToutiaoAdapter extends PlatformAdapter {
         ];
         
         for (const selector of fallbackSelectors) {
-          titleInput = await page.$(selector);
+          titleInput = await page.$(selector) as any;
           if (titleInput) {
             await this.log('info', `✅ 使用简化选择器找到: ${selector}`);
             break;
@@ -254,7 +254,7 @@ export class ToutiaoAdapter extends PlatformAdapter {
         ];
         
         for (const selector of fallbackSelectors) {
-          contentEditor = await page.$(selector);
+          contentEditor = await page.$(selector) as any;
           if (contentEditor) {
             console.log(`[头条号] ✅ 使用简化选择器找到: ${selector}`);
             break;
@@ -521,7 +521,7 @@ export class ToutiaoAdapter extends PlatformAdapter {
                   
                   console.log('[头条号] ⏳ 正在调用uploadFile方法...');
                   try {
-                    await fileInput.uploadFile(imagePath);
+                    await (fileInput as any).uploadFile(imagePath);
                     console.log('[头条号] ✅✅✅ uploadFile方法调用成功！图片已提交上传');
                   } catch (uploadError: any) {
                     console.log(`[头条号] ❌❌❌ uploadFile方法调用失败: ${uploadError.message}`);

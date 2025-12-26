@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { 
   Card, Typography, Anchor, Steps, Alert, List, Collapse, 
-  Input, Button, Space, Tag, Image, Divider 
+  Input, Button, Space, Divider 
 } from 'antd';
 import { 
   BookOutlined, SearchOutlined, PrinterOutlined, 
@@ -11,12 +11,12 @@ import {
 import '../styles/manual.css';
 
 const { Title, Paragraph, Text } = Typography;
-const { Step } = Steps;
-const { Panel } = Collapse;
+// const { Step } = Steps;
+// const { Panel } = Collapse;
 const { Search } = Input;
 
 export default function UserManualPage() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<number>(0);
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);

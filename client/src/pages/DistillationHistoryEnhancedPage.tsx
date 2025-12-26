@@ -114,7 +114,7 @@ export default function DistillationHistoryEnhancedPage() {
   // 查看蒸馏结果详情
   const handleViewDetail = async (record: DistillationWithUsage) => {
     try {
-      const response = await axios.get(`/api/distillation/${record.id}`);
+      await axios.get(`/api/distillation/${record.id}`);
       // 这里可以导航到详情页或显示详情弹窗
       message.success('加载详情成功');
       // navigate(`/distillation/${record.id}`);

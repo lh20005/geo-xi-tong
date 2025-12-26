@@ -168,6 +168,13 @@ export class WebSocketService {
   }
 
   /**
+   * 发送消息给特定用户
+   */
+  sendToUser(userId: number, event: string, data: any): void {
+    this.broadcast(userId, event, data);
+  }
+
+  /**
    * 广播消息给特定用户的所有连接
    */
   broadcast(userId: number, event: string, data: any): void {

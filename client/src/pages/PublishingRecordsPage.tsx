@@ -5,8 +5,8 @@ import {
 } from 'antd';
 import { 
   ReloadOutlined, EyeOutlined, CopyOutlined, 
-  CheckCircleOutlined, FileTextOutlined,
-  CalendarOutlined, TagOutlined 
+  CheckCircleOutlined,
+  CalendarOutlined 
 } from '@ant-design/icons';
 import { 
   getPublishingRecords,
@@ -21,7 +21,7 @@ import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 const { Option } = Select;
 
 export default function PublishingRecordsPage() {

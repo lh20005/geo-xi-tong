@@ -97,7 +97,7 @@ export class SecurityService {
 
     const allSensitiveFields = [...defaultSensitiveFields, ...sensitiveFields];
 
-    const masked = Array.isArray(data) ? [] : {};
+    const masked: { [key: string]: any } = Array.isArray(data) ? [] : {};
 
     for (const key in data) {
       const value = data[key];

@@ -18,11 +18,14 @@ export interface Account {
 export interface CreateAccountInput {
   platform_id: string;
   account_name: string;
+  real_username?: string;
   credentials: any;
 }
 
 export interface UpdateAccountInput {
   account_name?: string;
+  real_username?: string;
+  status?: string;
   credentials?: any;
 }
 

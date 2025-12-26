@@ -23,7 +23,7 @@ const UsageCountBadge: React.FC<UsageCountBadgeProps> = ({ count, onClick }) => 
     return `${num}次`;
   };
 
-  const badgeColor = count === 0 ? 'default' : 'blue';
+  // const badgeColor = count === 0 ? 'default' : 'blue';
   const badgeText = formatCount(count);
 
   const badge = (

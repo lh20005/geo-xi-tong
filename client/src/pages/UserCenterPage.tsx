@@ -54,7 +54,6 @@ const UserCenterPage = () => {
   const [loading, setLoading] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
 
   useEffect(() => {
     fetchSubscription();

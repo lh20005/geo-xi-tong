@@ -41,7 +41,7 @@ export default function PublishingTasksPage() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<number>>(new Set());
-  const [platformsLoading, setPlatformsLoading] = useState(false);
+  const [, setPlatformsLoading] = useState(false);
 
   // 任务管理
   const [tasks, setTasks] = useState<PublishingTask[]>([]);
@@ -315,7 +315,7 @@ export default function PublishingTasksPage() {
           logs: [...prev.logs, log]
         }));
       },
-      (error) => {
+      () => {
         message.error('日志流连接失败');
         setLogsModal(prev => ({ ...prev, isLive: false }));
       }

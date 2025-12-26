@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Spin, message, Result, Button } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, LoadingOutlined } from '@ant-design/icons';
+import { LoadingOutlined } from '@ant-design/icons';
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 
@@ -21,7 +21,7 @@ export default function PaymentPage() {
   const [loading, setLoading] = useState(true);
   const [orderInfo, setOrderInfo] = useState<OrderInfo | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failed'>('pending');
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // 获取订单信息
   const fetchOrderInfo = async () => {

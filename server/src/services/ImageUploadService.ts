@@ -139,7 +139,9 @@ export class ImageUploadService {
         if (uploadButtonSelector) {
           console.log(`[图片上传] 尝试点击上传按钮: ${uploadButtonSelector}`);
           await page.click(uploadButtonSelector);
-          await page.waitForTimeout(1000);
+          // TODO: 修复Puppeteer API兼容性问题
+          // await page.waitForTimeout(1000);
+          await new Promise(resolve => setTimeout(resolve, 1000));
           fileInput = await page.$('input[type="file"]');
         }
       }
@@ -150,11 +152,13 @@ export class ImageUploadService {
       }
 
       // 上传文件
-      await fileInput.uploadFile(imagePath);
+      await (fileInput as any).uploadFile(imagePath);
       console.log('[图片上传] ✅ 文件已选择，等待上传完成...');
 
       // 等待上传完成（根据平台不同可能需要调整）
-      await page.waitForTimeout(3000);
+      // TODO: 修复Puppeteer API兼容性问题
+      // await page.waitForTimeout(3000);
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // 尝试获取上传后的图片URL
       const uploadedUrl = await this.getUploadedImageUrl(page);

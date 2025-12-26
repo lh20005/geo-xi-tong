@@ -198,7 +198,7 @@ export default function ArticleGenerationPage() {
   };
 
   // 删除单个任务（包括运行中的任务）
-  const handleDeleteTask = async (taskId: number, taskStatus: string) => {
+  const handleDeleteTask = async (taskId: number, _taskStatus: string) => {
     try {
       setDeleting(true);
       // 如果是运行中的任务，会先终止再删除

@@ -46,7 +46,7 @@ export function createRateLimitMiddleware(
                 retryAfter: result.retryAfter
               },
               ipAddress,
-              req.headers['user-agent'] || null
+              req.headers['user-agent'] || undefined
             );
           }
         } catch (auditError) {

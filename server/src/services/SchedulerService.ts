@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { orderService } from './OrderService';
 import { subscriptionService } from './SubscriptionService';
 import { pool } from '../db/database';
@@ -163,7 +163,7 @@ export class SchedulerService {
           RETURNING id, user_id
         `);
 
-        if (expiredResult.rowCount > 0) {
+        if (expiredResult.rowCount && expiredResult.rowCount > 0) {
           console.log(`[定时任务] 已自动降级 ${expiredResult.rowCount} 个到期订阅`);
         }
       } catch (error) {
