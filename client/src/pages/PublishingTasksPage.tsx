@@ -212,8 +212,8 @@ export default function PublishingTasksPage() {
     const accountIds = Array.from(selectedAccounts);
     const totalTasks = articleIds.length * accountIds.length;
     
-    // 计算总耗时
-    const totalMinutes = (articleIds.length - 1) * publishInterval;
+    // 计算总耗时：总任务数减1，乘以间隔时间
+    const totalMinutes = (totalTasks - 1) * publishInterval;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     const timeDesc = hours > 0 ? `${hours}小时${minutes}分钟` : `${minutes}分钟`;
@@ -226,7 +226,7 @@ export default function PublishingTasksPage() {
           <p>发布间隔：<strong>{publishInterval}</strong> 分钟</p>
           <p>预计完成时间：约 <strong>{timeDesc}</strong></p>
           <p style={{ color: '#666', fontSize: 12, marginTop: 8 }}>
-            ⚠️ 串行发布：第一篇文章发布完成后，等待 {publishInterval} 分钟，再发布第二篇，依此类推
+            ⚠️ 串行发布：每个任务完成后，等待 {publishInterval} 分钟，再发布下一个任务
           </p>
         </div>
       ),
@@ -260,10 +260,11 @@ export default function PublishingTasksPage() {
                     }
                   })
                 );
+                
+                // 每创建一个任务就增加 batch_order，确保所有任务按顺序执行
+                batchOrder++;
               }
             }
-            
-            batchOrder++;
           }
 
           await Promise.all(tasks);
