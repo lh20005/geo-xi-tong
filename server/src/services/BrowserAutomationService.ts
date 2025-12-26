@@ -182,29 +182,6 @@ export class BrowserAutomationService {
   }
 
   /**
-   * 截图
-   */
-  async takeScreenshot(
-    page: Page,
-    path: string,
-    taskId?: number
-  ): Promise<void> {
-    try {
-      await page.screenshot({ path, fullPage: true });
-
-      if (taskId) {
-        await publishingService.logMessage(
-          taskId,
-          'info',
-          `截图保存: ${path}`
-        );
-      }
-    } catch (error: any) {
-      console.error('截图失败:', error);
-    }
-  }
-
-  /**
    * 执行带重试的操作
    */
   async executeWithRetry<T>(

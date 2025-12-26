@@ -2,10 +2,17 @@
 node_modules/
 */node_modules/
 
-# 环境变量
+# 🔒 环境变量（重要！）
 .env
-.env.local
-.env.production
+.env.*
+!.env.example
+
+# 🔒 敏感文件
+*.key
+*.pem
+*.crt
+secrets/
+config/production.json
 
 # 构建输出
 dist/
@@ -40,3 +47,10 @@ coverage/
 
 # TypeScript
 *.tsbuildinfo
+
+# 🔒 截图（避免泄露信息）
+server/*.png
+screenshots/
+*.png
+!client/public/**/*.png
+!landing/public/**/*.png

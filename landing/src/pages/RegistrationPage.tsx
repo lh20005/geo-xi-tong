@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
-import { config } from '../config/env';
 import Header from '../components/Header';
 
 export default function RegistrationPage() {

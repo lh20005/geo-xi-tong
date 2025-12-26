@@ -15,7 +15,7 @@ export class WebSocketService {
   private eventHandlers: Map<string, Set<EventHandler>> = new Map();
   private isConnecting = false;
   private shouldReconnect = true;
-  private heartbeatInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: number | null = null;
 
   /**
    * 连接到 WebSocket 服务器

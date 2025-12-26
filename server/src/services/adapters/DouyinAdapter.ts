@@ -116,14 +116,6 @@ export class DouyinAdapter extends PlatformAdapter {
       console.log('[抖音号] ✅ 页面加载完成');
       console.log(`[抖音号] 当前URL: ${page.url()}`);
       
-      // 截图保存当前页面状态
-      try {
-        await page.screenshot({ path: 'douyin-home-page.png', fullPage: false });
-        console.log('[抖音号] 📸 已保存页面截图到: douyin-home-page.png');
-      } catch (e) {
-        console.log('[抖音号] 截图失败:', e);
-      }
-      
       // ========== 步骤1：悬停在"高清发布"按钮上5秒，显示下拉菜单，然后点击"发布图文" ==========
       console.log('\n[抖音号] ========================================');
       console.log('[抖音号] 📝 步骤1/7：悬停在高清发布按钮上5秒，点击发布图文');
@@ -145,14 +137,6 @@ export class DouyinAdapter extends PlatformAdapter {
       console.log('[抖音号] ⏳ 保持悬停5秒，等待二级菜单完全弹出...');
       await new Promise(resolve => setTimeout(resolve, 5000));
       console.log('[抖音号] ✅ 悬停5秒完成，二级菜单应该已完全显示');
-      
-      // 截图保存菜单状态
-      try {
-        await page.screenshot({ path: 'douyin-menu-popup.png', fullPage: false });
-        console.log('[抖音号] 📸 已保存菜单截图到: douyin-menu-popup.png');
-      } catch (e) {
-        console.log('[抖音号] 截图失败:', e);
-      }
       
       // 点击二级菜单中的"发布图文"按钮
       // 策略：严格按照文字"发布图文"查找并点击
@@ -459,14 +443,6 @@ export class DouyinAdapter extends PlatformAdapter {
         // 额外等待确保内容稳定
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // 截图查看侧边栏状态
-        try {
-          await page.screenshot({ path: 'douyin-declaration-sidebar.png', fullPage: true });
-          console.log('[抖音号] 📸 已保存侧边栏截图到: douyin-declaration-sidebar.png');
-        } catch (e) {
-          console.log('[抖音号] 截图失败:', e);
-        }
-        
         // 打印所有可见的label元素，用于调试
         console.log('[抖音号] 🔍 调试：列出所有可见的label元素...');
         const debugLabels = await page.evaluate(() => {
@@ -654,14 +630,6 @@ export class DouyinAdapter extends PlatformAdapter {
       console.log('\n[抖音号] ========================================');
       console.log('[抖音号] 🚀 步骤7/7：点击发布按钮');
       console.log('[抖音号] ========================================');
-      
-      // 截图保存发布前的状态
-      try {
-        await page.screenshot({ path: 'douyin-before-publish.png', fullPage: false });
-        console.log('[抖音号] 📸 已保存发布前截图到: douyin-before-publish.png');
-      } catch (e) {
-        console.log('[抖音号] 截图失败:', e);
-      }
       
       // 使用简化的CSS选择器
       const publishButton = '#DCPF button.primary-cECiOJ.fixed-J9O8Yw';
@@ -863,14 +831,6 @@ export class DouyinAdapter extends PlatformAdapter {
       console.log('[抖音号] ⏳ 等待发布完成（20秒）...');
       await new Promise(resolve => setTimeout(resolve, 20000));
       
-      // 截图保存发布后的状态
-      try {
-        await page.screenshot({ path: 'douyin-after-publish.png', fullPage: true });
-        console.log('[抖音号] 📸 已保存发布后截图到: douyin-after-publish.png');
-      } catch (e) {
-        console.log('[抖音号] 截图失败:', e);
-      }
-      
       // 检查是否发布成功
       console.log('[抖音号] 🔍 检查发布结果...');
       try {
@@ -895,7 +855,6 @@ export class DouyinAdapter extends PlatformAdapter {
         const stillEditing = await page.$('#DCPF');
         if (stillEditing) {
           console.log('[抖音号] ⚠️ 仍在编辑页面，发布可能未成功');
-          console.log('[抖音号] 💡 建议：查看 douyin-after-publish.png 截图确认状态');
           
           // 列出页面上所有可见的按钮文字
           const visibleButtons = await page.$$eval('button', buttons => {
@@ -927,14 +886,6 @@ export class DouyinAdapter extends PlatformAdapter {
     } catch (error: any) {
       console.error('❌ 抖音号文章发布失败:', error.message);
       console.error('错误堆栈:', error.stack);
-      
-      // 保存错误时的截图
-      try {
-        await page.screenshot({ path: 'douyin-error.png', fullPage: true });
-        console.log('[抖音号] 📸 已保存错误截图到: douyin-error.png');
-      } catch (e) {
-        console.log('[抖音号] 无法保存错误截图');
-      }
       
       // 等待一段时间再关闭，方便查看
       console.log('[抖音号] ⏳ 等待10秒后关闭浏览器...');

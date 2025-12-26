@@ -3,6 +3,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { createServer } from 'http';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import { apiRouter } from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { sanitizeResponse } from './middleware/sanitizeResponse';
@@ -20,8 +22,58 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// 中间件
-app.use(cors());
+// ========== 🔒 安全中间件 ==========
+
+// 1. Helmet - 设置安全 HTTP Headers
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
+
+// 2. 隐藏技术栈信息
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.removeHeader('X-Powered-By');
+  res.setHeader('Server', 'WebServer');
+  next();
+});
+
+// 3. 速率限制（防止暴力攻击）
+// 开发环境：宽松限制，方便调试
+// 生产环境：合理限制，既保护服务器又不影响正常使用
+const limiter = rateLimit({
+  windowMs: 1 * 60 * 1000,  // 1分钟窗口
+  max: process.env.NODE_ENV === 'production' ? 500 : 1000,  // 生产：500次/分钟，开发：1000次/分钟
+  message: '请求过于频繁，请稍后再试',
+  standardHeaders: true,
+  legacyHeaders: false,
+  // 跳过某些不需要限制的路径
+  skip: (req) => {
+    // WebSocket 连接不限制
+    return req.path === '/ws';
+  }
+});
+
+app.use('/api', limiter);
+
+// 4. CORS 配置
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+  'http://localhost:5173',
+  'http://localhost:8080'
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('不允许的来源'));
+    }
+  },
+  credentials: true
+}));
+
+// 其他中间件
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 

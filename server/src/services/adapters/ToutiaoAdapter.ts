@@ -141,14 +141,6 @@ export class ToutiaoAdapter extends PlatformAdapter {
       await new Promise(resolve => setTimeout(resolve, 8000));
       await this.log('info', '✅ 页面加载完成');
       
-      // 截图保存当前页面状态
-      try {
-        await page.screenshot({ path: 'toutiao-publish-page.png', fullPage: true });
-        console.log('[头条号] 📸 已保存页面截图到: toutiao-publish-page.png');
-      } catch (e) {
-        console.log('[头条号] 截图失败:', e);
-      }
-      
       // ========== 步骤2：填写标题 ==========
       await this.log('info', '📝 步骤2/6：填写文章标题');
       
@@ -612,15 +604,6 @@ export class ToutiaoAdapter extends PlatformAdapter {
                   console.log('[头条号]    1. 对话框没有正确打开');
                   console.log('[头条号]    2. 选择器已过时');
                   console.log('[头条号]    3. 页面结构发生变化');
-                  console.log('[头条号] 💡 建议：检查页面截图，手动查找正确的选择器');
-                  
-                  // 保存截图用于调试
-                  try {
-                    await page.screenshot({ path: 'toutiao-upload-dialog.png', fullPage: true });
-                    console.log('[头条号] 📸 已保存对话框截图: toutiao-upload-dialog.png');
-                  } catch (e) {
-                    // ignore
-                  }
                 }
                 
                 } else {
@@ -936,14 +919,6 @@ export class ToutiaoAdapter extends PlatformAdapter {
           console.log('[头条号] ✅✅✅ 成功找到并点击发布按钮');
         } else {
           console.log('[头条号] ❌❌❌ 无法找到或点击发布按钮');
-          
-          // 截图调试
-          try {
-            await page.screenshot({ path: 'toutiao-button-not-found.png', fullPage: true });
-            console.log('[头条号] 📸 已保存调试截图: toutiao-button-not-found.png');
-          } catch (e) {
-            // ignore
-          }
         }
       }
       

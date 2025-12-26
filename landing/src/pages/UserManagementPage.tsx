@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import type { User } from '../types/user';
 import UserDetailModal from '../components/UserDetailModal';
@@ -75,16 +75,6 @@ export default function UserManagementPage() {
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await apiClient.logout();
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-      navigate('/login');
     }
   };
 

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { config } from '../config/env';
+import { useNavigate } from 'react-router-dom';
 
 interface UserMenuProps {
   username: string;
