@@ -25,29 +25,41 @@ export default defineConfig({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,      // 删除 console.log
-        drop_debugger: true,     // 删除 debugger
-        pure_funcs: [            // 删除指定函数
-          'console.log',
-          'console.info',
-          'console.debug'
-        ]
+        drop_console: true,
+        drop_debugger: true,
+        pure_funcs: ['console.log', 'console.info', 'console.debug']
       },
       mangle: {
-        safari10: true           // 变量名混淆
+        safari10: true
       },
       format: {
-        comments: false          // 删除注释
+        comments: false
       }
     },
     
-    // 分块策略（提高加载速度）
+    // ⚡ 性能优化
+    chunkSizeWarningLimit: 1000,
+    
+    // 分块策略（简化版，避免依赖加载顺序问题）
     rollupOptions: {
       output: {
         manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'antd-vendor': ['antd', '@ant-design/icons']
-        }
+          // 将所有 node_modules 打包到一个 vendor chunk
+          'vendor': [
+            'react',
+            'react-dom',
+            'react-router-dom',
+            'antd',
+            'axios',
+            'dayjs'
+          ],
+          // ECharts 单独打包（体积较大）
+          'echarts': ['echarts']
+        },
+        // 优化文件名
+        chunkFileNames: 'assets/js/[name]-[hash].js',
+        entryFileNames: 'assets/js/[name]-[hash].js',
+        assetFileNames: 'assets/[ext]/[name]-[hash].[ext]'
       }
     }
   }

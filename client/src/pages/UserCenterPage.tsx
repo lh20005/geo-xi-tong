@@ -104,7 +104,7 @@ const UserCenterPage = () => {
 
   const fetchPlans = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/subscription/plans`);
+      const response = await axios.get(`${API_BASE_URL}/subscription/plans`);
       if (response.data.success) {
         setPlans(response.data.data);
       }
@@ -117,7 +117,7 @@ const UserCenterPage = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await axios.get(`${API_BASE_URL}/api/subscription/current`, {
+      const response = await axios.get(`${API_BASE_URL}/subscription/current`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -134,7 +134,7 @@ const UserCenterPage = () => {
   const fetchUsageStats = async () => {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await axios.get(`${API_BASE_URL}/api/subscription/usage-stats`, {
+      const response = await axios.get(`${API_BASE_URL}/subscription/usage-stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -150,7 +150,7 @@ const UserCenterPage = () => {
     setOrdersLoading(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await axios.get(`${API_BASE_URL}/api/orders`, {
+      const response = await axios.get(`${API_BASE_URL}/orders`, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -170,7 +170,7 @@ const UserCenterPage = () => {
     try {
       const token = localStorage.getItem('auth_token');
       const response = await axios.put(
-        `${API_BASE_URL}/api/subscription/auto-renew`,
+        `${API_BASE_URL}/subscription/auto-renew`,
         { auto_renew: !subscription.auto_renew },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -192,7 +192,7 @@ const UserCenterPage = () => {
     try {
       const token = localStorage.getItem('auth_token');
       const response = await axios.post(
-        `${API_BASE_URL}/api/orders`,
+        `${API_BASE_URL}/orders`,
         { plan_id: planId },
         { headers: { Authorization: `Bearer ${token}` } }
       );

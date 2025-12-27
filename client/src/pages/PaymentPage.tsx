@@ -28,7 +28,7 @@ export default function PaymentPage() {
     try {
       const token = localStorage.getItem('auth_token');
       const response = await axios.get(
-        `${API_BASE_URL}/api/orders/${orderNo}`,
+        `${API_BASE_URL}/orders/${orderNo}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 

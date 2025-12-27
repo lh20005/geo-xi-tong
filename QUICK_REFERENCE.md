@@ -173,6 +173,27 @@ sudo tail -f /var/log/nginx/error.log
 sudo systemctl restart nginx
 ```
 
+### WebSocket 连接错误（浏览器控制台）
+
+**这是正常现象！** 浏览器显示的 WebSocket 错误是客户端重连行为，不是真正的问题。
+
+```bash
+# 验证 WebSocket 是否正常工作
+ssh ubuntu@43.143.163.6 "pm2 logs geo-backend --lines 20 --nostream" | grep WebSocket
+
+# 正常的日志应该包含：
+# [WebSocket] User authenticated
+# [WebSocket] User subscribed
+# [WebSocket] Received message: ping
+```
+
+**只有在以下情况才需要关注：**
+- ❌ 后端日志没有 WebSocket 记录
+- ❌ 实时同步功能不工作
+- ❌ 持续报错超过 5 分钟
+
+📖 详细说明：[WebSocket 连接说明](./docs/05-测试指南/WebSocket连接说明.md)
+
 ### 数据库连接失败
 
 ```bash
@@ -240,8 +261,10 @@ pm2 monit
 
 ## 文档快速链接
 
-- 📖 [数据库迁移使用指南](./DATABASE_MIGRATION_GUIDE.md)
-- 📖 [迁移系统总结](./MIGRATION_SYSTEM_SUMMARY.md)
+- 📖 [数据库迁移使用指南](./docs/03-部署指南/DATABASE_MIGRATION_GUIDE.md)
+- 📖 [迁移系统总结](./docs/03-部署指南/MIGRATION_SYSTEM_SUMMARY.md)
+- 📖 [部署问题排查](./docs/03-部署指南/DEPLOYMENT_TROUBLESHOOTING.md)
+- 📖 [WebSocket 连接说明](./docs/05-测试指南/WebSocket连接说明.md)
 - 📖 [部署指南](./docs/03-部署指南/腾讯云快速部署指南.md)
 - 📖 [安全指南](./docs/04-安全指南/)
 - 📖 [测试指南](./docs/05-测试指南/)

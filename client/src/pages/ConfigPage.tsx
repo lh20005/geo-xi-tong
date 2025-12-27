@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Form, Select, Input, Button, message, Space, Alert, Spin, Tabs, InputNumber } from 'antd';
 import { ApiOutlined, CheckCircleOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 
 const { TextArea } = Input;
 
@@ -17,7 +17,7 @@ function DistillationConfigTab() {
 
   const loadConfig = async () => {
     try {
-      const response = await axios.get('/api/config/distillation');
+      const response = await apiClient.get('/config/distillation');
       setCurrentConfig(response.data);
       if (response.data.configured) {
         form.setFieldsValue({
@@ -40,11 +40,29 @@ function DistillationConfigTab() {
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
-      await axios.post('/api/config/distillation', values);
+      // 第一步：获取确认令牌
+      const confirmResponse = await apiClient.post('/confirm/initiate', {
+        action: 'update-distillation-config',
+        data: values
+      });
+
+      if (!confirmResponse.data.success) {
+        throw new Error('获取确认令牌失败');
+      }
+
+      const confirmationToken = confirmResponse.data.data.token;
+
+      // 第二步：使用确认令牌保存配置
+      await apiClient.post('/config/distillation', values, {
+        headers: {
+          'X-Confirmation-Token': confirmationToken
+        }
+      });
+
       message.success('关键词蒸馏配置保存成功！');
       loadConfig();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || '保存配置失败';
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || '保存配置失败';
       message.error(errorMsg);
       console.error('保存配置错误:', error.response?.data || error);
     } finally {
@@ -201,7 +219,7 @@ export default function ConfigPage() {
 
   const loadConfig = async () => {
     try {
-      const response = await axios.get('/api/config/active');
+      const response = await apiClient.get('/config/active');
       setCurrentConfig(response.data);
       if (response.data.provider) {
         setSelectedProvider(response.data.provider);
@@ -214,7 +232,7 @@ export default function ConfigPage() {
   const detectOllamaModels = async (baseUrl: string) => {
     setDetectingModels(true);
     try {
-      const response = await axios.get('/api/config/ollama/models', {
+      const response = await apiClient.get('/config/ollama/models', {
         params: { baseUrl }
       });
       
@@ -262,7 +280,7 @@ export default function ConfigPage() {
     
     setTestingConnection(true);
     try {
-      const response = await axios.post('/api/config/ollama/test', {
+      const response = await apiClient.post('/config/ollama/test', {
         baseUrl,
         model
       });
@@ -280,12 +298,30 @@ export default function ConfigPage() {
   const handleSubmit = async (values: any) => {
     setLoading(true);
     try {
-      await axios.post('/api/config', values);
+      // 第一步：获取确认令牌
+      const confirmResponse = await apiClient.post('/confirm/initiate', {
+        action: 'update-api-config',
+        data: values
+      });
+
+      if (!confirmResponse.data.success) {
+        throw new Error('获取确认令牌失败');
+      }
+
+      const confirmationToken = confirmResponse.data.data.token;
+
+      // 第二步：使用确认令牌保存配置
+      await apiClient.post('/config', values, {
+        headers: {
+          'X-Confirmation-Token': confirmationToken
+        }
+      });
+
       message.success('API配置保存成功！');
       loadConfig();
       form.resetFields();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.error || '保存配置失败，请检查网络连接';
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || '保存配置失败，请检查网络连接';
       message.error(errorMsg);
       console.error('保存配置错误:', error.response?.data || error);
     } finally {

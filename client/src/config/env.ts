@@ -7,9 +7,10 @@ const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
 
 export const config = {
-  // API基础URL
-  apiUrl: import.meta.env.VITE_API_URL || 
-    (isProduction ? 'https://your-domain.com/api' : 'http://localhost:3000/api'),
+  // API基础URL（包含 /api 路径）
+  apiUrl: import.meta.env.VITE_API_URL 
+    ? `${import.meta.env.VITE_API_URL}/api`
+    : (isProduction ? 'https://your-domain.com/api' : 'http://localhost:3000/api'),
   
   // WebSocket URL
   wsUrl: import.meta.env.VITE_WS_URL || 
