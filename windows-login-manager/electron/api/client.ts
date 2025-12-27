@@ -10,7 +10,7 @@ import { storageManager } from '../storage/manager';
 
 // API响应类型
 interface AuthResponse {
-  accessToken: string;
+  authToken: string;
   refreshToken: string;
   expiresIn: number;
   user?: {
@@ -117,9 +117,9 @@ class APIClient {
         // 获取Token
         const tokens = await storageManager.getTokens();
         
-        if (tokens && tokens.accessToken) {
+        if (tokens && tokens.authToken) {
           // 添加Authorization header
-          config.headers.Authorization = `Bearer ${tokens.accessToken}`;
+          config.headers.Authorization = `Bearer ${tokens.authToken}`;
         }
 
         // 确保使用HTTPS（生产环境）
@@ -175,11 +175,11 @@ class APIClient {
             if (newTokens) {
               // 更新请求头
               if (originalRequest.headers) {
-                originalRequest.headers.Authorization = `Bearer ${newTokens.accessToken}`;
+                originalRequest.headers.Authorization = `Bearer ${newTokens.authToken}`;
               }
 
               // 通知所有等待的请求
-              this.refreshSubscribers.forEach((callback) => callback(newTokens.accessToken));
+              this.refreshSubscribers.forEach((callback) => callback(newTokens.authToken));
               this.refreshSubscribers = [];
 
               // 重试原始请求
@@ -222,15 +222,14 @@ class APIClient {
       const { token, refreshToken, expiresIn, user } = response.data.data;
 
       // 保存Token
-      await storageManager.saveTokens(
-        token,
-        refreshToken,
-        expiresIn
-      );
+      await storageManager.saveTokens({
+        authToken: token,
+        refreshToken: refreshToken
+      });
 
       log.info('Login successful');
       return {
-        accessToken: token,
+        authToken: token,
         refreshToken,
         expiresIn,
         user
@@ -262,15 +261,14 @@ class APIClient {
       const { token, expiresIn } = response.data.data;
 
       // 保存新Token
-      await storageManager.saveTokens(
-        token,
-        tokens.refreshToken, // 保持原有的refreshToken
-        expiresIn
-      );
+      await storageManager.saveTokens({
+        authToken: token,
+        refreshToken: tokens.refreshToken // 保持原有的refreshToken
+      });
 
       log.info('Token refreshed successfully');
       return {
-        accessToken: token,
+        authToken: token,
         refreshToken: tokens.refreshToken,
         expiresIn
       };
@@ -400,6 +398,209 @@ class APIClient {
       log.error('Failed to get platforms:', error);
       throw error;
     }
+  }
+
+  /**
+   * 健康检查
+   */
+  async getHealth(): Promise<{ status: string; message?: string }> {
+    const response = await this.axiosInstance.get<{ status: string; message?: string }>('/api/health');
+    return response.data;
+  }
+
+  /**
+   * Dashboard: 获取所有工作台数据（并行）
+   */
+  async getDashboardAllData(params?: { startDate?: string; endDate?: string }): Promise<{
+    metrics: any;
+    trends: any;
+    platformDistribution: any;
+    publishingStatus: any;
+    resourceUsage: any;
+    generationTasks: any;
+    topResources: any;
+    articleStats: any;
+    keywordDistribution: any;
+    monthlyComparison: any;
+    hourlyActivity: any;
+    successRates: any;
+  }> {
+    const [
+      metrics,
+      trends,
+      platformDistribution,
+      publishingStatus,
+      resourceUsage,
+      generationTasks,
+      topResources,
+      articleStats,
+      keywordDistribution,
+      monthlyComparison,
+      hourlyActivity,
+      successRates,
+    ] = await Promise.all([
+      this.axiosInstance.get('/api/dashboard/metrics', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/trends', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/platform-distribution', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/publishing-status', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/resource-usage', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/generation-tasks', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/top-resources', { params }).then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/article-stats').then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/keyword-distribution').then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/monthly-comparison').then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/hourly-activity').then((r) => r.data),
+      this.axiosInstance.get('/api/dashboard/success-rates').then((r) => r.data),
+    ]);
+
+    return {
+      metrics,
+      trends,
+      platformDistribution,
+      publishingStatus,
+      resourceUsage,
+      generationTasks,
+      topResources,
+      articleStats,
+      keywordDistribution,
+      monthlyComparison,
+      hourlyActivity,
+      successRates,
+    };
+  }
+
+  /**
+   * Conversion Targets: 列表
+   */
+  async getConversionTargets(params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    sortField?: string;
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<any> {
+    const response = await this.axiosInstance.get('/api/conversion-targets', { params });
+    return response.data;
+  }
+
+  /**
+   * Conversion Targets: 创建
+   */
+  async createConversionTarget(data: {
+    companyName: string;
+    industry?: string;
+    website?: string;
+    address?: string;
+  }): Promise<any> {
+    const response = await this.axiosInstance.post('/api/conversion-targets', data);
+    return response.data;
+  }
+
+  /**
+   * Conversion Targets: 更新
+   */
+  async updateConversionTarget(
+    id: number,
+    data: { companyName?: string; industry?: string; website?: string; address?: string }
+  ): Promise<any> {
+    const response = await this.axiosInstance.patch(`/api/conversion-targets/${id}`, data);
+    return response.data;
+  }
+
+  /**
+   * Conversion Targets: 删除
+   */
+  async deleteConversionTarget(id: number): Promise<any> {
+    const response = await this.axiosInstance.delete(`/api/conversion-targets/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Conversion Targets: 详情
+   */
+  async getConversionTarget(id: number): Promise<any> {
+    const response = await this.axiosInstance.get(`/api/conversion-targets/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 列表
+   */
+  async getKnowledgeBases(): Promise<any> {
+    const response = await this.axiosInstance.get('/api/knowledge-bases');
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 详情
+   */
+  async getKnowledgeBase(id: number): Promise<any> {
+    const response = await this.axiosInstance.get(`/api/knowledge-bases/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 创建
+   */
+  async createKnowledgeBase(data: { name: string; description?: string }): Promise<any> {
+    const response = await this.axiosInstance.post('/api/knowledge-bases', data);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 更新
+   */
+  async updateKnowledgeBase(id: number, data: { name?: string; description?: string }): Promise<any> {
+    const response = await this.axiosInstance.patch(`/api/knowledge-bases/${id}`, data);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 删除
+   */
+  async deleteKnowledgeBase(id: number): Promise<any> {
+    const response = await this.axiosInstance.delete(`/api/knowledge-bases/${id}`);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 上传文档
+   */
+  async uploadKnowledgeBaseDocuments(id: number, files: any[]): Promise<any> {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+    const response = await this.axiosInstance.post(`/api/knowledge-bases/${id}/documents`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 获取文档详情
+   */
+  async getKnowledgeBaseDocument(docId: number): Promise<any> {
+    const response = await this.axiosInstance.get(`/api/knowledge-bases/documents/${docId}`);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 删除文档
+   */
+  async deleteKnowledgeBaseDocument(docId: number): Promise<any> {
+    const response = await this.axiosInstance.delete(`/api/knowledge-bases/documents/${docId}`);
+    return response.data;
+  }
+
+  /**
+   * Knowledge Base: 搜索文档
+   */
+  async searchKnowledgeBaseDocuments(id: number, query: string): Promise<any> {
+    const response = await this.axiosInstance.get(`/api/knowledge-bases/${id}/documents/search`, {
+      params: { query }
+    });
+    return response.data;
   }
 
   /**

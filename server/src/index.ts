@@ -64,6 +64,7 @@ app.use('/api', limiter);
 // 4. CORS 配置
 const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') || [
   'http://localhost:5173',
+  'http://localhost:5174',  // Electron Vite dev server
   'http://localhost:8080',
   'http://43.143.163.6',
   'https://43.143.163.6',

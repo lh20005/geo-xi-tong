@@ -1,0 +1,90 @@
+import React from 'react';
+import { Card, Typography, Empty } from 'antd';
+import { processArticleContent } from '../utils/articleUtils';
+
+const { Text } = Typography;
+
+interface ArticlePreviewProps {
+  content: string;
+  title?: string;
+  imageUrl?: string;
+  showTitle?: boolean;
+  showImage?: boolean;
+}
+
+/**
+ * ArticlePreview组件
+ * 
+ * 用于统一的文章预览展示，保留段落格式和排版
+ * 适用于：文章管理页面、发布任务页面、发布记录页面等所有需要预览文章的地方
+ */
+const ArticlePreview: React.FC<ArticlePreviewProps> = ({ 
+  content, 
+  title,
+  imageUrl,
+  showTitle = true,
+  showImage = true
+}) => {
+  if (!content) {
+    return <Empty description="暂无文章内容" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+  }
+
+  // 渲染文章内容
+  const renderContent = () => {
+    const cleanContent = processArticleContent(content, imageUrl);
+    
+    // 使用pre-wrap保留换行和空格，这样复制时不会有HTML标签
+    return (
+      <div 
+        style={{ 
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          lineHeight: 1.8,
+          fontSize: 16,
+          color: '#333'
+        }}
+      >
+        {cleanContent}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {/* 文章标题 */}
+      {showTitle && title && (
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Text strong style={{ fontSize: 18, display: 'block', lineHeight: 1.6 }}>
+            {title}
+          </Text>
+        </Card>
+      )}
+
+      {/* 文章图片 */}
+      {showImage && imageUrl && (
+        <Card size="small" style={{ marginBottom: 16, textAlign: 'center' }}>
+          <img 
+            src={imageUrl} 
+            alt="文章配图" 
+            style={{ 
+              maxWidth: '100%', 
+              maxHeight: 400,
+              borderRadius: 8,
+              objectFit: 'contain'
+            }} 
+          />
+        </Card>
+      )}
+
+      {/* 文章内容 */}
+      <Card 
+        size="small" 
+        title={<Text strong>文章内容</Text>}
+      >
+        {renderContent()}
+      </Card>
+    </div>
+  );
+};
+
+export default ArticlePreview;

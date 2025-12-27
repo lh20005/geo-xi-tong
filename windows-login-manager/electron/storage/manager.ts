@@ -127,75 +127,6 @@ class StorageManager {
   }
 
   /**
-   * 保存Token
-   * Requirements: 7.7, 11.9
-   */
-  async saveTokens(accessToken: string, refreshToken: string, expiresIn: number = 3600): Promise<void> {
-    try {
-      const tokenData: TokenData = {
-        accessToken,
-        refreshToken,
-        expiresAt: Date.now() + expiresIn * 1000,
-      };
-
-      const encrypted = this.encrypt(JSON.stringify(tokenData));
-      store.set('tokens', encrypted);
-      
-      log.info('Tokens saved successfully');
-    } catch (error) {
-      log.error('Failed to save tokens:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 获取Token
-   * Requirements: 7.7, 11.9
-   */
-  async getTokens(): Promise<{ accessToken: string; refreshToken: string } | null> {
-    try {
-      const encrypted = store.get('tokens') as string;
-      
-      if (!encrypted) {
-        log.info('No tokens found');
-        return null;
-      }
-
-      const decrypted = this.decrypt(encrypted);
-      const tokenData: TokenData = JSON.parse(decrypted);
-
-      // 检查Token是否过期
-      if (tokenData.expiresAt < Date.now()) {
-        log.warn('Tokens expired');
-        await this.clearTokens();
-        return null;
-      }
-
-      return {
-        accessToken: tokenData.accessToken,
-        refreshToken: tokenData.refreshToken,
-      };
-    } catch (error) {
-      log.error('Failed to get tokens:', error);
-      return null;
-    }
-  }
-
-  /**
-   * 清除Token
-   * Requirements: 7.5
-   */
-  async clearTokens(): Promise<void> {
-    try {
-      store.delete('tokens');
-      log.info('Tokens cleared');
-    } catch (error) {
-      log.error('Failed to clear tokens:', error);
-      throw error;
-    }
-  }
-
-  /**
    * 保存配置
    * Requirements: 7.1
    */
@@ -376,6 +307,51 @@ class StorageManager {
     } catch (error) {
       log.error('Storage integrity check failed:', error);
       return false;
+    }
+  }
+
+  /**
+   * 获取 tokens（用于 API 认证）
+   */
+  async getTokens(): Promise<{ authToken: string; refreshToken: string } | null> {
+    try {
+      const encryptedData = store.get('auth_tokens') as string | undefined;
+      if (!encryptedData) {
+        return null;
+      }
+      
+      const decrypted = this.decrypt(encryptedData);
+      return JSON.parse(decrypted);
+    } catch (error) {
+      log.error('Failed to get tokens:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 保存 tokens
+   */
+  async saveTokens(tokens: { authToken: string; refreshToken: string }): Promise<void> {
+    try {
+      const encrypted = this.encrypt(JSON.stringify(tokens));
+      store.set('auth_tokens', encrypted);
+      log.info('Tokens saved successfully');
+    } catch (error) {
+      log.error('Failed to save tokens:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 清除 tokens
+   */
+  async clearTokens(): Promise<void> {
+    try {
+      store.delete('auth_tokens');
+      log.info('Tokens cleared successfully');
+    } catch (error) {
+      log.error('Failed to clear tokens:', error);
+      throw error;
     }
   }
 

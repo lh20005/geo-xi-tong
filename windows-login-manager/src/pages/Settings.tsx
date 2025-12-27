@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { message, Modal } from 'antd';
 import { useApp } from '../context/AppContext';
 import ipcBridge from '../services/ipc';
 import './Settings.css';
@@ -12,8 +13,21 @@ const Settings: React.FC = () => {
     theme: 'system' as 'light' | 'dark' | 'system',
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [showLogs, setShowLogs] = useState(false);
+
+  const confirmAsync = (title: string, content: string) =>
+    new Promise<boolean>((resolve) => {
+      Modal.confirm({
+        title,
+        content,
+        okText: '确定',
+        cancelText: '取消',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
 
   useEffect(() => {
     if (config) {
@@ -35,45 +49,42 @@ const Settings: React.FC = () => {
     try {
       setIsSaving(true);
       await updateConfig(formData);
-      alert('设置已保存');
+      message.success('设置已保存');
     } catch (error) {
       console.error('Failed to save settings:', error);
-      alert('保存失败，请重试');
+      message.error('保存失败，请重试');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleClearCache = async () => {
-    if (!confirm('确定要清除缓存吗？这将删除所有本地缓存的账号数据。')) {
-      return;
-    }
+    const ok = await confirmAsync('清除缓存', '确定要清除缓存吗？这将删除所有本地缓存的账号数据。');
+    if (!ok) return;
 
     try {
       await ipcBridge.clearCache();
-      alert('缓存已清除');
+      message.success('缓存已清除');
     } catch (error) {
       console.error('Failed to clear cache:', error);
-      alert('清除失败，请重试');
+      message.error('清除失败，请重试');
     }
   };
 
   const handleClearAllData = async () => {
-    if (
-      !confirm(
-        '警告：这将删除所有本地数据，包括配置、Token和缓存。确定要继续吗？'
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmAsync(
+      '清除所有数据',
+      '警告：这将删除所有本地数据，包括配置、Token和缓存。确定要继续吗？'
+    );
+    if (!ok) return;
 
     try {
       await ipcBridge.clearAllData();
-      alert('所有数据已清除，应用将重新加载');
+      message.success('所有数据已清除，应用将重新加载');
       window.location.reload();
     } catch (error) {
       console.error('Failed to clear all data:', error);
-      alert('清除失败，请重试');
+      message.error('清除失败，请重试');
     }
   };
 
@@ -84,32 +95,52 @@ const Settings: React.FC = () => {
       setShowLogs(true);
     } catch (error) {
       console.error('Failed to load logs:', error);
-      alert('加载日志失败');
+      message.error('加载日志失败');
     }
   };
 
   const handleExportLogs = async () => {
     try {
       const logPath = await ipcBridge.exportLogs();
-      alert(`日志文件位置：${logPath}`);
+      Modal.info({
+        title: '日志文件位置',
+        content: logPath,
+        okText: '知道了',
+      });
     } catch (error) {
       console.error('Failed to export logs:', error);
-      alert('导出失败');
+      message.error('导出失败');
     }
   };
 
   const handleClearLogs = async () => {
-    if (!confirm('确定要清除所有日志吗？')) {
-      return;
-    }
+    const ok = await confirmAsync('清除日志', '确定要清除所有日志吗？');
+    if (!ok) return;
 
     try {
       await ipcBridge.clearLogs();
       setLogs([]);
-      alert('日志已清除');
+      message.success('日志已清除');
     } catch (error) {
       console.error('Failed to clear logs:', error);
-      alert('清除失败');
+      message.error('清除失败');
+    }
+  };
+
+  const handleTestConnection = async () => {
+    try {
+      setIsTesting(true);
+      const result = await ipcBridge.checkServerHealth();
+      if (result.status === 'ok') {
+        message.success(result.message || '服务器连接正常');
+      } else {
+        message.error(result.message || '无法连接到服务器');
+      }
+    } catch (error) {
+      console.error('Failed to test connection:', error);
+      message.error(error instanceof Error ? error.message : '无法连接到服务器');
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -134,6 +165,11 @@ const Settings: React.FC = () => {
               placeholder="http://localhost:3000"
             />
             <p className="form-hint">后端API服务器的地址</p>
+            <div className="button-group">
+              <button className="secondary-btn" onClick={handleTestConnection} disabled={isTesting}>
+                {isTesting ? '测试中...' : '测试连接'}
+              </button>
+            </div>
           </div>
         </section>
 

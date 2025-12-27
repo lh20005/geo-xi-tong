@@ -2,24 +2,74 @@
 export interface ElectronAPI {
   // 系统登录
   login: (username: string, password: string) => Promise<AuthResult>;
-  logout: () => Promise<void>;
+  logout: () => Promise<any>;
   checkAuth: () => Promise<{ isAuthenticated: boolean; user?: { id: number; username: string; email?: string; role: string } }>;
-  
+
   // 平台登录
   loginPlatform: (platformId: string) => Promise<LoginResult>;
-  
+  cancelLogin: (platformId?: string) => Promise<any>;
+  getLoginStatus: () => Promise<{ isLoggingIn: boolean }>;
+
+  // 平台列表
+  getPlatforms: () => Promise<Platform[]>;
+
+  // 服务连通性
+  checkServerHealth: () => Promise<{ status: string; message?: string }>;
+
+  // Dashboard
+  getDashboardAllData: (params?: { startDate?: string; endDate?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+
+  // 转化目标
+  getConversionTargets: (params: { page?: number; pageSize?: number; search?: string; sortField?: string; sortOrder?: 'asc' | 'desc' }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  createConversionTarget: (payload: { companyName: string; industry?: string; website?: string; address?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  updateConversionTarget: (id: number, payload: { companyName?: string; industry?: string; website?: string; address?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  deleteConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+
+  // 知识库管理
+  getKnowledgeBases: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  getKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  createKnowledgeBase: (payload: { name: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  updateKnowledgeBase: (id: number, payload: { name?: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  deleteKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  uploadKnowledgeBaseDocuments: (id: number, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  deleteKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  searchKnowledgeBaseDocuments: (id: number, query: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+
   // 账号管理
   getAccounts: () => Promise<Account[]>;
-  deleteAccount: (accountId: number) => Promise<void>;
-  setDefaultAccount: (platformId: string, accountId: number) => Promise<void>;
-  
+  deleteAccount: (accountId: number) => Promise<any>;
+  setDefaultAccount: (platformId: string, accountId: number) => Promise<any>;
+  refreshAccounts: () => Promise<Account[]>;
+
   // 配置管理
   getConfig: () => Promise<AppConfig>;
-  setConfig: (config: AppConfig) => Promise<void>;
-  
+  setConfig: (config: AppConfig) => Promise<any>;
+  clearCache: () => Promise<any>;
+  clearAllData: () => Promise<any>;
+
   // 日志管理
   getLogs: () => Promise<string[]>;
   exportLogs: () => Promise<string>;
+  clearLogs: () => Promise<any>;
+
+  // 同步管理
+  getSyncStatus: () => Promise<any>;
+  triggerSync: () => Promise<any>;
+  clearSyncQueue: () => Promise<any>;
+
+  // WebSocket管理
+  getWebSocketStatus: () => Promise<any>;
+  reconnectWebSocket: () => Promise<any>;
+  onAccountEvent: (callback: (event: any) => void) => () => void;
+
+  // 存储管理
+  storage: {
+    getTokens: () => Promise<{ authToken: string; refreshToken: string } | null>;
+    saveTokens: (tokens: { authToken: string; refreshToken: string }) => Promise<void>;
+    clearTokens: () => Promise<void>;
+  };
 }
 
 export interface LoginResult {
@@ -97,5 +147,6 @@ export interface UserInfo {
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
+    electron: ElectronAPI; // 别名，方便使用
   }
 }

@@ -56,7 +56,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   useEffect(() => {
     console.log('Setting up WebSocket account event listener...');
     
-    const cleanup = window.electronAPI.onAccountEvent((event: any) => {
+    const cleanup = ipcBridge.onAccountEvent((event: any) => {
       console.log('Received account event:', event.type, event.data);
       
       switch (event.type) {

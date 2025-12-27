@@ -1,26 +1,11 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import Layout from './components/Layout';
-import PlatformSelection from './pages/PlatformSelection';
-import AccountList from './pages/AccountList';
-import Settings from './pages/Settings';
 import Login from './pages/Login';
 import { ipcBridge } from './services/ipc';
-import { isAdmin } from './utils/auth';
+import { routes } from './routes';
 import './App.css';
-
-// 管理员路由保护组件
-function AdminRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useApp();
-  
-  if (!isAdmin(user)) {
-    console.log('[Auth] 非管理员用户尝试访问设置页面');
-    return <Navigate to="/platforms" replace />;
-  }
-  
-  return <>{children}</>;
-}
 
 function AppContent() {
   const { setUser } = useApp();
@@ -38,7 +23,16 @@ function AppContent() {
       
       // 如果已认证，获取用户信息
       if (result.isAuthenticated && result.user) {
+        console.log('[App] 认证成功，用户信息:', result.user);
         setUser(result.user);
+        
+        // 同步用户信息到 localStorage，供权限判断使用
+        localStorage.setItem('user_info', JSON.stringify(result.user));
+        console.log('[App] 用户信息已保存到 localStorage');
+        
+        // 触发自定义事件，通知其他组件用户信息已更新
+        console.log('[App] 触发 userInfoUpdated 事件');
+        window.dispatchEvent(new Event('userInfoUpdated'));
       }
     } catch (error) {
       console.error('检查认证状态失败:', error);
@@ -49,15 +43,35 @@ function AppContent() {
   };
 
   const handleLoginSuccess = (user: any) => {
+    console.log('[App] 登录成功，用户信息:', user);
     setIsAuthenticated(true);
     setUser(user);
+    
+    // 同步用户信息到 localStorage，供权限判断使用
+    if (user) {
+      localStorage.setItem('user_info', JSON.stringify(user));
+      console.log('[App] 用户信息已保存到 localStorage');
+      
+      // 触发自定义事件，通知其他组件用户信息已更新
+      console.log('[App] 触发 userInfoUpdated 事件');
+      window.dispatchEvent(new Event('userInfoUpdated'));
+    }
   };
 
   const handleLogout = async () => {
     try {
+      console.log('[App] 执行登出');
       await ipcBridge.logout();
       setIsAuthenticated(false);
       setUser(null);
+      
+      // 清除 localStorage 中的用户信息
+      localStorage.removeItem('user_info');
+      console.log('[App] 用户信息已从 localStorage 清除');
+      
+      // 触发自定义事件，通知其他组件用户信息已更新
+      console.log('[App] 触发 userInfoUpdated 事件');
+      window.dispatchEvent(new Event('userInfoUpdated'));
     } catch (error) {
       console.error('登出失败:', error);
     }
@@ -86,14 +100,9 @@ function AppContent() {
     <Router>
       <Layout onLogout={handleLogout}>
         <Routes>
-          <Route path="/" element={<Navigate to="/platforms" replace />} />
-          <Route path="/platforms" element={<PlatformSelection />} />
-          <Route path="/accounts" element={<AccountList />} />
-          <Route path="/settings" element={
-            <AdminRoute>
-              <Settings />
-            </AdminRoute>
-          } />
+          {routes.map((route, index) => (
+            <Route key={index} path={route.path} element={route.element} />
+          ))}
         </Routes>
       </Layout>
     </Router>

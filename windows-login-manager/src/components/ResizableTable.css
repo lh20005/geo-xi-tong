@@ -1,0 +1,50 @@
+/* 隐藏默认的 react-resizable 手柄样式 */
+.react-resizable-handle {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* 在表头单元格悬停时显示分隔线提示 */
+.ant-table-thead > tr > th.ant-table-cell {
+  position: relative;
+}
+
+/* 悬停时在列边界显示细微的分隔线 */
+.ant-table-thead > tr > th.ant-table-cell:hover::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 2px;
+  background: #1890ff;
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+/* 拖拽时加强视觉反馈 */
+.ant-table-thead > tr > th.ant-table-cell:active::after {
+  opacity: 0.8;
+  background: #096dd9;
+}
+
+/* 确保鼠标指针在列边界时显示为可调整大小 */
+.ant-table-thead > tr > th.ant-table-cell {
+  cursor: default;
+}
+
+/* 在列的右侧边缘区域显示调整大小的光标 */
+.react-resizable {
+  position: relative;
+}
+
+.react-resizable-handle {
+  position: absolute;
+  right: -5px;
+  bottom: 0;
+  width: 10px;
+  height: 100%;
+  cursor: col-resize !important;
+  z-index: 1;
+}

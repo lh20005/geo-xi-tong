@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { message, Modal } from 'antd';
 import { useApp } from '../context/AppContext';
 import './AccountList.css';
 
@@ -6,30 +7,44 @@ const AccountList: React.FC = () => {
   const { accounts, isLoading, refreshAccounts, deleteAccount } = useApp();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const confirmAsync = (title: string, content: string) =>
+    new Promise<boolean>((resolve) => {
+      Modal.confirm({
+        title,
+        content,
+        okText: '确定',
+        cancelText: '取消',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+
   const handleRefresh = async () => {
     try {
       setIsRefreshing(true);
       await refreshAccounts();
     } catch (error) {
       console.error('Failed to refresh accounts:', error);
-      alert('刷新失败，请重试');
+      message.error('刷新失败，请重试');
     } finally {
       setIsRefreshing(false);
     }
   };
 
   const handleDelete = async (accountId: number, accountName: string) => {
-    if (!confirm(`确定要删除账号 "${accountName}" 吗？\n\n注意：此操作需要连接到服务器才能完成。`)) {
-      return;
-    }
+    const ok = await confirmAsync(
+      '删除账号',
+      `确定要删除账号 “${accountName}” 吗？\n\n注意：此操作需要连接到服务器才能完成。`
+    );
+    if (!ok) return;
 
     try {
       await deleteAccount(accountId);
-      alert('账号已删除');
+      message.success('账号已删除');
     } catch (error) {
       console.error('Failed to delete account:', error);
       const errorMessage = error instanceof Error ? error.message : '删除失败，请重试';
-      alert(`删除失败\n\n${errorMessage}`);
+      message.error(`删除失败：${errorMessage}`);
     }
   };
 
@@ -40,10 +55,6 @@ const AccountList: React.FC = () => {
       expired: { text: '已过期', className: 'status-expired' },
     };
     return badges[status] || badges.inactive;
-  };
-
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleString('zh-CN');
   };
 
   const getPlatformInfo = (platformId: string) => {

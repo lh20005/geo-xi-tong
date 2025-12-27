@@ -5,12 +5,39 @@ export interface ElectronAPI {
   // 系统登录
   login: (username: string, password: string) => Promise<any>;
   logout: () => Promise<any>;
-  checkAuth: () => Promise<{ isAuthenticated: boolean }>;
+  checkAuth: () => Promise<{ isAuthenticated: boolean; user?: { id: number; username: string; email?: string; role: string } }>;
   
   // 平台登录
   loginPlatform: (platformId: string) => Promise<any>;
-  cancelLogin: () => Promise<any>;
+  cancelLogin: (platformId?: string) => Promise<any>;
   getLoginStatus: () => Promise<{ isLoggingIn: boolean }>;
+
+  // 平台列表
+  getPlatforms: () => Promise<any[]>;
+
+  // 服务连通性
+  checkServerHealth: () => Promise<{ status: string; message?: string }>;
+
+  // Dashboard
+  getDashboardAllData: (params?: { startDate?: string; endDate?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+
+  // 转化目标
+  getConversionTargets: (params: { page?: number; pageSize?: number; search?: string; sortField?: string; sortOrder?: 'asc' | 'desc' }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  createConversionTarget: (payload: { companyName: string; industry?: string; website?: string; address?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  updateConversionTarget: (id: number, payload: { companyName?: string; industry?: string; website?: string; address?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  deleteConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  
+  // 知识库管理
+  getKnowledgeBases: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  getKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  createKnowledgeBase: (payload: { name: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  updateKnowledgeBase: (id: number, payload: { name?: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  deleteKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  uploadKnowledgeBaseDocuments: (id: number, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  deleteKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  searchKnowledgeBaseDocuments: (id: number, query: string) => Promise<{ success: boolean; data?: any; error?: string }>;
   
   // 账号管理
   getAccounts: () => Promise<any[]>;
@@ -38,6 +65,13 @@ export interface ElectronAPI {
   getWebSocketStatus: () => Promise<any>;
   reconnectWebSocket: () => Promise<any>;
   onAccountEvent: (callback: (event: any) => void) => () => void;
+
+  // 存储管理
+  storage: {
+    getTokens: () => Promise<{ authToken: string; refreshToken: string } | null>;
+    saveTokens: (tokens: { authToken: string; refreshToken: string }) => Promise<void>;
+    clearTokens: () => Promise<void>;
+  };
 }
 
 // 通过contextBridge安全地暴露API
@@ -51,8 +85,45 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 平台登录
   loginPlatform: (platformId: string) =>
     ipcRenderer.invoke('login-platform', platformId),
-  cancelLogin: () => ipcRenderer.invoke('cancel-login'),
+  cancelLogin: (platformId?: string) => ipcRenderer.invoke('cancel-login', platformId),
   getLoginStatus: () => ipcRenderer.invoke('get-login-status'),
+
+  // 平台列表
+  getPlatforms: () => ipcRenderer.invoke('get-platforms'),
+
+  // 服务连通性
+  checkServerHealth: () => ipcRenderer.invoke('check-server-health'),
+
+  // Dashboard
+  getDashboardAllData: (params?: { startDate?: string; endDate?: string }) =>
+    ipcRenderer.invoke('dashboard:get-all', params),
+
+  // 转化目标
+  getConversionTargets: (params: { page?: number; pageSize?: number; search?: string; sortField?: string; sortOrder?: 'asc' | 'desc' }) =>
+    ipcRenderer.invoke('conversion-targets:list', params),
+  createConversionTarget: (payload: { companyName: string; industry?: string; website?: string; address?: string }) =>
+    ipcRenderer.invoke('conversion-targets:create', payload),
+  updateConversionTarget: (id: number, payload: { companyName?: string; industry?: string; website?: string; address?: string }) =>
+    ipcRenderer.invoke('conversion-targets:update', id, payload),
+  deleteConversionTarget: (id: number) => ipcRenderer.invoke('conversion-targets:delete', id),
+  getConversionTarget: (id: number) => ipcRenderer.invoke('conversion-targets:get', id),
+  
+  // 知识库管理
+  getKnowledgeBases: () => ipcRenderer.invoke('knowledge-base:list'),
+  getKnowledgeBase: (id: number) => ipcRenderer.invoke('knowledge-base:get', id),
+  createKnowledgeBase: (payload: { name: string; description?: string }) =>
+    ipcRenderer.invoke('knowledge-base:create', payload),
+  updateKnowledgeBase: (id: number, payload: { name?: string; description?: string }) =>
+    ipcRenderer.invoke('knowledge-base:update', id, payload),
+  deleteKnowledgeBase: (id: number) => ipcRenderer.invoke('knowledge-base:delete', id),
+  uploadKnowledgeBaseDocuments: (id: number, files: any[]) =>
+    ipcRenderer.invoke('knowledge-base:upload-documents', id, files),
+  getKnowledgeBaseDocument: (docId: number) =>
+    ipcRenderer.invoke('knowledge-base:get-document', docId),
+  deleteKnowledgeBaseDocument: (docId: number) =>
+    ipcRenderer.invoke('knowledge-base:delete-document', docId),
+  searchKnowledgeBaseDocuments: (id: number, query: string) =>
+    ipcRenderer.invoke('knowledge-base:search-documents', id, query),
   
   // 账号管理
   getAccounts: () => ipcRenderer.invoke('get-accounts'),
@@ -89,11 +160,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.removeListener('account-event', listener);
     };
   },
+
+  // 存储管理
+  storage: {
+    getTokens: () => ipcRenderer.invoke('storage:get-tokens'),
+    saveTokens: (tokens: { authToken: string; refreshToken: string }) =>
+      ipcRenderer.invoke('storage:save-tokens', tokens),
+    clearTokens: () => ipcRenderer.invoke('storage:clear-tokens'),
+  },
 } as ElectronAPI);
 
 // 声明全局类型
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
+    electron: ElectronAPI; // 别名
   }
 }

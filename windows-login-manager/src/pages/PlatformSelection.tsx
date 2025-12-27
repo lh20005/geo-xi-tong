@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { message } from 'antd';
 import ipcBridge from '../services/ipc';
 import { useApp } from '../context/AppContext';
 import './PlatformSelection.css';
@@ -14,6 +15,7 @@ const PlatformSelection: React.FC = () => {
   const { refreshAccounts } = useApp();
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
 
@@ -24,20 +26,21 @@ const PlatformSelection: React.FC = () => {
   const loadPlatforms = async () => {
     try {
       setIsLoading(true);
-      // 模拟平台数据（实际应该从API获取）
-      const mockPlatforms: Platform[] = [
-        { platform_id: 'douyin', platform_name: '抖音', enabled: true },
-        { platform_id: 'toutiao', platform_name: '头条', enabled: true },
-        { platform_id: 'baijia', platform_name: '百家号', enabled: true },
-        { platform_id: 'wangyi', platform_name: '网易号', enabled: true },
-        { platform_id: 'sohu', platform_name: '搜狐号', enabled: true },
-        { platform_id: 'weibo', platform_name: '微博', enabled: true },
-        { platform_id: 'zhihu', platform_name: '知乎', enabled: true },
-        { platform_id: 'bilibili', platform_name: 'B站', enabled: true },
-      ];
-      setPlatforms(mockPlatforms);
+      setLoadError('');
+
+      const result = await ipcBridge.getPlatforms();
+      const list: Platform[] = (result || []).map((p: any) => ({
+        platform_id: p.platform_id,
+        platform_name: p.platform_name,
+        icon_url: p.icon_url,
+        enabled: !!p.enabled,
+      }));
+
+      setPlatforms(list);
     } catch (error) {
       console.error('Failed to load platforms:', error);
+      setLoadError(error instanceof Error ? error.message : '加载平台列表失败');
+      setPlatforms([]);
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +56,7 @@ const PlatformSelection: React.FC = () => {
       const result = await ipcBridge.loginPlatform(platformId);
 
       if (result.success) {
-        alert(`登录成功！账号：${result.account?.account_name}`);
+        message.success(`登录成功：${result.account?.account_name || ''}`);
         
         // 刷新账号列表
         try {
@@ -67,12 +70,12 @@ const PlatformSelection: React.FC = () => {
         if (result.message === 'Login cancelled') {
           console.log('Login cancelled by user');
         } else {
-          alert(`登录失败：${result.message || result.error}`);
+          message.error(`登录失败：${result.message || result.error || '未知错误'}`);
         }
       }
     } catch (error) {
       console.error('Login failed:', error);
-      alert('登录失败，请重试');
+      message.error('登录失败，请重试');
     } finally {
       setIsLoggingIn(false);
       setSelectedPlatform(null);
@@ -103,6 +106,15 @@ const PlatformSelection: React.FC = () => {
         <h1>选择平台登录</h1>
         <p>选择一个平台进行账号登录</p>
       </div>
+
+      {loadError && (
+        <div className="no-results">
+          <p>{loadError}</p>
+          <button className="cancel-btn" onClick={loadPlatforms}>
+            重试
+          </button>
+        </div>
+      )}
 
       {isLoggingIn && (
         <div className="login-progress">

@@ -150,41 +150,48 @@ class ApplicationManager {
         sandbox: true,
         preload: path.join(__dirname, 'preload.js'),
       },
-      show: false, // 等待ready-to-show事件
+      show: true, // 立即显示窗口
       frame: true, // 使用原生窗口框架
       titleBarStyle: 'default' as const,
     };
 
     this.window = new BrowserWindow(windowConfig);
+    logger.info('Main window created and shown');
 
-    // 窗口准备好后显示
+    // 窗口准备好后的回调
     this.window.once('ready-to-show', () => {
-      if (this.window) {
-        this.window.show();
-        logger.info('Main window shown');
-      }
+      logger.info('Window ready-to-show event fired');
     });
 
     // 加载应用
     const loadApp = async () => {
-      if (!this.window) return;
+      if (!this.window) {
+        logger.error('Window is null, cannot load app');
+        return;
+      }
 
       try {
+        logger.info(`Loading app in ${process.env.NODE_ENV} mode...`);
         if (process.env.NODE_ENV === 'development') {
+          logger.info('Attempting to load URL: http://localhost:5174');
           await this.window.loadURL('http://localhost:5174');
           this.window.webContents.openDevTools();
-          logger.info('Loaded development URL');
+          logger.info('Loaded development URL successfully');
         } else {
           const indexPath = path.join(__dirname, '../dist/index.html');
+          logger.info(`Attempting to load file: ${indexPath}`);
           await this.window.loadFile(indexPath);
-          logger.info('Loaded production file');
+          logger.info('Loaded production file successfully');
         }
       } catch (error) {
         logger.error('Failed to load app:', error);
+        logger.error('Error details:', JSON.stringify(error, null, 2));
       }
     };
 
-    loadApp();
+    loadApp().catch(err => {
+      logger.error('Unhandled error in loadApp:', err);
+    });
 
     // 窗口关闭事件
     this.window.on('close', (event) => {
@@ -360,7 +367,7 @@ class ApplicationManager {
       // 获取认证令牌
       const tokens = await storageManager.getTokens();
       
-      if (!tokens?.accessToken) {
+      if (!tokens?.authToken) {
         logger.warn('No access token available, skipping WebSocket initialization');
         return;
       }
@@ -371,7 +378,7 @@ class ApplicationManager {
       // 初始化WebSocket管理器
       await wsManager.initialize({
         serverUrl: wsUrl,
-        token: tokens.accessToken
+        token: tokens.authToken
       });
       
       logger.info('WebSocket connection initialized successfully');
@@ -400,7 +407,7 @@ class ApplicationManager {
       // 获取认证令牌
       const tokens = await storageManager.getTokens();
       
-      if (!tokens?.accessToken) {
+      if (!tokens?.authToken) {
         logger.warn('No access token available, skipping User WebSocket initialization');
         return;
       }
@@ -416,7 +423,7 @@ class ApplicationManager {
       // 初始化用户管理WebSocket管理器
       await userWsManager.initialize({
         serverUrl: wsUrl,
-        token: tokens.accessToken
+        token: tokens.authToken
       });
       
       logger.info('User WebSocket connection initialized successfully');

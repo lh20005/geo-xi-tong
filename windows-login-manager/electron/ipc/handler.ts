@@ -48,6 +48,15 @@ class IPCHandler {
     // 账号管理
     this.registerAccountHandlers();
 
+    // Dashboard
+    this.registerDashboardHandlers();
+
+    // 转化目标
+    this.registerConversionTargetHandlers();
+
+    // 知识库管理
+    this.registerKnowledgeBaseHandlers();
+
     // 配置管理
     this.registerConfigHandlers();
 
@@ -59,6 +68,9 @@ class IPCHandler {
 
     // WebSocket管理
     this.registerWebSocketHandlers();
+    
+    // 存储管理
+    this.registerStorageHandlers();
     
     // 设置WebSocket事件转发回调
     wsManager.setEventForwardCallback((event: AccountEvent) => {
@@ -113,10 +125,10 @@ class IPCHandler {
           const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
           const tokens = await storageManager.getTokens();
           
-          if (tokens?.accessToken) {
+          if (tokens?.authToken) {
             await wsManager.initialize({
               serverUrl: wsUrl,
-              token: tokens.accessToken
+              token: tokens.authToken
             });
             log.info('WebSocket initialized after login');
           }
@@ -166,7 +178,7 @@ class IPCHandler {
         const user = await storageManager.getUser();
         
         return {
-          isAuthenticated: !!tokens?.accessToken,
+          isAuthenticated: !!tokens?.authToken,
           user: user || undefined
         };
       } catch (error) {
@@ -256,6 +268,29 @@ class IPCHandler {
       } catch (error) {
         log.error('IPC: get-login-status failed:', error);
         return { isLoggingIn: false };
+      }
+    });
+
+    // 获取平台列表
+    ipcMain.handle('get-platforms', async () => {
+      try {
+        log.info('IPC: get-platforms');
+        return await apiClient.getPlatforms();
+      } catch (error) {
+        log.error('IPC: get-platforms failed:', error);
+        return [];
+      }
+    });
+
+    // 服务健康检查（用于测试 serverUrl 连通性）
+    ipcMain.handle('check-server-health', async () => {
+      try {
+        log.info('IPC: check-server-health');
+        return await apiClient.getHealth();
+      } catch (error: any) {
+        log.error('IPC: check-server-health failed:', error);
+        const message = error?.response?.data?.message || error?.message || '无法连接到服务器';
+        return { status: 'error', message };
       }
     });
   }
@@ -391,6 +426,235 @@ class IPCHandler {
   }
 
   /**
+   * 注册Dashboard处理器
+   */
+  private registerDashboardHandlers(): void {
+    ipcMain.handle('dashboard:get-all', async (_event, params?: { startDate?: string; endDate?: string }) => {
+      try {
+        log.info('IPC: dashboard:get-all');
+        const data = await apiClient.getDashboardAllData(params);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: dashboard:get-all failed:', error);
+        const message = error?.response?.data?.error || error?.message || '加载Dashboard失败';
+        return { success: false, error: message };
+      }
+    });
+  }
+
+  /**
+   * 注册转化目标处理器
+   */
+  private registerConversionTargetHandlers(): void {
+    ipcMain.handle(
+      'conversion-targets:list',
+      async (
+        _event,
+        params: {
+          page?: number;
+          pageSize?: number;
+          search?: string;
+          sortField?: string;
+          sortOrder?: 'asc' | 'desc';
+        }
+      ) => {
+        try {
+          log.info('IPC: conversion-targets:list');
+          const data = await apiClient.getConversionTargets(params);
+          return { success: true, data };
+        } catch (error: any) {
+          log.error('IPC: conversion-targets:list failed:', error);
+          const message = error?.response?.data?.error || error?.message || '加载转化目标失败';
+          return { success: false, error: message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      'conversion-targets:create',
+      async (
+        _event,
+        payload: { companyName: string; industry?: string; website?: string; address?: string }
+      ) => {
+        try {
+          log.info('IPC: conversion-targets:create');
+          const data = await apiClient.createConversionTarget(payload);
+          return { success: true, data };
+        } catch (error: any) {
+          log.error('IPC: conversion-targets:create failed:', error);
+          const message = error?.response?.data?.error || error?.message || '创建失败';
+          return { success: false, error: message };
+        }
+      }
+    );
+
+    ipcMain.handle(
+      'conversion-targets:update',
+      async (
+        _event,
+        id: number,
+        payload: { companyName?: string; industry?: string; website?: string; address?: string }
+      ) => {
+        try {
+          log.info(`IPC: conversion-targets:update - ${id}`);
+          const data = await apiClient.updateConversionTarget(id, payload);
+          return { success: true, data };
+        } catch (error: any) {
+          log.error('IPC: conversion-targets:update failed:', error);
+          const message = error?.response?.data?.error || error?.message || '更新失败';
+          return { success: false, error: message };
+        }
+      }
+    );
+
+    ipcMain.handle('conversion-targets:delete', async (_event, id: number) => {
+      try {
+        log.info(`IPC: conversion-targets:delete - ${id}`);
+        const data = await apiClient.deleteConversionTarget(id);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: conversion-targets:delete failed:', error);
+        const message = error?.response?.data?.error || error?.message || '删除失败';
+        return { success: false, error: message };
+      }
+    });
+
+    ipcMain.handle('conversion-targets:get', async (_event, id: number) => {
+      try {
+        log.info(`IPC: conversion-targets:get - ${id}`);
+        const data = await apiClient.getConversionTarget(id);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: conversion-targets:get failed:', error);
+        const message = error?.response?.data?.error || error?.message || '获取详情失败';
+        return { success: false, error: message };
+      }
+    });
+  }
+
+  /**
+   * 注册知识库管理处理器
+   */
+  private registerKnowledgeBaseHandlers(): void {
+    // 获取所有知识库
+    ipcMain.handle('knowledge-base:list', async () => {
+      try {
+        log.info('IPC: knowledge-base:list');
+        const data = await apiClient.getKnowledgeBases();
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:list failed:', error);
+        const message = error?.response?.data?.error || error?.message || '加载知识库失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 获取单个知识库详情
+    ipcMain.handle('knowledge-base:get', async (_event, id: number) => {
+      try {
+        log.info(`IPC: knowledge-base:get - ${id}`);
+        const data = await apiClient.getKnowledgeBase(id);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:get failed:', error);
+        const message = error?.response?.data?.error || error?.message || '获取知识库详情失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 创建知识库
+    ipcMain.handle('knowledge-base:create', async (_event, payload: { name: string; description?: string }) => {
+      try {
+        log.info('IPC: knowledge-base:create');
+        const data = await apiClient.createKnowledgeBase(payload);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:create failed:', error);
+        const message = error?.response?.data?.error || error?.message || '创建知识库失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 更新知识库
+    ipcMain.handle('knowledge-base:update', async (_event, id: number, payload: { name?: string; description?: string }) => {
+      try {
+        log.info(`IPC: knowledge-base:update - ${id}`);
+        const data = await apiClient.updateKnowledgeBase(id, payload);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:update failed:', error);
+        const message = error?.response?.data?.error || error?.message || '更新知识库失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 删除知识库
+    ipcMain.handle('knowledge-base:delete', async (_event, id: number) => {
+      try {
+        log.info(`IPC: knowledge-base:delete - ${id}`);
+        const data = await apiClient.deleteKnowledgeBase(id);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:delete failed:', error);
+        const message = error?.response?.data?.error || error?.message || '删除知识库失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 上传文档
+    ipcMain.handle('knowledge-base:upload-documents', async (_event, id: number, files: any[]) => {
+      try {
+        log.info(`IPC: knowledge-base:upload-documents - ${id}`);
+        const data = await apiClient.uploadKnowledgeBaseDocuments(id, files);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:upload-documents failed:', error);
+        const message = error?.response?.data?.error || error?.message || '上传文档失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 获取文档详情
+    ipcMain.handle('knowledge-base:get-document', async (_event, docId: number) => {
+      try {
+        log.info(`IPC: knowledge-base:get-document - ${docId}`);
+        const data = await apiClient.getKnowledgeBaseDocument(docId);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:get-document failed:', error);
+        const message = error?.response?.data?.error || error?.message || '获取文档详情失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 删除文档
+    ipcMain.handle('knowledge-base:delete-document', async (_event, docId: number) => {
+      try {
+        log.info(`IPC: knowledge-base:delete-document - ${docId}`);
+        const data = await apiClient.deleteKnowledgeBaseDocument(docId);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:delete-document failed:', error);
+        const message = error?.response?.data?.error || error?.message || '删除文档失败';
+        return { success: false, error: message };
+      }
+    });
+
+    // 搜索文档
+    ipcMain.handle('knowledge-base:search-documents', async (_event, id: number, query: string) => {
+      try {
+        log.info(`IPC: knowledge-base:search-documents - ${id}, query: ${query}`);
+        const data = await apiClient.searchKnowledgeBaseDocuments(id, query);
+        return { success: true, data };
+      } catch (error: any) {
+        log.error('IPC: knowledge-base:search-documents failed:', error);
+        const message = error?.response?.data?.error || error?.message || '搜索文档失败';
+        return { success: false, error: message };
+      }
+    });
+  }
+
+  /**
    * 注册配置管理处理器
    */
   private registerConfigHandlers(): void {
@@ -418,12 +682,12 @@ class IPCHandler {
           
           // 重新连接WebSocket（如果有token）
           const tokens = await storageManager.getTokens();
-          if (tokens?.accessToken) {
+          if (tokens?.authToken) {
             try {
               const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
               await wsManager.reconnect({
                 serverUrl: wsUrl,
-                token: tokens.accessToken
+                token: tokens.authToken
               });
               log.info('WebSocket reconnected with new server URL');
             } catch (error) {
@@ -606,7 +870,7 @@ class IPCHandler {
           };
         }
         
-        if (!tokens?.accessToken) {
+        if (!tokens?.authToken) {
           return {
             success: false,
             error: 'No access token available'
@@ -616,7 +880,7 @@ class IPCHandler {
         const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
         await wsManager.reconnect({
           serverUrl: wsUrl,
-          token: tokens.accessToken
+          token: tokens.authToken
         });
         
         return { success: true };
@@ -626,6 +890,44 @@ class IPCHandler {
           success: false,
           error: error instanceof Error ? error.message : 'Unknown error',
         };
+      }
+    });
+  }
+
+  /**
+   * 注册存储管理处理器
+   */
+  private registerStorageHandlers(): void {
+    // 获取 tokens
+    ipcMain.handle('storage:get-tokens', async () => {
+      try {
+        const tokens = await storageManager.getTokens();
+        return tokens;
+      } catch (error) {
+        log.error('IPC: storage:get-tokens failed:', error);
+        return null;
+      }
+    });
+
+    // 保存 tokens
+    ipcMain.handle('storage:save-tokens', async (_event, tokens: { authToken: string; refreshToken: string }) => {
+      try {
+        await storageManager.saveTokens(tokens);
+        log.info('IPC: Tokens saved successfully');
+      } catch (error) {
+        log.error('IPC: storage:save-tokens failed:', error);
+        throw error;
+      }
+    });
+
+    // 清除 tokens
+    ipcMain.handle('storage:clear-tokens', async () => {
+      try {
+        await storageManager.clearTokens();
+        log.info('IPC: Tokens cleared successfully');
+      } catch (error) {
+        log.error('IPC: storage:clear-tokens failed:', error);
+        throw error;
       }
     });
   }

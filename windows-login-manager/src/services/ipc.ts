@@ -24,12 +24,89 @@ class IPCBridge {
     return await this.api.loginPlatform(platformId);
   }
 
-  async cancelLogin(): Promise<any> {
-    return await this.api.cancelLogin();
+  async cancelLogin(platformId?: string): Promise<any> {
+    return await this.api.cancelLogin(platformId);
   }
 
   async getLoginStatus(): Promise<{ isLoggingIn: boolean }> {
     return await this.api.getLoginStatus();
+  }
+
+  // 平台列表
+  async getPlatforms(): Promise<any[]> {
+    return await this.api.getPlatforms();
+  }
+
+  // 服务连通性
+  async checkServerHealth(): Promise<{ status: string; message?: string }> {
+    return await this.api.checkServerHealth();
+  }
+
+  // Dashboard
+  async getDashboardAllData(params?: { startDate?: string; endDate?: string }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.getDashboardAllData(params);
+  }
+
+  // 转化目标
+  async getConversionTargets(params: { page?: number; pageSize?: number; search?: string; sortField?: string; sortOrder?: 'asc' | 'desc' }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.getConversionTargets(params);
+  }
+
+  async createConversionTarget(payload: { companyName: string; industry?: string; website?: string; address?: string }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.createConversionTarget(payload);
+  }
+
+  async updateConversionTarget(id: number, payload: { companyName?: string; industry?: string; website?: string; address?: string }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.updateConversionTarget(id, payload);
+  }
+
+  async deleteConversionTarget(id: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.deleteConversionTarget(id);
+  }
+
+  async getConversionTarget(id: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.getConversionTarget(id);
+  }
+
+  // 知识库管理
+  async getKnowledgeBases(): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.getKnowledgeBases();
+  }
+
+  async getKnowledgeBase(id: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.getKnowledgeBase(id);
+  }
+
+  async createKnowledgeBase(payload: { name: string; description?: string }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.createKnowledgeBase(payload);
+  }
+
+  async updateKnowledgeBase(id: number, payload: { name?: string; description?: string }): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.updateKnowledgeBase(id, payload);
+  }
+
+  async deleteKnowledgeBase(id: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.deleteKnowledgeBase(id);
+  }
+
+  async uploadKnowledgeBaseDocuments(id: number, files: any[]): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.uploadKnowledgeBaseDocuments(id, files);
+  }
+
+  async getKnowledgeBaseDocument(docId: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.getKnowledgeBaseDocument(docId);
+  }
+
+  async deleteKnowledgeBaseDocument(docId: number): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.deleteKnowledgeBaseDocument(docId);
+  }
+
+  async searchKnowledgeBaseDocuments(id: number, query: string): Promise<{ success: boolean; data?: any; error?: string }> {
+    return await this.api.searchKnowledgeBaseDocuments(id, query);
+  }
+
+  onAccountEvent(callback: (event: any) => void): () => void {
+    return this.api.onAccountEvent(callback);
   }
 
   // 账号管理
