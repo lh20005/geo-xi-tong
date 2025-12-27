@@ -20,6 +20,8 @@ import { SecurityService } from './services/SecurityService';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
+// 识别反向代理的 X-Forwarded-For，避免限流中间件报错
+app.set('trust proxy', true);
 const PORT = process.env.PORT || 3000;
 
 // ========== 🔒 安全中间件 ==========
@@ -27,7 +29,9 @@ const PORT = process.env.PORT || 3000;
 // 1. Helmet - 设置安全 HTTP Headers
 app.use(helmet({
   contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  // 禁用 HSTS，避免强制 HTTPS 跳转问题
+  hsts: false
 }));
 
 // 2. 隐藏技术栈信息
@@ -57,10 +61,13 @@ const limiter = rateLimit({
 app.use('/api', limiter);
 
 // 4. CORS 配置
-const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') || [
   'http://localhost:5173',
-  'http://localhost:8080'
-];
+  'http://localhost:8080',
+  'http://43.143.163.6',
+  'https://43.143.163.6',
+  'https://your-domain.com'
+]).map(o => o.trim()).filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
@@ -70,7 +77,10 @@ app.use(cors({
       callback(new Error('不允许的来源'));
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 204
 }));
 
 // 其他中间件

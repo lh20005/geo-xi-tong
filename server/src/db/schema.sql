@@ -31,21 +31,6 @@ CREATE TABLE IF NOT EXISTS topics (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 文章表
-CREATE TABLE IF NOT EXISTS articles (
-  id SERIAL PRIMARY KEY,
-  title VARCHAR(500),
-  keyword VARCHAR(255) NOT NULL,
-  distillation_id INTEGER REFERENCES distillations(id),
-  task_id INTEGER REFERENCES generation_tasks(id) ON DELETE SET NULL,
-  requirements TEXT,
-  content TEXT NOT NULL,
-  image_url VARCHAR(500),
-  provider VARCHAR(20) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
 -- 相册表
 CREATE TABLE IF NOT EXISTS albums (
   id SERIAL PRIMARY KEY,
@@ -121,7 +106,7 @@ CREATE TABLE IF NOT EXISTS article_settings (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 文章生成任务表
+-- 文章生成任务表（必须在articles表之前创建）
 CREATE TABLE IF NOT EXISTS generation_tasks (
   id SERIAL PRIMARY KEY,
   distillation_id INTEGER NOT NULL REFERENCES distillations(id) ON DELETE CASCADE,
@@ -134,6 +119,21 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
   progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
   error_message TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 文章表（现在可以安全引用generation_tasks）
+CREATE TABLE IF NOT EXISTS articles (
+  id SERIAL PRIMARY KEY,
+  title VARCHAR(500),
+  keyword VARCHAR(255) NOT NULL,
+  distillation_id INTEGER REFERENCES distillations(id),
+  task_id INTEGER REFERENCES generation_tasks(id) ON DELETE SET NULL,
+  requirements TEXT,
+  content TEXT NOT NULL,
+  image_url VARCHAR(500),
+  provider VARCHAR(20) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

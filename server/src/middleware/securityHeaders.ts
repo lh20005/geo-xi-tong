@@ -33,11 +33,8 @@ export const configureSecurityHeaders = (app: Express) => {
       noSniff: true,
       
       // Strict-Transport-Security (11.4)
-      hsts: {
-        maxAge: 31536000, // 1 year
-        includeSubDomains: true,
-        preload: true
-      },
+      // 禁用 HSTS，避免强制 HTTPS 跳转问题
+      hsts: false,
       
       // X-XSS-Protection (11.5)
       xssFilter: true,
