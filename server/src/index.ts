@@ -16,6 +16,7 @@ import { tokenService } from './services/TokenService';
 import { securityCheckService } from './services/SecurityCheckService';
 import { schedulerService } from './services/SchedulerService';
 import { SecurityService } from './services/SecurityService';
+import { authService } from './services/AuthService';
 
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
@@ -102,6 +103,10 @@ app.use(errorHandler);
 // 初始化加密服务并启动服务器
 async function startServer() {
   try {
+    // 初始化默认管理员账号
+    console.log('👤 初始化管理员账号...');
+    await authService.initializeDefaultAdmin();
+    
     // 启动时验证支付配置
     console.log('🔒 验证支付配置...');
     SecurityService.validatePaymentConfig();

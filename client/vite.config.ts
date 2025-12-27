@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  base: '/app/',  // 设置base路径为 /app/，用于生产环境部署
   server: {
     port: 5173,
     proxy: {
