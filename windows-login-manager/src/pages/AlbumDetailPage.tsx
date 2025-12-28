@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { Card, Button, message, Space, Modal, Upload, Empty, Image, Row, Col, Input } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../api/client';
+import { API_BASE_URL } from '../config/env';
 import type { UploadFile } from 'antd';
 
 interface ImageData {
@@ -38,11 +39,18 @@ export default function AlbumDetailPage() {
   const loadAlbumDetail = async (id: number) => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/gallery/albums/${id}`);
-      setAlbum(response.data);
+      const response = await apiClient.get(`/gallery/albums/${id}`);
+      const albumData = response.data;
+      
+      // 确保images属性存在
+      if (!albumData.images) {
+        albumData.images = [];
+      }
+      
+      setAlbum(albumData);
     } catch (error: any) {
-      message.error(error.response?.data?.error || '加载相册失败');
-      if (error.response?.status === 404) {
+      message.error(error.message || '加载相册失败');
+      if (error.message?.includes('404') || error.message?.includes('不存在')) {
         navigate('/gallery');
       }
     } finally {
@@ -65,7 +73,7 @@ export default function AlbumDetailPage() {
         }
       });
 
-      await axios.post(`/api/gallery/albums/${albumId}/images`, formData, {
+      await apiClient.post(`/gallery/albums/${albumId}/images`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -76,7 +84,7 @@ export default function AlbumDetailPage() {
       setFileList([]);
       loadAlbumDetail(parseInt(albumId!));
     } catch (error: any) {
-      message.error(error.response?.data?.error || '上传图片失败');
+      message.error(error.message || '上传图片失败');
     } finally {
       setLoading(false);
     }
@@ -91,11 +99,11 @@ export default function AlbumDetailPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/gallery/images/${imageId}`);
+          await apiClient.delete(`/gallery/images/${imageId}`);
           message.success('图片删除成功');
           loadAlbumDetail(parseInt(albumId!));
         } catch (error: any) {
-          message.error(error.response?.data?.error || '删除图片失败');
+          message.error(error.message || '删除图片失败');
         }
       }
     });
@@ -124,11 +132,11 @@ export default function AlbumDetailPage() {
         }
         
         try {
-          await axios.patch(`/api/gallery/albums/${albumId}`, { name: newName.trim() });
+          await apiClient.patch(`/gallery/albums/${albumId}`, { name: newName.trim() });
           message.success('相册名称更新成功');
           loadAlbumDetail(parseInt(albumId!));
         } catch (error: any) {
-          message.error(error.response?.data?.error || '更新失败');
+          message.error(error.message || '更新失败');
           return Promise.reject();
         }
       }
@@ -144,11 +152,11 @@ export default function AlbumDetailPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/gallery/albums/${albumId}`);
+          await apiClient.delete(`/gallery/albums/${albumId}`);
           message.success('相册删除成功');
           navigate('/gallery');
         } catch (error: any) {
-          message.error(error.response?.data?.error || '删除相册失败');
+          message.error(error.message || '删除相册失败');
         }
       }
     });
@@ -212,7 +220,7 @@ export default function AlbumDetailPage() {
         loading={loading}
         bordered={false}
       >
-        {album && album.images.length === 0 ? (
+        {album && (!album.images || album.images.length === 0) ? (
           <Empty
             description="相册中还没有图片"
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -228,11 +236,11 @@ export default function AlbumDetailPage() {
         ) : (
           <Image.PreviewGroup>
             <Row gutter={[16, 16]}>
-              {album?.images.map((image) => (
+              {album?.images?.map((image) => (
                 <Col xs={12} sm={8} md={6} lg={4} key={image.id}>
                   <div style={{ position: 'relative' }}>
                     <Image
-                      src={`/uploads/gallery/${image.filepath}`}
+                      src={`${API_BASE_URL}/uploads/gallery/${image.filepath}`}
                       alt={image.filename}
                       style={{
                         width: '100%',

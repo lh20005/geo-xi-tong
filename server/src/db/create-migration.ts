@@ -161,7 +161,7 @@ function createMigration() {
     
     log('\n' + '='.repeat(50), 'gray');
     log('✓ 迁移文件创建成功！', 'green');
-    log(`\n文件位置: ${filepath}`, 'cyan');
+    log(`\n文件位置: ${filepath}`, 'blue');
     log('\n下一步:', 'yellow');
     log('  1. 编辑迁移文件，填写 UP 和 DOWN SQL', 'gray');
     log('  2. 运行 npm run db:migrate 执行迁移', 'gray');

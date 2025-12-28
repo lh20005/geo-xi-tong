@@ -73,15 +73,27 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') || [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // 允许没有 origin 的请求（如 Electron、Postman、curl）
+    if (!origin) {
       callback(null, true);
-    } else {
-      callback(new Error('不允许的来源'));
+      return;
     }
+    // 允许 file:// 协议（Electron）
+    if (origin.startsWith('file://')) {
+      callback(null, true);
+      return;
+    }
+    // 允许白名单中的来源
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('不允许的来源'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Content-Length'],
   optionsSuccessStatus: 204
 }));
 
@@ -93,6 +105,14 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(sanitizeResponse);
 
 // 静态文件服务 - 提供图片访问
+// 为静态文件添加CORS头
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // 路由

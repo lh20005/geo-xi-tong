@@ -3,6 +3,7 @@ import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Ta
 import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { API_BASE_URL } from '../config/env';
 import type { UploadFile } from 'antd';
 
 interface Album {
@@ -189,7 +190,7 @@ export default function GalleryPage() {
                       >
                         <img
                           alt={album.name}
-                          src={`/uploads/gallery/${album.cover_image}`}
+                          src={`${API_BASE_URL}/uploads/gallery/${album.cover_image}`}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       </div>

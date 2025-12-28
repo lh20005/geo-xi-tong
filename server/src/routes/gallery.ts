@@ -7,6 +7,17 @@ import fs from 'fs';
 
 export const galleryRouter = Router();
 
+// 辅助函数：解码文件名，处理中文乱码
+function decodeFilename(filename: string): string {
+  try {
+    // 尝试从 latin1 转换为 utf8
+    return Buffer.from(filename, 'latin1').toString('utf8');
+  } catch (error) {
+    // 如果转换失败，返回原始文件名
+    return filename;
+  }
+}
+
 // 配置文件上传
 const uploadDir = path.join(__dirname, '../../uploads/gallery');
 
@@ -20,8 +31,22 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
+    console.log('[Gallery Upload] 原始文件名 (raw):', file.originalname);
+    console.log('[Gallery Upload] 原始文件名 (buffer):', Buffer.from(file.originalname, 'binary'));
+    
+    // 解码文件名，处理中文乱码
+    const originalname = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    console.log('[Gallery Upload] 解码后文件名:', originalname);
+    
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const ext = path.extname(originalname);
+    const basename = path.basename(originalname, ext);
+    // 保留原始文件名（去除特殊字符）+ 唯一后缀 + 扩展名
+    const safeBasename = basename.replace(/[^\u4e00-\u9fa5a-zA-Z0-9_-]/g, '_');
+    const finalFilename = `${uniqueSuffix}-${safeBasename}${ext}`;
+    console.log('[Gallery Upload] 最终文件名:', finalFilename);
+    
+    cb(null, finalFilename);
   }
 });
 
@@ -92,9 +117,11 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
       // 插入图片（如果有）
       if (files && files.length > 0) {
         for (const file of files) {
+          const decodedFilename = decodeFilename(file.originalname);
+          console.log('[Gallery DB] 保存文件名到数据库:', decodedFilename);
           await client.query(
             'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5)',
-            [album.id, file.originalname, file.filename, file.mimetype, file.size]
+            [album.id, decodedFilename, file.filename, file.mimetype, file.size]
           );
         }
       }
@@ -265,9 +292,10 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
     // 插入图片记录
     const uploadedImages = [];
     for (const file of files) {
+      const decodedFilename = decodeFilename(file.originalname);
       const result = await pool.query(
         'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id, filename, created_at',
-        [albumId, file.originalname, file.filename, file.mimetype, file.size]
+        [albumId, decodedFilename, file.filename, file.mimetype, file.size]
       );
       uploadedImages.push(result.rows[0]);
     }
