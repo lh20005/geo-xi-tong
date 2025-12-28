@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ipcBridge } from '../services/ipc';
 import './Login.css';
 
@@ -11,6 +11,21 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+
+  // 从localStorage加载保存的账户信息
+  useEffect(() => {
+    const savedUsername = localStorage.getItem('savedUsername');
+    const savedPassword = localStorage.getItem('savedPassword');
+    const savedRememberMe = localStorage.getItem('rememberMe') === 'true';
+
+    if (savedRememberMe && savedUsername && savedPassword) {
+      setUsername(savedUsername);
+      setPassword(savedPassword);
+      setRememberMe(true);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,6 +43,18 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       
       if (result.success && result.user) {
         console.log('登录成功:', result.user);
+        
+        // 保存或清除账户信息
+        if (rememberMe) {
+          localStorage.setItem('savedUsername', username);
+          localStorage.setItem('savedPassword', password);
+          localStorage.setItem('rememberMe', 'true');
+        } else {
+          localStorage.removeItem('savedUsername');
+          localStorage.removeItem('savedPassword');
+          localStorage.removeItem('rememberMe');
+        }
+        
         onLoginSuccess(result.user);
       } else {
         setError(result.error || '登录失败');
@@ -44,7 +71,9 @@ export default function Login({ onLoginSuccess }: LoginProps) {
     <div className="login-container">
       <div className="login-card">
         <div className="login-header">
-          <div className="login-icon">🔐</div>
+          <div className="login-icon">
+            <img src="/images/logo.png" alt="GEO Logo" />
+          </div>
           <h1>GEO优化系统</h1>
           <p>Windows登录管理器</p>
         </div>
@@ -65,14 +94,47 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
           <div className="form-group">
             <label htmlFor="password">密码</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="请输入密码"
-              disabled={loading}
-            />
+            <div className="password-input-wrapper">
+              <input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="请输入密码"
+                disabled={loading}
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword(!showPassword)}
+                disabled={loading}
+                title={showPassword ? "隐藏密码" : "显示密码"}
+              >
+                {showPassword ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+
+          <div className="form-group checkbox-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                disabled={loading}
+              />
+              <span>记住账号密码</span>
+            </label>
           </div>
 
           {error && (

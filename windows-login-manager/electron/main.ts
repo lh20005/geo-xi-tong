@@ -141,9 +141,7 @@ class ApplicationManager {
       minHeight: 600,
       title: '平台登录管理器',
       backgroundColor: '#ffffff',
-      icon: process.platform === 'win32' 
-        ? path.join(__dirname, '../build/icon.ico')
-        : undefined,
+      icon: path.join(__dirname, '../build/icon.png'),
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
