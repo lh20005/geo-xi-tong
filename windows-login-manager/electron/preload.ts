@@ -72,10 +72,13 @@ export interface ElectronAPI {
     saveTokens: (tokens: { authToken: string; refreshToken: string }) => Promise<void>;
     clearTokens: () => Promise<void>;
   };
+  
+  // 事件监听
+  onTokensSaved: (callback: (tokens: { authToken: string; refreshToken: string }) => void) => () => void;
 }
 
-// 通过contextBridge安全地暴露API
-contextBridge.exposeInMainWorld('electronAPI', {
+// 创建 API 对象
+const electronAPI = {
   // 系统登录
   login: (username: string, password: string) =>
     ipcRenderer.invoke('login', username, password),
@@ -168,7 +171,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('storage:save-tokens', tokens),
     clearTokens: () => ipcRenderer.invoke('storage:clear-tokens'),
   },
-} as ElectronAPI);
+  
+  // 事件监听
+  onTokensSaved: (callback: (tokens: { authToken: string; refreshToken: string }) => void) => {
+    const listener = (_event: any, tokens: any) => callback(tokens);
+    ipcRenderer.on('tokens-saved', listener);
+    // 返回清理函数
+    return () => {
+      ipcRenderer.removeListener('tokens-saved', listener);
+    };
+  },
+} as ElectronAPI;
+
+// 通过contextBridge安全地暴露API
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+// 同时暴露为 electron 别名，以兼容现有代码
+contextBridge.exposeInMainWorld('electron', electronAPI);
 
 // 声明全局类型
 declare global {

@@ -119,11 +119,17 @@ class IPCHandler {
           await storageManager.saveUser(loginResult.user);
         }
         
+        // 获取保存的 tokens 并发送到渲染进程
+        const tokens = await storageManager.getTokens();
+        if (tokens) {
+          log.info('Sending tokens to renderer process for localStorage sync');
+          event.sender.send('tokens-saved', tokens);
+        }
+        
         // 登录成功后初始化WebSocket
         const config = await storageManager.getConfig();
         if (config) {
           const wsUrl = WebSocketManager.deriveWebSocketUrl(config.serverUrl);
-          const tokens = await storageManager.getTokens();
           
           if (tokens?.authToken) {
             await wsManager.initialize({
@@ -136,7 +142,8 @@ class IPCHandler {
         
         return { 
           success: true,
-          user: loginResult.user
+          user: loginResult.user,
+          tokens: tokens // 同时在响应中返回 tokens
         };
       } catch (error) {
         log.error('IPC: login failed:', error);

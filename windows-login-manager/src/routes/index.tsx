@@ -36,6 +36,7 @@ const IPWhitelistPage = lazy(() => import('../pages/IPWhitelistPage'));
 const PermissionsPage = lazy(() => import('../pages/PermissionsPage'));
 const SecurityConfigPage = lazy(() => import('../pages/SecurityConfigPage'));
 const ProductManagementPage = lazy(() => import('../pages/ProductManagementPage'));
+const TokenDebugPage = lazy(() => import('../pages/TokenDebugPage'));
 const OrderManagementPage = lazy(() => import('../pages/OrderManagementPage'));
 const PaymentPage = lazy(() => import('../pages/PaymentPage'));
 
@@ -267,6 +268,14 @@ export const routes = [
     element: (
       <Suspense fallback={<LoadingFallback />}>
         <ProductManagementPage />
+      </Suspense>
+    )
+  },
+  {
+    path: '/products/token-debug',
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <TokenDebugPage />
       </Suspense>
     )
   },

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Table, Button, Modal, Form, InputNumber, Switch, message, Tag, Space, Tooltip } from 'antd';
 import { EditOutlined, HistoryOutlined, RollbackOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
+import { ensureTokensSync } from '../utils/tokenSync';
 
 interface Plan {
   id: number;
@@ -42,19 +43,39 @@ const ProductManagementPage = () => {
   const [form] = Form.useForm();
 
   useEffect(() => {
-    fetchPlans();
+    // 确保 token 同步后再获取数据
+    const initPage = async () => {
+      await ensureTokensSync();
+      fetchPlans();
+    };
+    initPage();
   }, []);
 
   const fetchPlans = async () => {
     setLoading(true);
     try {
+      console.log('[ProductManagement] 开始获取套餐列表');
+      console.log('[ProductManagement] API Base URL:', import.meta.env.VITE_API_BASE_URL);
+      
       const response = await apiClient.get('/admin/products');
       
+      console.log('[ProductManagement] API 响应:', response.data);
+      
       if (response.data.success) {
+        console.log('[ProductManagement] 成功获取套餐:', response.data.data.length);
         setPlans(response.data.data);
+      } else {
+        console.error('[ProductManagement] API 返回失败:', response.data);
+        message.error(response.data.message || '获取套餐列表失败');
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || '获取套餐列表失败');
+      console.error('[ProductManagement] 获取套餐失败:', error);
+      console.error('[ProductManagement] 错误详情:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      });
+      message.error(error.message || error.response?.data?.message || '获取套餐列表失败');
     } finally {
       setLoading(false);
     }
