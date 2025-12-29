@@ -156,11 +156,11 @@ router.post('/accounts', async (req, res) => {
     
     console.log('[创建账号] 账号保存成功, ID:', account.id, 'isNew:', isNew);
     
-    // 广播账号事件
+    // 广播账号事件（只发送给当前用户）
     if (isNew) {
-      getWebSocketService().broadcastAccountEvent('created', account);
+      getWebSocketService().broadcastAccountEvent('created', account, userId);
     } else {
-      getWebSocketService().broadcastAccountEvent('updated', account);
+      getWebSocketService().broadcastAccountEvent('updated', account, userId);
     }
     
     res.json({
@@ -194,8 +194,8 @@ router.put('/accounts/:id', async (req, res) => {
       credentials
     }, real_username || '', userId);
     
-    // 广播账号更新事件
-    getWebSocketService().broadcastAccountEvent('updated', account);
+    // 广播账号更新事件（只发送给当前用户）
+    getWebSocketService().broadcastAccountEvent('updated', account, userId);
     
     res.json({
       success: true,
@@ -225,10 +225,10 @@ router.delete('/accounts/:id', async (req, res) => {
     
     console.log(`[DELETE] 账号删除成功: ID=${accountId}`);
     
-    // 广播账号删除事件
-    getWebSocketService().broadcastAccountEvent('deleted', { id: accountId });
+    // 广播账号删除事件（只发送给当前用户）
+    getWebSocketService().broadcastAccountEvent('deleted', { id: accountId }, userId);
     
-    console.log(`[DELETE] WebSocket事件已广播: account.deleted, ID=${accountId}`);
+    console.log(`[DELETE] WebSocket事件已广播: account.deleted, ID=${accountId}, UserID=${userId}`);
     
     res.json({
       success: true,

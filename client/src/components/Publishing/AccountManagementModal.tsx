@@ -38,12 +38,16 @@ export default function AccountManagementModal({
 
   const handleDelete = async (accountId: number) => {
     try {
+      console.log('[删除账号] 开始删除账号:', accountId);
       await deleteAccount(accountId);
+      console.log('[删除账号] 删除成功，显示成功提示');
       message.success('账号删除成功');
+      console.log('[删除账号] 调用 onSuccess 回调');
       onSuccess();
-    } catch (error) {
-      message.error('账号删除失败');
-      console.error('账号删除失败:', error);
+    } catch (error: any) {
+      console.error('[删除账号] 删除失败:', error);
+      const errorMessage = error?.message || '账号删除失败';
+      message.error(errorMessage);
     }
   };
 

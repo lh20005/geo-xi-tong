@@ -85,8 +85,8 @@ router.post('/', async (req, res) => {
       await accountService.setDefaultAccount(platform_id, account.id, userId);
     }
     
-    // 广播账号创建事件
-    getWebSocketService().broadcastAccountEvent('created', account);
+    // 广播账号创建事件（只发送给当前用户）
+    getWebSocketService().broadcastAccountEvent('created', account, userId);
     
     res.status(201).json(account);
   } catch (error: any) {
@@ -119,8 +119,8 @@ router.put('/:id', async (req, res) => {
       await accountService.setDefaultAccount(account.platform_id, accountId, userId);
     }
     
-    // 广播账号更新事件
-    getWebSocketService().broadcastAccountEvent('updated', account);
+    // 广播账号更新事件（只发送给当前用户）
+    getWebSocketService().broadcastAccountEvent('updated', account, userId);
     
     res.json(account);
   } catch (error: any) {
@@ -140,14 +140,21 @@ router.delete('/:id', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     
+    console.log(`[DELETE] 收到删除账号请求: ID=${accountId}, UserID=${userId}`);
+    
     await accountService.deleteAccount(accountId, userId);
     
-    // 广播账号删除事件
-    getWebSocketService().broadcastAccountEvent('deleted', { id: accountId });
+    console.log(`[DELETE] 账号删除成功: ID=${accountId}`);
     
-    res.status(204).send();
+    // 广播账号删除事件（只发送给当前用户）
+    getWebSocketService().broadcastAccountEvent('deleted', { id: accountId }, userId);
+    
+    res.json({
+      success: true,
+      message: '账号删除成功'
+    });
   } catch (error: any) {
-    console.error('删除账号失败:', error);
+    console.error('[DELETE] 删除账号失败:', error);
     res.status(400).json({
       success: false,
       message: error.message || '删除账号失败'
@@ -173,7 +180,10 @@ router.post('/:id/set-default', async (req, res) => {
     
     await accountService.setDefaultAccount(platform_id, accountId, userId);
     
-    res.status(204).send();
+    res.json({
+      success: true,
+      message: '默认账号设置成功'
+    });
   } catch (error: any) {
     console.error('设置默认账号失败:', error);
     res.status(400).json({

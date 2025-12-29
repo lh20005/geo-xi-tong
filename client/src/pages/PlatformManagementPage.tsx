@@ -1,11 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined } from '@ant-design/icons';
-import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount } from '../api/publishing';
+import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic } from 'antd';
+import { CheckCircleOutlined, DeleteOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined } from '@ant-design/icons';
+import { getPlatforms, getAccounts, Platform, Account, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
-import AccountBindingModal from '../components/Publishing/AccountBindingModal';
-import AccountManagementModal from '../components/Publishing/AccountManagementModal';
-import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 
 // const { Title } = Typography;
 
@@ -13,111 +10,10 @@ export default function PlatformManagementPage() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-  const [bindingModalVisible, setBindingModalVisible] = useState(false);
-  const [managementModalVisible, setManagementModalVisible] = useState(false);
-  const [selectedPlatform] = useState<Platform | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     loadData();
-    
-    // Initialize WebSocket connection (non-blocking)
-    const timer = setTimeout(() => {
-      initializeWebSocketConnection();
-    }, 500); // Delay to avoid React Strict Mode double-mount issues
-
-    return () => {
-      clearTimeout(timer);
-      // Cleanup WebSocket on unmount
-      try {
-        const wsClient = getWebSocketClient();
-        if (wsClient.isConnected()) {
-          wsClient.disconnect();
-        }
-      } catch (error) {
-        // WebSocket not initialized, ignore
-      }
-    };
   }, []);
-
-  const initializeWebSocketConnection = () => {
-    try {
-      // Check if already connected
-      try {
-        const existingClient = getWebSocketClient();
-        if (existingClient.isConnected()) {
-          console.log('[WebSocket] 已经连接，跳过初始化');
-          return;
-        }
-      } catch (error) {
-        // No existing client, continue with initialization
-      }
-
-      // Get WebSocket URL from environment or use default
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
-      
-      // Get auth token from localStorage
-      const token = localStorage.getItem('auth_token');
-      
-      if (!token) {
-        console.warn('[WebSocket] 没有auth token，无法连接WebSocket');
-        return;
-      }
-
-      console.log('[WebSocket] 初始化WebSocket连接');
-      const wsClient = initializeWebSocket(wsUrl);
-
-      // Set up event listeners
-      wsClient.on('connected', () => {
-        console.log('[WebSocket] 连接成功');
-        setWsConnected(true);
-      });
-
-      wsClient.on('disconnected', () => {
-        console.log('[WebSocket] 连接断开');
-        setWsConnected(false);
-      });
-
-      wsClient.on('authenticated', () => {
-        console.log('[WebSocket] 认证成功');
-        // Subscribe to account events
-        wsClient.subscribe(['accounts']);
-      });
-
-      wsClient.on('account.created', (data) => {
-        console.log('[WebSocket] 收到账号创建事件:', data);
-        message.success('检测到新账号创建');
-        loadData(); // Refresh account list
-      });
-
-      wsClient.on('account.updated', (data) => {
-        console.log('[WebSocket] 收到账号更新事件:', data);
-        message.info('账号信息已更新');
-        loadData(); // Refresh account list
-      });
-
-      wsClient.on('account.deleted', (data) => {
-        console.log('[WebSocket] 收到账号删除事件:', data);
-        message.warning('账号已被删除');
-        loadData(); // Refresh account list
-      });
-
-      wsClient.on('error', (error) => {
-        console.warn('[WebSocket] 连接错误（非关键功能）:', error);
-        setWsConnected(false);
-      });
-
-      wsClient.on('server_error', (message) => {
-        console.warn('[WebSocket] 服务端错误（非关键功能）:', message);
-      });
-
-      // Connect to WebSocket with token
-      console.log('[WebSocket] 使用token连接');
-      wsClient.connect(token);
-    } catch (error) {
-      console.error('[WebSocket] 初始化失败:', error);
-    }
-  };
 
   const loadData = async () => {
     try {
@@ -136,68 +32,29 @@ export default function PlatformManagementPage() {
     }
   };
 
-  const handlePlatformClick = async (platform: Platform) => {
-    try {
-      console.log('[前端] 点击平台卡片:', platform.platform_name, platform.platform_id);
-      message.loading({ content: '正在打开浏览器登录页面...', key: 'browser-login', duration: 0 });
-      
-      console.log('[前端] 调用 loginWithBrowser API...');
-      const result = await loginWithBrowser(platform.platform_id);
-      console.log('[前端] API返回结果:', result);
-      
-      message.destroy('browser-login');
-      
-      if (result.success) {
-        message.success('登录成功，Cookie已保存');
-        loadData(); // 重新加载数据
-      } else {
-        message.error(result.message || '登录失败');
-      }
-    } catch (error: any) {
-      message.destroy('browser-login');
-      console.error('[前端] 浏览器登录失败:', error);
-      console.error('[前端] 错误详情:', {
-        message: error.message,
-        response: error.response,
-        stack: error.stack
-      });
-      message.error(error.message || error.response?.data?.message || '打开浏览器失败');
-    }
-  };
-
   const handleDeleteAccount = async (accountId: number) => {
     try {
+      console.log('[删除账号] 开始删除账号:', accountId);
       await deleteAccount(accountId);
+      console.log('[删除账号] 删除成功，显示成功提示');
       message.success('账号删除成功');
-      loadData();
-    } catch (error) {
-      message.error('账号删除失败');
-      console.error('账号删除失败:', error);
+      console.log('[删除账号] 开始刷新数据');
+      await loadData();
+      console.log('[删除账号] 数据刷新完成');
+    } catch (error: any) {
+      console.error('[删除账号] 删除失败:', error);
+      const errorMessage = error?.message || '账号删除失败';
+      message.error(errorMessage);
     }
-  };
-
-  const handleBindingSuccess = () => {
-    setBindingModalVisible(false);
-    loadData();
-    message.success('账号绑定成功');
-  };
-
-  const handleManagementSuccess = () => {
-    loadData();
   };
 
   const getPlatformAccounts = (platformId: string) => {
     return accounts.filter(acc => acc.platform_id === platformId);
   };
 
-  const isPlatformBound = (platformId: string) => {
-    return getPlatformAccounts(platformId).length > 0;
-  };
-
   // 统计数据
   const stats = {
     totalPlatforms: platforms.length,
-    boundPlatforms: platforms.filter(p => isPlatformBound(p.platform_id)).length,
     totalAccounts: accounts.length,
     activeAccounts: accounts.filter(a => a.status === 'active').length
   };
@@ -296,7 +153,7 @@ export default function PlatformManagementPage() {
     <div style={{ padding: 24 }}>
       {/* 统计卡片 - 与文章列表页风格一致 */}
       <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+        <Col span={8}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="支持平台" 
@@ -306,17 +163,7 @@ export default function PlatformManagementPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
-          <Card size="small" style={{ textAlign: 'center' }}>
-            <Statistic 
-              title="已配置平台" 
-              value={stats.boundPlatforms} 
-              valueStyle={{ color: '#52c41a' }}
-              prefix={<CheckCircleOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
+        <Col span={8}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="账号总数" 
@@ -325,7 +172,7 @@ export default function PlatformManagementPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col span={8}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="活跃账号" 
@@ -336,106 +183,6 @@ export default function PlatformManagementPage() {
         </Col>
       </Row>
 
-      {/* 平台登录卡片区域 */}
-      <Card 
-        title={
-          <Space>
-            <LoginOutlined style={{ color: '#0ea5e9' }} />
-            <span>平台登录</span>
-            {wsConnected && (
-              <Badge status="success" text="实时同步" />
-            )}
-          </Space>
-        }
-        extra={
-          <Space>
-            {wsConnected ? (
-              <Tag icon={<WifiOutlined />} color="success">已连接</Tag>
-            ) : (
-              <Tag icon={<WifiOutlined />} color="default">未连接</Tag>
-            )}
-            <Button 
-              icon={<ReloadOutlined />} 
-              onClick={loadData}
-            >
-              刷新
-            </Button>
-          </Space>
-        }
-        bordered={false}
-        style={{ marginBottom: 24 }}
-      >
-        <div style={{ marginBottom: 16, color: '#64748b' }}>
-          点击平台卡片打开浏览器进行登录，登录成功后Cookie将自动保存
-        </div>
-        
-        <Row gutter={[16, 16]}>
-          {platforms.map(platform => {
-            const bound = isPlatformBound(platform.platform_id);
-            const platformAccounts = getPlatformAccounts(platform.platform_id);
-            
-            return (
-              <Col xs={24} sm={12} md={8} lg={6} key={platform.platform_id}>
-                <Card
-                  hoverable
-                  onClick={() => handlePlatformClick(platform)}
-                  style={{
-                    textAlign: 'center',
-                    position: 'relative',
-                    borderRadius: 8,
-                    border: bound ? '2px solid #52c41a' : '1px solid #e2e8f0',
-                    background: bound ? '#f6ffed' : '#ffffff',
-                    transition: 'all 0.3s ease',
-                    cursor: 'pointer'
-                  }}
-                  bodyStyle={{ padding: '24px 16px' }}
-                >
-                  {bound && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8
-                      }}
-                    >
-                      <CheckCircleOutlined style={{ fontSize: 20, color: '#52c41a' }} />
-                    </div>
-                  )}
-                  
-                  <div
-                    style={{
-                      width: 64,
-                      height: 64,
-                      margin: '0 auto 12px',
-                      borderRadius: 8,
-                      background: bound ? '#52c41a' : '#0ea5e9',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 28,
-                      fontWeight: 'bold',
-                      color: '#ffffff'
-                    }}
-                  >
-                    {platform.platform_name.charAt(0)}
-                  </div>
-                  
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8, color: '#1e293b' }}>
-                    {platform.platform_name}
-                  </div>
-                  
-                  {bound ? (
-                    <Tag color="success">已登录 {platformAccounts.length} 个账号</Tag>
-                  ) : (
-                    <Tag color="default">点击登录</Tag>
-                  )}
-                </Card>
-              </Col>
-            );
-          })}
-        </Row>
-      </Card>
-
       {/* 账号列表 - 与其他页面表格风格一致 */}
       {accounts.length > 0 && (
         <Card
@@ -444,6 +191,14 @@ export default function PlatformManagementPage() {
               <StarFilled style={{ color: '#0ea5e9' }} />
               <span>账号管理</span>
             </Space>
+          }
+          extra={
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={loadData}
+            >
+              刷新
+            </Button>
           }
           bordered={false}
         >
@@ -462,25 +217,6 @@ export default function PlatformManagementPage() {
             }}
           />
         </Card>
-      )}
-
-      {selectedPlatform && (
-        <>
-          <AccountBindingModal
-            visible={bindingModalVisible}
-            platform={selectedPlatform}
-            onSuccess={handleBindingSuccess}
-            onCancel={() => setBindingModalVisible(false)}
-          />
-          
-          <AccountManagementModal
-            visible={managementModalVisible}
-            platform={selectedPlatform}
-            accounts={getPlatformAccounts(selectedPlatform.platform_id)}
-            onSuccess={handleManagementSuccess}
-            onCancel={() => setManagementModalVisible(false)}
-          />
-        </>
       )}
     </div>
   );

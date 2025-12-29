@@ -225,10 +225,19 @@ export class WebSocketService {
   }
 
   /**
-   * 广播账号事件给所有连接的用户
+   * 广播账号事件给账号所属用户（多租户隔离）
    */
-  broadcastAccountEvent(eventType: 'created' | 'updated' | 'deleted', account: any): void {
-    this.broadcastToAll(`account.${eventType}`, account);
+  broadcastAccountEvent(eventType: 'created' | 'updated' | 'deleted', account: any, userId?: number): void {
+    // 如果提供了userId，只发送给该用户；否则从account中提取user_id
+    const targetUserId = userId || account.user_id;
+    
+    if (!targetUserId) {
+      console.warn('[WebSocket] 无法确定账号所属用户，跳过广播');
+      return;
+    }
+    
+    // 只广播给账号所属的用户（多租户隔离）
+    this.broadcast(targetUserId, `account.${eventType}`, account);
   }
 
   /**
