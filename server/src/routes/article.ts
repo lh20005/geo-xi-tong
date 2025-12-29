@@ -87,17 +87,15 @@ articleRouter.post('/generate', async (req, res) => {
       return res.status(404).json({ error: '蒸馏记录不存在或无权访问' });
     }
     
-    // 获取当前用户的API配置
-    const configResult = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true AND user_id = $1 LIMIT 1',
-      [userId]
-    );
+    // 获取系统级API配置
+    const { systemApiConfigService } = await import('../services/SystemApiConfigService');
+    const config = await systemApiConfigService.getActiveConfig();
     
-    if (configResult.rows.length === 0) {
-      return res.status(400).json({ error: '请先配置AI API' });
+    if (!config) {
+      return res.status(400).json({ error: '系统未配置AI服务，请联系管理员' });
     }
     
-    const { provider, api_key, ollama_base_url, ollama_model } = configResult.rows[0];
+    const { provider, apiKey: api_key, ollamaBaseUrl: ollama_base_url, ollamaModel: ollama_model } = config;
     
     // 获取选中的话题
     let topicsQuery = 'SELECT question FROM topics WHERE distillation_id = $1';
@@ -551,17 +549,15 @@ articleRouter.post('/:id/smart-format', async (req, res) => {
       return res.status(404).json({ error: '文章不存在或无权访问' });
     }
 
-    // 使用当前用户的API配置
-    const configResult = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true AND user_id = $1 LIMIT 1',
-      [userId]
-    );
+    // 使用系统级API配置
+    const { systemApiConfigService } = await import('../services/SystemApiConfigService');
+    const config = await systemApiConfigService.getActiveConfig();
 
-    if (configResult.rows.length === 0) {
-      return res.status(400).json({ error: '请先配置AI API' });
+    if (!config) {
+      return res.status(400).json({ error: '系统未配置AI服务，请联系管理员' });
     }
 
-    const { provider, api_key, ollama_base_url, ollama_model } = configResult.rows[0];
+    const { provider, apiKey: api_key, ollamaBaseUrl: ollama_base_url, ollamaModel: ollama_model } = config;
 
     const aiService = new AIService({
       provider,

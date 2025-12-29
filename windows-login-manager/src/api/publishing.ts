@@ -244,7 +244,11 @@ export async function deleteAllTasks(status?: string): Promise<{ deletedCount: n
  * 使用浏览器登录平台
  */
 export async function loginWithBrowser(platformId: string): Promise<{ success: boolean; message?: string; account?: Account }> {
-  const response = await apiClient.post('/publishing/browser-login', { platform_id: platformId });
+  // 浏览器登录需要用户手动操作，设置更长的超时时间（5分钟）
+  const response = await apiClient.post('/publishing/browser-login', 
+    { platform_id: platformId },
+    { timeout: 300000 } // 5分钟超时
+  );
   return response.data;
 }
 

@@ -120,16 +120,15 @@ configRouter.post('/distillation', authenticate, requireAdmin, configRateLimit, 
 
 // ==================== AI API 配置 ====================
 
-// 获取当前激活的API配置
+// 获取当前激活的系统级API配置
 configRouter.get('/active', authenticate, async (req, res) => {
   try {
     const isAdmin = (req as any).user?.isAdmin || false;
     
-    const result = await pool.query(
-      'SELECT id, provider, ollama_base_url, ollama_model, is_active FROM api_configs WHERE is_active = true LIMIT 1'
-    );
+    const { systemApiConfigService } = await import('../services/SystemApiConfigService');
+    const config = await systemApiConfigService.getActiveConfig();
     
-    if (result.rows.length === 0) {
+    if (!config) {
       return res.json({ 
         provider: null, 
         configured: false,
@@ -138,13 +137,12 @@ configRouter.get('/active', authenticate, async (req, res) => {
       });
     }
     
-    const config = result.rows[0];
     res.json({ 
       provider: config.provider,
-      ollamaBaseUrl: config.ollama_base_url,
-      ollamaModel: config.ollama_model,
+      ollamaBaseUrl: config.ollamaBaseUrl,
+      ollamaModel: config.ollamaModel,
       configured: true,
-      canEdit: isAdmin  // 告诉前端是否可以编辑
+      canEdit: isAdmin  // 告诉前端是否可以编辑（只有管理员可以编辑系统级配置）
     });
   } catch (error) {
     console.error('获取配置失败:', error);

@@ -32,6 +32,7 @@ export interface GenerationTask {
   keyword: string;
   provider: string;
   distillationResult?: string | null;
+  userId: number; // 添加用户ID
 }
 
 export interface KeywordTopicPair {
@@ -234,8 +235,8 @@ export class ArticleGenerationService {
       // 创建独立任务
       const result = await pool.query(
         `INSERT INTO generation_tasks 
-         (distillation_id, album_id, knowledge_base_id, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending') 
+         (distillation_id, album_id, knowledge_base_id, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, user_id, status) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') 
          RETURNING id`,
         [
           config.distillationId,
@@ -244,7 +245,8 @@ export class ArticleGenerationService {
           config.articleSettingId,
           config.conversionTargetId || null,
           1, // 每个任务只生成1篇文章
-          selectedIdsJson
+          selectedIdsJson,
+          config.userId // 添加用户ID
         ]
       );
       
@@ -294,11 +296,20 @@ export class ArticleGenerationService {
    * 获取任务列表
    * 需求: 8.4, 8.5, 13.3
    */
-  async getTasks(page: number = 1, pageSize: number = 10): Promise<{ tasks: GenerationTask[]; total: number }> {
+  async getTasks(page: number = 1, pageSize: number = 10, userId?: number): Promise<{ tasks: GenerationTask[]; total: number }> {
     const offset = (page - 1) * pageSize;
 
-    const countResult = await pool.query('SELECT COUNT(*) FROM generation_tasks');
+    // 添加用户ID过滤
+    const countQuery = userId 
+      ? 'SELECT COUNT(*) FROM generation_tasks WHERE user_id = $1'
+      : 'SELECT COUNT(*) FROM generation_tasks';
+    const countParams = userId ? [userId] : [];
+    const countResult = await pool.query(countQuery, countParams);
     const total = parseInt(countResult.rows[0].count);
+
+    // 添加用户ID过滤到主查询
+    const whereClause = userId ? 'WHERE gt.user_id = $3' : '';
+    const queryParams = userId ? [pageSize, offset, userId] : [pageSize, offset];
 
     const result = await pool.query(
       `SELECT 
@@ -315,6 +326,7 @@ export class ArticleGenerationService {
         gt.error_message,
         gt.created_at, 
         gt.updated_at,
+        gt.user_id,
         gt.selected_distillation_ids,
         ct.company_name as conversion_target_name,
         d.keyword,
@@ -328,9 +340,10 @@ export class ArticleGenerationService {
        FROM generation_tasks gt
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        INNER JOIN distillations d ON gt.distillation_id = d.id
+       ${whereClause}
        ORDER BY gt.created_at DESC
        LIMIT $1 OFFSET $2`,
-      [pageSize, offset]
+      queryParams
     );
 
     return {
@@ -354,6 +367,7 @@ export class ArticleGenerationService {
           errorMessage: row.error_message,
           createdAt: row.created_at,
           updatedAt: row.updated_at,
+          userId: row.user_id,
           conversionTargetName: row.conversion_target_name || null,
           keyword,
           provider: row.provider,
@@ -367,7 +381,11 @@ export class ArticleGenerationService {
   /**
    * 获取任务详情
    */
-  async getTaskDetail(taskId: number): Promise<GenerationTask | null> {
+  async getTaskDetail(taskId: number, userId?: number): Promise<GenerationTask | null> {
+    // 添加用户ID过滤
+    const whereClause = userId ? 'WHERE gt.id = $1 AND gt.user_id = $2' : 'WHERE gt.id = $1';
+    const queryParams = userId ? [taskId, userId] : [taskId];
+
     const result = await pool.query(
       `SELECT 
         gt.id, 
@@ -383,6 +401,7 @@ export class ArticleGenerationService {
         gt.error_message,
         gt.created_at, 
         gt.updated_at,
+        gt.user_id,
         ct.company_name as conversion_target_name,
         d.keyword,
         d.provider,
@@ -395,8 +414,8 @@ export class ArticleGenerationService {
        FROM generation_tasks gt
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        INNER JOIN distillations d ON gt.distillation_id = d.id
-       WHERE gt.id = $1`,
-      [taskId]
+       ${whereClause}`,
+      queryParams
     );
 
     if (result.rows.length === 0) {
@@ -418,6 +437,7 @@ export class ArticleGenerationService {
       errorMessage: row.error_message,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      userId: row.user_id,
       conversionTargetName: row.conversion_target_name || null,
       keyword: row.keyword,
       provider: row.provider,
@@ -673,6 +693,7 @@ export class ArticleGenerationService {
               result.content,
               imageUrl,
               aiConfig.provider,
+              task.userId,
               imageId
             );
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章保存成功，ID: ${articleId}，话题ID: ${distillationData.topicId} 的usage_count已更新${imageId ? `，图片ID: ${imageId} 的usage_count已更新` : ''}`);
@@ -825,6 +846,7 @@ export class ArticleGenerationService {
             result.content,
             imageUrl,
             aiConfig.provider,
+            task.userId,
             imageId
           );
           console.log(`[任务 ${taskId}] 文章保存成功，ID: ${articleId}${imageId ? `，图片ID: ${imageId} 的usage_count已更新` : ''}`);
@@ -963,31 +985,24 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 获取活跃的AI配置
+   * 获取活跃的AI配置（使用系统级配置）
    */
   async getActiveAIConfig(): Promise<any> {
-    const result = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true LIMIT 1'
-    );
+    // 使用系统级API配置服务
+    const { systemApiConfigService } = await import('./SystemApiConfigService');
+    const config = await systemApiConfigService.getActiveConfig();
 
-    if (result.rows.length === 0) {
-      throw new Error('没有活跃的AI配置');
+    if (!config) {
+      throw new Error('没有活跃的系统级AI配置，请联系管理员配置');
     }
 
-    const config = result.rows[0];
-    
-    // 解密API密钥
-    if (config.api_key) {
-      try {
-        const { encryptionService } = await import('./EncryptionService');
-        config.api_key = encryptionService.decrypt(config.api_key);
-      } catch (error) {
-        console.error('解密API密钥失败，使用原始值:', error);
-        // 如果解密失败，可能是旧数据（未加密），直接使用
-      }
-    }
-
-    return config;
+    // 返回格式化的配置对象
+    return {
+      provider: config.provider,
+      api_key: config.apiKey,
+      ollama_base_url: config.ollamaBaseUrl,
+      ollama_model: config.ollamaModel
+    };
   }
 
   /**
@@ -1480,6 +1495,7 @@ export class ArticleGenerationService {
     content: string,
     imageUrl: string,
     provider: string,
+    userId: number,
     imageId?: number
   ): Promise<number> {
     const client = await pool.connect();
@@ -1489,13 +1505,13 @@ export class ArticleGenerationService {
       await client.query('BEGIN');
       console.log(`[保存文章] 事务开始`);
 
-      // 1. 保存文章（包含topic_id）
+      // 1. 保存文章（包含topic_id和user_id）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
          RETURNING id`,
-        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider]
+        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId]
       );
 
       const articleId = articleResult.rows[0].id;
@@ -1557,6 +1573,7 @@ export class ArticleGenerationService {
     content: string,
     imageUrl: string,
     provider: string,
+    userId: number,
     imageId?: number
   ): Promise<number> {
     const client = await pool.connect();
@@ -1564,13 +1581,13 @@ export class ArticleGenerationService {
     try {
       await client.query('BEGIN');
 
-      // 1. 保存文章
+      // 1. 保存文章（包含user_id）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, task_id, content, image_url, provider) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+         (title, keyword, distillation_id, task_id, content, image_url, provider, user_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
          RETURNING id`,
-        [title, keyword, distillationId, taskId, content, imageUrl, provider]
+        [title, keyword, distillationId, taskId, content, imageUrl, provider, userId]
       );
 
       const articleId = articleResult.rows[0].id;
@@ -1620,14 +1637,15 @@ export class ArticleGenerationService {
     title: string,
     content: string,
     imageUrl: string,
-    provider: string
+    provider: string,
+    userId: number
   ): Promise<number> {
     const result = await pool.query(
       `INSERT INTO articles 
-       (title, keyword, distillation_id, task_id, content, image_url, provider) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       (title, keyword, distillation_id, task_id, content, image_url, provider, user_id) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
        RETURNING id`,
-      [title, keyword, distillationId, taskId, content, imageUrl, provider]
+      [title, keyword, distillationId, taskId, content, imageUrl, provider, userId]
     );
 
     return result.rows[0].id;
@@ -1718,21 +1736,20 @@ export class ArticleGenerationService {
       throw new Error(`文章设置ID ${task.articleSettingId} 不存在`);
     }
 
-    // 验证AI配置
-    const aiConfigResult = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true LIMIT 1'
-    );
-    if (aiConfigResult.rows.length === 0) {
-      throw new Error('没有活跃的AI配置，请先配置AI服务');
+    // 验证系统级AI配置
+    const { systemApiConfigService } = await import('./SystemApiConfigService');
+    const config = await systemApiConfigService.getActiveConfig();
+    
+    if (!config) {
+      throw new Error('没有活跃的系统级AI配置，请联系管理员配置AI服务');
     }
 
-    const config = aiConfigResult.rows[0];
     if (config.provider === 'ollama') {
-      if (!config.ollama_base_url || !config.ollama_model) {
+      if (!config.ollamaBaseUrl || !config.ollamaModel) {
         throw new Error('Ollama配置不完整，缺少base_url或model');
       }
     } else {
-      if (!config.api_key) {
+      if (!config.apiKey) {
         throw new Error(`${config.provider}配置不完整，缺少API密钥`);
       }
     }
@@ -1844,24 +1861,23 @@ export class ArticleGenerationService {
       recommendations.push(`检查文章设置时出错: ${error.message}`);
     }
 
-    // 检查AI配置
+    // 检查系统级AI配置
     try {
-      const aiConfigResult = await pool.query(
-        'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true LIMIT 1'
-      );
-      checks.aiConfigExists = aiConfigResult.rows.length > 0;
+      const { systemApiConfigService } = await import('./SystemApiConfigService');
+      const config = await systemApiConfigService.getActiveConfig();
+      
+      checks.aiConfigExists = config !== null;
       
       if (!checks.aiConfigExists) {
-        recommendations.push('没有活跃的AI配置，请先配置AI服务');
+        recommendations.push('没有活跃的系统级AI配置，请联系管理员配置AI服务');
       } else {
-        const config = aiConfigResult.rows[0];
         if (config.provider === 'ollama') {
-          checks.aiConfigValid = !!(config.ollama_base_url && config.ollama_model);
+          checks.aiConfigValid = !!(config.ollamaBaseUrl && config.ollamaModel);
           if (!checks.aiConfigValid) {
             recommendations.push('Ollama配置不完整，缺少base_url或model');
           }
         } else {
-          checks.aiConfigValid = !!config.api_key;
+          checks.aiConfigValid = !!config.apiKey;
           if (!checks.aiConfigValid) {
             recommendations.push(`${config.provider}配置不完整，缺少API密钥`);
           }

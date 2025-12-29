@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Card, Form, Select, Input, Button, message, Space, Alert, Spin, Tabs, InputNumber } from 'antd';
-import { ApiOutlined, CheckCircleOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { Card, Form, Input, Button, message, Space, Alert, Tabs, InputNumber } from 'antd';
+import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 
 const { TextArea } = Input;
@@ -205,127 +205,34 @@ function DistillationConfigTab() {
 }
 
 export default function ConfigPage() {
-  const [form] = Form.useForm();
-  const [loading, setLoading] = useState(false);
-  const [currentConfig, setCurrentConfig] = useState<any>(null);
-  const [selectedProvider, setSelectedProvider] = useState<string>('');
-  const [ollamaModels, setOllamaModels] = useState<any[]>([]);
-  const [detectingModels, setDetectingModels] = useState(false);
-  const [testingConnection, setTestingConnection] = useState(false);
+  const [systemConfig, setSystemConfig] = useState<any>(null);
 
   useEffect(() => {
-    loadConfig();
+    loadSystemConfig();
   }, []);
 
-  const loadConfig = async () => {
+  const loadSystemConfig = async () => {
     try {
       const response = await apiClient.get('/config/active');
-      setCurrentConfig(response.data);
-      if (response.data.provider) {
-        setSelectedProvider(response.data.provider);
-      }
+      setSystemConfig(response.data);
     } catch (error) {
-      console.error('加载配置失败:', error);
+      console.error('加载系统配置失败:', error);
     }
   };
 
-  const detectOllamaModels = async (baseUrl: string) => {
-    setDetectingModels(true);
+export default function ConfigPage() {
+  const [systemConfig, setSystemConfig] = useState<any>(null);
+
+  useEffect(() => {
+    loadSystemConfig();
+  }, []);
+
+  const loadSystemConfig = async () => {
     try {
-      const response = await apiClient.get('/config/ollama/models', {
-        params: { baseUrl }
-      });
-      
-      if (response.data.models.length === 0) {
-        message.warning(response.data.message || '未检测到DeepSeek模型');
-        if (response.data.installCommand) {
-          message.info(`安装命令: ${response.data.installCommand}`);
-        }
-      } else {
-        message.success(`检测到 ${response.data.count} 个DeepSeek模型`);
-      }
-      
-      setOllamaModels(response.data.models);
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '检测模型失败');
-      setOllamaModels([]);
-    } finally {
-      setDetectingModels(false);
-    }
-  };
-
-  const handleProviderChange = (value: string) => {
-    setSelectedProvider(value);
-    if (value === 'ollama') {
-      const baseUrl = form.getFieldValue('ollamaBaseUrl') || 'http://localhost:11434';
-      detectOllamaModels(baseUrl);
-    }
-  };
-
-  const handleOllamaBaseUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const baseUrl = e.target.value;
-    if (baseUrl && selectedProvider === 'ollama') {
-      detectOllamaModels(baseUrl);
-    }
-  };
-
-  const testOllamaConnection = async () => {
-    const baseUrl = form.getFieldValue('ollamaBaseUrl');
-    const model = form.getFieldValue('ollamaModel');
-    
-    if (!baseUrl || !model) {
-      message.warning('请先选择Ollama服务地址和模型');
-      return;
-    }
-    
-    setTestingConnection(true);
-    try {
-      const response = await apiClient.post('/config/ollama/test', {
-        baseUrl,
-        model
-      });
-      
-      if (response.data.success) {
-        message.success(response.data.message);
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.error || '连接测试失败');
-    } finally {
-      setTestingConnection(false);
-    }
-  };
-
-  const handleSubmit = async (values: any) => {
-    setLoading(true);
-    try {
-      // 第一步：获取确认令牌
-      const confirmResponse = await apiClient.post('/confirm/initiate', {
-        action: 'update-api-config',
-        data: values
-      });
-
-      if (!confirmResponse.data.success) {
-        throw new Error('获取确认令牌失败');
-      }
-
-      const confirmationToken = confirmResponse.data.data.token;
-
-      // 第二步：使用确认令牌保存配置
-      await apiClient.post('/config', values, {
-        headers: {
-          'X-Confirmation-Token': confirmationToken
-        }
-      });
-
-      message.success('API配置保存成功！');
-      loadConfig();
-      form.resetFields();
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.response?.data?.message || '保存配置失败，请检查网络连接';
-      message.error(errorMsg);
-      console.error('保存配置错误:', error.response?.data || error);
-    } finally {
-      setLoading(false);
+      const response = await apiClient.get('/config/active');
+      setSystemConfig(response.data);
+    } catch (error) {
+      console.error('加载系统配置失败:', error);
     }
   };
 
@@ -335,26 +242,24 @@ export default function ConfigPage() {
         title="系统配置"
         bordered={false}
       >
-        <Tabs
-          defaultActiveKey="api"
-          items={[
-            {
-              key: 'api',
-              label: (
-                <Space>
-                  <ApiOutlined />
-                  <span>AI API配置</span>
-                </Space>
-              ),
-              children: (
-                <div>
-        {currentConfig?.configured && (
+        {/* AI服务状态提示 */}
+        <Alert
+          message="AI服务配置"
+          description="AI服务由系统管理员统一配置和管理，您无需单独设置API密钥。如有问题，请联系管理员。"
+          type="info"
+          icon={<CheckCircleOutlined />}
+          showIcon
+          style={{ marginBottom: 16 }}
+        />
+
+        {/* 显示当前配置状态 */}
+        {systemConfig?.configured && (
           <Alert
-            message="当前配置"
+            message="当前AI服务"
             description={
-              currentConfig.provider === 'ollama'
-                ? `已配置本地Ollama - 模型: ${currentConfig.ollamaModel}`
-                : `已配置 ${currentConfig.provider === 'deepseek' ? 'DeepSeek' : 'Gemini'} API`
+              systemConfig.provider === 'ollama'
+                ? `系统正在使用本地Ollama - 模型: ${systemConfig.ollamaModel}`
+                : `系统正在使用 ${systemConfig.provider === 'deepseek' ? 'DeepSeek' : systemConfig.provider === 'gemini' ? 'Gemini' : systemConfig.provider} 提供AI服务`
             }
             type="success"
             icon={<CheckCircleOutlined />}
@@ -363,171 +268,20 @@ export default function ConfigPage() {
           />
         )}
 
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-          autoComplete="off"
-        >
-          <Form.Item
-            label="选择 AI 模型"
-            name="provider"
-            rules={[{ required: true, message: '请选择AI模型' }]}
-          >
-            <Select
-              size="large"
-              placeholder="请选择要使用的AI模型"
-              onChange={handleProviderChange}
-              options={[
-                { value: 'deepseek', label: 'DeepSeek' },
-                { value: 'gemini', label: 'Google Gemini' },
-                { value: 'ollama', label: '本地 Ollama' },
-              ]}
-            />
-          </Form.Item>
+        {!systemConfig?.configured && (
+          <Alert
+            message="AI服务未配置"
+            description="系统管理员尚未配置AI服务，部分功能可能无法使用。请联系管理员配置。"
+            type="warning"
+            showIcon
+            style={{ marginBottom: 24 }}
+          />
+        )}
 
-          {selectedProvider !== 'ollama' && (
-            <Form.Item
-              label="API Key"
-              name="apiKey"
-              rules={[{ required: selectedProvider !== 'ollama', message: '请输入API Key' }]}
-              extra="您的API密钥将被安全存储，仅用于调用AI服务"
-            >
-              <Input.Password
-                size="large"
-                placeholder="请输入您的API Key"
-                autoComplete="new-password"
-              />
-            </Form.Item>
-          )}
-
-          {selectedProvider === 'ollama' && (
-            <>
-              <Form.Item
-                label="Ollama 服务地址"
-                name="ollamaBaseUrl"
-                initialValue="http://localhost:11434"
-                rules={[{ required: true, message: '请输入Ollama服务地址' }]}
-                extra="本地Ollama服务的地址，默认为 http://localhost:11434"
-              >
-                <Input
-                  size="large"
-                  placeholder="http://localhost:11434"
-                  onChange={handleOllamaBaseUrlChange}
-                  suffix={
-                    detectingModels ? (
-                      <Spin size="small" />
-                    ) : (
-                      <ReloadOutlined 
-                        onClick={() => {
-                          const baseUrl = form.getFieldValue('ollamaBaseUrl');
-                          if (baseUrl) detectOllamaModels(baseUrl);
-                        }}
-                        style={{ cursor: 'pointer', color: '#1890ff' }}
-                      />
-                    )
-                  }
-                />
-              </Form.Item>
-
-              <Form.Item
-                label="选择模型"
-                name="ollamaModel"
-                rules={[{ required: true, message: '请选择模型' }]}
-                extra={ollamaModels.length === 0 ? '未检测到DeepSeek模型，请先安装' : `检测到 ${ollamaModels.length} 个可用模型`}
-              >
-                <Select
-                  size="large"
-                  placeholder="请选择要使用的模型"
-                  loading={detectingModels}
-                  options={ollamaModels.map(model => ({
-                    value: model.name,
-                    label: `${model.name} (${model.size})`
-                  }))}
-                />
-              </Form.Item>
-
-              <Form.Item>
-                <Button
-                  icon={<ThunderboltOutlined />}
-                  onClick={testOllamaConnection}
-                  loading={testingConnection}
-                >
-                  测试连接
-                </Button>
-              </Form.Item>
-            </>
-          )}
-
-          <Form.Item>
-            <Space>
-              <Button
-                type="primary"
-                htmlType="submit"
-                size="large"
-                loading={loading}
-                icon={<CheckCircleOutlined />}
-              >
-                保存配置
-              </Button>
-              <Button size="large" onClick={() => form.resetFields()}>
-                重置
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
-
-        <Card
-          type="inner"
-          title={selectedProvider === 'ollama' ? '使用本地 Ollama' : '获取 API Key'}
-          style={{ marginTop: 24, background: '#f8fafc' }}
-        >
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            {selectedProvider === 'ollama' ? (
-              <>
-                <div>
-                  <strong>安装 Ollama:</strong>
-                  <br />
-                  访问 <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer">
-                    https://ollama.ai
-                  </a> 下载并安装Ollama
-                </div>
-                <div>
-                  <strong>安装 DeepSeek 模型:</strong>
-                  <br />
-                  在终端运行: <code>ollama pull deepseek-r1:latest</code>
-                  <br />
-                  或: <code>ollama pull deepseek-coder:latest</code>
-                </div>
-                <div>
-                  <strong>启动 Ollama 服务:</strong>
-                  <br />
-                  Ollama安装后会自动在后台运行，默认端口为 11434
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <strong>DeepSeek:</strong>
-                  <br />
-                  访问 <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer">
-                    https://platform.deepseek.com
-                  </a> 注册并获取API密钥
-                </div>
-                <div>
-                  <strong>Google Gemini:</strong>
-                  <br />
-                  访问 <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
-                    https://makersuite.google.com/app/apikey
-                  </a> 获取API密钥
-                </div>
-              </>
-            )}
-          </Space>
-        </Card>
-                </div>
-              ),
-            },
+        {/* 只保留关键词蒸馏配置 */}
+        <Tabs
+          defaultActiveKey="distillation"
+          items={[
             {
               key: 'distillation',
               label: (

@@ -112,6 +112,7 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
  */
 articleGenerationRouter.get('/tasks', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 10;
 
@@ -119,7 +120,7 @@ articleGenerationRouter.get('/tasks', async (req, res) => {
       return res.status(400).json({ error: '无效的分页参数' });
     }
 
-    const result = await service.getTasks(page, pageSize);
+    const result = await service.getTasks(page, pageSize, userId);
 
     res.json({
       tasks: result.tasks,
@@ -139,13 +140,14 @@ articleGenerationRouter.get('/tasks', async (req, res) => {
  */
 articleGenerationRouter.get('/tasks/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
 
     if (isNaN(taskId) || taskId <= 0) {
       return res.status(400).json({ error: '无效的任务ID' });
     }
 
-    const task = await service.getTaskDetail(taskId);
+    const task = await service.getTaskDetail(taskId, userId);
 
     if (!task) {
       return res.status(404).json({ error: '任务不存在' });
@@ -219,10 +221,17 @@ articleGenerationRouter.get('/tasks/:id', async (req, res) => {
  */
 articleGenerationRouter.get('/tasks/:id/diagnose', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
 
     if (isNaN(taskId) || taskId <= 0) {
       return res.status(400).json({ error: '无效的任务ID' });
+    }
+
+    // 先检查任务是否属于当前用户
+    const task = await service.getTaskDetail(taskId, userId);
+    if (!task) {
+      return res.status(404).json({ error: '任务不存在' });
     }
 
     const report = await service.diagnoseTask(taskId);
@@ -240,14 +249,15 @@ articleGenerationRouter.get('/tasks/:id/diagnose', async (req, res) => {
  */
 articleGenerationRouter.post('/tasks/:id/retry', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
 
     if (isNaN(taskId) || taskId <= 0) {
       return res.status(400).json({ error: '无效的任务ID' });
     }
 
-    // 检查任务是否存在
-    const task = await service.getTaskDetail(taskId);
+    // 检查任务是否存在且属于当前用户
+    const task = await service.getTaskDetail(taskId, userId);
     if (!task) {
       return res.status(404).json({ error: '任务不存在' });
     }
@@ -280,14 +290,15 @@ articleGenerationRouter.post('/tasks/:id/retry', async (req, res) => {
  */
 articleGenerationRouter.post('/tasks/:id/cancel', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
 
     if (isNaN(taskId) || taskId <= 0) {
       return res.status(400).json({ error: '无效的任务ID' });
     }
 
-    // 检查任务是否存在
-    const task = await service.getTaskDetail(taskId);
+    // 检查任务是否存在且属于当前用户
+    const task = await service.getTaskDetail(taskId, userId);
     if (!task) {
       return res.status(404).json({ error: '任务不存在' });
     }
@@ -317,6 +328,7 @@ articleGenerationRouter.post('/tasks/:id/cancel', async (req, res) => {
  */
 articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
     const { force } = req.query; // 支持强制删除
 
@@ -324,8 +336,8 @@ articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
       return res.status(400).json({ error: '无效的任务ID' });
     }
 
-    // 检查任务是否存在
-    const task = await service.getTaskDetail(taskId);
+    // 检查任务是否存在且属于当前用户
+    const task = await service.getTaskDetail(taskId, userId);
     if (!task) {
       return res.status(404).json({ error: '任务不存在' });
     }
@@ -356,6 +368,7 @@ articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
  */
 articleGenerationRouter.post('/tasks/batch-delete', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { taskIds } = req.body;
 
     if (!Array.isArray(taskIds) || taskIds.length === 0) {
@@ -368,10 +381,10 @@ articleGenerationRouter.post('/tasks/batch-delete', async (req, res) => {
       return res.status(400).json({ error: '没有有效的任务ID' });
     }
 
-    // 检查是否有正在运行的任务
+    // 检查是否有正在运行的任务（只检查属于当前用户的任务）
     const runningTasksResult = await pool.query(
-      'SELECT id FROM generation_tasks WHERE id = ANY($1) AND status = $2',
-      [validIds, 'running']
+      'SELECT id FROM generation_tasks WHERE id = ANY($1) AND status = $2 AND user_id = $3',
+      [validIds, 'running', userId]
     );
 
     if (runningTasksResult.rows.length > 0) {
@@ -383,10 +396,10 @@ articleGenerationRouter.post('/tasks/batch-delete', async (req, res) => {
       });
     }
 
-    // 批量删除任务
+    // 批量删除任务（只删除属于当前用户的任务）
     const result = await pool.query(
-      'DELETE FROM generation_tasks WHERE id = ANY($1) RETURNING id',
-      [validIds]
+      'DELETE FROM generation_tasks WHERE id = ANY($1) AND user_id = $2 RETURNING id',
+      [validIds, userId]
     );
 
     const deletedCount = result.rows.length;
@@ -411,10 +424,12 @@ articleGenerationRouter.post('/tasks/batch-delete', async (req, res) => {
  */
 articleGenerationRouter.delete('/tasks', async (req, res) => {
   try {
-    // 检查是否有正在运行的任务
+    const userId = getCurrentTenantId(req);
+
+    // 检查是否有正在运行的任务（只检查属于当前用户的任务）
     const runningTasksResult = await pool.query(
-      'SELECT id FROM generation_tasks WHERE status = $1',
-      ['running']
+      'SELECT id FROM generation_tasks WHERE status = $1 AND user_id = $2',
+      ['running', userId]
     );
 
     if (runningTasksResult.rows.length > 0) {
@@ -426,10 +441,10 @@ articleGenerationRouter.delete('/tasks', async (req, res) => {
       });
     }
 
-    // 删除所有非运行中的任务
+    // 删除所有非运行中的任务（只删除属于当前用户的任务）
     const result = await pool.query(
-      'DELETE FROM generation_tasks WHERE status != $1 RETURNING id',
-      ['running']
+      'DELETE FROM generation_tasks WHERE status != $1 AND user_id = $2 RETURNING id',
+      ['running', userId]
     );
 
     const deletedCount = result.rows.length;
