@@ -729,6 +729,67 @@ curl http://YOUR_SERVER_IP/api/health
 
 ## 🔒 安全配置说明
 
+### 微信支付安全配置 ⭐ 重要
+
+系统已完成全面的安全审计和修复，所有敏感信息都通过环境变量管理。
+
+#### 安全修复成果（2024年12月29日）
+
+✅ **代码层面**
+- 移除所有硬编码的敏感信息
+- 所有配置从环境变量读取
+- 生产环境禁用敏感日志
+
+✅ **文档层面**
+- 清理 23 个文档中的真实配置
+- 使用占位符示例
+- 创建自动备份
+
+✅ **文件权限**
+- 证书文件权限设置为 600
+- .gitignore 正确配置
+
+✅ **安全工具**
+- 安全验证工具
+- 文档清理脚本
+- 配置测试脚本
+
+#### 快速验证安全配置
+
+```bash
+# 验证所有安全配置
+npm run security:verify
+
+# 测试支付配置
+npm run test:payment-config
+
+# 清理文档中的敏感信息（如需要）
+npm run security:clean-docs
+```
+
+#### 环境变量配置
+
+微信支付需要以下环境变量（在 `server/.env` 中配置）：
+
+```env
+# 微信支付配置
+WECHAT_PAY_APP_ID=wx_your_app_id
+WECHAT_PAY_MCH_ID=your_merchant_id
+WECHAT_PAY_API_V3_KEY=your_32_character_key
+WECHAT_PAY_SERIAL_NO=your_serial_number
+WECHAT_PAY_PRIVATE_KEY_PATH=/path/to/apiclient_key.pem
+WECHAT_PAY_PUBLIC_KEY_PATH=/path/to/wechat_pay_public_key.pem
+WECHAT_PAY_PUBLIC_KEY_ID=PUB_KEY_ID_your_id
+WECHAT_PAY_NOTIFY_URL=https://your-domain.com/api/payment/wechat/notify
+```
+
+#### 安全文档
+
+- 📖 [微信支付安全审计报告](./微信支付安全审计报告.md) - 详细的安全问题分析
+- 📖 [安全修复完成](./✅安全修复完成.md) - 修复步骤和验证方法
+- 📖 [安全配置完成-生产环境就绪](./🔒安全配置完成-生产环境就绪.md) - 生产环境部署指南
+- 📖 [安全修复总结](./✅安全修复总结-立即可用.md) - 快速使用指南
+
 ### 强密钥说明
 
 系统使用以下强密钥保护安全：

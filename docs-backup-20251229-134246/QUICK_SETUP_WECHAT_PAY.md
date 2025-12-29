@@ -3,10 +3,10 @@
 ## 📋 你目前的状态
 
 ### ✅ 已有的信息：
-1. AppID: `wx_your_app_id_here`
-2. 商户号: `your_merchant_id`
-3. APIv3密钥: `your_32_character_api_v3_key_here`
-4. 证书序列号: `your_certificate_serial_number_here`
+1. AppID: `wx76c24846b57dfaa9`
+2. 商户号: `1103960104`
+3. APIv3密钥: `3453DGDsdf3gsd564DSFDSR2N67N8Lfs`
+4. 证书序列号: `305B80592042FA4A46F7A68E10044169EE13093D`
 
 ### ❌ 缺少的信息：
 1. **私钥文件** - 需要下载
@@ -40,7 +40,7 @@
 #### 3. 使用证书工具
 
 1. 打开证书工具
-2. 输入商户号：`your_merchant_id`
+2. 输入商户号：`1103960104`
 3. 点击"申请证书"
 4. 使用微信扫码确认
 5. 等待生成（几秒钟）
@@ -146,16 +146,16 @@ https://abc123.ngrok.io/api/payment/wechat/notify
 # ==================== 微信支付配置 ====================
 
 # 1. AppID
-WECHAT_PAY_APP_ID=wx_your_app_id_here
+WECHAT_PAY_APP_ID=wx76c24846b57dfaa9
 
 # 2. 商户号
-WECHAT_PAY_MCH_ID=your_merchant_id
+WECHAT_PAY_MCH_ID=1103960104
 
 # 3. APIv3密钥
-WECHAT_PAY_API_V3_KEY=your_32_character_api_v3_key_here
+WECHAT_PAY_API_V3_KEY=3453DGDsdf3gsd564DSFDSR2N67N8Lfs
 
 # 4. 证书序列号
-WECHAT_PAY_SERIAL_NO=your_certificate_serial_number_here
+WECHAT_PAY_SERIAL_NO=305B80592042FA4A46F7A68E10044169EE13093D
 
 # 5. 私钥文件路径（完成第一步后填写）
 WECHAT_PAY_PRIVATE_KEY_PATH=/Users/lzc/.wechat-pay/apiclient_key.pem

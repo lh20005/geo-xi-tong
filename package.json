@@ -17,7 +17,10 @@
     "start:services": "brew services start postgresql@14 && brew services start redis",
     "stop:services": "brew services stop postgresql@14 && brew services stop redis",
     "db:migrate": "cd server && npm run db:migrate",
-    "setup": "npm run install:all && npm run start:services && npm run db:migrate"
+    "setup": "npm run install:all && npm run start:services && npm run db:migrate",
+    "security:verify": "node scripts/verify-security.js",
+    "security:clean-docs": "./scripts/clean-sensitive-docs.sh",
+    "test:payment-config": "./scripts/test-payment-config.sh"
   },
   "keywords": ["geo", "optimization", "ai"],
   "author": "",
