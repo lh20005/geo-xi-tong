@@ -32,6 +32,7 @@ export interface CreateTaskInput {
   article_id: number;
   account_id: number;
   platform_id: string;
+  user_id: number;  // 添加 user_id
   config: {
     title?: string;
     category?: string;
@@ -71,13 +72,14 @@ export class PublishingService {
 
     const result = await pool.query(
       `INSERT INTO publishing_tasks 
-       (article_id, account_id, platform_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+       (article_id, account_id, platform_id, user_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
        RETURNING *`,
       [
         input.article_id,
         input.account_id,
         input.platform_id,
+        input.user_id,
         JSON.stringify(input.config),
         input.scheduled_at || null,
         input.scheduled_at ? 'pending' : 'pending',

@@ -1,8 +1,15 @@
 import { Router } from 'express';
 import { pool } from '../db/database';
 import { z } from 'zod';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 export const conversionTargetRouter = Router();
+
+// 所有路由都需要认证和租户上下文
+conversionTargetRouter.use(authenticate);
+conversionTargetRouter.use(setTenantContext);
+conversionTargetRouter.use(requireTenantContext);
 
 // Zod验证schemas
 const createConversionTargetSchema = z.object({
@@ -22,6 +29,7 @@ const updateConversionTargetSchema = z.object({
 // 获取转化目标列表（支持分页、搜索、排序）
 conversionTargetRouter.get('/', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 10;
     const search = (req.query.search as string) || '';
@@ -30,12 +38,12 @@ conversionTargetRouter.get('/', async (req, res) => {
     
     const offset = (page - 1) * pageSize;
     
-    // 构建WHERE子句
-    let whereClause = '';
-    const queryParams: any[] = [];
+    // 构建WHERE子句（包含租户隔离）
+    const queryParams: any[] = [userId];
+    let whereClause = 'WHERE user_id = $1';
     
     if (search.trim()) {
-      whereClause = 'WHERE (company_name ILIKE $1 OR industry ILIKE $1)';
+      whereClause += ' AND (company_name ILIKE $2 OR industry ILIKE $2)';
       queryParams.push(`%${search}%`);
     }
     
@@ -53,6 +61,8 @@ conversionTargetRouter.get('/', async (req, res) => {
     
     // 获取分页数据
     const dataParams = [...queryParams, pageSize, offset];
+    const paramIndexLimit = queryParams.length + 1;
+    const paramIndexOffset = queryParams.length + 2;
     const result = await pool.query(
       `SELECT 
         id, 
@@ -65,7 +75,7 @@ conversionTargetRouter.get('/', async (req, res) => {
        FROM conversion_targets 
        ${whereClause}
        ORDER BY ${validSortField} ${validSortOrder}
-       LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`,
+       LIMIT $${paramIndexLimit} OFFSET $${paramIndexOffset}`,
       dataParams
     );
     
@@ -91,12 +101,13 @@ conversionTargetRouter.get('/', async (req, res) => {
 // 创建转化目标
 conversionTargetRouter.post('/', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const validatedData = createConversionTargetSchema.parse(req.body);
     
-    // 检查公司名称是否已存在
+    // 检查公司名称是否已存在（同一用户下）
     const checkResult = await pool.query(
-      'SELECT id FROM conversion_targets WHERE company_name = $1',
-      [validatedData.companyName]
+      'SELECT id FROM conversion_targets WHERE company_name = $1 AND user_id = $2',
+      [validatedData.companyName, userId]
     );
     
     if (checkResult.rows.length > 0) {
@@ -109,14 +120,15 @@ conversionTargetRouter.post('/', async (req, res) => {
     
     const result = await pool.query(
       `INSERT INTO conversion_targets 
-       (company_name, industry, website, address) 
-       VALUES ($1, $2, $3, $4) 
+       (company_name, industry, website, address, user_id) 
+       VALUES ($1, $2, $3, $4, $5) 
        RETURNING id, company_name, industry, website, address, created_at, updated_at`,
       [
         validatedData.companyName,
         validatedData.industry || null,
         validatedData.website || null,
-        validatedData.address || null
+        validatedData.address || null,
+        userId
       ]
     );
     
@@ -144,6 +156,7 @@ conversionTargetRouter.post('/', async (req, res) => {
 // 获取单个转化目标详情
 conversionTargetRouter.get('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const id = parseInt(req.params.id);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ 
@@ -162,8 +175,8 @@ conversionTargetRouter.get('/:id', async (req, res) => {
         created_at, 
         updated_at
        FROM conversion_targets 
-       WHERE id = $1`,
-      [id]
+       WHERE id = $1 AND user_id = $2`,
+      [id, userId]
     );
     
     if (result.rows.length === 0) {
@@ -191,6 +204,7 @@ conversionTargetRouter.get('/:id', async (req, res) => {
 // 更新转化目标
 conversionTargetRouter.patch('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const id = parseInt(req.params.id);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ 
@@ -201,10 +215,10 @@ conversionTargetRouter.patch('/:id', async (req, res) => {
     
     const validatedData = updateConversionTargetSchema.parse(req.body);
     
-    // 检查记录是否存在
+    // 检查记录是否存在且属于当前用户
     const checkResult = await pool.query(
-      'SELECT id FROM conversion_targets WHERE id = $1',
-      [id]
+      'SELECT id FROM conversion_targets WHERE id = $1 AND user_id = $2',
+      [id, userId]
     );
     
     if (checkResult.rows.length === 0) {
@@ -215,11 +229,11 @@ conversionTargetRouter.patch('/:id', async (req, res) => {
       });
     }
     
-    // 如果更新公司名称，检查是否与其他记录重复
+    // 如果更新公司名称，检查是否与其他记录重复（同一用户下）
     if (validatedData.companyName) {
       const duplicateCheck = await pool.query(
-        'SELECT id FROM conversion_targets WHERE company_name = $1 AND id != $2',
-        [validatedData.companyName, id]
+        'SELECT id FROM conversion_targets WHERE company_name = $1 AND id != $2 AND user_id = $3',
+        [validatedData.companyName, id, userId]
       );
       
       if (duplicateCheck.rows.length > 0) {
@@ -258,11 +272,12 @@ conversionTargetRouter.patch('/:id', async (req, res) => {
     
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(id);
+    values.push(userId);
     
     const result = await pool.query(
       `UPDATE conversion_targets 
        SET ${updates.join(', ')} 
-       WHERE id = $${paramIndex} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
        RETURNING id, company_name, industry, website, address, created_at, updated_at`,
       values
     );
@@ -291,6 +306,7 @@ conversionTargetRouter.patch('/:id', async (req, res) => {
 // 删除转化目标
 conversionTargetRouter.delete('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const id = parseInt(req.params.id);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ 
@@ -299,10 +315,10 @@ conversionTargetRouter.delete('/:id', async (req, res) => {
       });
     }
     
-    // 检查记录是否存在
+    // 检查记录是否存在且属于当前用户
     const checkResult = await pool.query(
-      'SELECT id FROM conversion_targets WHERE id = $1',
-      [id]
+      'SELECT id FROM conversion_targets WHERE id = $1 AND user_id = $2',
+      [id, userId]
     );
     
     if (checkResult.rows.length === 0) {
@@ -314,7 +330,7 @@ conversionTargetRouter.delete('/:id', async (req, res) => {
     }
     
     // 删除记录
-    await pool.query('DELETE FROM conversion_targets WHERE id = $1', [id]);
+    await pool.query('DELETE FROM conversion_targets WHERE id = $1 AND user_id = $2', [id, userId]);
     
     res.json({
       success: true,

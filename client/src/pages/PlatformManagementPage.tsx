@@ -20,21 +20,39 @@ export default function PlatformManagementPage() {
 
   useEffect(() => {
     loadData();
-    initializeWebSocketConnection();
+    
+    // Initialize WebSocket connection (non-blocking)
+    const timer = setTimeout(() => {
+      initializeWebSocketConnection();
+    }, 500); // Delay to avoid React Strict Mode double-mount issues
 
     return () => {
+      clearTimeout(timer);
       // Cleanup WebSocket on unmount
       try {
         const wsClient = getWebSocketClient();
-        wsClient.disconnect();
+        if (wsClient.isConnected()) {
+          wsClient.disconnect();
+        }
       } catch (error) {
-        // WebSocket not initialized
+        // WebSocket not initialized, ignore
       }
     };
   }, []);
 
   const initializeWebSocketConnection = () => {
     try {
+      // Check if already connected
+      try {
+        const existingClient = getWebSocketClient();
+        if (existingClient.isConnected()) {
+          console.log('[WebSocket] 已经连接，跳过初始化');
+          return;
+        }
+      } catch (error) {
+        // No existing client, continue with initialization
+      }
+
       // Get WebSocket URL from environment or use default
       const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
       
@@ -85,11 +103,12 @@ export default function PlatformManagementPage() {
       });
 
       wsClient.on('error', (error) => {
-        console.error('[WebSocket] 错误:', error);
+        console.warn('[WebSocket] 连接错误（非关键功能）:', error);
+        setWsConnected(false);
       });
 
       wsClient.on('server_error', (message) => {
-        console.error('[WebSocket] 服务端错误:', message);
+        console.warn('[WebSocket] 服务端错误（非关键功能）:', message);
       });
 
       // Connect to WebSocket with token

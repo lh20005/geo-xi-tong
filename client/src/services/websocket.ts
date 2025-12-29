@@ -48,17 +48,17 @@ export class WebSocketClient {
     this.token = token;
 
     try {
+      // Include token in URL for authentication
+      const urlWithToken = `${this.url}${this.url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
       console.log(`Connecting to WebSocket: ${this.url}`);
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(urlWithToken);
 
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.reconnectAttempts = 0;
         
-        // Authenticate
-        this.authenticate();
-        
-        // Start heartbeat
+        // Token is already in URL, no need to authenticate again
+        // Just start heartbeat and emit connected event
         this.startHeartbeat();
         
         this.emit('connected', {});

@@ -2,8 +2,15 @@ import express from 'express';
 import { accountService } from '../services/AccountService';
 import { pool } from '../db/database';
 import { getWebSocketService } from '../services/WebSocketService';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 const router = express.Router();
+
+// 所有路由都需要认证和租户上下文
+router.use(authenticate);
+router.use(setTenantContext);
+router.use(requireTenantContext);
 
 /**
  * 获取所有平台配置
@@ -32,7 +39,8 @@ router.get('/platforms', async (req, res) => {
  */
 router.get('/accounts', async (req, res) => {
   try {
-    const accounts = await accountService.getAllAccounts();
+    const userId = getCurrentTenantId(req);
+    const accounts = await accountService.getAllAccounts(userId);
     
     res.json({
       success: true,
@@ -52,8 +60,9 @@ router.get('/accounts', async (req, res) => {
  */
 router.get('/accounts/platform/:platformId', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { platformId } = req.params;
-    const accounts = await accountService.getAccountsByPlatform(platformId);
+    const accounts = await accountService.getAccountsByPlatform(platformId, userId);
     
     res.json({
       success: true,
@@ -73,15 +82,16 @@ router.get('/accounts/platform/:platformId', async (req, res) => {
  */
 router.get('/accounts/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     const includeCredentials = req.query.includeCredentials === 'true';
     
-    const account = await accountService.getAccountById(accountId, includeCredentials);
+    const account = await accountService.getAccountById(accountId, userId, includeCredentials);
     
     if (!account) {
       return res.status(404).json({
         success: false,
-        message: '账号不存在'
+        message: '账号不存在或无权访问'
       });
     }
     
@@ -103,6 +113,7 @@ router.get('/accounts/:id', async (req, res) => {
  */
 router.post('/accounts', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { platform_id, account_name, credentials, real_username } = req.body;
     
     if (!platform_id || !account_name || !credentials) {
@@ -119,14 +130,14 @@ router.post('/accounts', async (req, res) => {
         platform_id,
         account_name,
         credentials
-      }, real_username);
+      }, real_username, userId);
     } else {
       // 如果没有 real_username，使用 account_name 作为唯一标识
       result = await accountService.createOrUpdateAccount({
         platform_id,
         account_name,
         credentials
-      }, account_name);
+      }, account_name, userId);
     }
     
     const { account, isNew } = result;
@@ -158,13 +169,14 @@ router.post('/accounts', async (req, res) => {
  */
 router.put('/accounts/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
-    const { account_name, credentials } = req.body;
+    const { account_name, credentials, real_username } = req.body;
     
-    const account = await accountService.updateAccount(accountId, {
+    const account = await accountService.updateAccountWithRealUsername(accountId, {
       account_name,
       credentials
-    });
+    }, real_username || '', userId);
     
     // 广播账号更新事件
     getWebSocketService().broadcastAccountEvent('updated', account);
@@ -188,11 +200,12 @@ router.put('/accounts/:id', async (req, res) => {
  */
 router.delete('/accounts/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     
-    console.log(`[DELETE] 收到删除账号请求: ID=${accountId}`);
+    console.log(`[DELETE] 收到删除账号请求: ID=${accountId}, UserID=${userId}`);
     
-    await accountService.deleteAccount(accountId);
+    await accountService.deleteAccount(accountId, userId);
     
     console.log(`[DELETE] 账号删除成功: ID=${accountId}`);
     
@@ -219,6 +232,7 @@ router.delete('/accounts/:id', async (req, res) => {
  */
 router.post('/accounts/:id/set-default', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     const { platform_id } = req.body;
     
@@ -229,7 +243,7 @@ router.post('/accounts/:id/set-default', async (req, res) => {
       });
     }
     
-    await accountService.setDefaultAccount(platform_id, accountId);
+    await accountService.setDefaultAccount(platform_id, accountId, userId);
     
     res.json({
       success: true,
@@ -249,6 +263,7 @@ router.post('/accounts/:id/set-default', async (req, res) => {
  */
 router.post('/browser-login', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { platform_id } = req.body;
     
     if (!platform_id) {
@@ -274,7 +289,7 @@ router.post('/browser-login', async (req, res) => {
     const platform = platformResult.rows[0];
     
     // 调用浏览器登录服务
-    const result = await accountService.loginWithBrowser(platform);
+    const result = await accountService.loginWithBrowser(platform, userId);
     
     res.json(result);
   } catch (error: any) {

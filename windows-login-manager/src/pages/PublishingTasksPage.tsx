@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, message, 
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
-  InputNumber, Switch
+  InputNumber, Switch, Table
 } from 'antd';
 import {
   SendOutlined, ReloadOutlined, CheckCircleOutlined,
@@ -1326,6 +1326,7 @@ export default function PublishingTasksPage() {
                 />
               ),
             },
+            Table.EXPAND_COLUMN,
             {
               title: '执行进度',
               key: 'progress',
@@ -1570,7 +1571,6 @@ export default function PublishingTasksPage() {
                   expandedRowRender,
                   rowExpandable: (record) => record.tasks && record.tasks.length > 0,
                   columnWidth: 140,
-                  expandIconColumnIndex: 1, // 将展开列放在复选框之后
                   expandIcon: ({ expanded, onExpand, record }) => (
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
                       <Button

@@ -75,7 +75,7 @@ export function createRateLimitMiddleware(
 
 /**
  * 登录限流中间件
- * 限制：每个IP+用户名组合在5分钟内最多5次登录尝试
+ * 限制：每个IP+用户名组合在15分钟内最多30次登录尝试
  * 这样可以防止暴力破解单个账号，同时不影响同一IP下的其他用户
  */
 export const loginRateLimit = createRateLimitMiddleware(
@@ -85,15 +85,15 @@ export const loginRateLimit = createRateLimitMiddleware(
     return `login:${ipAddress}:${username}`;
   },
   {
-    windowMs: 5 * 60 * 1000,   // 5分钟
-    maxRequests: 5              // 最多5次
+    windowMs: 15 * 60 * 1000,   // 15分钟
+    maxRequests: 30              // 最多30次
   },
-  '登录尝试次数过多,请5分钟后再试'
+  '登录尝试次数过多,请15分钟后再试'
 );
 
 /**
  * 注册限流中间件
- * 限制：每个IP地址每小时最多3次注册
+ * 限制：每个IP地址每5分钟最多10次注册
  */
 export const registrationRateLimit = createRateLimitMiddleware(
   (req: Request) => {
@@ -101,10 +101,10 @@ export const registrationRateLimit = createRateLimitMiddleware(
     return `registration:${ipAddress}`;
   },
   {
-    windowMs: 60 * 60 * 1000,  // 1小时
-    maxRequests: 3              // 最多3次
+    windowMs: 5 * 60 * 1000,    // 5分钟
+    maxRequests: 10              // 最多10次
   },
-  '注册尝试次数过多,请1小时后再试'
+  '注册尝试次数过多,请5分钟后再试'
 );
 
 /**

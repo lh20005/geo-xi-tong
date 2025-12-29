@@ -5,8 +5,15 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { DocumentParserService } from '../services/documentParser';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 export const knowledgeBaseRouter = Router();
+
+// 所有路由都需要认证和租户上下文
+knowledgeBaseRouter.use(authenticate);
+knowledgeBaseRouter.use(setTenantContext);
+knowledgeBaseRouter.use(requireTenantContext);
 
 // 配置文件上传
 const uploadDir = path.join(__dirname, '../../uploads/knowledge');
@@ -56,9 +63,11 @@ const updateKnowledgeBaseSchema = z.object({
   description: z.string().optional()
 });
 
-// 获取所有知识库
+// 获取所有知识库（只获取当前用户的）
 knowledgeBaseRouter.get('/', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
+    
     const result = await pool.query(
       `SELECT 
         kb.id, 
@@ -69,8 +78,10 @@ knowledgeBaseRouter.get('/', async (req, res) => {
         COUNT(kd.id) as document_count
        FROM knowledge_bases kb
        LEFT JOIN knowledge_documents kd ON kb.id = kd.knowledge_base_id
+       WHERE kb.user_id = $1
        GROUP BY kb.id
-       ORDER BY kb.created_at DESC`
+       ORDER BY kb.created_at DESC`,
+      [userId]
     );
     
     res.json({ knowledgeBases: result.rows });
@@ -80,14 +91,15 @@ knowledgeBaseRouter.get('/', async (req, res) => {
   }
 });
 
-// 创建知识库
+// 创建知识库（关联到当前用户）
 knowledgeBaseRouter.post('/', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const validatedData = createKnowledgeBaseSchema.parse(req.body);
     
     const result = await pool.query(
-      'INSERT INTO knowledge_bases (name, description) VALUES ($1, $2) RETURNING id, name, description, created_at',
-      [validatedData.name, validatedData.description || null]
+      'INSERT INTO knowledge_bases (name, description, user_id) VALUES ($1, $2, $3) RETURNING id, name, description, created_at',
+      [validatedData.name, validatedData.description || null, userId]
     );
     
     res.json(result.rows[0]);
@@ -100,22 +112,23 @@ knowledgeBaseRouter.post('/', async (req, res) => {
   }
 });
 
-// 获取知识库详情
+// 获取知识库详情（验证所有权）
 knowledgeBaseRouter.get('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const kbId = parseInt(req.params.id);
     if (isNaN(kbId) || kbId <= 0) {
       return res.status(400).json({ error: '无效的知识库ID' });
     }
     
-    // 获取知识库信息
+    // 获取知识库信息（验证所有权）
     const kbResult = await pool.query(
-      'SELECT id, name, description, created_at, updated_at FROM knowledge_bases WHERE id = $1',
-      [kbId]
+      'SELECT id, name, description, created_at, updated_at FROM knowledge_bases WHERE id = $1 AND user_id = $2',
+      [kbId, userId]
     );
     
     if (kbResult.rows.length === 0) {
-      return res.status(404).json({ error: '知识库不存在' });
+      return res.status(404).json({ error: '知识库不存在或无权访问' });
     }
     
     // 获取文档列表
@@ -189,29 +202,33 @@ knowledgeBaseRouter.patch('/:id', async (req, res) => {
   }
 });
 
-// 删除知识库
+// 删除知识库（验证所有权）
 knowledgeBaseRouter.delete('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const kbId = parseInt(req.params.id);
     if (isNaN(kbId) || kbId <= 0) {
       return res.status(400).json({ error: '无效的知识库ID' });
     }
     
-    // 检查知识库是否存在
-    const checkResult = await pool.query('SELECT id FROM knowledge_bases WHERE id = $1', [kbId]);
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '知识库不存在' });
-    }
-    
-    // 获取文档数量
+    // 获取文档数量（验证所有权）
     const docsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM knowledge_documents WHERE knowledge_base_id = $1',
-      [kbId]
+      `SELECT COUNT(*) as count FROM knowledge_documents kd
+       JOIN knowledge_bases kb ON kd.knowledge_base_id = kb.id
+       WHERE kb.id = $1 AND kb.user_id = $2`,
+      [kbId, userId]
     );
     const deletedDocuments = parseInt(docsResult.rows[0].count);
     
-    // 删除知识库（级联删除文档）
-    await pool.query('DELETE FROM knowledge_bases WHERE id = $1', [kbId]);
+    // 删除知识库（级联删除文档，验证所有权）
+    const result = await pool.query(
+      'DELETE FROM knowledge_bases WHERE id = $1 AND user_id = $2 RETURNING id',
+      [kbId, userId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '知识库不存在或无权访问' });
+    }
     
     res.json({
       success: true,
@@ -223,11 +240,12 @@ knowledgeBaseRouter.delete('/:id', async (req, res) => {
   }
 });
 
-// 上传文档到知识库
+// 上传文档到知识库（验证所有权）
 knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req, res) => {
   const files = req.files as Express.Multer.File[];
   
   try {
+    const userId = getCurrentTenantId(req);
     const kbId = parseInt(req.params.id);
     if (isNaN(kbId) || kbId <= 0) {
       // 清理已上传的文件
@@ -241,12 +259,16 @@ knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req
       return res.status(400).json({ error: '请选择要上传的文件' });
     }
     
-    // 检查知识库是否存在
-    const checkResult = await pool.query('SELECT id FROM knowledge_bases WHERE id = $1', [kbId]);
+    // 检查知识库是否存在且属于当前用户
+    const checkResult = await pool.query(
+      'SELECT id FROM knowledge_bases WHERE id = $1 AND user_id = $2',
+      [kbId, userId]
+    );
+    
     if (checkResult.rows.length === 0) {
       // 清理已上传的文件
       files.forEach(file => fs.existsSync(file.path) && fs.unlinkSync(file.path));
-      return res.status(404).json({ error: '知识库不存在' });
+      return res.status(404).json({ error: '知识库不存在或无权访问' });
     }
     
     const parser = new DocumentParserService();

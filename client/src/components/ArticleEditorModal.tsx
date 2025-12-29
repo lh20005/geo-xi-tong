@@ -8,8 +8,6 @@ import ArticleContent from './ArticleContent';
 import { apiClient } from '../api/client';
 import { logArticleFormat } from '../utils/debugArticleFormat';
 
-const { TabPane } = Tabs;
-
 interface ArticleEditorModalProps {
   visible: boolean;
   article: any | null;
@@ -221,38 +219,50 @@ export default function ArticleEditorModal({ visible, article, onClose, onSave }
         </Form.Item>
 
         <Form.Item label="文章内容">
-          <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <TabPane tab="编辑" key="edit">
-              <Spin spinning={formatting} tip="正在智能排版...">
-                <ReactQuill
-                  theme="snow"
-                  value={content}
-                  onChange={setContent}
-                  modules={quillModules}
-                  formats={quillFormats}
-                  style={{ height: '400px', marginBottom: '50px' }}
-                  readOnly={formatting}
-                />
-              </Spin>
-            </TabPane>
-            <TabPane tab="预览" key="preview">
-              <div
-                style={{
-                  height: '450px',
-                  overflow: 'auto',
-                  padding: '16px',
-                  background: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                }}
-              >
-                <ArticleContent
-                  content={content}
-                  imageUrl={article?.imageUrl}
-                />
-              </div>
-            </TabPane>
-          </Tabs>
+          <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab}
+            items={[
+              {
+                key: 'edit',
+                label: '编辑',
+                children: (
+                  <Spin spinning={formatting} tip="正在智能排版...">
+                    <ReactQuill
+                      theme="snow"
+                      value={content}
+                      onChange={setContent}
+                      modules={quillModules}
+                      formats={quillFormats}
+                      style={{ height: '400px', marginBottom: '50px' }}
+                      readOnly={formatting}
+                    />
+                  </Spin>
+                )
+              },
+              {
+                key: 'preview',
+                label: '预览',
+                children: (
+                  <div
+                    style={{
+                      height: '450px',
+                      overflow: 'auto',
+                      padding: '16px',
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                    }}
+                  >
+                    <ArticleContent
+                      content={content}
+                      imageUrl={article?.imageUrl}
+                    />
+                  </div>
+                )
+              }
+            ]}
+          />
         </Form.Item>
       </Form>
     </Modal>

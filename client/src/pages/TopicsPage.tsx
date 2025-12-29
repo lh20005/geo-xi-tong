@@ -19,7 +19,7 @@ import {
   ArrowLeftOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -47,7 +47,7 @@ export default function TopicsPage() {
   const loadTopics = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
+      const response = await apiClient.get(`/topics/distillation/${distillationId}/stats`);
       setTopics(response.data.topics);
     } catch (error) {
       if (!silent) {
@@ -65,7 +65,7 @@ export default function TopicsPage() {
 
   const handleSaveEdit = async () => {
     try {
-      await axios.put(`/api/topics/${editModal.topicId}`, {
+      await apiClient.put(`/topics/${editModal.topicId}`, {
         question: editValue,
       });
       message.success('话题更新成功');
@@ -82,7 +82,7 @@ export default function TopicsPage() {
       content: '确定要删除这个话题吗？',
       onOk: async () => {
         try {
-          await axios.delete(`/api/topics/${topicId}`);
+          await apiClient.delete(`/topics/${topicId}`);
           message.success('删除成功');
           loadTopics();
         } catch (error) {

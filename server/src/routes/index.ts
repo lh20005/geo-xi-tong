@@ -24,6 +24,7 @@ import securityRouter from './security';
 import paymentRouter from './payment';
 import ordersRouter from './orders';
 import subscriptionRouter from './subscription';
+import quotaRouter from './quota';
 
 export const apiRouter = Router();
 
@@ -37,6 +38,7 @@ apiRouter.use('/security', securityRouter);
 apiRouter.use('/payment', paymentRouter);
 apiRouter.use('/orders', ordersRouter);
 apiRouter.use('/subscription', subscriptionRouter);
+apiRouter.use('/quota', quotaRouter);  // 配额管理API
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);
@@ -54,5 +56,5 @@ apiRouter.use('/publishing', publishingRecordsRouter);
 apiRouter.use('/dashboard', dashboardRouter);
 
 apiRouter.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'GEO优化系统运行正常' });
+  res.json({ status: 'ok', message: 'GEO优化系统运行正常（多租户模式）' });
 });

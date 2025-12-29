@@ -2,14 +2,22 @@ import express from 'express';
 import { publishingService } from '../services/PublishingService';
 import { pool } from '../db/database';
 import { logBroadcaster } from '../services/LogBroadcaster';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 const router = express.Router();
+
+// 应用认证和租户中间件
+router.use(authenticate);
+router.use(setTenantContext);
+router.use(requireTenantContext);
 
 /**
  * 创建发布任务
  */
 router.post('/tasks', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { 
       article_id, 
       account_id, 
@@ -29,6 +37,30 @@ router.post('/tasks', async (req, res) => {
       });
     }
 
+    // 验证文章所有权
+    const articleCheck = await pool.query(
+      'SELECT id FROM articles WHERE id = $1 AND user_id = $2',
+      [article_id, userId]
+    );
+    if (articleCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '文章不存在或无权访问'
+      });
+    }
+
+    // 验证账号所有权
+    const accountCheck = await pool.query(
+      'SELECT id FROM platform_accounts WHERE id = $1 AND user_id = $2',
+      [account_id, userId]
+    );
+    if (accountCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '平台账号不存在或无权访问'
+      });
+    }
+
     // 兼容前端的 scheduled_time 和 scheduled_at 两种参数名
     const scheduledTime = scheduled_time || scheduled_at;
 
@@ -36,6 +68,7 @@ router.post('/tasks', async (req, res) => {
       article_id,
       account_id,
       platform_id,
+      user_id: userId,
       config: config || {},
       scheduled_at: scheduledTime ? new Date(scheduledTime) : undefined,
       batch_id,
@@ -47,8 +80,8 @@ router.post('/tasks', async (req, res) => {
     await pool.query(
       `UPDATE articles 
        SET publishing_status = 'pending' 
-       WHERE id = $1`,
-      [article_id]
+       WHERE id = $1 AND user_id = $2`,
+      [article_id, userId]
     );
     console.log(`✅ 文章 #${article_id} 已标记为发布中（publishing_status = 'pending'）`);
 
@@ -102,21 +135,64 @@ router.post('/tasks', async (req, res) => {
  */
 router.get('/tasks', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { status, platform_id, article_id, page, pageSize } = req.query;
 
-    const result = await publishingService.getTasks({
-      status: status as string,
-      platform_id: platform_id as string,
-      article_id: article_id ? parseInt(article_id as string) : undefined,
-      page: page ? parseInt(page as string) : undefined,
-      pageSize: pageSize ? parseInt(pageSize as string) : undefined
-    });
+    // 构建查询条件，添加 user_id 过滤
+    const conditions: string[] = ['pt.user_id = $1'];
+    const params: any[] = [userId];
+    let paramIndex = 2;
+
+    if (status) {
+      conditions.push(`pt.status = $${paramIndex}`);
+      params.push(status);
+      paramIndex++;
+    }
+
+    if (platform_id) {
+      conditions.push(`pt.platform_id = $${paramIndex}`);
+      params.push(platform_id);
+      paramIndex++;
+    }
+
+    if (article_id) {
+      conditions.push(`pt.article_id = $${paramIndex}`);
+      params.push(parseInt(article_id as string));
+      paramIndex++;
+    }
+
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
+
+    // 获取总数
+    const countResult = await pool.query(
+      `SELECT COUNT(*) as total FROM publishing_tasks pt ${whereClause}`,
+      params
+    );
+    const total = parseInt(countResult.rows[0].total);
+
+    // 获取数据
+    const currentPage = page ? parseInt(page as string) : 1;
+    const currentPageSize = pageSize ? parseInt(pageSize as string) : 20;
+    const offset = (currentPage - 1) * currentPageSize;
+    
+    const dataResult = await pool.query(
+      `SELECT 
+        pt.*,
+        pa.account_name,
+        pa.credentials
+       FROM publishing_tasks pt
+       LEFT JOIN platform_accounts pa ON pt.account_id = pa.id
+       ${whereClause} 
+       ORDER BY pt.created_at DESC 
+       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...params, currentPageSize, offset]
+    );
 
     res.json({
       success: true,
       data: {
-        tasks: result.tasks,
-        total: result.total
+        tasks: dataResult.rows,
+        total
       }
     });
   } catch (error) {
@@ -133,19 +209,25 @@ router.get('/tasks', async (req, res) => {
  */
 router.get('/tasks/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
-    const task = await publishingService.getTaskById(taskId);
+    
+    // 验证任务所有权
+    const result = await pool.query(
+      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
 
-    if (!task) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '任务不存在'
+        message: '任务不存在或无权访问'
       });
     }
 
     res.json({
       success: true,
-      data: task
+      data: result.rows[0]
     });
   } catch (error) {
     console.error('获取任务详情失败:', error);
@@ -161,7 +243,22 @@ router.get('/tasks/:id', async (req, res) => {
  */
 router.get('/tasks/:id/logs', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
+    
+    // 验证任务所有权
+    const taskCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
+    
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '任务不存在或无权访问'
+      });
+    }
+
     const logs = await publishingService.getTaskLogs(taskId);
 
     res.json({
@@ -181,7 +278,21 @@ router.get('/tasks/:id/logs', async (req, res) => {
  * 实时日志流（SSE）
  */
 router.get('/tasks/:id/logs/stream', async (req, res) => {
+  const userId = getCurrentTenantId(req);
   const taskId = parseInt(req.params.id);
+
+  // 验证任务所有权
+  const taskCheck = await pool.query(
+    'SELECT id FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+    [taskId, userId]
+  );
+  
+  if (taskCheck.rows.length === 0) {
+    return res.status(404).json({
+      success: false,
+      message: '任务不存在或无权访问'
+    });
+  }
 
   // 设置 SSE 响应头
   res.setHeader('Content-Type', 'text/event-stream');
@@ -226,7 +337,22 @@ router.get('/tasks/:id/logs/stream', async (req, res) => {
  */
 router.post('/tasks/:id/cancel', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
+    
+    // 验证任务所有权
+    const taskCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
+    
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '任务不存在或无权访问'
+      });
+    }
+
     await publishingService.cancelTask(taskId);
 
     res.json({
@@ -247,21 +373,30 @@ router.post('/tasks/:id/cancel', async (req, res) => {
  */
 router.post('/tasks/:id/retry', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
-    const originalTask = await publishingService.getTaskById(taskId);
+    
+    // 验证任务所有权
+    const taskResult = await pool.query(
+      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
 
-    if (!originalTask) {
+    if (taskResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '原任务不存在'
+        message: '原任务不存在或无权访问'
       });
     }
+
+    const originalTask = taskResult.rows[0];
 
     // 创建新任务
     const newTask = await publishingService.createTask({
       article_id: originalTask.article_id,
       account_id: originalTask.account_id,
       platform_id: originalTask.platform_id,
+      user_id: userId,
       config: req.body.config || originalTask.config,
       scheduled_at: req.body.scheduled_at ? new Date(req.body.scheduled_at) : undefined
     });
@@ -296,15 +431,23 @@ router.post('/tasks/:id/retry', async (req, res) => {
  */
 router.post('/tasks/:id/execute', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
-    const task = await publishingService.getTaskById(taskId);
+    
+    // 验证任务所有权
+    const taskResult = await pool.query(
+      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
 
-    if (!task) {
+    if (taskResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '任务不存在'
+        message: '任务不存在或无权访问'
       });
     }
+
+    const task = taskResult.rows[0];
 
     if (task.status !== 'pending') {
       return res.status(400).json({
@@ -337,13 +480,19 @@ router.post('/tasks/:id/execute', async (req, res) => {
  */
 router.post('/tasks/:id/terminate', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
-    const task = await publishingService.getTaskById(taskId);
+    
+    // 验证任务所有权
+    const taskResult = await pool.query(
+      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
 
-    if (!task) {
+    if (taskResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '任务不存在'
+        message: '任务不存在或无权访问'
       });
     }
 
@@ -371,15 +520,23 @@ router.post('/tasks/:id/terminate', async (req, res) => {
  */
 router.delete('/tasks/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const taskId = parseInt(req.params.id);
-    const task = await publishingService.getTaskById(taskId);
+    
+    // 验证任务所有权
+    const taskResult = await pool.query(
+      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
 
-    if (!task) {
+    if (taskResult.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '任务不存在'
+        message: '任务不存在或无权访问'
       });
     }
+
+    const task = taskResult.rows[0];
 
     // 如果任务正在执行，先终止
     if (task.status === 'running') {
@@ -407,6 +564,7 @@ router.delete('/tasks/:id', async (req, res) => {
  */
 router.post('/tasks/batch-delete', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { taskIds } = req.body;
 
     if (!Array.isArray(taskIds) || taskIds.length === 0) {
@@ -422,9 +580,15 @@ router.post('/tasks/batch-delete', async (req, res) => {
 
     for (const taskId of taskIds) {
       try {
-        const task = await publishingService.getTaskById(taskId);
+        // 验证任务所有权
+        const taskResult = await pool.query(
+          'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+          [taskId, userId]
+        );
         
-        if (task) {
+        if (taskResult.rows.length > 0) {
+          const task = taskResult.rows[0];
+          
           // 如果任务正在执行，先终止
           if (task.status === 'running') {
             await publishingService.updateTaskStatus(taskId, 'failed', '任务已被批量删除');
@@ -434,7 +598,7 @@ router.post('/tasks/batch-delete', async (req, res) => {
           successCount++;
         } else {
           failCount++;
-          errors.push(`任务 #${taskId} 不存在`);
+          errors.push(`任务 #${taskId} 不存在或无权访问`);
         }
       } catch (error: any) {
         failCount++;
@@ -465,17 +629,81 @@ router.post('/tasks/batch-delete', async (req, res) => {
  */
 router.post('/tasks/delete-all', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { status } = req.body; // 可选：只删除特定状态的任务
 
-    const result = await publishingService.deleteAllTasks(status);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
 
-    res.json({
-      success: true,
-      data: {
-        deletedCount: result.deletedCount
-      },
-      message: `成功删除 ${result.deletedCount} 个任务`
-    });
+      const whereConditions = ['user_id = $1'];
+      const params: any[] = [userId];
+      
+      if (status) {
+        whereConditions.push('status = $2');
+        params.push(status);
+      }
+      
+      const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+
+      // 获取所有要删除的任务的文章ID
+      const articlesResult = await client.query(
+        `SELECT DISTINCT article_id FROM publishing_tasks ${whereClause}`,
+        params
+      );
+      const articleIds = articlesResult.rows.map((row: any) => row.article_id);
+
+      // 先获取要删除的任务ID
+      const taskIdsResult = await client.query(
+        `SELECT id FROM publishing_tasks ${whereClause}`,
+        params
+      );
+      const taskIds = taskIdsResult.rows.map(row => row.id);
+
+      let deletedCount = 0;
+
+      if (taskIds.length > 0) {
+        // 删除任务日志
+        await client.query(
+          `DELETE FROM publishing_logs WHERE task_id = ANY($1)`,
+          [taskIds]
+        );
+
+        // 删除任务
+        const result = await client.query(
+          `DELETE FROM publishing_tasks ${whereClause}`,
+          params
+        );
+        deletedCount = result.rowCount || 0;
+
+        // 恢复所有相关文章的可见状态
+        if (articleIds.length > 0) {
+          await client.query(
+            `UPDATE articles 
+             SET publishing_status = NULL 
+             WHERE id = ANY($1) AND user_id = $2`,
+            [articleIds, userId]
+          );
+          
+          console.log(`✅ 已恢复 ${articleIds.length} 篇文章的可见状态`);
+        }
+      }
+
+      await client.query('COMMIT');
+
+      res.json({
+        success: true,
+        data: {
+          deletedCount
+        },
+        message: `成功删除 ${deletedCount} 个任务`
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error) {
     console.error('删除所有任务失败:', error);
     res.status(500).json({
@@ -490,7 +718,22 @@ router.post('/tasks/delete-all', async (req, res) => {
  */
 router.post('/batches/:batchId/stop', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { batchId } = req.params;
+    
+    // 验证批次所有权（检查批次中的任务是否属于当前用户）
+    const batchCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE batch_id = $1 AND user_id = $2 LIMIT 1',
+      [batchId, userId]
+    );
+    
+    if (batchCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '批次不存在或无权访问'
+      });
+    }
+    
     const { batchExecutor } = require('../services/BatchExecutor');
     
     const result = await batchExecutor.stopBatch(batchId);
@@ -522,7 +765,22 @@ router.post('/batches/:batchId/stop', async (req, res) => {
  */
 router.delete('/batches/:batchId', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { batchId } = req.params;
+    
+    // 验证批次所有权
+    const batchCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE batch_id = $1 AND user_id = $2 LIMIT 1',
+      [batchId, userId]
+    );
+    
+    if (batchCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '批次不存在或无权访问'
+      });
+    }
+    
     const { batchExecutor } = require('../services/BatchExecutor');
     
     const result = await batchExecutor.deleteBatch(batchId);
@@ -546,7 +804,22 @@ router.delete('/batches/:batchId', async (req, res) => {
  */
 router.get('/batches/:batchId', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { batchId } = req.params;
+    
+    // 验证批次所有权
+    const batchCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE batch_id = $1 AND user_id = $2 LIMIT 1',
+      [batchId, userId]
+    );
+    
+    if (batchCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '批次不存在或无权访问'
+      });
+    }
+    
     const { batchExecutor } = require('../services/BatchExecutor');
     
     const info = await batchExecutor.getBatchInfo(batchId);
@@ -568,6 +841,7 @@ router.get('/batches/:batchId', async (req, res) => {
  * 综合修复：修复所有文章和任务状态问题
  */
 router.post('/comprehensive-fix', async (req, res) => {
+  const userId = getCurrentTenantId(req);
   const client = await pool.connect();
   
   try {
@@ -586,9 +860,9 @@ router.post('/comprehensive-fix', async (req, res) => {
     const fix1 = await client.query(`
       UPDATE articles
       SET is_published = false
-      WHERE is_published IS NULL AND published_at IS NULL
+      WHERE is_published IS NULL AND published_at IS NULL AND user_id = $1
       RETURNING id, keyword
-    `);
+    `, [userId]);
     results.nullIsPublished = fix1.rows;
     console.log(`   ✅ 修复 ${fix1.rows.length} 篇文章`);
     
@@ -597,9 +871,9 @@ router.post('/comprehensive-fix', async (req, res) => {
     const fix2 = await client.query(`
       UPDATE articles
       SET is_published = true
-      WHERE is_published IS NULL AND published_at IS NOT NULL
+      WHERE is_published IS NULL AND published_at IS NOT NULL AND user_id = $1
       RETURNING id, keyword
-    `);
+    `, [userId]);
     results.publishedWithNull = fix2.rows;
     console.log(`   ✅ 修复 ${fix2.rows.length} 篇文章`);
     
@@ -612,12 +886,12 @@ router.post('/comprehensive-fix', async (req, res) => {
         SELECT a.id
         FROM articles a
         LEFT JOIN publishing_tasks pt ON a.id = pt.article_id AND pt.status IN ('pending', 'running')
-        WHERE a.publishing_status = 'pending'
+        WHERE a.publishing_status = 'pending' AND a.user_id = $1
         GROUP BY a.id
         HAVING COUNT(pt.id) = 0
       )
       RETURNING id, keyword
-    `);
+    `, [userId]);
     results.releasedArticles = fix3.rows;
     console.log(`   ✅ 释放 ${fix3.rows.length} 篇文章`);
     
@@ -649,15 +923,16 @@ router.post('/comprehensive-fix', async (req, res) => {
  */
 router.post('/fix-stuck-articles', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     console.log('🔧 开始修复被锁定的文章...');
     
-    // 1. 查找所有被锁定的文章
+    // 1. 查找所有被锁定的文章（仅当前用户）
     const lockedArticlesResult = await pool.query(`
       SELECT id, keyword, publishing_status
       FROM articles
-      WHERE publishing_status = 'pending'
+      WHERE publishing_status = 'pending' AND user_id = $1
       ORDER BY id
-    `);
+    `, [userId]);
 
     const lockedArticles = lockedArticlesResult.rows;
     console.log(`找到 ${lockedArticles.length} 篇被锁定的文章`);
@@ -681,8 +956,8 @@ router.post('/fix-stuck-articles', async (req, res) => {
       const tasksResult = await pool.query(`
         SELECT id, status
         FROM publishing_tasks
-        WHERE article_id = $1 AND status IN ('pending', 'running')
-      `, [article.id]);
+        WHERE article_id = $1 AND user_id = $2 AND status IN ('pending', 'running')
+      `, [article.id, userId]);
 
       if (tasksResult.rows.length === 0) {
         // 没有活跃任务，应该释放
@@ -708,9 +983,9 @@ router.post('/fix-stuck-articles', async (req, res) => {
     const result = await pool.query(`
       UPDATE articles
       SET publishing_status = NULL
-      WHERE id = ANY($1)
+      WHERE id = ANY($1) AND user_id = $2
       RETURNING id, keyword
-    `, [articleIds]);
+    `, [articleIds, userId]);
 
     console.log(`✅ 成功释放 ${result.rows.length} 篇文章`);
 

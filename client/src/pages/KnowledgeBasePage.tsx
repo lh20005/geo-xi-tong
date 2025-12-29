@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Button, message, Space, Modal, Input, Empty, Row, Col, Tag } from 'antd';
 import { BookOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 
 const { TextArea } = Input;
 
@@ -29,7 +29,7 @@ export default function KnowledgeBasePage() {
 
   const loadKnowledgeBases = async () => {
     try {
-      const response = await axios.get('/api/knowledge-bases');
+      const response = await apiClient.get('/knowledge-bases');
       setKnowledgeBases(response.data.knowledgeBases);
     } catch (error) {
       console.error('加载知识库失败:', error);
@@ -45,7 +45,7 @@ export default function KnowledgeBasePage() {
 
     setLoading(true);
     try {
-      await axios.post('/api/knowledge-bases', {
+      await apiClient.post('/knowledge-bases', {
         name: kbName.trim(),
         description: kbDescription.trim() || undefined
       });
@@ -71,7 +71,7 @@ export default function KnowledgeBasePage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/knowledge-bases/${id}`);
+          await apiClient.delete(`/knowledge-bases/${id}`);
           message.success('知识库删除成功');
           loadKnowledgeBases();
         } catch (error: any) {
@@ -123,7 +123,7 @@ export default function KnowledgeBasePage() {
         }
         
         try {
-          await axios.patch(`/api/knowledge-bases/${id}`, {
+          await apiClient.patch(`/knowledge-bases/${id}`, {
             name: formData.name.trim(),
             description: formData.description.trim() || undefined
           });

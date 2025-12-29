@@ -1,14 +1,23 @@
 import { Router, Request, Response } from 'express';
 import { DashboardService } from '../services/DashboardService';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 export const dashboardRouter = Router();
 const dashboardService = new DashboardService();
 
+// 应用认证和租户中间件
+dashboardRouter.use(authenticate);
+dashboardRouter.use(setTenantContext);
+dashboardRouter.use(requireTenantContext);
+
 // 获取核心业务指标
 dashboardRouter.get('/metrics', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const metrics = await dashboardService.getMetrics(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -22,8 +31,10 @@ dashboardRouter.get('/metrics', async (req: Request, res: Response) => {
 // 获取内容生产趋势数据
 dashboardRouter.get('/trends', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const trends = await dashboardService.getTrends(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -37,8 +48,10 @@ dashboardRouter.get('/trends', async (req: Request, res: Response) => {
 // 获取发布平台分布
 dashboardRouter.get('/platform-distribution', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const distribution = await dashboardService.getPlatformDistribution(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -52,8 +65,10 @@ dashboardRouter.get('/platform-distribution', async (req: Request, res: Response
 // 获取发布任务状态分布
 dashboardRouter.get('/publishing-status', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const status = await dashboardService.getPublishingStatus(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -67,8 +82,10 @@ dashboardRouter.get('/publishing-status', async (req: Request, res: Response) =>
 // 获取资源使用效率
 dashboardRouter.get('/resource-usage', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const usage = await dashboardService.getResourceUsage(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -82,8 +99,10 @@ dashboardRouter.get('/resource-usage', async (req: Request, res: Response) => {
 // 获取文章生成任务概览
 dashboardRouter.get('/generation-tasks', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const tasks = await dashboardService.getGenerationTasks(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -97,8 +116,10 @@ dashboardRouter.get('/generation-tasks', async (req: Request, res: Response) => 
 // 获取知识库和转化目标使用排行
 dashboardRouter.get('/top-resources', async (req: Request, res: Response) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { startDate, endDate } = req.query;
     const resources = await dashboardService.getTopResources(
+      userId,
       startDate as string,
       endDate as string
     );
@@ -112,7 +133,8 @@ dashboardRouter.get('/top-resources', async (req: Request, res: Response) => {
 // 获取文章详细统计
 dashboardRouter.get('/article-stats', async (req: Request, res: Response) => {
   try {
-    const stats = await dashboardService.getArticleStats();
+    const userId = getCurrentTenantId(req);
+    const stats = await dashboardService.getArticleStats(userId);
     res.json(stats);
   } catch (error) {
     console.error('获取文章统计失败:', error);
@@ -123,7 +145,8 @@ dashboardRouter.get('/article-stats', async (req: Request, res: Response) => {
 // 获取关键词分布
 dashboardRouter.get('/keyword-distribution', async (req: Request, res: Response) => {
   try {
-    const distribution = await dashboardService.getKeywordDistribution();
+    const userId = getCurrentTenantId(req);
+    const distribution = await dashboardService.getKeywordDistribution(userId);
     res.json(distribution);
   } catch (error) {
     console.error('获取关键词分布失败:', error);
@@ -134,7 +157,8 @@ dashboardRouter.get('/keyword-distribution', async (req: Request, res: Response)
 // 获取月度对比数据
 dashboardRouter.get('/monthly-comparison', async (req: Request, res: Response) => {
   try {
-    const comparison = await dashboardService.getMonthlyComparison();
+    const userId = getCurrentTenantId(req);
+    const comparison = await dashboardService.getMonthlyComparison(userId);
     res.json(comparison);
   } catch (error) {
     console.error('获取月度对比失败:', error);
@@ -145,7 +169,8 @@ dashboardRouter.get('/monthly-comparison', async (req: Request, res: Response) =
 // 获取24小时活动分布
 dashboardRouter.get('/hourly-activity', async (req: Request, res: Response) => {
   try {
-    const activity = await dashboardService.getHourlyActivity();
+    const userId = getCurrentTenantId(req);
+    const activity = await dashboardService.getHourlyActivity(userId);
     res.json(activity);
   } catch (error) {
     console.error('获取活动分布失败:', error);
@@ -156,7 +181,8 @@ dashboardRouter.get('/hourly-activity', async (req: Request, res: Response) => {
 // 获取成功率数据
 dashboardRouter.get('/success-rates', async (req: Request, res: Response) => {
   try {
-    const rates = await dashboardService.getSuccessRates();
+    const userId = getCurrentTenantId(req);
+    const rates = await dashboardService.getSuccessRates(userId);
     res.json(rates);
   } catch (error) {
     console.error('获取成功率失败:', error);

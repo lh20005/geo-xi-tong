@@ -37,7 +37,7 @@ export class AccountService {
   /**
    * 创建平台账号绑定
    */
-  async createAccount(input: CreateAccountInput): Promise<Account> {
+  async createAccount(input: CreateAccountInput, userId: number): Promise<Account> {
     // 验证凭证格式
     this.validateCredentials(input.credentials);
     
@@ -46,10 +46,10 @@ export class AccountService {
     
     const result = await pool.query(
       `INSERT INTO platform_accounts 
-       (platform, platform_id, account_name, credentials, status, is_default) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
+       (platform, platform_id, account_name, credentials, user_id, status, is_default) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7) 
        RETURNING *`,
-      [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, 'active', false]
+      [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, userId, 'active', false]
     );
     
     const account = result.rows[0];
@@ -61,7 +61,7 @@ export class AccountService {
   /**
    * 创建平台账号绑定（包含真实用户名）
    */
-  async createAccountWithRealUsername(input: CreateAccountInput, realUsername: string): Promise<Account> {
+  async createAccountWithRealUsername(input: CreateAccountInput, realUsername: string, userId: number): Promise<Account> {
     // 验证凭证格式
     this.validateCredentials(input.credentials);
     
@@ -70,10 +70,10 @@ export class AccountService {
     
     const result = await pool.query(
       `INSERT INTO platform_accounts 
-       (platform, platform_id, account_name, credentials, real_username, status, is_default) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7) 
+       (platform, platform_id, account_name, credentials, real_username, user_id, status, is_default) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
        RETURNING *`,
-      [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, realUsername, 'active', false]
+      [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, realUsername, userId, 'active', false]
     );
     
     const account = result.rows[0];
@@ -86,20 +86,21 @@ export class AccountService {
    * 创建或更新账号（去重逻辑）
    * 如果同一平台的同一用户名已存在，则更新；否则创建新账号
    */
-  async createOrUpdateAccount(input: CreateAccountInput, realUsername: string): Promise<{ account: Account; isNew: boolean }> {
+  async createOrUpdateAccount(input: CreateAccountInput, realUsername: string, userId: number): Promise<{ account: Account; isNew: boolean }> {
     // 验证凭证格式
     this.validateCredentials(input.credentials);
     
-    // 检查是否已存在相同的账号
+    // 检查是否已存在相同的账号（同一用户下）
     // 使用 real_username 作为唯一标识（如果提供），否则使用 account_name
     const uniqueIdentifier = realUsername || input.account_name;
     
     const existingResult = await pool.query(
       `SELECT * FROM platform_accounts 
        WHERE platform_id = $1 
-       AND (real_username = $2 OR (real_username IS NULL AND account_name = $2))
+       AND user_id = $2
+       AND (real_username = $3 OR (real_username IS NULL AND account_name = $3))
        LIMIT 1`,
-      [input.platform_id, uniqueIdentifier]
+      [input.platform_id, userId, uniqueIdentifier]
     );
     
     if (existingResult.rows.length > 0) {
@@ -116,9 +117,9 @@ export class AccountService {
              account_name = $3,
              updated_at = CURRENT_TIMESTAMP,
              last_used_at = CURRENT_TIMESTAMP
-         WHERE id = $4
+         WHERE id = $4 AND user_id = $5
          RETURNING *`,
-        [encryptedCredentials, realUsername, input.account_name, existingAccount.id]
+        [encryptedCredentials, realUsername, input.account_name, existingAccount.id, userId]
       );
       
       console.log(`[账号去重] 已更新账号 ID: ${existingAccount.id}`);
@@ -135,10 +136,10 @@ export class AccountService {
       
       const insertResult = await pool.query(
         `INSERT INTO platform_accounts 
-         (platform, platform_id, account_name, credentials, real_username, status, is_default) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+         (platform, platform_id, account_name, credentials, real_username, user_id, status, is_default) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
          RETURNING *`,
-        [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, realUsername, 'active', false]
+        [input.platform_id, input.platform_id, input.account_name, encryptedCredentials, realUsername, userId, 'active', false]
       );
       
       console.log(`[账号去重] 已创建新账号 ID: ${insertResult.rows[0].id}`);
@@ -151,38 +152,40 @@ export class AccountService {
   }
   
   /**
-   * 获取所有账号（不返回凭证）
+   * 获取所有账号（不返回凭证）- 仅返回当前用户的账号
    */
-  async getAllAccounts(): Promise<Account[]> {
+  async getAllAccounts(userId: number): Promise<Account[]> {
     const result = await pool.query(
       `SELECT * FROM platform_accounts 
-       ORDER BY created_at DESC`
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
     );
     
     return result.rows.map(row => this.formatAccount(row, false));
   }
   
   /**
-   * 根据平台ID获取账号
+   * 根据平台ID获取账号 - 仅返回当前用户的账号
    */
-  async getAccountsByPlatform(platformId: string): Promise<Account[]> {
+  async getAccountsByPlatform(platformId: string, userId: number): Promise<Account[]> {
     const result = await pool.query(
       `SELECT * FROM platform_accounts 
-       WHERE platform_id = $1 
+       WHERE platform_id = $1 AND user_id = $2
        ORDER BY is_default DESC, created_at DESC`,
-      [platformId]
+      [platformId, userId]
     );
     
     return result.rows.map(row => this.formatAccount(row, false));
   }
   
   /**
-   * 根据ID获取账号（包含解密的凭证）
+   * 根据ID获取账号（包含解密的凭证）- 验证所有权
    */
-  async getAccountById(accountId: number, includeCredentials: boolean = false): Promise<Account | null> {
+  async getAccountById(accountId: number, userId: number, includeCredentials: boolean = false): Promise<Account | null> {
     const result = await pool.query(
-      'SELECT * FROM platform_accounts WHERE id = $1',
-      [accountId]
+      'SELECT * FROM platform_accounts WHERE id = $1 AND user_id = $2',
+      [accountId, userId]
     );
     
     if (result.rows.length === 0) {
@@ -195,7 +198,7 @@ export class AccountService {
   /**
    * 更新账号
    */
-  async updateAccount(accountId: number, input: UpdateAccountInput): Promise<Account> {
+  async updateAccount(accountId: number, input: UpdateAccountInput, userId: number): Promise<Account> {
     const updates: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -217,17 +220,18 @@ export class AccountService {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     
     values.push(accountId);
+    values.push(userId);
     
     const result = await pool.query(
       `UPDATE platform_accounts 
        SET ${updates.join(', ')} 
-       WHERE id = $${paramIndex} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
        RETURNING *`,
       values
     );
     
     if (result.rows.length === 0) {
-      throw new Error('账号不存在');
+      throw new Error('账号不存在或无权访问');
     }
     
     return this.formatAccount(result.rows[0], false);
@@ -236,7 +240,7 @@ export class AccountService {
   /**
    * 更新账号（包含真实用户名）
    */
-  async updateAccountWithRealUsername(accountId: number, input: UpdateAccountInput, realUsername: string): Promise<Account> {
+  async updateAccountWithRealUsername(accountId: number, input: UpdateAccountInput, realUsername: string, userId: number): Promise<Account> {
     const updates: string[] = [];
     const values: any[] = [];
     let paramIndex = 1;
@@ -265,59 +269,60 @@ export class AccountService {
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     
     values.push(accountId);
+    values.push(userId);
     
     const result = await pool.query(
       `UPDATE platform_accounts 
        SET ${updates.join(', ')} 
-       WHERE id = $${paramIndex} 
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
        RETURNING *`,
       values
     );
     
     if (result.rows.length === 0) {
-      throw new Error('账号不存在');
+      throw new Error('账号不存在或无权访问');
     }
     
     return this.formatAccount(result.rows[0], false);
   }
   
   /**
-   * 删除账号
+   * 删除账号 - 验证所有权
    */
-  async deleteAccount(accountId: number): Promise<void> {
+  async deleteAccount(accountId: number, userId: number): Promise<void> {
     const result = await pool.query(
-      'DELETE FROM platform_accounts WHERE id = $1',
-      [accountId]
+      'DELETE FROM platform_accounts WHERE id = $1 AND user_id = $2',
+      [accountId, userId]
     );
     
     if (result.rowCount === 0) {
-      throw new Error('账号不存在');
+      throw new Error('账号不存在或无权访问');
     }
   }
   
   /**
-   * 设置默认账号
+   * 设置默认账号 - 仅在当前用户的账号中设置
    */
-  async setDefaultAccount(platformId: string, accountId: number): Promise<void> {
+  async setDefaultAccount(platformId: string, accountId: number, userId: number): Promise<void> {
     const client = await pool.connect();
     
     try {
       await client.query('BEGIN');
       
-      // 取消该平台所有账号的默认状态
+      // 取消该平台该用户所有账号的默认状态
       await client.query(
-        'UPDATE platform_accounts SET is_default = false WHERE platform_id = $1',
-        [platformId]
+        'UPDATE platform_accounts SET is_default = false WHERE platform_id = $1 AND user_id = $2',
+        [platformId, userId]
       );
       
-      // 设置指定账号为默认
+      // 设置指定账号为默认（验证所有权）
       const result = await client.query(
-        'UPDATE platform_accounts SET is_default = true WHERE id = $1 AND platform_id = $2',
-        [accountId, platformId]
+        'UPDATE platform_accounts SET is_default = true WHERE id = $1 AND platform_id = $2 AND user_id = $3',
+        [accountId, platformId, userId]
       );
       
       if (result.rowCount === 0) {
-        throw new Error('账号不存在或平台不匹配');
+        throw new Error('账号不存在、平台不匹配或无权访问');
       }
       
       await client.query('COMMIT');
@@ -395,7 +400,7 @@ export class AccountService {
   /**
    * 使用浏览器登录平台
    */
-  async loginWithBrowser(platform: any): Promise<{ success: boolean; message?: string; account?: Account }> {
+  async loginWithBrowser(platform: any, userId: number): Promise<{ success: boolean; message?: string; account?: Account }> {
     let browser: any = null;
     
     try {
@@ -516,8 +521,8 @@ export class AccountService {
       }, null, 2));
       console.log(`========================================\n`);
       
-      // 检查是否已存在相同用户名的账号
-      const existingAccounts = await this.getAccountsByPlatform(platform.platform_id);
+      // 检查是否已存在相同用户名的账号（仅当前用户）
+      const existingAccounts = await this.getAccountsByPlatform(platform.platform_id, userId);
       console.log(`[浏览器登录] 平台 ${platform.platform_id} 现有账号数: ${existingAccounts.length}`);
       
       const existingAccount = existingAccounts.find(acc => 
@@ -532,7 +537,7 @@ export class AccountService {
           console.log(`[浏览器登录] 更新现有账号 ID: ${existingAccount.id}`);
           account = await this.updateAccountWithRealUsername(existingAccount.id, {
             credentials
-          }, realUsername);
+          }, realUsername, userId);
           console.log(`[浏览器登录] 账号更新成功`);
         } else {
           // 创建新账号（包括真实用户名）
@@ -541,7 +546,7 @@ export class AccountService {
             platform_id: platform.platform_id,
             account_name: accountName,
             credentials
-          }, realUsername);
+          }, realUsername, userId);
           console.log(`[浏览器登录] 账号创建成功 ID: ${account.id}`);
         }
         

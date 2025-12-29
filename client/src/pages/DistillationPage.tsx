@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Input, Button, message, Space, Typography, Tag, Modal, Empty } from 'antd';
 import { ThunderboltOutlined, FileTextOutlined, EyeOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 import ResizableTable from '../components/ResizableTable';
 import { 
   saveResultToLocalStorage, 
@@ -22,7 +22,7 @@ export default function DistillationPage() {
   // 加载历史记录
   const loadHistory = async () => {
     try {
-      const response = await axios.get('/api/distillation/history');
+      const response = await apiClient.get('/distillation/history');
       setHistory(response.data.data || response.data);
     } catch (error) {
       console.error('加载历史失败:', error);
@@ -33,7 +33,7 @@ export default function DistillationPage() {
   const handleViewHistory = async (record: any) => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/distillation/${record.id}`);
+      const response = await apiClient.get(`/distillation/${record.id}`);
       const detailData = {
         distillationId: response.data.id,
         keyword: response.data.keyword,
@@ -61,7 +61,7 @@ export default function DistillationPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/distillation/${id}`);
+          await apiClient.delete(`/distillation/${id}`);
           message.success('删除成功');
           if (selectedRecordId === id) {
             setSelectedRecordId(null);
@@ -100,7 +100,7 @@ export default function DistillationPage() {
         }
         
         try {
-          await axios.patch(`/api/distillation/${id}`, { keyword: newKeyword.trim() });
+          await apiClient.patch(`/distillation/${id}`, { keyword: newKeyword.trim() });
           message.success('关键词更新成功');
           if (selectedRecordId === id) {
             const savedResult = loadResultFromLocalStorage();
@@ -128,7 +128,7 @@ export default function DistillationPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const response = await axios.delete('/api/distillation/all/records');
+          const response = await apiClient.delete('/distillation/all/records');
           message.success(`成功删除 ${response.data.deletedCount} 条记录`);
           setHistory([]);
           setSelectedRecordId(null);
@@ -157,7 +157,7 @@ export default function DistillationPage() {
 
     setLoading(true);
     try {
-      const response = await axios.post('/api/distillation', { keyword });
+      const response = await apiClient.post('/distillation', { keyword });
       
       // 保存结果到LocalStorage
       const resultData = {

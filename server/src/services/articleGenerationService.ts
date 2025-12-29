@@ -11,6 +11,7 @@ export interface TaskConfig {
   articleSettingId: number;
   conversionTargetId?: number;
   articleCount: number;
+  userId: number; // 用户ID，用于多租户隔离
 }
 
 export interface GenerationTask {

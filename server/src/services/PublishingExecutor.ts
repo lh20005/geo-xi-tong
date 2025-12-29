@@ -157,7 +157,7 @@ export class PublishingExecutor {
       );
 
       // 获取账号信息（包含凭证）
-      const account = await accountService.getAccountById(task.account_id, true);
+      const account = await accountService.getAccountById(task.account_id, task.user_id, true);
       if (!account || !account.credentials) {
         throw new Error('账号不存在或凭证无效');
       }

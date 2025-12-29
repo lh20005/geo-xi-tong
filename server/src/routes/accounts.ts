@@ -1,16 +1,24 @@
 import express from 'express';
 import { accountService } from '../services/AccountService';
 import { getWebSocketService } from '../services/WebSocketService';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 const router = express.Router();
 
+// 所有路由都需要认证和租户上下文
+router.use(authenticate);
+router.use(setTenantContext);
+router.use(requireTenantContext);
+
 /**
  * 获取所有账号
- * 用于 Electron 登录管理器
+ * 用于 Electron 登录管理器（仅返回当前用户的账号）
  */
 router.get('/', async (req, res) => {
   try {
-    const accounts = await accountService.getAllAccounts();
+    const userId = getCurrentTenantId(req);
+    const accounts = await accountService.getAllAccounts(userId);
     
     res.json(accounts);
   } catch (error) {
@@ -27,15 +35,16 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     const includeCredentials = req.query.includeCredentials !== 'false'; // 默认包含凭证
     
-    const account = await accountService.getAccountById(accountId, includeCredentials);
+    const account = await accountService.getAccountById(accountId, userId, includeCredentials);
     
     if (!account) {
       return res.status(404).json({
         success: false,
-        message: '账号不存在'
+        message: '账号不存在或无权访问'
       });
     }
     
@@ -54,6 +63,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { platform_id, account_name, real_username, credentials, is_default } = req.body;
     
     if (!platform_id || !account_name || !credentials) {
@@ -68,11 +78,11 @@ router.post('/', async (req, res) => {
       account_name,
       real_username,
       credentials
-    });
+    }, userId);
     
     // 如果设置为默认账号
     if (is_default) {
-      await accountService.setDefaultAccount(platform_id, account.id);
+      await accountService.setDefaultAccount(platform_id, account.id, userId);
     }
     
     // 广播账号创建事件
@@ -93,6 +103,7 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     const { account_name, real_username, credentials, is_default, status } = req.body;
     
@@ -101,11 +112,11 @@ router.put('/:id', async (req, res) => {
       real_username,
       credentials,
       status
-    });
+    }, userId);
     
     // 如果设置为默认账号
     if (is_default && account) {
-      await accountService.setDefaultAccount(account.platform_id, accountId);
+      await accountService.setDefaultAccount(account.platform_id, accountId, userId);
     }
     
     // 广播账号更新事件
@@ -126,9 +137,10 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     
-    await accountService.deleteAccount(accountId);
+    await accountService.deleteAccount(accountId, userId);
     
     // 广播账号删除事件
     getWebSocketService().broadcastAccountEvent('deleted', { id: accountId });
@@ -148,6 +160,7 @@ router.delete('/:id', async (req, res) => {
  */
 router.post('/:id/set-default', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const accountId = parseInt(req.params.id);
     const { platform_id } = req.body;
     
@@ -158,7 +171,7 @@ router.post('/:id/set-default', async (req, res) => {
       });
     }
     
-    await accountService.setDefaultAccount(platform_id, accountId);
+    await accountService.setDefaultAccount(platform_id, accountId, userId);
     
     res.status(204).send();
   } catch (error: any) {

@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { apiClient } from './client';
 import type {
   TaskConfig,
   CreateTaskResponse,
@@ -11,13 +11,11 @@ import type {
   ConversionTarget
 } from '../types/articleGeneration';
 
-const API_BASE_URL = '/api';
-
 /**
  * 创建文章生成任务
  */
 export async function createTask(config: TaskConfig): Promise<CreateTaskResponse> {
-  const response = await axios.post(`${API_BASE_URL}/article-generation/tasks`, config);
+  const response = await apiClient.post('/article-generation/tasks', config);
   return response.data;
 }
 
@@ -25,7 +23,7 @@ export async function createTask(config: TaskConfig): Promise<CreateTaskResponse
  * 获取任务列表
  */
 export async function fetchTasks(page: number = 1, pageSize: number = 10): Promise<TaskListResponse> {
-  const response = await axios.get(`${API_BASE_URL}/article-generation/tasks`, {
+  const response = await apiClient.get('/article-generation/tasks', {
     params: { page, pageSize }
   });
   return response.data;
@@ -35,7 +33,7 @@ export async function fetchTasks(page: number = 1, pageSize: number = 10): Promi
  * 获取任务详情
  */
 export async function fetchTaskDetail(taskId: number): Promise<TaskDetailResponse> {
-  const response = await axios.get(`${API_BASE_URL}/article-generation/tasks/${taskId}`);
+  const response = await apiClient.get(`/article-generation/tasks/${taskId}`);
   return response.data;
 }
 
@@ -43,7 +41,7 @@ export async function fetchTaskDetail(taskId: number): Promise<TaskDetailRespons
  * 获取蒸馏历史列表
  */
 export async function fetchDistillations(): Promise<DistillationHistory[]> {
-  const response = await axios.get(`${API_BASE_URL}/distillation/history`);
+  const response = await apiClient.get('/distillation/history');
   return response.data;
 }
 
@@ -51,7 +49,7 @@ export async function fetchDistillations(): Promise<DistillationHistory[]> {
  * 获取相册列表
  */
 export async function fetchAlbums(): Promise<Album[]> {
-  const response = await axios.get(`${API_BASE_URL}/gallery/albums`);
+  const response = await apiClient.get('/gallery/albums');
   return response.data.albums || [];
 }
 
@@ -59,7 +57,7 @@ export async function fetchAlbums(): Promise<Album[]> {
  * 获取知识库列表
  */
 export async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
-  const response = await axios.get(`${API_BASE_URL}/knowledge-bases`);
+  const response = await apiClient.get('/knowledge-bases');
   return response.data.knowledgeBases || [];
 }
 
@@ -67,7 +65,7 @@ export async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
  * 获取文章设置列表
  */
 export async function fetchArticleSettings(): Promise<ArticleSetting[]> {
-  const response = await axios.get(`${API_BASE_URL}/article-settings`);
+  const response = await apiClient.get('/article-settings');
   return response.data.settings || [];
 }
 
@@ -75,7 +73,7 @@ export async function fetchArticleSettings(): Promise<ArticleSetting[]> {
  * 获取转化目标列表
  */
 export async function fetchConversionTargets(): Promise<ConversionTarget[]> {
-  const response = await axios.get(`${API_BASE_URL}/conversion-targets`);
+  const response = await apiClient.get('/conversion-targets');
   return response.data.data?.targets || [];
 }
 
@@ -83,7 +81,7 @@ export async function fetchConversionTargets(): Promise<ConversionTarget[]> {
  * 删除单个任务
  */
 export async function deleteTask(taskId: number): Promise<{ success: boolean; message: string }> {
-  const response = await axios.delete(`${API_BASE_URL}/article-generation/tasks/${taskId}`);
+  const response = await apiClient.delete(`/article-generation/tasks/${taskId}`);
   return response.data;
 }
 
@@ -96,7 +94,7 @@ export async function batchDeleteTasks(taskIds: number[]): Promise<{
   deletedCount: number;
   deletedIds: number[];
 }> {
-  const response = await axios.post(`${API_BASE_URL}/article-generation/tasks/batch-delete`, { taskIds });
+  const response = await apiClient.post('/article-generation/tasks/batch-delete', { taskIds });
   return response.data;
 }
 
@@ -104,6 +102,6 @@ export async function batchDeleteTasks(taskIds: number[]): Promise<{
  * 删除所有任务
  */
 export async function deleteAllTasks(): Promise<{ success: boolean; message: string; deletedCount: number }> {
-  const response = await axios.delete(`${API_BASE_URL}/article-generation/tasks`);
+  const response = await apiClient.delete('/article-generation/tasks');
   return response.data;
 }

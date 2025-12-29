@@ -18,7 +18,7 @@ import {
   DownloadOutlined,
   BookOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 import ArticleContent from '../components/ArticleContent';
 
 const { Title, Paragraph } = Typography;
@@ -49,7 +49,7 @@ export default function ArticlePage() {
 
   const loadKeyword = async () => {
     try {
-      const response = await axios.get(`/api/distillations/${distillationId}`);
+      const response = await apiClient.get(`/distillations/${distillationId}`);
       if (response.data && response.data.keyword) {
         setKeyword(response.data.keyword);
       }
@@ -60,7 +60,7 @@ export default function ArticlePage() {
 
   const loadKnowledgeBases = async () => {
     try {
-      const response = await axios.get('/api/knowledge-bases');
+      const response = await apiClient.get('/knowledge-bases');
       setKnowledgeBases(response.data.knowledgeBases);
     } catch (error) {
       console.error('加载知识库失败:', error);
@@ -72,7 +72,7 @@ export default function ArticlePage() {
     try {
       const selectedTopics = location.state?.selectedTopics || [];
       
-      const response = await axios.post('/api/articles/generate', {
+      const response = await apiClient.post('/articles/generate', {
         keyword,
         distillationId,
         requirements,

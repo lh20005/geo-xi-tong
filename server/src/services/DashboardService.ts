@@ -10,7 +10,7 @@ export class DashboardService {
    * 包括蒸馏总数、文章总数、发布任务总数、发布成功率
    * 以及今日和昨日的对比数据
    */
-  async getMetrics(startDate?: string, endDate?: string) {
+  async getMetrics(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -23,40 +23,43 @@ export class DashboardService {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString();
 
-      // 查询蒸馏数据
+      // 查询蒸馏数据（添加 user_id 过滤）
       const distillationsQuery = `
         SELECT 
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE created_at >= $1) as today,
           COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1) as yesterday
         FROM distillations
+        WHERE user_id = $3
       `;
-      const distillationsResult = await client.query(distillationsQuery, [todayStr, yesterdayStr]);
+      const distillationsResult = await client.query(distillationsQuery, [todayStr, yesterdayStr, userId]);
       const distillations = distillationsResult.rows[0];
 
-      // 查询文章数据
+      // 查询文章数据（添加 user_id 过滤）
       const articlesQuery = `
         SELECT 
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE created_at >= $1) as today,
           COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1) as yesterday
         FROM articles
+        WHERE user_id = $3
       `;
-      const articlesResult = await client.query(articlesQuery, [todayStr, yesterdayStr]);
+      const articlesResult = await client.query(articlesQuery, [todayStr, yesterdayStr, userId]);
       const articles = articlesResult.rows[0];
 
-      // 查询发布任务数据
+      // 查询发布任务数据（添加 user_id 过滤）
       const publishingTasksQuery = `
         SELECT 
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE created_at >= $1) as today,
           COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1) as yesterday
         FROM publishing_tasks
+        WHERE user_id = $3
       `;
-      const publishingTasksResult = await client.query(publishingTasksQuery, [todayStr, yesterdayStr]);
+      const publishingTasksResult = await client.query(publishingTasksQuery, [todayStr, yesterdayStr, userId]);
       const publishingTasks = publishingTasksResult.rows[0];
 
-      // 查询发布成功率（最近30天）
+      // 查询发布成功率（最近30天，添加 user_id 过滤）
       const thirtyDaysAgo = new Date(today);
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
@@ -68,9 +71,9 @@ export class DashboardService {
           COUNT(*) FILTER (WHERE created_at >= $1) as recent_total,
           COUNT(*) FILTER (WHERE status = 'completed' AND created_at >= $1) as recent_success
         FROM publishing_tasks
-        WHERE created_at >= $2
+        WHERE created_at >= $2 AND user_id = $3
       `;
-      const successRateResult = await client.query(successRateQuery, [todayStr, thirtyDaysAgoStr]);
+      const successRateResult = await client.query(successRateQuery, [todayStr, thirtyDaysAgoStr, userId]);
       const successRate = successRateResult.rows[0];
 
       const currentRate = parseInt(successRate.total) > 0 
@@ -113,7 +116,7 @@ export class DashboardService {
    * 获取内容生产趋势数据
    * 返回指定时间范围内每天的文章和蒸馏数量
    */
-  async getTrends(startDate?: string, endDate?: string) {
+  async getTrends(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -134,7 +137,7 @@ export class DashboardService {
             DATE(created_at) AS date,
             COUNT(*) AS count
           FROM articles
-          WHERE created_at >= $1 AND created_at <= $2
+          WHERE created_at >= $1 AND created_at <= $2 AND user_id = $3
           GROUP BY DATE(created_at)
         ),
         distillation_counts AS (
@@ -142,7 +145,7 @@ export class DashboardService {
             DATE(created_at) AS date,
             COUNT(*) AS count
           FROM distillations
-          WHERE created_at >= $1 AND created_at <= $2
+          WHERE created_at >= $1 AND created_at <= $2 AND user_id = $3
           GROUP BY DATE(created_at)
         )
         SELECT 
@@ -155,7 +158,7 @@ export class DashboardService {
         ORDER BY ds.date ASC
       `;
 
-      const result = await client.query(query, [start.toISOString(), end.toISOString()]);
+      const result = await client.query(query, [start.toISOString(), end.toISOString(), userId]);
 
       return {
         data: result.rows.map(row => ({
@@ -173,7 +176,7 @@ export class DashboardService {
    * 获取发布平台分布
    * 返回各平台的发布数量，按数量降序排列
    */
-  async getPlatformDistribution(startDate?: string, endDate?: string) {
+  async getPlatformDistribution(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -183,10 +186,12 @@ export class DashboardService {
           pc.platform_name,
           COUNT(*) AS publish_count
         FROM publishing_records pr
+        INNER JOIN publishing_tasks pt ON pr.task_id = pt.id
         LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
+        WHERE pt.user_id = $1
       `;
 
-      const params: any[] = [];
+      const params: any[] = [userId];
       const conditions: string[] = [];
 
       if (startDate) {
@@ -200,7 +205,7 @@ export class DashboardService {
       }
 
       if (conditions.length > 0) {
-        query += ` WHERE ${conditions.join(' AND ')}`;
+        query += ` AND ${conditions.join(' AND ')}`;
       }
 
       query += `
@@ -226,7 +231,7 @@ export class DashboardService {
    * 获取发布任务状态分布
    * 返回各状态的任务数量和占比
    */
-  async getPublishingStatus(startDate?: string, endDate?: string) {
+  async getPublishingStatus(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -235,9 +240,10 @@ export class DashboardService {
           status,
           COUNT(*) AS count
         FROM publishing_tasks
+        WHERE user_id = $1
       `;
 
-      const params: any[] = [];
+      const params: any[] = [userId];
       const conditions: string[] = [];
 
       if (startDate) {
@@ -251,7 +257,7 @@ export class DashboardService {
       }
 
       if (conditions.length > 0) {
-        query += ` WHERE ${conditions.join(' AND ')}`;
+        query += ` AND ${conditions.join(' AND ')}`;
       }
 
       query += `
@@ -276,7 +282,7 @@ export class DashboardService {
    * 获取资源使用效率
    * 返回蒸馏、话题、图片的总数和已使用数量
    */
-  async getResourceUsage(startDate?: string, endDate?: string) {
+  async getResourceUsage(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -304,10 +310,12 @@ export class DashboardService {
       const imagesQuery = `
         SELECT 
           COUNT(*) AS total,
-          COUNT(*) FILTER (WHERE usage_count > 0) AS used
-        FROM images
+          COUNT(*) FILTER (WHERE i.usage_count > 0) AS used
+        FROM images i
+        INNER JOIN albums a ON i.album_id = a.id
+        WHERE a.user_id = $1
       `;
-      const imagesResult = await client.query(imagesQuery);
+      const imagesResult = await client.query(imagesQuery, [userId]);
       const images = imagesResult.rows[0];
 
       return {
@@ -333,7 +341,7 @@ export class DashboardService {
    * 获取文章生成任务概览
    * 返回任务状态分布、平均完成时间和成功率
    */
-  async getGenerationTasks(startDate?: string, endDate?: string) {
+  async getGenerationTasks(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -341,10 +349,10 @@ export class DashboardService {
         SELECT 
           status,
           COUNT(*) AS count
-        FROM generation_tasks
+        FROM generation_tasks WHERE user_id = $1
       `;
 
-      const params: any[] = [];
+      const params: any[] = [userId];
       const conditions: string[] = [];
 
       if (startDate) {
@@ -358,7 +366,7 @@ export class DashboardService {
       }
 
       if (conditions.length > 0) {
-        statusQuery += ` WHERE ${conditions.join(' AND ')}`;
+        statusQuery += ` AND ${conditions.join(' AND ')}`;
       }
 
       statusQuery += `
@@ -373,7 +381,7 @@ export class DashboardService {
         SELECT 
           AVG(EXTRACT(EPOCH FROM (updated_at - created_at))) AS avg_seconds
         FROM generation_tasks
-        WHERE status = 'completed'
+        WHERE user_id = $1 AND status = 'completed'
       `;
 
       if (conditions.length > 0) {
@@ -407,7 +415,7 @@ export class DashboardService {
    * 获取文章详细统计
    * 包括总数、已发布、未发布、今日生成、本月生成
    */
-  async getArticleStats() {
+  async getArticleStats(userId: number) {
     const client = await pool.connect();
     
     try {
@@ -447,7 +455,7 @@ export class DashboardService {
    * 获取关键词分布统计
    * 返回TOP10关键词及其蒸馏次数和文章数量
    */
-  async getKeywordDistribution() {
+  async getKeywordDistribution(userId: number) {
     const client = await pool.connect();
     
     try {
@@ -492,7 +500,7 @@ export class DashboardService {
    * 获取月度对比数据
    * 返回最近6个月的蒸馏、文章、发布数据
    */
-  async getMonthlyComparison() {
+  async getMonthlyComparison(userId: number) {
     const client = await pool.connect();
     
     try {
@@ -511,22 +519,25 @@ export class DashboardService {
         LEFT JOIN (
           SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
           FROM distillations
+          WHERE user_id = $1
           GROUP BY TO_CHAR(created_at, 'YYYY-MM')
         ) d ON m.month = d.month
         LEFT JOIN (
           SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
           FROM articles
+          WHERE user_id = $1
           GROUP BY TO_CHAR(created_at, 'YYYY-MM')
         ) a ON m.month = a.month
         LEFT JOIN (
           SELECT TO_CHAR(created_at, 'YYYY-MM') as month, COUNT(*) as count
           FROM publishing_tasks
+          WHERE user_id = $1
           GROUP BY TO_CHAR(created_at, 'YYYY-MM')
         ) p ON m.month = p.month
         ORDER BY m.month ASC
       `;
 
-      const result = await client.query(query);
+      const result = await client.query(query, [userId]);
 
       return {
         months: result.rows.map(row => row.month),
@@ -543,7 +554,7 @@ export class DashboardService {
    * 获取24小时活动分布
    * 返回每小时的活动次数
    */
-  async getHourlyActivity() {
+  async getHourlyActivity(userId: number) {
     const client = await pool.connect();
     
     try {
@@ -557,11 +568,12 @@ export class DashboardService {
         FROM hours h
         LEFT JOIN articles a ON EXTRACT(HOUR FROM a.created_at) = h.hour
           AND a.created_at >= CURRENT_DATE - INTERVAL '7 days'
+          AND a.user_id = $1
         GROUP BY h.hour
         ORDER BY h.hour ASC
       `;
 
-      const result = await client.query(query);
+      const result = await client.query(query, [userId]);
 
       return {
         hours: result.rows.map(row => parseInt(row.hour)),
@@ -576,7 +588,7 @@ export class DashboardService {
    * 获取成功率数据
    * 返回发布成功率和生成成功率
    */
-  async getSuccessRates() {
+  async getSuccessRates(userId: number) {
     const client = await pool.connect();
     
     try {
@@ -619,7 +631,7 @@ export class DashboardService {
    * 获取知识库和转化目标使用排行
    * 返回TOP10最常用的资源
    */
-  async getTopResources(startDate?: string, endDate?: string) {
+  async getTopResources(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
@@ -630,12 +642,13 @@ export class DashboardService {
           kb.name,
           COUNT(gt.id) AS usage_count
         FROM knowledge_bases kb
-        LEFT JOIN generation_tasks gt ON kb.id = gt.knowledge_base_id
+        LEFT JOIN generation_tasks gt ON kb.id = gt.knowledge_base_id AND gt.user_id = $1
+        WHERE kb.user_id = $1
         GROUP BY kb.id, kb.name
         ORDER BY usage_count DESC
         LIMIT 10
       `;
-      const knowledgeBasesResult = await client.query(knowledgeBasesQuery);
+      const knowledgeBasesResult = await client.query(knowledgeBasesQuery, [userId]);
 
       // 查询转化目标使用排行
       const conversionTargetsQuery = `
@@ -644,12 +657,13 @@ export class DashboardService {
           ct.company_name,
           COUNT(gt.id) AS usage_count
         FROM conversion_targets ct
-        LEFT JOIN generation_tasks gt ON ct.id = gt.conversion_target_id
+        LEFT JOIN generation_tasks gt ON ct.id = gt.conversion_target_id AND gt.user_id = $1
+        WHERE ct.user_id = $1
         GROUP BY ct.id, ct.company_name
         ORDER BY usage_count DESC
         LIMIT 10
       `;
-      const conversionTargetsResult = await client.query(conversionTargetsQuery);
+      const conversionTargetsResult = await client.query(conversionTargetsQuery, [userId]);
 
       return {
         knowledgeBases: knowledgeBasesResult.rows.map(row => ({

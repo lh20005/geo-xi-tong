@@ -11,8 +11,6 @@ import {
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 
-const { TabPane } = Tabs;
-
 interface SecurityMetrics {
   failedLogins: number;
   blockedIPs: number;
@@ -191,71 +189,80 @@ const SecurityDashboardPage: React.FC = () => {
 
       {/* 安全建议 */}
       <Card title="安全建议">
-        <Tabs defaultActiveKey="1">
-          <TabPane tab="当前状态" key="1">
-            {metrics && (
-              <div>
-                {metrics.failedLogins > 100 && (
-                  <Alert
-                    message="失败登录次数较高"
-                    description="建议检查是否存在暴力破解攻击"
-                    type="warning"
-                    showIcon
-                    style={{ marginBottom: '12px' }}
-                  />
-                )}
-                {metrics.blockedIPs > 10 && (
-                  <Alert
-                    message="被封禁IP数量较多"
-                    description="建议审查IP白名单策略"
-                    type="warning"
-                    showIcon
-                    style={{ marginBottom: '12px' }}
-                  />
-                )}
-                {metrics.suspiciousActivities > 50 && (
-                  <Alert
-                    message="可疑活动较多"
-                    description="建议加强安全监控和日志审查"
-                    type="warning"
-                    showIcon
-                    style={{ marginBottom: '12px' }}
-                  />
-                )}
-                {metrics.activeAnomalies > 5 && (
-                  <Alert
-                    message="活跃异常数量较高"
-                    description="建议检查用户行为模式"
-                    type="warning"
-                    showIcon
-                    style={{ marginBottom: '12px' }}
-                  />
-                )}
-                {metrics.failedLogins <= 100 && 
-                 metrics.blockedIPs <= 10 && 
-                 metrics.suspiciousActivities <= 50 && 
-                 metrics.activeAnomalies <= 5 && (
-                  <Alert
-                    message="系统安全状况良好"
-                    description="继续保持监控"
-                    type="success"
-                    showIcon
-                  />
-                )}
-              </div>
-            )}
-          </TabPane>
-          <TabPane tab="最佳实践" key="2">
-            <ul>
-              <li>定期审查审计日志，关注异常操作</li>
-              <li>及时处理安全告警，不要忽视警告信息</li>
-              <li>保持密码策略的严格性，定期更新密码</li>
-              <li>限制管理员权限，遵循最小权限原则</li>
-              <li>定期备份重要数据和配置</li>
-              <li>保持系统和依赖包的更新</li>
-            </ul>
-          </TabPane>
-        </Tabs>
+        <Tabs 
+          defaultActiveKey="1"
+          items={[
+            {
+              key: '1',
+              label: '当前状态',
+              children: metrics && (
+                <div>
+                  {metrics.failedLogins > 100 && (
+                    <Alert
+                      message="失败登录次数较高"
+                      description="建议检查是否存在暴力破解攻击"
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: '12px' }}
+                    />
+                  )}
+                  {metrics.blockedIPs > 10 && (
+                    <Alert
+                      message="被封禁IP数量较多"
+                      description="建议审查IP白名单策略"
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: '12px' }}
+                    />
+                  )}
+                  {metrics.suspiciousActivities > 50 && (
+                    <Alert
+                      message="可疑活动较多"
+                      description="建议加强安全监控和日志审查"
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: '12px' }}
+                    />
+                  )}
+                  {metrics.activeAnomalies > 5 && (
+                    <Alert
+                      message="活跃异常数量较高"
+                      description="建议检查用户行为模式"
+                      type="warning"
+                      showIcon
+                      style={{ marginBottom: '12px' }}
+                    />
+                  )}
+                  {metrics.failedLogins <= 100 && 
+                   metrics.blockedIPs <= 10 && 
+                   metrics.suspiciousActivities <= 50 && 
+                   metrics.activeAnomalies <= 5 && (
+                    <Alert
+                      message="系统安全状况良好"
+                      description="继续保持监控"
+                      type="success"
+                      showIcon
+                    />
+                  )}
+                </div>
+              )
+            },
+            {
+              key: '2',
+              label: '最佳实践',
+              children: (
+                <ul>
+                  <li>定期审查审计日志，关注异常操作</li>
+                  <li>及时处理安全告警，不要忽视警告信息</li>
+                  <li>保持密码策略的严格性，定期更新密码</li>
+                  <li>限制管理员权限，遵循最小权限原则</li>
+                  <li>定期备份重要数据和配置</li>
+                  <li>保持系统和依赖包的更新</li>
+                </ul>
+              )
+            }
+          ]}
+        />
       </Card>
     </div>
   );

@@ -4,8 +4,15 @@ import { z } from 'zod';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 export const galleryRouter = Router();
+
+// 所有路由都需要认证和租户上下文
+galleryRouter.use(authenticate);
+galleryRouter.use(setTenantContext);
+galleryRouter.use(requireTenantContext);
 
 // 辅助函数：解码文件名，处理中文乱码
 function decodeFilename(filename: string): string {
@@ -72,9 +79,11 @@ const updateAlbumSchema = z.object({
   name: z.string().min(1).trim()
 });
 
-// 获取所有相册
+// 获取所有相册（只获取当前用户的）
 galleryRouter.get('/albums', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
+    
     const result = await pool.query(
       `SELECT 
         a.id, 
@@ -84,8 +93,10 @@ galleryRouter.get('/albums', async (req, res) => {
         (SELECT filepath FROM images WHERE album_id = a.id ORDER BY created_at ASC LIMIT 1) as cover_image
        FROM albums a
        LEFT JOIN images i ON a.id = i.album_id
+       WHERE a.user_id = $1
        GROUP BY a.id
-       ORDER BY a.created_at DESC`
+       ORDER BY a.created_at DESC`,
+      [userId]
     );
     
     res.json({ albums: result.rows });
@@ -98,6 +109,7 @@ galleryRouter.get('/albums', async (req, res) => {
 // 创建相册（支持同时上传图片）
 galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const validatedData = createAlbumSchema.parse(req.body);
     const files = req.files as Express.Multer.File[];
     
@@ -106,10 +118,10 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
     try {
       await client.query('BEGIN');
       
-      // 插入相册
+      // 插入相册（关联到当前用户）
       const albumResult = await client.query(
-        'INSERT INTO albums (name) VALUES ($1) RETURNING id, name, created_at',
-        [validatedData.name]
+        'INSERT INTO albums (name, user_id) VALUES ($1, $2) RETURNING id, name, created_at',
+        [validatedData.name, userId]
       );
       
       const album = albumResult.rows[0];
@@ -157,22 +169,23 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
   }
 });
 
-// 获取相册详情
+// 获取相册详情（验证所有权）
 galleryRouter.get('/albums/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const albumId = parseInt(req.params.id);
     if (isNaN(albumId) || albumId <= 0) {
       return res.status(400).json({ error: '无效的相册ID' });
     }
     
-    // 获取相册信息
+    // 获取相册信息（验证所有权）
     const albumResult = await pool.query(
-      'SELECT id, name, created_at FROM albums WHERE id = $1',
-      [albumId]
+      'SELECT id, name, created_at FROM albums WHERE id = $1 AND user_id = $2',
+      [albumId, userId]
     );
     
     if (albumResult.rows.length === 0) {
-      return res.status(404).json({ error: '相册不存在' });
+      return res.status(404).json({ error: '相册不存在或无权访问' });
     }
     
     // 获取相册中的所有图片
@@ -191,9 +204,10 @@ galleryRouter.get('/albums/:id', async (req, res) => {
   }
 });
 
-// 更新相册名称
+// 更新相册名称（验证所有权）
 galleryRouter.patch('/albums/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const albumId = parseInt(req.params.id);
     if (isNaN(albumId) || albumId <= 0) {
       return res.status(400).json({ error: '无效的相册ID' });
@@ -201,17 +215,15 @@ galleryRouter.patch('/albums/:id', async (req, res) => {
     
     const validatedData = updateAlbumSchema.parse(req.body);
     
-    // 检查相册是否存在
-    const checkResult = await pool.query('SELECT id FROM albums WHERE id = $1', [albumId]);
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '相册不存在' });
-    }
-    
-    // 更新相册名称
+    // 更新相册名称（验证所有权）
     const result = await pool.query(
-      'UPDATE albums SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, name, updated_at',
-      [validatedData.name, albumId]
+      'UPDATE albums SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3 RETURNING id, name, updated_at',
+      [validatedData.name, albumId, userId]
     );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '相册不存在或无权访问' });
+    }
     
     res.json(result.rows[0]);
   } catch (error: any) {
@@ -223,26 +235,38 @@ galleryRouter.patch('/albums/:id', async (req, res) => {
   }
 });
 
-// 删除相册
+// 删除相册（验证所有权）
 galleryRouter.delete('/albums/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const albumId = parseInt(req.params.id);
     if (isNaN(albumId) || albumId <= 0) {
       return res.status(400).json({ error: '无效的相册ID' });
     }
     
-    // 检查相册是否存在
-    const checkResult = await pool.query('SELECT id FROM albums WHERE id = $1', [albumId]);
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '相册不存在' });
+    // 获取所有图片文件路径（验证所有权）
+    const imagesResult = await pool.query(
+      `SELECT i.filepath FROM images i
+       JOIN albums a ON i.album_id = a.id
+       WHERE a.id = $1 AND a.user_id = $2`,
+      [albumId, userId]
+    );
+    
+    if (imagesResult.rows.length === 0) {
+      // 检查相册是否存在
+      const checkResult = await pool.query(
+        'SELECT id FROM albums WHERE id = $1 AND user_id = $2',
+        [albumId, userId]
+      );
+      if (checkResult.rows.length === 0) {
+        return res.status(404).json({ error: '相册不存在或无权访问' });
+      }
     }
     
-    // 获取所有图片文件路径
-    const imagesResult = await pool.query('SELECT filepath FROM images WHERE album_id = $1', [albumId]);
     const deletedImages = imagesResult.rows.length;
     
     // 删除相册（级联删除图片记录）
-    await pool.query('DELETE FROM albums WHERE id = $1', [albumId]);
+    await pool.query('DELETE FROM albums WHERE id = $1 AND user_id = $2', [albumId, userId]);
     
     // 删除文件系统中的图片文件
     imagesResult.rows.forEach(row => {
@@ -262,9 +286,10 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
   }
 });
 
-// 上传图片到相册
+// 上传图片到相册（验证所有权）
 galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const albumId = parseInt(req.params.albumId);
     if (isNaN(albumId) || albumId <= 0) {
       return res.status(400).json({ error: '无效的相册ID' });
@@ -276,8 +301,12 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
       return res.status(400).json({ error: '请选择要上传的图片' });
     }
     
-    // 检查相册是否存在
-    const checkResult = await pool.query('SELECT id FROM albums WHERE id = $1', [albumId]);
+    // 检查相册是否存在且属于当前用户
+    const checkResult = await pool.query(
+      'SELECT id FROM albums WHERE id = $1 AND user_id = $2',
+      [albumId, userId]
+    );
+    
     if (checkResult.rows.length === 0) {
       // 删除已上传的文件
       files.forEach(file => {
@@ -286,7 +315,7 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
           fs.unlinkSync(filePath);
         }
       });
-      return res.status(404).json({ error: '相册不存在' });
+      return res.status(404).json({ error: '相册不存在或无权访问' });
     }
     
     // 插入图片记录

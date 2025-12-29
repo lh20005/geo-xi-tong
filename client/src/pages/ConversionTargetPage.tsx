@@ -20,7 +20,7 @@ import {
 } from '@ant-design/icons';
 import type { TablePaginationConfig } from 'antd';
 import type { FilterValue, SorterResult } from 'antd/es/table/interface';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 import ResizableTable from '../components/ResizableTable';
 
 const { TextArea } = Input;
@@ -61,7 +61,7 @@ export default function ConversionTargetPage() {
   const loadConversionTargets = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/conversion-targets', {
+      const response = await apiClient.get('/conversion-targets', {
         params: {
           page: currentPage,
           pageSize,
@@ -235,7 +235,7 @@ export default function ConversionTargetPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const response = await axios.delete(`/api/conversion-targets/${record.id}`);
+          const response = await apiClient.delete(`/conversion-targets/${record.id}`);
           if (response.data.success) {
             message.success('删除成功');
             loadConversionTargets();
@@ -266,14 +266,14 @@ export default function ConversionTargetPage() {
       };
 
       if (modalMode === 'create') {
-        const response = await axios.post('/api/conversion-targets', data);
+        const response = await apiClient.post('/conversion-targets', data);
         if (response.data.success) {
           message.success('创建成功');
           setModalVisible(false);
           loadConversionTargets();
         }
       } else if (modalMode === 'edit' && selectedTarget) {
-        const response = await axios.patch(`/api/conversion-targets/${selectedTarget.id}`, data);
+        const response = await apiClient.patch(`/conversion-targets/${selectedTarget.id}`, data);
         if (response.data.success) {
           message.success('更新成功');
           setModalVisible(false);

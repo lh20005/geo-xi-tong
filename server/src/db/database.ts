@@ -80,6 +80,7 @@ export interface TopicsQueryFilters {
   search?: string;  // 新增：搜索话题内容
   page?: number;
   pageSize?: number;
+  userId?: number;  // 新增：用户ID用于多租户隔离
 }
 
 /**
@@ -99,13 +100,21 @@ export async function getTopicsWithReferences(
     provider,
     search,
     page = 1,
-    pageSize = 10
+    pageSize = 10,
+    userId
   } = filters;
 
   // 构建WHERE条件
   const conditions: string[] = [];
   const params: any[] = [];
   let paramIndex = 1;
+
+  // 添加用户ID过滤（多租户隔离）
+  if (userId !== undefined) {
+    conditions.push(`d.user_id = $${paramIndex}`);
+    params.push(userId);
+    paramIndex++;
+  }
 
   // search参数优先级最高，如果提供了search，忽略其他筛选条件
   if (search) {
@@ -192,12 +201,19 @@ export async function getTopicsWithReferences(
 export async function getTopicsStatistics(
   filters: TopicsQueryFilters = {}
 ): Promise<TopicsStatistics> {
-  const { keyword, provider, search } = filters;
+  const { keyword, provider, search, userId } = filters;
 
   // 构建WHERE条件
   const conditions: string[] = [];
   const params: any[] = [];
   let paramIndex = 1;
+
+  // 添加用户ID过滤（多租户隔离）
+  if (userId !== undefined) {
+    conditions.push(`d.user_id = $${paramIndex}`);
+    params.push(userId);
+    paramIndex++;
+  }
 
   // search参数优先级最高
   if (search) {

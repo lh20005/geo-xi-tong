@@ -47,20 +47,32 @@ export class DistillationService {
     pageSize: number = 10,
     sortBy: 'created_at' | 'usage_count' = 'usage_count',
     sortOrder: 'asc' | 'desc' = 'asc',
-    filterUsage: 'all' | 'used' | 'unused' = 'all'
+    filterUsage: 'all' | 'used' | 'unused' = 'all',
+    userId?: number
   ): Promise<{ distillations: DistillationUsageStats[]; total: number }> {
     const offset = (page - 1) * pageSize;
 
     // 构建WHERE子句用于筛选
-    let whereClause = '';
-    if (filterUsage === 'used') {
-      whereClause = 'WHERE d.usage_count > 0';
-    } else if (filterUsage === 'unused') {
-      whereClause = 'WHERE d.usage_count = 0';
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+    
+    if (userId !== undefined) {
+      conditions.push(`d.user_id = $${paramIndex}`);
+      params.push(userId);
+      paramIndex++;
     }
+    
+    if (filterUsage === 'used') {
+      conditions.push('d.usage_count > 0');
+    } else if (filterUsage === 'unused') {
+      conditions.push('d.usage_count = 0');
+    }
+    
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // 获取总数（应用筛选）
-    const countResult = await pool.query(`SELECT COUNT(*) FROM distillations d ${whereClause}`);
+    const countResult = await pool.query(`SELECT COUNT(*) FROM distillations d ${whereClause}`, params);
     const total = parseInt(countResult.rows[0].count);
 
     // 构建ORDER BY子句
@@ -82,8 +94,8 @@ export class DistillationService {
        ${whereClause}
        GROUP BY d.id, d.keyword, d.provider, d.usage_count, d.created_at
        ${orderByClause}
-       LIMIT $1 OFFSET $2`,
-      [pageSize, offset]
+       LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
+      [...params, pageSize, offset]
     );
 
     return {
@@ -191,8 +203,23 @@ export class DistillationService {
    * 过滤掉没有话题的蒸馏结果
    */
   async getRecommendedDistillations(
-    limit: number = 3
+    limit: number = 3,
+    userId?: number
   ): Promise<RecommendedDistillation[]> {
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+    
+    if (userId !== undefined) {
+      conditions.push(`d.user_id = $${paramIndex}`);
+      params.push(userId);
+      paramIndex++;
+    }
+    
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    params.push(limit);
+    
     const result = await pool.query(
       `SELECT 
         d.id as distillation_id,
@@ -201,11 +228,12 @@ export class DistillationService {
         COUNT(t.id) as topic_count
        FROM distillations d
        LEFT JOIN topics t ON d.id = t.distillation_id
+       ${whereClause}
        GROUP BY d.id, d.keyword, d.usage_count
        HAVING COUNT(t.id) > 0
        ORDER BY d.usage_count ASC, d.created_at ASC
-       LIMIT $1`,
-      [limit]
+       LIMIT $${paramIndex}`,
+      params
     );
 
     return result.rows.map((row, index) => ({
@@ -390,7 +418,7 @@ export class DistillationService {
    * @param filters 筛选参数
    * @returns 包含数据、分页信息和统计信息的响应
    */
-  async getResultsWithReferences(filters: TopicsQueryFilters = {}): Promise<{
+  async getResultsWithReferences(filters: TopicsQueryFilters & { userId?: number } = {}): Promise<{
     data: Array<{
       id: number;
       distillationId: number;

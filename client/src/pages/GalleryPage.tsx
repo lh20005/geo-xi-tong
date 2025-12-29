@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag } from 'antd';
 import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 import type { UploadFile } from 'antd';
 
 interface Album {
@@ -27,7 +27,7 @@ export default function GalleryPage() {
 
   const loadAlbums = async () => {
     try {
-      const response = await axios.get('/api/gallery/albums');
+      const response = await apiClient.get('/gallery/albums');
       setAlbums(response.data.albums);
     } catch (error) {
       console.error('加载相册失败:', error);
@@ -53,7 +53,7 @@ export default function GalleryPage() {
         }
       });
 
-      await axios.post('/api/gallery/albums', formData, {
+      await apiClient.post('/gallery/albums', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -80,7 +80,7 @@ export default function GalleryPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/gallery/albums/${id}`);
+          await apiClient.delete(`/gallery/albums/${id}`);
           message.success('相册删除成功');
           loadAlbums();
         } catch (error: any) {
@@ -114,7 +114,7 @@ export default function GalleryPage() {
         }
         
         try {
-          await axios.patch(`/api/gallery/albums/${id}`, { name: newName.trim() });
+          await apiClient.patch(`/gallery/albums/${id}`, { name: newName.trim() });
           message.success('相册名称更新成功');
           loadAlbums();
         } catch (error: any) {

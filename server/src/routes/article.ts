@@ -2,18 +2,29 @@ import { Router } from 'express';
 import { pool } from '../db/database';
 import { AIService } from '../services/aiService';
 import { KnowledgeBaseService } from '../services/knowledgeBaseService';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 export const articleRouter = Router();
 
-// 获取文章统计数据
+// 所有路由都需要认证和租户上下文
+articleRouter.use(authenticate);
+articleRouter.use(setTenantContext);
+articleRouter.use(requireTenantContext);
+
+// 获取文章统计数据（只统计当前用户的）
 articleRouter.get('/stats', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
+    
     const result = await pool.query(
       `SELECT 
         COUNT(*) as total,
         COUNT(*) FILTER (WHERE is_published = true) as published,
         COUNT(*) FILTER (WHERE is_published = false) as unpublished
-       FROM articles`
+       FROM articles
+       WHERE user_id = $1`,
+      [userId]
     );
     
     const stats = result.rows[0];
@@ -28,16 +39,20 @@ articleRouter.get('/stats', async (req, res) => {
   }
 });
 
-// 获取关键词统计数据
+// 获取关键词统计数据（只统计当前用户的）
 articleRouter.get('/stats/keywords', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
+    
     const result = await pool.query(
       `SELECT 
         keyword,
         COUNT(*) as count
        FROM articles
+       WHERE user_id = $1
        GROUP BY keyword
-       ORDER BY count DESC, keyword ASC`
+       ORDER BY count DESC, keyword ASC`,
+      [userId]
     );
     
     res.json({
@@ -55,15 +70,27 @@ articleRouter.get('/stats/keywords', async (req, res) => {
 // 生成文章
 articleRouter.post('/generate', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { keyword, distillationId, requirements, topicIds, knowledgeBaseIds } = req.body;
     
     if (!keyword || !distillationId) {
       return res.status(400).json({ error: '缺少必要参数' });
     }
     
-    // 获取API配置
+    // 验证蒸馏记录所有权
+    const distillationCheck = await pool.query(
+      'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
+      [distillationId, userId]
+    );
+    
+    if (distillationCheck.rows.length === 0) {
+      return res.status(404).json({ error: '蒸馏记录不存在或无权访问' });
+    }
+    
+    // 获取当前用户的API配置
     const configResult = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true LIMIT 1'
+      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true AND user_id = $1 LIMIT 1',
+      [userId]
     );
     
     if (configResult.rows.length === 0) {
@@ -92,9 +119,19 @@ articleRouter.post('/generate', async (req, res) => {
       ollamaModel: ollama_model
     });
     
-    // 获取知识库上下文（如果提供了知识库ID）
+    // 获取知识库上下文（如果提供了知识库ID，验证所有权）
     let knowledgeContext = '';
     if (knowledgeBaseIds && Array.isArray(knowledgeBaseIds) && knowledgeBaseIds.length > 0) {
+      // 验证知识库所有权
+      const kbCheck = await pool.query(
+        'SELECT id FROM knowledge_bases WHERE id = ANY($1) AND user_id = $2',
+        [knowledgeBaseIds, userId]
+      );
+      
+      if (kbCheck.rows.length !== knowledgeBaseIds.length) {
+        return res.status(404).json({ error: '部分知识库不存在或无权访问' });
+      }
+      
       const knowledgeService = new KnowledgeBaseService();
       knowledgeContext = await knowledgeService.getKnowledgeContext(knowledgeBaseIds);
     }
@@ -107,12 +144,12 @@ articleRouter.post('/generate', async (req, res) => {
       knowledgeContext
     );
     
-    // 保存文章
+    // 保存文章（关联用户）
     const articleResult = await pool.query(
-      `INSERT INTO articles (keyword, distillation_id, requirements, content, provider)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO articles (keyword, distillation_id, requirements, content, provider, user_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [keyword, distillationId, requirements, content, provider]
+      [keyword, distillationId, requirements, content, provider, userId]
     );
     
     res.json({
@@ -134,6 +171,7 @@ articleRouter.delete('/batch', async (req, res) => {
   const client = await pool.connect();
   
   try {
+    const userId = getCurrentTenantId(req);
     const { ids } = req.body;
     
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
@@ -142,19 +180,19 @@ articleRouter.delete('/batch', async (req, res) => {
 
     await client.query('BEGIN');
     
-    // 获取要删除的文章的distillation_id统计
+    // 获取要删除的文章的distillation_id统计（仅当前用户的文章）
     const distillationResult = await client.query(
       `SELECT distillation_id, COUNT(*) as count
        FROM articles
-       WHERE id = ANY($1::integer[]) AND distillation_id IS NOT NULL
+       WHERE id = ANY($1::integer[]) AND user_id = $2 AND distillation_id IS NOT NULL
        GROUP BY distillation_id`,
-      [ids]
+      [ids, userId]
     );
     
-    // 删除文章（级联删除会自动删除distillation_usage记录）
+    // 删除文章（级联删除会自动删除distillation_usage记录，仅当前用户的）
     const deleteResult = await client.query(
-      'DELETE FROM articles WHERE id = ANY($1::integer[]) RETURNING id',
-      [ids]
+      'DELETE FROM articles WHERE id = ANY($1::integer[]) AND user_id = $2 RETURNING id',
+      [ids, userId]
     );
     
     const deletedCount = deleteResult.rows.length;
@@ -188,19 +226,23 @@ articleRouter.delete('/all', async (req, res) => {
   const client = await pool.connect();
   
   try {
+    const userId = getCurrentTenantId(req);
+    
     await client.query('BEGIN');
     
-    // 获取所有文章的distillation_id统计
+    // 获取所有文章的distillation_id统计（仅当前用户）
     const distillationResult = await client.query(
       `SELECT distillation_id, COUNT(*) as count
        FROM articles
-       WHERE distillation_id IS NOT NULL
-       GROUP BY distillation_id`
+       WHERE user_id = $1 AND distillation_id IS NOT NULL
+       GROUP BY distillation_id`,
+      [userId]
     );
     
-    // 删除所有文章
+    // 删除所有文章（仅当前用户）
     const deleteResult = await client.query(
-      'DELETE FROM articles RETURNING id'
+      'DELETE FROM articles WHERE user_id = $1 RETURNING id',
+      [userId]
     );
     
     const deletedCount = deleteResult.rows.length;
@@ -232,6 +274,7 @@ articleRouter.delete('/all', async (req, res) => {
 // 获取文章列表（支持分页和多条件筛选）
 articleRouter.get('/', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 10;
     const taskId = req.query.taskId ? parseInt(req.query.taskId as string) : null;
@@ -245,10 +288,10 @@ articleRouter.get('/', async (req, res) => {
 
     const offset = (page - 1) * pageSize;
 
-    // 构建查询条件
-    const whereClauses: string[] = [];
-    const queryParams: any[] = [];
-    let paramIndex = 1;
+    // 构建查询条件（首先添加用户隔离）
+    const whereClauses: string[] = ['a.user_id = $1'];
+    const queryParams: any[] = [userId];
+    let paramIndex = 2;
 
     if (taskId !== null) {
       whereClauses.push(`a.task_id = $${paramIndex}`);
@@ -355,6 +398,7 @@ articleRouter.get('/', async (req, res) => {
 // 获取文章详情
 articleRouter.get('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { id } = req.params;
     
     const result = await pool.query(
@@ -382,12 +426,12 @@ articleRouter.get('/:id', async (req, res) => {
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
-       WHERE a.id = $1`,
-      [id]
+       WHERE a.id = $1 AND a.user_id = $2`,
+      [id, userId]
     );
     
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: '文章不存在' });
+      return res.status(404).json({ error: '文章不存在或无权访问' });
     }
     
     const article = result.rows[0];
@@ -420,6 +464,7 @@ articleRouter.get('/:id', async (req, res) => {
 // 更新文章
 articleRouter.put('/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { id } = req.params;
     const { title, content, imageUrl } = req.body;
 
@@ -431,13 +476,14 @@ articleRouter.put('/:id', async (req, res) => {
       return res.status(400).json({ error: '文章内容不能为空' });
     }
 
+    // 验证文章所有权
     const checkResult = await pool.query(
-      'SELECT id FROM articles WHERE id = $1',
-      [id]
+      'SELECT id FROM articles WHERE id = $1 AND user_id = $2',
+      [id, userId]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '文章不存在' });
+      return res.status(404).json({ error: '文章不存在或无权访问' });
     }
 
     const updateFields = ['title = $1', 'content = $2', 'updated_at = CURRENT_TIMESTAMP'];
@@ -451,11 +497,12 @@ articleRouter.put('/:id', async (req, res) => {
     }
 
     updateValues.push(id);
+    updateValues.push(userId);
 
     const result = await pool.query(
       `UPDATE articles 
        SET ${updateFields.join(', ')}
-       WHERE id = $${paramIndex}
+       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
        RETURNING id, title, keyword, distillation_id, task_id, requirements,
                  content, image_url, provider, created_at, updated_at, is_published, published_at`,
       updateValues
@@ -486,6 +533,7 @@ articleRouter.put('/:id', async (req, res) => {
 // 智能排版文章
 articleRouter.post('/:id/smart-format', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { id } = req.params;
     const { content, imageUrl } = req.body;
 
@@ -493,17 +541,20 @@ articleRouter.post('/:id/smart-format', async (req, res) => {
       return res.status(400).json({ error: '文章内容不能为空' });
     }
 
+    // 验证文章所有权
     const checkResult = await pool.query(
-      'SELECT id FROM articles WHERE id = $1',
-      [id]
+      'SELECT id FROM articles WHERE id = $1 AND user_id = $2',
+      [id, userId]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '文章不存在' });
+      return res.status(404).json({ error: '文章不存在或无权访问' });
     }
 
+    // 使用当前用户的API配置
     const configResult = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true LIMIT 1'
+      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true AND user_id = $1 LIMIT 1',
+      [userId]
     );
 
     if (configResult.rows.length === 0) {
@@ -552,6 +603,7 @@ articleRouter.post('/:id/smart-format', async (req, res) => {
 // 更新文章发布状态
 articleRouter.put('/:id/publish', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { id } = req.params;
     const { isPublished } = req.body;
 
@@ -559,13 +611,14 @@ articleRouter.put('/:id/publish', async (req, res) => {
       return res.status(400).json({ error: 'isPublished必须是布尔值' });
     }
 
+    // 验证文章所有权
     const checkResult = await pool.query(
-      'SELECT id FROM articles WHERE id = $1',
-      [id]
+      'SELECT id FROM articles WHERE id = $1 AND user_id = $2',
+      [id, userId]
     );
 
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '文章不存在' });
+      return res.status(404).json({ error: '文章不存在或无权访问' });
     }
 
     const result = await pool.query(
@@ -573,9 +626,9 @@ articleRouter.put('/:id/publish', async (req, res) => {
        SET is_published = $1, 
            published_at = CASE WHEN $1 = true THEN CURRENT_TIMESTAMP ELSE NULL END,
            updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2
+       WHERE id = $2 AND user_id = $3
        RETURNING id, is_published, published_at, updated_at`,
-      [isPublished, id]
+      [isPublished, id, userId]
     );
 
     const article = result.rows[0];
@@ -596,23 +649,26 @@ articleRouter.delete('/:id', async (req, res) => {
   const client = await pool.connect();
   
   try {
+    const userId = getCurrentTenantId(req);
     const { id } = req.params;
     
     await client.query('BEGIN');
     
+    // 验证文章所有权并获取distillation_id
     const articleResult = await client.query(
-      'SELECT distillation_id FROM articles WHERE id = $1',
-      [id]
+      'SELECT distillation_id FROM articles WHERE id = $1 AND user_id = $2',
+      [id, userId]
     );
     
     if (articleResult.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ error: '文章不存在' });
+      return res.status(404).json({ error: '文章不存在或无权访问' });
     }
     
     const distillationId = articleResult.rows[0].distillation_id;
     
-    await client.query('DELETE FROM articles WHERE id = $1', [id]);
+    // 删除文章（仅当前用户的）
+    await client.query('DELETE FROM articles WHERE id = $1 AND user_id = $2', [id, userId]);
     
     if (distillationId) {
       await client.query(

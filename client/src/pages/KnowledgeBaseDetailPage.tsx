@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Button, message, Space, Modal, Upload, Empty, Input, Tag, Tooltip } from 'antd';
 import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 import ResizableTable from '../components/ResizableTable';
 import type { UploadFile } from 'antd';
 
@@ -43,7 +43,7 @@ export default function KnowledgeBaseDetailPage() {
 
   const loadKnowledgeBase = async () => {
     try {
-      const response = await axios.get(`/api/knowledge-bases/${id}`);
+      const response = await apiClient.get(`/knowledge-bases/${id}`);
       setKnowledgeBase(response.data);
       setDocuments(response.data.documents);
     } catch (error) {
@@ -67,7 +67,7 @@ export default function KnowledgeBaseDetailPage() {
         }
       });
 
-      const response = await axios.post(`/api/knowledge-bases/${id}/documents`, formData, {
+      const response = await apiClient.post(`/knowledge-bases/${id}/documents`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -99,7 +99,7 @@ export default function KnowledgeBaseDetailPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/knowledge-bases/documents/${docId}`);
+          await apiClient.delete(`/knowledge-bases/documents/${docId}`);
           message.success('文档删除成功');
           loadKnowledgeBase();
         } catch (error: any) {
@@ -111,7 +111,7 @@ export default function KnowledgeBaseDetailPage() {
 
   const handleViewDocument = async (docId: number) => {
     try {
-      const response = await axios.get(`/api/knowledge-bases/documents/${docId}`);
+      const response = await apiClient.get(`/knowledge-bases/documents/${docId}`);
       setSelectedDoc(response.data);
       setViewModalVisible(true);
     } catch (error: any) {
@@ -126,7 +126,7 @@ export default function KnowledgeBaseDetailPage() {
     }
 
     try {
-      const response = await axios.get(`/api/knowledge-bases/${id}/documents/search?q=${encodeURIComponent(searchKeyword)}`);
+      const response = await apiClient.get(`/knowledge-bases/${id}/documents/search?q=${encodeURIComponent(searchKeyword)}`);
       setDocuments(response.data.documents);
     } catch (error: any) {
       message.error(error.response?.data?.error || '搜索失败');

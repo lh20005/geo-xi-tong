@@ -3,8 +3,6 @@ import { Table, Button, Modal, Form, InputNumber, message, Card, Statistic, Tag,
 import { EditOutlined, HistoryOutlined, DollarOutlined, SettingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 
-const { TabPane } = Tabs;
-
 interface Plan {
   id: number;
   plan_code: string;

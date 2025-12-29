@@ -1,4 +1,4 @@
-import axios from 'axios';
+import { apiClient } from './client';
 
 export interface DistillationUsageStats {
   distillationId: number;
@@ -29,7 +29,7 @@ export async function getDistillationsWithStats(
   sortOrder: 'asc' | 'desc' = 'asc',
   filterUsage: 'all' | 'used' | 'unused' = 'all'
 ): Promise<{ distillations: DistillationUsageStats[]; total: number }> {
-  const response = await axios.get('/api/distillation/stats', {
+  const response = await apiClient.get('/distillation/stats', {
     params: { page, pageSize, sortBy, sortOrder, filterUsage }
   });
   return response.data;
@@ -42,7 +42,7 @@ export async function getDistillationsWithStats(
 export async function getRecommendedDistillations(
   limit: number = 10
 ): Promise<RecommendedDistillation[]> {
-  const response = await axios.get('/api/distillation/recommended', {
+  const response = await apiClient.get('/distillation/recommended', {
     params: { limit }
   });
   return response.data;
@@ -54,7 +54,7 @@ export async function getRecommendedDistillations(
 export async function getDistillationDetail(
   distillationId: number
 ): Promise<DistillationUsageStats | null> {
-  const response = await axios.get(`/api/distillation/${distillationId}`);
+  const response = await apiClient.get(`/distillation/${distillationId}`);
   return response.data;
 }
 
@@ -80,7 +80,7 @@ export async function getUsageHistory(
   page: number;
   pageSize: number;
 }> {
-  const response = await axios.get(`/api/distillation/${distillationId}/usage`, {
+  const response = await apiClient.get(`/distillation/${distillationId}/usage`, {
     params: { page, pageSize }
   });
   return response.data;

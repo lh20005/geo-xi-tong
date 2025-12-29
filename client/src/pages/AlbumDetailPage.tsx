@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, Button, message, Space, Modal, Upload, Empty, Image, Row, Col, Input } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../api/client';
 import type { UploadFile } from 'antd';
 
 interface ImageData {
@@ -38,7 +38,7 @@ export default function AlbumDetailPage() {
   const loadAlbumDetail = async (id: number) => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/gallery/albums/${id}`);
+      const response = await apiClient.get(`/gallery/albums/${id}`);
       setAlbum(response.data);
     } catch (error: any) {
       message.error(error.response?.data?.error || '加载相册失败');
@@ -65,7 +65,7 @@ export default function AlbumDetailPage() {
         }
       });
 
-      await axios.post(`/api/gallery/albums/${albumId}/images`, formData, {
+      await apiClient.post(`/gallery/albums/${albumId}/images`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
@@ -91,7 +91,7 @@ export default function AlbumDetailPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/gallery/images/${imageId}`);
+          await apiClient.delete(`/gallery/images/${imageId}`);
           message.success('图片删除成功');
           loadAlbumDetail(parseInt(albumId!));
         } catch (error: any) {
@@ -124,7 +124,7 @@ export default function AlbumDetailPage() {
         }
         
         try {
-          await axios.patch(`/api/gallery/albums/${albumId}`, { name: newName.trim() });
+          await apiClient.patch(`/gallery/albums/${albumId}`, { name: newName.trim() });
           message.success('相册名称更新成功');
           loadAlbumDetail(parseInt(albumId!));
         } catch (error: any) {
@@ -144,7 +144,7 @@ export default function AlbumDetailPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/gallery/albums/${albumId}`);
+          await apiClient.delete(`/gallery/albums/${albumId}`);
           message.success('相册删除成功');
           navigate('/gallery');
         } catch (error: any) {
