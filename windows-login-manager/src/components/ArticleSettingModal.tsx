@@ -94,7 +94,7 @@ export default function ArticleSettingModal({
       cancelText="取消"
       cancelButtonProps={{ style: { display: mode === 'view' ? 'none' : 'inline-block' } }}
       width={720}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

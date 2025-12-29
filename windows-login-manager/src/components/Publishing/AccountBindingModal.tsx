@@ -60,7 +60,7 @@ export default function AccountBindingModal({
       onCancel={handleCancel}
       confirmLoading={loading}
       width={500}
-      destroyOnClose
+      destroyOnHidden
     >
       <Form
         form={form}

@@ -116,12 +116,24 @@ router.post('/accounts', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const { platform_id, account_name, credentials, real_username } = req.body;
     
+    console.log('[创建账号] 开始处理请求');
+    console.log('[创建账号] platform_id:', platform_id);
+    console.log('[创建账号] account_name:', account_name);
+    console.log('[创建账号] real_username:', real_username);
+    console.log('[创建账号] userId:', userId);
+    console.log('[创建账号] credentials 类型:', typeof credentials);
+    console.log('[创建账号] credentials 是否有 cookies:', credentials?.cookies ? 'yes' : 'no');
+    console.log('[创建账号] cookies 数量:', credentials?.cookies?.length || 0);
+    
     if (!platform_id || !account_name || !credentials) {
+      console.log('[创建账号] 缺少必需参数');
       return res.status(400).json({
         success: false,
         message: '缺少必需参数'
       });
     }
+    
+    console.log('[创建账号] 参数验证通过，开始创建/更新账号');
     
     // 使用 createOrUpdateAccount 实现去重
     let result;
@@ -142,6 +154,8 @@ router.post('/accounts', async (req, res) => {
     
     const { account, isNew } = result;
     
+    console.log('[创建账号] 账号保存成功, ID:', account.id, 'isNew:', isNew);
+    
     // 广播账号事件
     if (isNew) {
       getWebSocketService().broadcastAccountEvent('created', account);
@@ -156,10 +170,12 @@ router.post('/accounts', async (req, res) => {
       isNew
     });
   } catch (error: any) {
-    console.error('创建/更新账号失败:', error);
+    console.error('[创建账号] 失败:', error);
+    console.error('[创建账号] 错误堆栈:', error.stack);
     res.status(400).json({
       success: false,
-      message: error.message || '创建/更新账号失败'
+      message: error.message || '创建/更新账号失败',
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

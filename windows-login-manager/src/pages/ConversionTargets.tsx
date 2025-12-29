@@ -332,7 +332,7 @@ export default function ConversionTargets() {
         cancelText="取消"
         cancelButtonProps={{ style: { display: modalMode === 'view' ? 'none' : 'inline-block' } }}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form form={form} layout="vertical" disabled={modalMode === 'view'}>
           <Form.Item

@@ -358,7 +358,7 @@ export default function ConversionTargetPage() {
         cancelText="取消"
         cancelButtonProps={{ style: { display: modalMode === 'view' ? 'none' : 'inline-block' } }}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <Form
           form={form}

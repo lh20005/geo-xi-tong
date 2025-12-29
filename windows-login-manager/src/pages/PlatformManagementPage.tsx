@@ -369,7 +369,7 @@ export default function PlatformManagementPage() {
                     transition: 'all 0.3s ease',
                     cursor: 'pointer'
                   }}
-                  bodyStyle={{ padding: '24px 16px' }}
+                  styles={{ body: { padding: '24px 16px' } }}
                 >
                   {bound && (
                     <div

@@ -279,7 +279,7 @@ export default function PublishingConfigModal({
       onCancel={handleCancel}
       confirmLoading={loading}
       width={1200}
-      destroyOnClose
+      destroyOnHidden
       okText={`创建发布任务 ${selectedArticleIds.size > 0 ? `(${selectedArticleIds.size} 篇)` : ''}`}
       cancelText="取消"
       okButtonProps={{ disabled: selectedArticleIds.size === 0 }}

@@ -1063,7 +1063,7 @@ export default function PublishingTasksPage() {
                       transition: 'all 0.3s ease',
                       cursor: 'pointer'
                     }}
-                    bodyStyle={{ padding: '20px 16px' }}
+                    styles={{ body: { padding: '20px 16px' } }}
                   >
                     {isSelected && (
                       <div
@@ -1118,7 +1118,7 @@ export default function PublishingTasksPage() {
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             border: 'none'
           }}
-          bodyStyle={{ padding: 20 }}
+          styles={{ body: { padding: 20 } }}
         >
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             {/* 统计信息 */}

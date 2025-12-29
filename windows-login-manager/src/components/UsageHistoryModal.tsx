@@ -149,7 +149,7 @@ const UsageHistoryModal: React.FC<UsageHistoryModalProps> = ({
       onCancel={handleClose}
       footer={null}
       width={800}
-      destroyOnClose
+      destroyOnHidden
     >
       <Spin spinning={loading}>
         {usageHistory.length === 0 && !loading ? (

@@ -220,22 +220,6 @@ export default function ConfigPage() {
     }
   };
 
-export default function ConfigPage() {
-  const [systemConfig, setSystemConfig] = useState<any>(null);
-
-  useEffect(() => {
-    loadSystemConfig();
-  }, []);
-
-  const loadSystemConfig = async () => {
-    try {
-      const response = await apiClient.get('/config/active');
-      setSystemConfig(response.data);
-    } catch (error) {
-      console.error('加载系统配置失败:', error);
-    }
-  };
-
   return (
     <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
       <Card

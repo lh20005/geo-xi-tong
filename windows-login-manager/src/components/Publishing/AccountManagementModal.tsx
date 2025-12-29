@@ -130,7 +130,7 @@ export default function AccountManagementModal({
       onCancel={onCancel}
       footer={null}
       width={700}
-      destroyOnClose
+      destroyOnHidden
     >
       {!editingAccount && !addingAccount && (
         <>

@@ -79,6 +79,42 @@ export class EncryptionService {
   }
 
   /**
+   * 加密对象（将对象序列化为JSON后加密）
+   * @param obj 要加密的对象
+   * @returns 加密后的文本
+   */
+  encryptObject(obj: any): string {
+    if (!obj) {
+      throw new Error('Object to encrypt cannot be empty');
+    }
+
+    try {
+      const jsonString = JSON.stringify(obj);
+      return this.encrypt(jsonString);
+    } catch (error: any) {
+      throw new Error(`Failed to encrypt object: ${error.message}`);
+    }
+  }
+
+  /**
+   * 解密对象（解密后反序列化为对象）
+   * @param encryptedText 加密的文本
+   * @returns 解密后的对象
+   */
+  decryptObject(encryptedText: string): any {
+    if (!encryptedText) {
+      throw new Error('Encrypted text cannot be empty');
+    }
+
+    try {
+      const jsonString = this.decrypt(encryptedText);
+      return JSON.parse(jsonString);
+    } catch (error: any) {
+      throw new Error(`Failed to decrypt object: ${error.message}`);
+    }
+  }
+
+  /**
    * 验证加密密钥是否正确配置
    */
   static validateEncryptionKey(): boolean {

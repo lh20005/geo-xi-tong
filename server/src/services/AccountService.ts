@@ -87,12 +87,27 @@ export class AccountService {
    * 如果同一平台的同一用户名已存在，则更新；否则创建新账号
    */
   async createOrUpdateAccount(input: CreateAccountInput, realUsername: string, userId: number): Promise<{ account: Account; isNew: boolean }> {
+    console.log('[AccountService] createOrUpdateAccount 开始');
+    console.log('[AccountService] platform_id:', input.platform_id);
+    console.log('[AccountService] account_name:', input.account_name);
+    console.log('[AccountService] realUsername:', realUsername);
+    console.log('[AccountService] userId:', userId);
+    
     // 验证凭证格式
-    this.validateCredentials(input.credentials);
+    try {
+      console.log('[AccountService] 开始验证凭证格式');
+      this.validateCredentials(input.credentials);
+      console.log('[AccountService] 凭证格式验证通过');
+    } catch (error: any) {
+      console.error('[AccountService] 凭证验证失败:', error.message);
+      throw error;
+    }
     
     // 检查是否已存在相同的账号（同一用户下）
     // 使用 real_username 作为唯一标识（如果提供），否则使用 account_name
     const uniqueIdentifier = realUsername || input.account_name;
+    
+    console.log('[AccountService] 检查是否存在重复账号, uniqueIdentifier:', uniqueIdentifier);
     
     const existingResult = await pool.query(
       `SELECT * FROM platform_accounts 
@@ -108,7 +123,9 @@ export class AccountService {
       const existingAccount = existingResult.rows[0];
       console.log(`[账号去重] 发现已存在账号 ID: ${existingAccount.id}, 平台: ${input.platform_id}, 用户名: ${uniqueIdentifier}`);
       
+      console.log('[AccountService] 开始加密凭证（更新）');
       const encryptedCredentials = encryptionService.encryptObject(input.credentials);
+      console.log('[AccountService] 凭证加密完成，长度:', encryptedCredentials.length);
       
       const updateResult = await pool.query(
         `UPDATE platform_accounts 
@@ -132,7 +149,9 @@ export class AccountService {
       // 账号不存在，创建新账号
       console.log(`[账号去重] 创建新账号，平台: ${input.platform_id}, 用户名: ${uniqueIdentifier}`);
       
+      console.log('[AccountService] 开始加密凭证（新建）');
       const encryptedCredentials = encryptionService.encryptObject(input.credentials);
+      console.log('[AccountService] 凭证加密完成，长度:', encryptedCredentials.length);
       
       const insertResult = await pool.query(
         `INSERT INTO platform_accounts 
