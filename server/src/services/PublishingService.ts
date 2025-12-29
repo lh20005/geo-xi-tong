@@ -9,6 +9,7 @@ export interface PublishingTask {
   account_name?: string;
   real_username?: string;
   platform_id: string;
+  user_id: number; // 添加 user_id 字段
   status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled' | 'timeout';
   config: {
     timeout_minutes?: number;
@@ -579,6 +580,7 @@ export class PublishingService {
       account_id: row.account_id,
       account_name: row.account_name,
       platform_id: row.platform_id,
+      user_id: row.user_id, // 添加 user_id 字段
       status: row.status,
       config: typeof row.config === 'string' ? JSON.parse(row.config) : row.config,
       scheduled_at: row.scheduled_at,

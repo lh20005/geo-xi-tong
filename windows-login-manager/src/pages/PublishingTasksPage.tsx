@@ -1150,15 +1150,17 @@ export default function PublishingTasksPage() {
                 <Space size="middle" align="center">
                   <FieldTimeOutlined style={{ color: '#fff', fontSize: 20 }} />
                   <Text style={{ color: '#fff', fontSize: 14 }}>发布间隔：</Text>
-                  <InputNumber
-                    min={1}
-                    max={1440}
-                    value={publishInterval}
-                    onChange={(value) => setPublishInterval(value || 5)}
-                    addonAfter="分钟"
-                    style={{ width: 140 }}
-                    placeholder="间隔时间"
-                  />
+                  <Space.Compact>
+                    <InputNumber
+                      min={1}
+                      max={1440}
+                      value={publishInterval}
+                      onChange={(value) => setPublishInterval(value || 5)}
+                      style={{ width: 100 }}
+                      placeholder="间隔时间"
+                    />
+                    <Button disabled style={{ pointerEvents: 'none' }}>分钟</Button>
+                  </Space.Compact>
                   <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
                     第一篇立即发布，后续文章每隔 {publishInterval} 分钟发布一篇
                   </Text>

@@ -1870,7 +1870,7 @@ export class ArticleGenerationService {
       
       if (!checks.aiConfigExists) {
         recommendations.push('没有活跃的系统级AI配置，请联系管理员配置AI服务');
-      } else {
+      } else if (config) {
         if (config.provider === 'ollama') {
           checks.aiConfigValid = !!(config.ollamaBaseUrl && config.ollamaModel);
           if (!checks.aiConfigValid) {

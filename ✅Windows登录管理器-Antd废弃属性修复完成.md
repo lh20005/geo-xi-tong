@@ -1,110 +1,106 @@
-# ✅ Windows 登录管理器 - Ant Design 废弃属性修复完成
+# ✅ Windows登录管理器 - Ant Design 废弃属性修复完成
 
-## 修复内容
+## 修复时间
+2025-12-29
 
-修复了 Ant Design 5.x 版本中的废弃属性警告，确保代码符合最新的 API 规范。
+## 问题描述
+在新建发布任务时，控制台出现 Ant Design 废弃警告：
 
-### 1. Modal 组件 - destroyOnClose → destroyOnHidden
-
-**修复原因**: `destroyOnClose` 在 Ant Design 5.x 中已废弃，需要使用 `destroyOnHidden`
-
-**修复文件** (7个):
-- ✅ `src/components/Publishing/AccountManagementModal.tsx`
-- ✅ `src/components/ArticleSettingModal.tsx`
-- ✅ `src/components/Publishing/AccountBindingModal.tsx`
-- ✅ `src/components/UsageHistoryModal.tsx`
-- ✅ `src/pages/ConversionTargets.tsx`
-- ✅ `src/components/Publishing/PublishingConfigModal.tsx`
-- ✅ `src/pages/ConversionTargetPage.tsx`
-
-**修改示例**:
-```tsx
-// 修改前
-<Modal
-  destroyOnClose
->
-
-// 修改后
-<Modal
-  destroyOnHidden
->
+**InputNumber `addonAfter` 废弃警告**
+```
+Warning: [antd: InputNumber] `addonAfter` is deprecated. Please use `Space.Compact` instead.
 ```
 
-### 2. Card 组件 - bodyStyle → styles.body
+## 修复方案
 
-**修复原因**: `bodyStyle` 在 Ant Design 5.x 中已废弃，需要使用 `styles={{ body: {...} }}`
+### InputNumber `addonAfter` 属性修复
 
-**修复文件** (2个):
-- ✅ `src/pages/PlatformManagementPage.tsx` (1处)
-- ✅ `src/pages/PublishingTasksPage.tsx` (2处)
-
-**修改示例**:
+**修复前：**
 ```tsx
-// 修改前
-<Card
-  bodyStyle={{ padding: '24px 16px' }}
->
-
-// 修改后
-<Card
-  styles={{ body: { padding: '24px 16px' } }}
->
+<InputNumber
+  min={1}
+  max={1440}
+  value={publishInterval}
+  onChange={(value) => setPublishInterval(value || 5)}
+  addonAfter="分钟"
+  style={{ width: 140 }}
+  placeholder="间隔时间"
+/>
 ```
+
+**修复后：**
+```tsx
+<Space.Compact>
+  <InputNumber
+    min={1}
+    max={1440}
+    value={publishInterval}
+    onChange={(value) => setPublishInterval(value || 5)}
+    style={{ width: 100 }}
+    placeholder="间隔时间"
+  />
+  <Button disabled style={{ pointerEvents: 'none' }}>分钟</Button>
+</Space.Compact>
+```
+
+**说明：**
+- 使用 `Space.Compact` 组件包裹 InputNumber 和 Button
+- Button 设置为 disabled 且 `pointerEvents: 'none'` 使其仅作为视觉标签
+- 保持了原有的视觉效果和用户体验
+
+## 修复的文件
+
+### 1. Windows 登录管理器
+- ✅ `windows-login-manager/src/pages/PublishingTasksPage.tsx`
+  - 修复 InputNumber addonAfter
+
+### 2. Web 客户端
+- ✅ `client/src/pages/PublishingTasksPage.tsx`
+  - 修复 InputNumber addonAfter
+
+## 关于 Modal.confirm 警告
+
+**注意：** Modal 静态方法的警告（`Modal.confirm` 无法使用动态主题）暂时保留，因为：
+
+1. 应用未使用 Ant Design 的 `<App>` 组件包裹
+2. 修改为 `App.useApp()` 需要重构整个应用结构
+3. 当前警告不影响功能使用
+4. 可以在未来的重构中统一处理
+
+如需完全消除警告，需要：
+- 在 `App.tsx` 中用 `<App>` 组件包裹整个应用
+- 使用 `App.useApp()` hook 替代 `Modal.confirm`
+
+## 验证结果
+
+- ✅ TypeScript 编译通过
+- ✅ 无语法错误
+- ✅ 无类型错误
+- ✅ 功能正常工作
+- ✅ 视觉效果保持一致
+- ✅ InputNumber addonAfter 警告已消除
+
+## 测试建议
+
+1. **发布任务创建**
+   - 测试发布间隔输入框的显示和交互
+   - 测试创建任务时的确认对话框
+   - 验证所有任务操作功能正常
 
 ## 技术说明
 
-### destroyOnClose vs destroyOnHidden
+### Space.Compact 的优势
+- 符合 Ant Design 最新设计规范
+- 更灵活的组件组合方式
+- 更好的样式控制
 
-- **旧属性**: `destroyOnClose` - 在关闭时销毁子元素
-- **新属性**: `destroyOnHidden` - 在隐藏时销毁子元素
-- **原因**: 新名称更准确地描述了行为（隐藏而非关闭）
-- **功能**: 完全相同，只是命名更规范
+## 状态
 
-### bodyStyle vs styles.body
+🎉 **修复完成** - InputNumber 废弃属性警告已解决，功能正常运行！
 
-- **旧属性**: `bodyStyle` - 直接设置 body 样式
-- **新属性**: `styles={{ body: {...} }}` - 使用统一的 styles 对象
-- **原因**: Ant Design 5.x 统一了样式配置方式
-- **优势**: 
-  - 更一致的 API 设计
-  - 支持更多部分的样式定制（header, body, actions 等）
-  - 更好的 TypeScript 类型支持
+## 下一步
 
-## 影响范围
-
-- ✅ 所有 Modal 弹窗组件
-- ✅ 所有 Card 卡片组件
-- ✅ 控制台警告已消除
-- ✅ 功能完全正常
-- ✅ 用户体验无变化
-
-## 测试验证
-
-1. **Modal 测试**:
-   - 打开各种弹窗（账号管理、文章设置、发布配置等）
-   - 确认弹窗正常打开和关闭
-   - 确认关闭后组件正确销毁
-
-2. **Card 测试**:
-   - 查看平台管理页面的平台卡片
-   - 查看发布任务页面的文章卡片
-   - 确认样式显示正常
-
-3. **控制台检查**:
-   - 打开浏览器开发者工具
-   - 确认没有 Ant Design 废弃属性警告
-
-## 兼容性
-
-- ✅ Ant Design 5.x 完全兼容
-- ✅ 向后兼容（功能无变化）
-- ✅ TypeScript 类型检查通过
-- ✅ 热更新自动生效
-
-## 总结
-
-所有 Ant Design 废弃属性已修复，代码符合最新规范，控制台警告已消除。应用功能完全正常，用户体验无任何影响。
-
-修复完成时间: 2025-12-29
-修复文件总数: 9 个
-修复位置总数: 10 处
+如需完全消除 Modal 警告，可以考虑：
+1. 重构应用入口，添加 `<App>` 组件包裹
+2. 统一使用 `App.useApp()` 替代所有静态方法
+3. 更新项目文档，记录最佳实践
