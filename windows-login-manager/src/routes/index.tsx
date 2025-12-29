@@ -41,8 +41,6 @@ const OrderManagementPage = lazy(() => import('../pages/OrderManagementPage'));
 const PaymentPage = lazy(() => import('../pages/PaymentPage'));
 
 // 登录管理器原有页面
-const PlatformSelection = lazy(() => import('../pages/PlatformSelection'));
-const AccountList = lazy(() => import('../pages/AccountList'));
 const Settings = lazy(() => import('../pages/Settings'));
 
 // 加载组件
@@ -297,22 +295,6 @@ export const routes = [
   },
   
   // 登录管理器原有页面
-  {
-    path: '/platforms',
-    element: (
-      <Suspense fallback={<LoadingFallback />}>
-        <PlatformSelection />
-      </Suspense>
-    )
-  },
-  {
-    path: '/accounts',
-    element: (
-      <Suspense fallback={<LoadingFallback />}>
-        <AccountList />
-      </Suspense>
-    )
-  },
   {
     path: '/settings',
     element: (

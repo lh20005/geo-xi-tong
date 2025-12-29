@@ -100,16 +100,6 @@ export default function Sidebar() {
       label: '文章管理',
     },
     {
-      key: '/platforms',
-      icon: <CloudUploadOutlined />,
-      label: '平台选择',
-    },
-    {
-      key: '/accounts',
-      icon: <TeamOutlined />,
-      label: '账号列表',
-    },
-    {
       key: '/platform-management',
       icon: <CloudUploadOutlined />,
       label: '平台管理',
