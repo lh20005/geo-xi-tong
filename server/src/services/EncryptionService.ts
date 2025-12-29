@@ -1,186 +1,103 @@
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
 
 /**
- * 数据加密服务
- * Requirements: 14.1, 14.2, 14.4, 14.5
+ * 加密服务
+ * 用于加密/解密敏感信息（如API密钥）
  */
 export class EncryptionService {
-  // bcrypt cost factor (Requirement 14.1)
-  private static readonly BCRYPT_ROUNDS = 10;
+  private algorithm = 'aes-256-cbc';
+  private key: Buffer;
+  private ivLength = 16;
 
-  // AES-256加密配置 (Requirement 14.2)
-  private static readonly ALGORITHM = 'aes-256-gcm';
-  private static readonly IV_LENGTH = 16;
-  private static readonly AUTH_TAG_LENGTH = 16;
-  private static readonly SALT_LENGTH = 64;
-
-  // 加密密钥（应从环境变量获取）
-  private encryptionKey: Buffer;
-
-  constructor(encryptionKey?: string) {
-    // 从环境变量或参数获取密钥
-    const key = encryptionKey || process.env.ENCRYPTION_KEY || 'default-key-for-development-only';
+  constructor() {
+    // 从环境变量获取加密密钥
+    const encryptionKey = process.env.API_KEY_ENCRYPTION_KEY;
     
-    // 生成32字节密钥（AES-256需要）
-    this.encryptionKey = crypto.scryptSync(key, 'salt', 32);
+    if (!encryptionKey) {
+      throw new Error('API_KEY_ENCRYPTION_KEY environment variable is not set');
+    }
+
+    // 确保密钥长度为32字节（256位）
+    this.key = crypto.scryptSync(encryptionKey, 'salt', 32);
   }
 
   /**
-   * 使用bcrypt哈希密码
-   * Requirement 14.1
+   * 加密文本
+   * @param text 要加密的明文
+   * @returns 加密后的文本（格式：iv:encryptedData）
    */
-  async hashPassword(password: string): Promise<string> {
-    return bcrypt.hash(password, EncryptionService.BCRYPT_ROUNDS);
-  }
+  encrypt(text: string): string {
+    if (!text) {
+      throw new Error('Text to encrypt cannot be empty');
+    }
 
-  /**
-   * 验证密码
-   * Requirement 14.1
-   */
-  async verifyPassword(password: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(password, hash);
-  }
-
-  /**
-   * 获取bcrypt cost factor
-   * Requirement 14.1
-   */
-  getBcryptRounds(): number {
-    return EncryptionService.BCRYPT_ROUNDS;
-  }
-
-  /**
-   * 使用AES-256-GCM加密敏感配置
-   * Requirement 14.2
-   */
-  encryptConfig(plaintext: string): string {
-    // 生成随机IV
-    const iv = crypto.randomBytes(EncryptionService.IV_LENGTH);
-
+    // 生成随机初始化向量
+    const iv = crypto.randomBytes(this.ivLength);
+    
     // 创建加密器
-    const cipher = crypto.createCipheriv(
-      EncryptionService.ALGORITHM,
-      this.encryptionKey,
-      iv
-    );
-
+    const cipher = crypto.createCipheriv(this.algorithm, this.key, iv);
+    
     // 加密数据
-    let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+    let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
-
-    // 获取认证标签
-    const authTag = cipher.getAuthTag();
-
-    // 返回格式: iv:authTag:encrypted
-    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+    
+    // 返回格式：iv:encryptedData
+    return `${iv.toString('hex')}:${encrypted}`;
   }
 
   /**
-   * 解密敏感配置
-   * Requirement 14.2
+   * 解密文本
+   * @param encryptedText 加密的文本（格式：iv:encryptedData）
+   * @returns 解密后的明文
    */
-  decryptConfig(ciphertext: string): string {
-    // 解析加密数据
-    const parts = ciphertext.split(':');
-    if (parts.length !== 3) {
-      throw new Error('Invalid encrypted data format');
+  decrypt(encryptedText: string): string {
+    if (!encryptedText) {
+      throw new Error('Encrypted text cannot be empty');
     }
 
-    const iv = Buffer.from(parts[0], 'hex');
-    const authTag = Buffer.from(parts[1], 'hex');
-    const encrypted = parts[2];
+    try {
+      // 分离IV和加密数据
+      const parts = encryptedText.split(':');
+      if (parts.length !== 2) {
+        throw new Error('Invalid encrypted text format');
+      }
 
-    // 创建解密器
-    const decipher = crypto.createDecipheriv(
-      EncryptionService.ALGORITHM,
-      this.encryptionKey,
-      iv
-    );
+      const iv = Buffer.from(parts[0], 'hex');
+      const encryptedData = parts[1];
 
-    // 设置认证标签
-    decipher.setAuthTag(authTag);
-
-    // 解密数据
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-
-    return decrypted;
-  }
-
-  /**
-   * 哈希刷新令牌
-   * Requirement 14.4
-   */
-  hashToken(token: string): string {
-    return crypto
-      .createHash('sha256')
-      .update(token)
-      .digest('hex');
-  }
-
-  /**
-   * 生成安全随机令牌
-   * Requirement 14.5
-   */
-  generateSecureToken(length: number = 32): string {
-    return crypto.randomBytes(length).toString('hex');
-  }
-
-  /**
-   * 生成安全随机数
-   * Requirement 14.5
-   */
-  generateSecureRandom(min: number, max: number): number {
-    const range = max - min + 1;
-    const bytesNeeded = Math.ceil(Math.log2(range) / 8);
-    const maxValue = Math.pow(256, bytesNeeded);
-    const randomBytes = crypto.randomBytes(bytesNeeded);
-    const randomValue = randomBytes.readUIntBE(0, bytesNeeded);
-    
-    // 使用rejection sampling确保均匀分布
-    if (randomValue >= maxValue - (maxValue % range)) {
-      return this.generateSecureRandom(min, max);
+      // 创建解密器
+      const decipher = crypto.createDecipheriv(this.algorithm, this.key, iv);
+      
+      // 解密数据
+      let decrypted = decipher.update(encryptedData, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      
+      return decrypted;
+    } catch (error: any) {
+      throw new Error(`Decryption failed: ${error.message}`);
     }
-    
-    return min + (randomValue % range);
   }
 
   /**
-   * 验证加密算法
+   * 验证加密密钥是否正确配置
    */
-  getEncryptionAlgorithm(): string {
-    return EncryptionService.ALGORITHM;
+  static validateEncryptionKey(): boolean {
+    try {
+      const service = new EncryptionService();
+      const testText = 'test';
+      const encrypted = service.encrypt(testText);
+      const decrypted = service.decrypt(encrypted);
+      return decrypted === testText;
+    } catch (error) {
+      return false;
+    }
   }
 
   /**
-   * 生成密钥派生
+   * 生成随机加密密钥（用于初始化配置）
    */
-  deriveKey(password: string, salt: string): Buffer {
-    return crypto.scryptSync(password, salt, 32);
-  }
-
-  /**
-   * 生成随机盐
-   */
-  generateSalt(): string {
-    return crypto.randomBytes(EncryptionService.SALT_LENGTH).toString('hex');
-  }
-
-  /**
-   * 加密对象（用于加密账号凭证等）
-   */
-  encryptObject(obj: any): string {
-    const jsonString = JSON.stringify(obj);
-    return this.encryptConfig(jsonString);
-  }
-
-  /**
-   * 解密对象
-   */
-  decryptObject(encrypted: string): any {
-    const jsonString = this.decryptConfig(encrypted);
-    return JSON.parse(jsonString);
+  static generateEncryptionKey(): string {
+    return crypto.randomBytes(32).toString('hex');
   }
 }
 

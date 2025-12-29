@@ -2,7 +2,7 @@ import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from
 import { ApiOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '../../api/client';
 import type { MenuProps } from 'antd';
 import { config } from '../../config/env';
 
@@ -22,7 +22,7 @@ export default function Header() {
 
   const loadConfig = async () => {
     try {
-      const response = await axios.get('/api/config/active');
+      const response = await apiClient.get('/config/active');
       setApiConfig(response.data);
     } catch (error) {
       console.error('加载配置失败:', error);

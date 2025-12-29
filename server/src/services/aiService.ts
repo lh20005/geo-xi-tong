@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { OllamaService } from './ollamaService';
+import { systemApiConfigService } from './SystemApiConfigService';
 
 export type AIProvider = 'deepseek' | 'gemini' | 'ollama';
 
@@ -10,6 +11,8 @@ interface AIConfig {
   ollamaModel?: string;
   timeout?: number; // 超时时间（毫秒），默认120秒
   maxRetries?: number; // 最大重试次数，默认2次
+  tenantId?: number; // 租户ID，用于配额检查和使用记录
+  userId?: number; // 用户ID，用于使用记录
 }
 
 export class AIService {
@@ -30,6 +33,39 @@ export class AIService {
       }
       this.ollamaService = new OllamaService(config.ollamaBaseUrl, this.timeout);
     }
+  }
+
+  /**
+   * 从系统配置创建AIService实例
+   */
+  static async createFromSystemConfig(
+    provider?: AIProvider,
+    tenantId?: number,
+    userId?: number
+  ): Promise<AIService> {
+    // 获取系统级配置
+    const systemConfig = await systemApiConfigService.getActiveConfig(provider);
+    
+    if (!systemConfig) {
+      throw new Error('系统未配置AI服务，请联系管理员');
+    }
+    
+    // 检查配额（如果提供了tenantId）
+    if (tenantId) {
+      const quotaCheck = await systemApiConfigService.validateQuota(tenantId);
+      if (!quotaCheck.valid) {
+        throw new Error(quotaCheck.message || 'API调用配额不足');
+      }
+    }
+    
+    return new AIService({
+      provider: systemConfig.provider,
+      apiKey: systemConfig.apiKey,
+      ollamaBaseUrl: systemConfig.ollamaBaseUrl,
+      ollamaModel: systemConfig.ollamaModel,
+      tenantId,
+      userId
+    });
   }
 
   /**
@@ -69,7 +105,7 @@ export class AIService {
       .replace(/\{keyword\}/g, keyword)
       .replace(/\{count\}/g, count.toString());
 
-    const response = await this.callAI(prompt);
+    const response = await this.callAI(prompt, 'distillation');
     const questions = response
       .split('\n')
       .map(q => q.trim())
@@ -108,7 +144,7 @@ ${knowledgeContext}
 
     // 不添加任何额外的硬性要求，完全以提示词模板为准
 
-    return await this.callAI(prompt);
+    return await this.callAI(prompt, 'article_generation');
   }
 
   /**
@@ -130,14 +166,54 @@ ${content}
 
 请直接输出排版后的文章内容：`;
 
-    return await this.callAI(prompt);
+    return await this.callAI(prompt, 'article_formatting');
   }
 
   /**
-   * 调用AI接口（带重试机制）
+   * 调用AI接口（带重试机制和使用记录）
    */
-  private async callAI(prompt: string): Promise<string> {
-    return await this.callAIWithRetry(prompt, this.maxRetries);
+  private async callAI(prompt: string, operationType: string = 'general'): Promise<string> {
+    const startTime = Date.now();
+    let success = false;
+    let errorMessage: string | undefined;
+    let result: string = '';
+    
+    try {
+      result = await this.callAIWithRetry(prompt, this.maxRetries);
+      success = true;
+      return result;
+    } catch (error: any) {
+      errorMessage = error.message;
+      throw error;
+    } finally {
+      // 记录使用情况
+      if (this.config.tenantId && this.config.userId) {
+        const duration = Date.now() - startTime;
+        
+        // 估算token使用量（粗略估算：中文约1.5字符/token，英文约4字符/token）
+        const tokensUsed = Math.ceil((prompt.length + result.length) / 2);
+        
+        // 估算成本（DeepSeek: $0.14/M input tokens, $0.28/M output tokens）
+        let costEstimate = 0;
+        if (this.config.provider === 'deepseek') {
+          const inputTokens = Math.ceil(prompt.length / 2);
+          const outputTokens = Math.ceil(result.length / 2);
+          costEstimate = (inputTokens * 0.14 + outputTokens * 0.28) / 1000000;
+        }
+        
+        await systemApiConfigService.logUsage({
+          tenantId: this.config.tenantId,
+          userId: this.config.userId,
+          provider: this.config.provider,
+          operationType,
+          tokensUsed,
+          costEstimate,
+          success,
+          errorMessage,
+          requestDurationMs: duration
+        });
+      }
+    }
   }
 
   /**

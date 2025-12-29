@@ -974,7 +974,20 @@ export class ArticleGenerationService {
       throw new Error('没有活跃的AI配置');
     }
 
-    return result.rows[0];
+    const config = result.rows[0];
+    
+    // 解密API密钥
+    if (config.api_key) {
+      try {
+        const { encryptionService } = await import('./EncryptionService');
+        config.api_key = encryptionService.decrypt(config.api_key);
+      } catch (error) {
+        console.error('解密API密钥失败，使用原始值:', error);
+        // 如果解密失败，可能是旧数据（未加密），直接使用
+      }
+    }
+
+    return config;
   }
 
   /**

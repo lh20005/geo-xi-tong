@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/database';
 import { AIService } from '../services/aiService';
+import { ConfigHelper } from '../services/ConfigHelper';
 import { DistillationService } from '../services/distillationService';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
@@ -23,17 +24,13 @@ distillationRouter.post('/', async (req, res) => {
       return res.status(400).json({ error: '请提供关键词' });
     }
     
-    // 获取当前用户激活的API配置
-    const configResult = await pool.query(
-      'SELECT provider, api_key, ollama_base_url, ollama_model FROM api_configs WHERE is_active = true AND user_id = $1 LIMIT 1',
-      [userId]
-    );
+    // 使用ConfigHelper获取AI服务（自动解密）
+    const aiService = await ConfigHelper.getAIService();
+    const currentConfig = await ConfigHelper.getCurrentConfig();
     
-    if (configResult.rows.length === 0) {
-      return res.status(400).json({ error: '请先配置AI API' });
+    if (!currentConfig) {
+      return res.status(400).json({ error: '系统未配置AI服务，请联系管理员' });
     }
-    
-    const { provider, api_key, ollama_base_url, ollama_model } = configResult.rows[0];
     
     // 获取关键词蒸馏配置（优先用户配置，其次全局配置）
     const distillConfigResult = await pool.query(
@@ -49,21 +46,13 @@ distillationRouter.post('/', async (req, res) => {
       topicCount = distillConfigResult.rows[0].topic_count;
     }
     
-    // 创建AI服务实例
-    const aiService = new AIService({
-      provider,
-      apiKey: api_key,
-      ollamaBaseUrl: ollama_base_url,
-      ollamaModel: ollama_model
-    });
-    
     // 执行蒸馏（使用配置的prompt和数量）
     const questions = await aiService.distillKeyword(keyword, promptTemplate, topicCount);
     
     // 保存蒸馏记录（关联用户）
     const distillationResult = await pool.query(
       'INSERT INTO distillations (keyword, provider, user_id) VALUES ($1, $2, $3) RETURNING id',
-      [keyword, provider, userId]
+      [keyword, currentConfig.provider, userId]
     );
     
     const distillationId = distillationResult.rows[0].id;

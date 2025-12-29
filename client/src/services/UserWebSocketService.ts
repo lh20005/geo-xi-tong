@@ -51,8 +51,10 @@ export class UserWebSocketService {
       }
 
       // Build WebSocket URL
-      const wsUrl = config.apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-      const url = `${wsUrl.replace('/api', '')}/ws?token=${token}`;
+      // Extract the base URL without /api path
+      const baseUrl = config.apiUrl.replace('/api', '');
+      const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+      const url = `${wsUrl}/ws?token=${token}`;
 
       console.log('[UserWebSocket] Connecting to:', url);
 

@@ -4,6 +4,7 @@ import { OllamaService } from '../services/ollamaService';
 import { authenticate, requireAdmin } from '../middleware/adminAuth';
 import { requireConfirmation } from '../middleware/requireConfirmation';
 import { createRateLimitMiddleware } from '../middleware/rateLimit';
+import { encryptionService } from '../services/EncryptionService';
 
 export const configRouter = Router();
 
@@ -120,14 +121,21 @@ configRouter.post('/distillation', authenticate, requireAdmin, configRateLimit, 
 // ==================== AI API 配置 ====================
 
 // 获取当前激活的API配置
-configRouter.get('/active', async (req, res) => {
+configRouter.get('/active', authenticate, async (req, res) => {
   try {
+    const isAdmin = (req as any).user?.isAdmin || false;
+    
     const result = await pool.query(
       'SELECT id, provider, ollama_base_url, ollama_model, is_active FROM api_configs WHERE is_active = true LIMIT 1'
     );
     
     if (result.rows.length === 0) {
-      return res.json({ provider: null, configured: false });
+      return res.json({ 
+        provider: null, 
+        configured: false,
+        canEdit: isAdmin,
+        message: isAdmin ? '请配置AI服务' : '系统未配置AI服务，请联系管理员'
+      });
     }
     
     const config = result.rows[0];
@@ -135,9 +143,11 @@ configRouter.get('/active', async (req, res) => {
       provider: config.provider,
       ollamaBaseUrl: config.ollama_base_url,
       ollamaModel: config.ollama_model,
-      configured: true 
+      configured: true,
+      canEdit: isAdmin  // 告诉前端是否可以编辑
     });
   } catch (error) {
+    console.error('获取配置失败:', error);
     res.status(500).json({ error: '获取配置失败' });
   }
 });
@@ -176,10 +186,24 @@ configRouter.post('/', authenticate, requireAdmin, configRateLimit, requireConfi
       }
     }
     
+    // 加密API密钥
+    let encryptedKey: string | null = null;
+    if (apiKey) {
+      try {
+        encryptedKey = encryptionService.encrypt(apiKey);
+        console.log('✅ API密钥已加密存储');
+      } catch (error: any) {
+        console.error('❌ 加密API密钥失败:', error);
+        return res.status(500).json({ 
+          error: '加密API密钥失败，请检查API_KEY_ENCRYPTION_KEY环境变量是否配置' 
+        });
+      }
+    }
+    
     // 停用所有现有配置
     await pool.query('UPDATE api_configs SET is_active = false');
     
-    // 插入新配置
+    // 插入新配置（存储加密后的密钥）
     let result;
     if (provider === 'ollama') {
       result = await pool.query(
@@ -189,14 +213,14 @@ configRouter.post('/', authenticate, requireAdmin, configRateLimit, requireConfi
     } else {
       result = await pool.query(
         'INSERT INTO api_configs (provider, api_key, ollama_base_url, ollama_model, is_active) VALUES ($1, $2, NULL, NULL, true) RETURNING id, provider',
-        [provider, apiKey]
+        [provider, encryptedKey]  // 存储加密后的密钥
       );
     }
     
     res.json({ 
       success: true, 
       config: result.rows[0],
-      message: 'API配置保存成功'
+      message: 'API配置保存成功（密钥已加密存储）'
     });
   } catch (error: any) {
     console.error('保存配置错误:', error);

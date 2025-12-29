@@ -1,9 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: '/app/',  // 设置base路径为 /app/，用于生产环境部署
+  base: mode === 'production' ? '/app/' : '/',  // 生产环境使用 /app/，开发环境使用 /
   server: {
     port: 5173,
     proxy: {
@@ -13,6 +13,11 @@ export default defineConfig({
       },
       '/uploads': {
         target: 'http://localhost:3000',
+        changeOrigin: true
+      },
+      '/ws': {
+        target: 'ws://localhost:3000',
+        ws: true,
         changeOrigin: true
       }
     }
@@ -63,4 +68,4 @@ export default defineConfig({
       }
     }
   }
-});
+}));

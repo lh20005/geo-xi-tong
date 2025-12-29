@@ -212,6 +212,7 @@ export default function ConfigPage() {
   const [ollamaModels, setOllamaModels] = useState<any[]>([]);
   const [detectingModels, setDetectingModels] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
+  const [canEdit, setCanEdit] = useState(false);  // 是否可以编辑（管理员权限）
 
   useEffect(() => {
     loadConfig();
@@ -221,6 +222,7 @@ export default function ConfigPage() {
     try {
       const response = await apiClient.get('/config/active');
       setCurrentConfig(response.data);
+      setCanEdit(response.data.canEdit || false);  // 从后端获取权限
       if (response.data.provider) {
         setSelectedProvider(response.data.provider);
       }
@@ -348,7 +350,34 @@ export default function ConfigPage() {
               ),
               children: (
                 <div>
-        {currentConfig?.configured && (
+        {/* 普通用户：只读视图 */}
+        {!canEdit && currentConfig?.configured && (
+          <Alert
+            message="AI服务已配置"
+            description={
+              currentConfig.provider === 'ollama'
+                ? `系统已配置本地Ollama服务 - 模型: ${currentConfig.ollamaModel}`
+                : `系统已配置 ${currentConfig.provider === 'deepseek' ? 'DeepSeek' : 'Gemini'} API服务`
+            }
+            type="success"
+            icon={<CheckCircleOutlined />}
+            showIcon
+            style={{ marginBottom: 24 }}
+          />
+        )}
+
+        {!canEdit && !currentConfig?.configured && (
+          <Alert
+            message="AI服务未配置"
+            description="系统尚未配置AI服务，请联系管理员进行配置"
+            type="warning"
+            showIcon
+            style={{ marginBottom: 24 }}
+          />
+        )}
+
+        {/* 管理员：配置表单 */}
+        {canEdit && currentConfig?.configured && (
           <Alert
             message="当前配置"
             description={
@@ -363,6 +392,7 @@ export default function ConfigPage() {
           />
         )}
 
+        {canEdit && (
         <Form
           form={form}
           layout="vertical"
@@ -391,7 +421,7 @@ export default function ConfigPage() {
               label="API Key"
               name="apiKey"
               rules={[{ required: selectedProvider !== 'ollama', message: '请输入API Key' }]}
-              extra="您的API密钥将被安全存储，仅用于调用AI服务"
+              extra="您的API密钥将被加密存储，仅用于调用AI服务"
             >
               <Input.Password
                 size="large"
@@ -476,7 +506,9 @@ export default function ConfigPage() {
             </Space>
           </Form.Item>
         </Form>
+        )}
 
+        {canEdit && (
         <Card
           type="inner"
           title={selectedProvider === 'ollama' ? '使用本地 Ollama' : '获取 API Key'}
@@ -525,6 +557,18 @@ export default function ConfigPage() {
             )}
           </Space>
         </Card>
+        )}
+
+        {!canEdit && (
+          <Card
+            type="inner"
+            title="提示"
+            style={{ marginTop: 24, background: '#f8fafc' }}
+          >
+            <p>您当前没有配置AI服务的权限。如需配置，请联系系统管理员。</p>
+            <p>所有用户共享系统级AI配置，无需单独设置即可使用AI功能。</p>
+          </Card>
+        )}
                 </div>
               ),
             },
