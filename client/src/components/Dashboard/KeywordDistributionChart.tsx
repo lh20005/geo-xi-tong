@@ -1,5 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import { Card, Empty, Spin } from 'antd';
+import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
 
 interface KeywordDistributionChartProps {
   data: {
@@ -17,7 +18,10 @@ interface KeywordDistributionChartProps {
 export default function KeywordDistributionChart({ data, loading }: KeywordDistributionChartProps) {
   if (loading) {
     return (
-      <Card title="关键词分布">
+      <Card 
+        title={<span style={cardTitleStyle}>关键词分布 TOP10</span>}
+        style={cardStyle}
+      >
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
         </div>
@@ -27,7 +31,10 @@ export default function KeywordDistributionChart({ data, loading }: KeywordDistr
 
   if (!data || data.topKeywords.length === 0) {
     return (
-      <Card title="关键词分布">
+      <Card 
+        title={<span style={cardTitleStyle}>关键词分布 TOP10</span>}
+        style={cardStyle}
+      >
         <Empty description="暂无数据" />
       </Card>
     );
@@ -42,16 +49,26 @@ export default function KeywordDistributionChart({ data, loading }: KeywordDistr
       trigger: 'axis',
       axisPointer: {
         type: 'shadow'
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e8e8e8',
+      borderWidth: 1,
+      textStyle: {
+        color: '#262626'
       }
     },
     legend: {
       data: ['蒸馏次数', '文章数量'],
-      top: 10
+      top: 10,
+      textStyle: {
+        fontSize: 13
+      }
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
@@ -59,12 +76,20 @@ export default function KeywordDistributionChart({ data, loading }: KeywordDistr
       data: keywords,
       axisLabel: {
         interval: 0,
-        rotate: 30
+        rotate: 30,
+        color: '#595959',
+        fontSize: 12
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#e8e8e8'
+        }
       }
     },
     yAxis: {
       type: 'value',
-      name: '数量'
+      name: '数量',
+      ...axisStyle
     },
     series: [
       {
@@ -79,11 +104,13 @@ export default function KeywordDistributionChart({ data, loading }: KeywordDistr
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: '#667eea' },
-              { offset: 1, color: '#764ba2' }
+              { offset: 0, color: colors.primary },
+              { offset: 1, color: '#40a9ff' }
             ]
-          }
-        }
+          },
+          borderRadius: [4, 4, 0, 0]
+        },
+        barMaxWidth: 40
       },
       {
         name: '文章数量',
@@ -97,21 +124,25 @@ export default function KeywordDistributionChart({ data, loading }: KeywordDistr
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: '#f093fb' },
-              { offset: 1, color: '#f5576c' }
+              { offset: 0, color: colors.purple },
+              { offset: 1, color: '#9254de' }
             ]
-          }
-        }
+          },
+          borderRadius: [4, 4, 0, 0]
+        },
+        barMaxWidth: 40
       }
     ]
   };
 
   return (
     <Card 
-      title="关键词分布 TOP10"
+      title={<span style={cardTitleStyle}>关键词分布 TOP10</span>}
+      style={cardStyle}
       extra={
-        <div style={{ fontSize: 12, color: '#999' }}>
-          总关键词: {data.totalKeywords} | 总蒸馏: {data.totalDistillations}
+        <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+          总关键词: <span style={{ color: '#262626', fontWeight: 500 }}>{data.totalKeywords}</span> | 
+          总蒸馏: <span style={{ color: '#262626', fontWeight: 500 }}>{data.totalDistillations}</span>
         </div>
       }
     >

@@ -1,5 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import { Card, Empty, Spin } from 'antd';
+import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
 
 interface HourlyActivityChartProps {
   data: {
@@ -12,7 +13,10 @@ interface HourlyActivityChartProps {
 export default function HourlyActivityChart({ data, loading }: HourlyActivityChartProps) {
   if (loading) {
     return (
-      <Card title="24小时活动热力图">
+      <Card 
+        title={<span style={cardTitleStyle}>24小时活动热力图</span>}
+        style={cardStyle}
+      >
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
         </div>
@@ -22,7 +26,10 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
 
   if (!data || data.hours.length === 0) {
     return (
-      <Card title="24小时活动热力图">
+      <Card 
+        title={<span style={cardTitleStyle}>24小时活动热力图</span>}
+        style={cardStyle}
+      >
         <Empty description="暂无数据" />
       </Card>
     );
@@ -40,12 +47,19 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
         const hour = params[0].name;
         const count = params[0].value;
         return `${hour}:00 - ${hour}:59<br/>活动次数: ${count}`;
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e8e8e8',
+      borderWidth: 1,
+      textStyle: {
+        color: '#262626'
       }
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
+      top: '10%',
       containLabel: true
     },
     xAxis: {
@@ -53,12 +67,20 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
       data: data.hours.map(h => h.toString().padStart(2, '0')),
       axisLabel: {
         interval: 2,
-        formatter: '{value}:00'
+        formatter: '{value}:00',
+        color: '#8c8c8c',
+        fontSize: 12
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#e8e8e8'
+        }
       }
     },
     yAxis: {
       type: 'value',
-      name: '活动次数'
+      name: '活动次数',
+      ...axisStyle
     },
     series: [
       {
@@ -76,19 +98,20 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
               colorStops: [
                 { 
                   offset: 0, 
-                  color: value > maxActivity * 0.7 ? '#ff4d4f' :
-                         value > maxActivity * 0.4 ? '#faad14' : '#52c41a'
+                  color: value > maxActivity * 0.7 ? colors.error :
+                         value > maxActivity * 0.4 ? colors.warning : colors.success
                 },
                 { 
                   offset: 1, 
                   color: value > maxActivity * 0.7 ? '#ff7875' :
-                         value > maxActivity * 0.4 ? '#ffc53d' : '#73d13d'
+                         value > maxActivity * 0.4 ? '#ffc53d' : '#95de64'
                 }
               ]
-            }
+            },
+            borderRadius: [4, 4, 0, 0]
           }
         })),
-        barWidth: '60%'
+        barMaxWidth: 30
       }
     ],
     visualMap: {
@@ -102,8 +125,11 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
   };
 
   return (
-    <Card title="24小时活动热力图">
-      <ReactECharts option={option} style={{ height: '300px' }} />
+    <Card 
+      title={<span style={cardTitleStyle}>24小时活动热力图</span>}
+      style={cardStyle}
+    >
+      <ReactECharts option={option} style={{ height: '320px' }} />
     </Card>
   );
 }

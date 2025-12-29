@@ -59,29 +59,29 @@ export class DashboardService {
       const publishingTasksResult = await client.query(publishingTasksQuery, [todayStr, yesterdayStr, userId]);
       const publishingTasks = publishingTasksResult.rows[0];
 
-      // 查询发布成功率（最近30天，添加 user_id 过滤）
+      // 查询文章发布率（基于articles表的is_published字段）
       const thirtyDaysAgo = new Date(today);
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
 
-      const successRateQuery = `
+      const publishRateQuery = `
         SELECT 
           COUNT(*) as total,
-          COUNT(*) FILTER (WHERE status = 'completed') as success,
-          COUNT(*) FILTER (WHERE created_at >= $1) as recent_total,
-          COUNT(*) FILTER (WHERE status = 'completed' AND created_at >= $1) as recent_success
-        FROM publishing_tasks
-        WHERE created_at >= $2 AND user_id = $3
+          COUNT(*) FILTER (WHERE is_published = true) as published,
+          COUNT(*) FILTER (WHERE created_at >= $1 AND created_at < $2) as previous_total,
+          COUNT(*) FILTER (WHERE is_published = true AND created_at >= $1 AND created_at < $2) as previous_published
+        FROM articles
+        WHERE created_at >= $1 AND user_id = $3
       `;
-      const successRateResult = await client.query(successRateQuery, [todayStr, thirtyDaysAgoStr, userId]);
-      const successRate = successRateResult.rows[0];
+      const publishRateResult = await client.query(publishRateQuery, [thirtyDaysAgoStr, todayStr, userId]);
+      const publishRate = publishRateResult.rows[0];
 
-      const currentRate = parseInt(successRate.total) > 0 
-        ? (parseInt(successRate.success) / parseInt(successRate.total)) * 100 
+      const currentRate = parseInt(publishRate.total) > 0 
+        ? (parseInt(publishRate.published) / parseInt(publishRate.total)) * 100 
         : 0;
       
-      const previousRate = parseInt(successRate.recent_total) > 0
-        ? (parseInt(successRate.recent_success) / parseInt(successRate.recent_total)) * 100
+      const previousRate = parseInt(publishRate.previous_total) > 0
+        ? (parseInt(publishRate.previous_published) / parseInt(publishRate.previous_total)) * 100
         : 0;
 
       return {
@@ -101,8 +101,8 @@ export class DashboardService {
           yesterday: parseInt(publishingTasks.yesterday)
         },
         publishingSuccessRate: {
-          total: parseInt(successRate.total),
-          success: parseInt(successRate.success),
+          total: parseInt(publishRate.total),
+          success: parseInt(publishRate.published),
           rate: currentRate,
           previousRate: previousRate
         }

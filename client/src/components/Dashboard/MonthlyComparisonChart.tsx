@@ -1,5 +1,6 @@
 import ReactECharts from 'echarts-for-react';
 import { Card, Empty, Spin } from 'antd';
+import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
 
 interface MonthlyComparisonChartProps {
   data: {
@@ -14,7 +15,10 @@ interface MonthlyComparisonChartProps {
 export default function MonthlyComparisonChart({ data, loading }: MonthlyComparisonChartProps) {
   if (loading) {
     return (
-      <Card title="月度数据对比">
+      <Card 
+        title={<span style={cardTitleStyle}>月度数据对比</span>}
+        style={cardStyle}
+      >
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
         </div>
@@ -24,7 +28,10 @@ export default function MonthlyComparisonChart({ data, loading }: MonthlyCompari
 
   if (!data || data.months.length === 0) {
     return (
-      <Card title="月度数据对比">
+      <Card 
+        title={<span style={cardTitleStyle}>月度数据对比</span>}
+        style={cardStyle}
+      >
         <Empty description="暂无数据" />
       </Card>
     );
@@ -38,16 +45,26 @@ export default function MonthlyComparisonChart({ data, loading }: MonthlyCompari
         crossStyle: {
           color: '#999'
         }
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e8e8e8',
+      borderWidth: 1,
+      textStyle: {
+        color: '#262626'
       }
     },
     legend: {
       data: ['关键词蒸馏', '文章生成', '发布任务'],
-      top: 10
+      top: 10,
+      textStyle: {
+        fontSize: 13
+      }
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
@@ -55,11 +72,13 @@ export default function MonthlyComparisonChart({ data, loading }: MonthlyCompari
       data: data.months,
       axisPointer: {
         type: 'shadow'
-      }
+      },
+      ...axisStyle
     },
     yAxis: {
       type: 'value',
-      name: '数量'
+      name: '数量',
+      ...axisStyle
     },
     series: [
       {
@@ -67,16 +86,20 @@ export default function MonthlyComparisonChart({ data, loading }: MonthlyCompari
         type: 'bar',
         data: data.distillations,
         itemStyle: {
-          color: '#667eea'
-        }
+          color: colors.primary,
+          borderRadius: [4, 4, 0, 0]
+        },
+        barMaxWidth: 40
       },
       {
         name: '文章生成',
         type: 'bar',
         data: data.articles,
         itemStyle: {
-          color: '#f5576c'
-        }
+          color: colors.purple,
+          borderRadius: [4, 4, 0, 0]
+        },
+        barMaxWidth: 40
       },
       {
         name: '发布任务',
@@ -84,18 +107,22 @@ export default function MonthlyComparisonChart({ data, loading }: MonthlyCompari
         data: data.publishings,
         yAxisIndex: 0,
         itemStyle: {
-          color: '#4facfe'
+          color: colors.cyan
         },
         lineStyle: {
           width: 3
         },
-        smooth: true
+        smooth: true,
+        symbolSize: 8
       }
     ]
   };
 
   return (
-    <Card title="月度数据对比">
+    <Card 
+      title={<span style={cardTitleStyle}>月度数据对比</span>}
+      style={cardStyle}
+    >
       <ReactECharts option={option} style={{ height: '350px' }} />
     </Card>
   );
