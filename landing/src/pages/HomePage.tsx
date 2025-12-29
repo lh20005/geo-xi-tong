@@ -1,12 +1,19 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
+import PaymentModal from '../components/PaymentModal';
 import { config } from '../config/env';
 
 export default function HomePage() {
   const [activeSection, setActiveSection] = useState('home');
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<{
+    id: number;
+    name: string;
+    price: number;
+  } | null>(null);
 
   // 轮播图片列表
   const carouselImages = [
@@ -76,6 +83,19 @@ export default function HomePage() {
         window.location.href = `${config.clientUrl}?${params.toString()}`;
       }
     }
+  };
+
+  // 处理购买按钮点击
+  const handlePurchase = (planId: number, planName: string, price: number) => {
+    if (!isLoggedIn) {
+      // 未登录，跳转到登录页
+      window.location.href = '/login';
+      return;
+    }
+    
+    // 已登录，打开支付弹窗
+    setSelectedPlan({ id: planId, name: planName, price });
+    setPaymentModalOpen(true);
   };
 
   // 处理URL hash跳转
@@ -386,12 +406,12 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥99</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                <Link
-                  to="/login"
+                <button
+                  onClick={() => handlePurchase(2, '专业版', 99)}
                   className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   点击购买
-                </Link>
+                </button>
               </div>
               
               {/* 功能列表 */}
@@ -455,12 +475,12 @@ export default function HomePage() {
                   <span className="text-5xl font-bold text-white">¥299</span>
                   <span className="text-blue-100">/月</span>
                 </div>
-                <Link
-                  to="/login"
+                <button
+                  onClick={() => handlePurchase(3, '企业版', 299)}
                   className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   点击购买
-                </Link>
+                </button>
               </div>
               
               {/* 功能列表 */}
@@ -1120,6 +1140,17 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
+
+      {/* 支付弹窗 */}
+      {selectedPlan && (
+        <PaymentModal
+          isOpen={paymentModalOpen}
+          onClose={() => setPaymentModalOpen(false)}
+          planId={selectedPlan.id}
+          planName={selectedPlan.name}
+          price={selectedPlan.price}
+        />
+      )}
     </div>
   );
 }

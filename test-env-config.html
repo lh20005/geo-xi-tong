@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>环境配置测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        h2 { color: #666; margin-top: 0; }
+        .info { margin: 10px 0; }
+        .label { font-weight: bold; color: #555; }
+        .value { color: #007bff; }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        #result { margin-top: 20px; }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 环境配置测试</h1>
+    
+    <div class="card">
+        <h2>当前环境信息</h2>
+        <div class="info">
+            <span class="label">主机名:</span>
+            <span class="value" id="hostname"></span>
+        </div>
+        <div class="info">
+            <span class="label">协议:</span>
+            <span class="value" id="protocol"></span>
+        </div>
+        <div class="info">
+            <span class="label">端口:</span>
+            <span class="value" id="port"></span>
+        </div>
+        <div class="info">
+            <span class="label">完整URL:</span>
+            <span class="value" id="fullUrl"></span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>环境检测结果</h2>
+        <div class="info">
+            <span class="label">是否 ngrok:</span>
+            <span class="value" id="isNgrok"></span>
+        </div>
+        <div class="info">
+            <span class="label">是否本地开发:</span>
+            <span class="value" id="isLocalDev"></span>
+        </div>
+        <div class="info">
+            <span class="label">API URL:</span>
+            <span class="value" id="apiUrl"></span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>API 连接测试</h2>
+        <button onclick="testApiConnection()">测试 API 连接</button>
+        <button onclick="testCreateOrder()">测试创建订单</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // 环境检测
+        const hostname = window.location.hostname;
+        const protocol = window.location.protocol;
+        const port = window.location.port;
+        const isNgrok = hostname.includes('ngrok');
+        const isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1';
+        
+        // 计算 API URL
+        let apiUrl;
+        if (isNgrok) {
+            apiUrl = `${protocol}//${hostname}/api`;
+        } else if (isLocalDev) {
+            apiUrl = 'http://localhost:3000/api';
+        } else {
+            apiUrl = `${protocol}//${hostname}/api`;
+        }
+
+        // 显示信息
+        document.getElementById('hostname').textContent = hostname;
+        document.getElementById('protocol').textContent = protocol;
+        document.getElementById('port').textContent = port || '默认';
+        document.getElementById('fullUrl').textContent = window.location.href;
+        document.getElementById('isNgrok').textContent = isNgrok ? '✅ 是' : '❌ 否';
+        document.getElementById('isLocalDev').textContent = isLocalDev ? '✅ 是' : '❌ 否';
+        document.getElementById('apiUrl').textContent = apiUrl;
+
+        // 测试 API 连接
+        async function testApiConnection() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>⏳ 正在测试连接...</p>';
+
+            try {
+                const response = await fetch(`${apiUrl}/health`);
+                const data = await response.json();
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✅ API 连接成功！</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ API 连接失败</p>
+                    <pre>${error.message}</pre>
+                    <p>尝试的 URL: ${apiUrl}/health</p>
+                `;
+            }
+        }
+
+        // 测试创建订单
+        async function testCreateOrder() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<p>⏳ 正在测试创建订单...</p>';
+
+            // 先登录
+            try {
+                const loginResponse = await fetch(`${apiUrl}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'lzc2005',
+                        password: 'Woshixiaogou2005'
+                    })
+                });
+
+                const loginData = await loginResponse.json();
+                
+                if (!loginData.success) {
+                    throw new Error('登录失败');
+                }
+
+                const token = loginData.data.token;
+
+                // 创建订单
+                const orderResponse = await fetch(`${apiUrl}/orders`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        plan_id: 2,
+                        order_type: 'purchase'
+                    })
+                });
+
+                const orderData = await orderResponse.json();
+
+                if (orderData.success) {
+                    resultDiv.innerHTML = `
+                        <p class="success">✅ 订单创建成功！</p>
+                        <pre>${JSON.stringify(orderData, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <p class="error">❌ 订单创建失败</p>
+                        <pre>${JSON.stringify(orderData, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <p class="error">❌ 测试失败</p>
+                    <pre>${error.message}</pre>
+                    <p>API URL: ${apiUrl}</p>
+                `;
+            }
+        }
+
+        // 页面加载时自动测试连接
+        window.onload = function() {
+            console.log('环境配置:', {
+                hostname,
+                protocol,
+                port,
+                isNgrok,
+                isLocalDev,
+                apiUrl
+            });
+        };
+    </script>
+</body>
+</html>

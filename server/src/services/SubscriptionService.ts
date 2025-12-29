@@ -452,6 +452,36 @@ export class SubscriptionService {
       client.release();
     }
   }
+
+  /**
+   * 根据ID获取套餐信息
+   */
+  async getPlanById(planId: number): Promise<Plan | null> {
+    const result = await pool.query(
+      `SELECT p.*, 
+        json_agg(
+          json_build_object(
+            'id', f.id,
+            'plan_id', f.plan_id,
+            'feature_code', f.feature_code,
+            'feature_name', f.feature_name,
+            'feature_value', f.feature_value,
+            'feature_unit', f.feature_unit
+          )
+        ) as features
+      FROM subscription_plans p
+      LEFT JOIN plan_features f ON p.id = f.plan_id
+      WHERE p.id = $1
+      GROUP BY p.id`,
+      [planId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    return result.rows[0];
+  }
 }
 
 

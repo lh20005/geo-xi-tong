@@ -1,0 +1,121 @@
+import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import axios from 'axios';
+import crypto from 'crypto';
+
+// 加载环境变量
+dotenv.config({ path: path.join(__dirname, '../.env') });
+
+const mchId = process.env.WECHAT_PAY_MCH_ID!;
+const serialNo = process.env.WECHAT_PAY_SERIAL_NO!;
+const privateKeyPath = process.env.WECHAT_PAY_PRIVATE_KEY_PATH!;
+const apiV3Key = process.env.WECHAT_PAY_API_V3_KEY!;
+
+console.log('=== 获取微信支付平台证书 ===\n');
+
+// 生成签名
+function generateSignature(method: string, url: string, timestamp: number, nonceStr: string, body: string = ''): string {
+  const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
+  const message = `${method}\n${url}\n${timestamp}\n${nonceStr}\n${body}\n`;
+  
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(message);
+  const signature = sign.sign(privateKey, 'base64');
+  
+  return signature;
+}
+
+// 生成Authorization头
+function generateAuthorizationHeader(method: string, url: string, body: string = ''): string {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const nonceStr = Math.random().toString(36).substring(2, 15);
+  const signature = generateSignature(method, url, timestamp, nonceStr, body);
+  
+  return `WECHATPAY2-SHA256-RSA2048 mchid="${mchId}",nonce_str="${nonceStr}",signature="${signature}",timestamp="${timestamp}",serial_no="${serialNo}"`;
+}
+
+async function downloadPlatformCert() {
+  try {
+    const url = '/v3/certificates';
+    const fullUrl = `https://api.mch.weixin.qq.com${url}`;
+    
+    console.log('1. 请求平台证书...');
+    console.log('   URL:', fullUrl);
+    
+    const authorization = generateAuthorizationHeader('GET', url);
+    
+    const response = await axios.get(fullUrl, {
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/json',
+        'User-Agent': 'wechatpay-axios-plugin',
+      }
+    });
+    
+    console.log('   响应状态:', response.status);
+    console.log('\n2. 解析证书数据...');
+    
+    const certificates = response.data.data;
+    console.log('   找到', certificates.length, '个证书');
+    
+    if (certificates.length === 0) {
+      console.log('   ❌ 没有找到平台证书');
+      return;
+    }
+    
+    // 解密证书
+    console.log('\n3. 解密证书...');
+    const cert = certificates[0];
+    const encryptCertificate = cert.encrypt_certificate;
+    
+    console.log('   证书序列号:', cert.serial_no);
+    console.log('   生效时间:', cert.effective_time);
+    console.log('   过期时间:', cert.expire_time);
+    
+    // 解密
+    const ciphertext = Buffer.from(encryptCertificate.ciphertext, 'base64');
+    const authTag = ciphertext.slice(ciphertext.length - 16);
+    const data = ciphertext.slice(0, ciphertext.length - 16);
+    
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      apiV3Key,
+      encryptCertificate.nonce
+    );
+    
+    decipher.setAuthTag(authTag);
+    decipher.setAAD(Buffer.from(encryptCertificate.associated_data));
+    
+    let decrypted = decipher.update(data);
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+    
+    const platformCert = decrypted.toString('utf8');
+    
+    console.log('   ✅ 证书解密成功');
+    
+    // 保存证书
+    console.log('\n4. 保存证书...');
+    const certDir = path.dirname(privateKeyPath);
+    const platformCertPath = path.join(certDir, 'platform_cert.pem');
+    const platformSerialPath = path.join(certDir, 'platform_serial.txt');
+    
+    fs.writeFileSync(platformCertPath, platformCert);
+    fs.writeFileSync(platformSerialPath, cert.serial_no);
+    
+    console.log('   证书已保存到:', platformCertPath);
+    console.log('   序列号已保存到:', platformSerialPath);
+    
+    console.log('\n✅ 平台证书获取成功！');
+    console.log('\n平台证书序列号:', cert.serial_no);
+    
+  } catch (error: any) {
+    console.error('❌ 获取平台证书失败:', error.message);
+    if (error.response) {
+      console.error('   响应状态:', error.response.status);
+      console.error('   响应数据:', JSON.stringify(error.response.data, null, 2));
+    }
+  }
+}
+
+downloadPlatformCert();

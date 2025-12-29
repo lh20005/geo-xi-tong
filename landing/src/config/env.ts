@@ -5,7 +5,7 @@
  */
 
 // 配置版本号（用于强制更新缓存）
-const CONFIG_VERSION = '1.0.2-20251227-app-path-fix';
+const CONFIG_VERSION = '1.0.3-20251229-ngrok-fix';
 
 const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
@@ -13,6 +13,9 @@ const isProduction = import.meta.env.PROD;
 // 智能环境检测函数
 const detectEnvironment = () => {
   const hostname = window.location.hostname;
+  
+  // ngrok 环境检测
+  const isNgrok = hostname.includes('ngrok');
   
   // 本地开发环境检测
   const isLocalDev = hostname === 'localhost' || 
@@ -25,12 +28,13 @@ const detectEnvironment = () => {
   const isRemoteTestServer = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
   
   // 生产域名检测
-  const isProductionDomain = !isLocalDev && !isRemoteTestServer && hostname.includes('.');
+  const isProductionDomain = !isLocalDev && !isRemoteTestServer && !isNgrok && hostname.includes('.');
   
   return {
     isLocalDev,
     isRemoteTestServer,
-    isProductionDomain
+    isProductionDomain,
+    isNgrok
   };
 };
 
@@ -45,10 +49,18 @@ const configs = {
     environment: 'local'
   },
   
+  // ngrok 环境配置（用于微信支付测试）
+  ngrok: {
+    // ngrok 环境下，API 使用相同的 ngrok 域名
+    apiUrl: `${window.location.protocol}//${window.location.host}/api`,
+    clientUrl: 'http://localhost:5173',  // 客户端仍然在本地
+    environment: 'ngrok'
+  },
+  
   // 远程测试服务器配置（IP访问）
   remoteTest: {
     apiUrl: `http://${window.location.hostname}/api`,
-    clientUrl: `http://${window.location.hostname}/app`,  // 修改为 /app 路径
+    clientUrl: `http://${window.location.hostname}/app`,
     environment: 'remote-test'
   },
   
@@ -72,7 +84,9 @@ const getConfig = () => {
   }
   
   // 自动环境检测
-  if (env.isLocalDev) {
+  if (env.isNgrok) {
+    return configs.ngrok;
+  } else if (env.isLocalDev) {
     return configs.local;
   } else if (env.isRemoteTestServer) {
     return configs.remoteTest;
@@ -96,6 +110,7 @@ export const config = {
   isLocalDev: env.isLocalDev,
   isRemoteTestServer: env.isRemoteTestServer,
   isProductionDomain: env.isProductionDomain,
+  isNgrok: env.isNgrok,
   
   // 其他配置
   appName: 'GEO优化SaaS系统',

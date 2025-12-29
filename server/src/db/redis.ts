@@ -2,7 +2,8 @@ import { createClient } from 'redis';
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: path.join(__dirname, '../../../.env') });
+// 加载环境变量 - 从 server 目录读取
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 // 创建Redis客户端
 const redisClient = createClient({

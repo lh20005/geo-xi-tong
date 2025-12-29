@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { createServer } from 'http';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -18,7 +19,8 @@ import { schedulerService } from './services/SchedulerService';
 import { SecurityService } from './services/SecurityService';
 import { authService } from './services/AuthService';
 
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+// 加载环境变量 - 直接从 server 目录读取
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 // 识别反向代理的 X-Forwarded-For，避免限流中间件报错
@@ -71,6 +73,12 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS?.split(',') || [
   'https://your-domain.com'
 ]).map(o => o.trim()).filter(Boolean);
 
+// 添加ngrok域名（临时解决方案）
+allowedOrigins.push('https://granolithic-pseudoprosperous-rebeca.ngrok-free.dev');
+
+console.log('🔒 CORS配置加载完成');
+console.log('   允许的来源:', allowedOrigins);
+
 app.use(cors({
   origin: (origin, callback) => {
     // 允许没有 origin 的请求（如 Electron、Postman、curl）
@@ -88,6 +96,8 @@ app.use(cors({
       callback(null, true);
       return;
     }
+    console.log('❌ CORS拒绝来源:', origin);
+    console.log('   允许的来源列表:', allowedOrigins);
     callback(new Error('不允许的来源'));
   },
   credentials: true,
@@ -117,6 +127,22 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // 路由
 app.use('/api', apiRouter);
+
+// Landing 页面静态文件服务（用于 ngrok 访问）
+const landingDistPath = path.join(__dirname, '../../landing/dist');
+if (fs.existsSync(landingDistPath)) {
+  console.log('✅ 提供 Landing 页面静态文件服务');
+  app.use(express.static(landingDistPath));
+  
+  // SPA 路由支持 - 所有非 API 请求都返回 index.html
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api') && !req.path.startsWith('/uploads')) {
+      res.sendFile(path.join(landingDistPath, 'index.html'));
+    }
+  });
+} else {
+  console.log('⚠️  Landing 页面未构建，请运行: cd landing && npm run build');
+}
 
 // 错误处理
 app.use(errorHandler);

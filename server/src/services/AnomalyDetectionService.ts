@@ -14,8 +14,8 @@ export class AnomalyDetectionService {
     const now = Date.now();
 
     try {
-      // 记录失败时间戳
-      await redisClient.zadd(key, now, orderNo);
+      // 记录失败时间戳（新版 Redis 客户端语法）
+      await redisClient.zAdd(key, { score: now, value: orderNo });
       
       // 设置过期时间（1小时）
       await redisClient.expire(key, 3600);
@@ -36,8 +36,8 @@ export class AnomalyDetectionService {
     const oneHourAgo = now - 3600000; // 1小时前
 
     try {
-      // 获取1小时内的失败次数
-      const failures = await redisClient.zcount(key, oneHourAgo, now);
+      // 获取1小时内的失败次数（新版 Redis 客户端语法）
+      const failures = await redisClient.zCount(key, oneHourAgo, now);
 
       if (typeof failures === 'number' && failures >= 5) {
         // 触发告警
@@ -50,7 +50,7 @@ export class AnomalyDetectionService {
         });
 
         // 临时锁定用户支付功能（可选）
-        await redisClient.setex(`payment:locked:${userId}`, 3600, '1');
+        await redisClient.setEx(`payment:locked:${userId}`, 3600, '1');
       }
     } catch (error) {
       console.error('检查支付失败时出错:', error);
@@ -69,13 +69,13 @@ export class AnomalyDetectionService {
     const now = Date.now();
 
     try {
-      // 记录使用时间戳
-      await redisClient.zadd(key, now, now.toString());
+      // 记录使用时间戳（新版 Redis 客户端语法）
+      await redisClient.zAdd(key, { score: now, value: now.toString() });
       await redisClient.expire(key, 3600);
 
       // 获取最近1小时的使用次数
       const oneHourAgo = now - 3600000;
-      const recentUsage = await redisClient.zcount(key, oneHourAgo, now);
+      const recentUsage = await redisClient.zCount(key, oneHourAgo, now);
 
       // 获取用户配额限制
       const quotaResult = await pool.query(
@@ -121,12 +121,12 @@ export class AnomalyDetectionService {
     const fiveMinutesAgo = now - 300000; // 5分钟前
 
     try {
-      // 记录订单创建时间
-      await redisClient.zadd(key, now, now.toString());
+      // 记录订单创建时间（新版 Redis 客户端语法）
+      await redisClient.zAdd(key, { score: now, value: now.toString() });
       await redisClient.expire(key, 3600);
 
       // 获取5分钟内创建的订单数
-      const recentOrders = await redisClient.zcount(key, fiveMinutesAgo, now);
+      const recentOrders = await redisClient.zCount(key, fiveMinutesAgo, now);
 
       if (typeof recentOrders === 'number' && recentOrders >= 10) {
         await this.triggerAlert({
