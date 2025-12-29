@@ -1,5 +1,5 @@
 import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
-import { ApiOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -14,20 +14,30 @@ interface HeaderProps {
 }
 
 export default function Header({ onLogout }: HeaderProps) {
-  const [apiConfig, setApiConfig] = useState<any>(null);
+  const [backendConnected, setBackendConnected] = useState<boolean>(true);
   const navigate = useNavigate();
   const { user } = useApp();
 
   useEffect(() => {
-    loadConfig();
+    // 初始检查后端连接
+    checkBackendConnection();
+    
+    // 每10秒检查一次后端连接状态
+    const interval = setInterval(() => {
+      checkBackendConnection();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
-  const loadConfig = async () => {
+  const checkBackendConnection = async () => {
     try {
-      const response = await axios.get('/api/config/active');
-      setApiConfig(response.data);
+      // 使用一个轻量级的API端点来检查连接
+      await axios.get('/api/health', { timeout: 5000 });
+      setBackendConnected(true);
     } catch (error) {
-      console.error('加载配置失败:', error);
+      console.error('后端连接检查失败:', error);
+      setBackendConnected(false);
     }
   };
 
@@ -84,13 +94,13 @@ export default function Header({ onLogout }: HeaderProps) {
         欢迎来到GEO优化系统 - 桌面版
       </div>
       <Space size="large">
-        {apiConfig?.configured ? (
-          <Tag icon={<ApiOutlined />} color="success">
-            {apiConfig.provider === 'deepseek' ? 'DeepSeek' : 'Gemini'} 已连接
+        {backendConnected ? (
+          <Tag icon={<DatabaseOutlined />} color="success">
+            数据库已连接
           </Tag>
         ) : (
-          <Tag icon={<ApiOutlined />} color="warning">
-            未配置API
+          <Tag icon={<DatabaseOutlined />} color="error">
+            数据库连接断开
           </Tag>
         )}
         

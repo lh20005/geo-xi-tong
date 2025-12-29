@@ -1,0 +1,260 @@
+# ✅ Windows登录管理器数据库连接状态监控完成
+
+## 📝 需求描述
+
+Windows登录管理器（端口5174），进入后：
+1. 将右上角"未配置API"改为"数据库已连接"
+2. 跟踪后端连接情况
+3. 一旦断开连接，会改变图标状态
+
+## 🔧 实现方案
+
+### 修改文件：`windows-login-manager/src/components/Layout/Header.tsx`
+
+#### 1. 导入图标变更
+```typescript
+// 修改前
+import { ApiOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+
+// 修改后
+import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+```
+
+#### 2. 状态管理变更
+```typescript
+// 修改前
+const [apiConfig, setApiConfig] = useState<any>(null);
+
+// 修改后
+const [backendConnected, setBackendConnected] = useState<boolean>(true);
+```
+
+#### 3. 连接检查逻辑
+```typescript
+useEffect(() => {
+  // 初始检查后端连接
+  checkBackendConnection();
+  
+  // 每10秒检查一次后端连接状态
+  const interval = setInterval(() => {
+    checkBackendConnection();
+  }, 10000);
+  
+  return () => clearInterval(interval);
+}, []);
+
+const checkBackendConnection = async () => {
+  try {
+    // 使用一个轻量级的API端点来检查连接
+    await axios.get('/api/health', { timeout: 5000 });
+    setBackendConnected(true);
+  } catch (error) {
+    console.error('后端连接检查失败:', error);
+    setBackendConnected(false);
+  }
+};
+```
+
+#### 4. UI显示变更
+```typescript
+// 修改前
+{apiConfig?.configured ? (
+  <Tag icon={<ApiOutlined />} color="success">
+    {apiConfig.provider === 'deepseek' ? 'DeepSeek' : 'Gemini'} 已连接
+  </Tag>
+) : (
+  <Tag icon={<ApiOutlined />} color="warning">
+    未配置API
+  </Tag>
+)}
+
+// 修改后
+{backendConnected ? (
+  <Tag icon={<DatabaseOutlined />} color="success">
+    数据库已连接
+  </Tag>
+) : (
+  <Tag icon={<DatabaseOutlined />} color="error">
+    数据库连接断开
+  </Tag>
+)}
+```
+
+## ✨ 功能特性
+
+### 1. 实时监控
+- ✅ 每10秒自动检查后端连接状态
+- ✅ 使用 `/api/health` 端点进行健康检查
+- ✅ 5秒超时设置，避免长时间等待
+
+### 2. 状态显示
+**连接正常：**
+- 图标：数据库图标（DatabaseOutlined）
+- 颜色：绿色（success）
+- 文本：数据库已连接
+
+**连接断开：**
+- 图标：数据库图标（DatabaseOutlined）
+- 颜色：红色（error）
+- 文本：数据库连接断开
+
+### 3. 自动清理
+- ✅ 组件卸载时自动清除定时器
+- ✅ 避免内存泄漏
+
+## 🔌 后端健康检查端点
+
+### 端点信息
+- **路径：** `/api/health`
+- **方法：** GET
+- **认证：** 不需要
+- **响应：**
+```json
+{
+  "status": "ok",
+  "message": "GEO优化系统运行正常（多租户模式）"
+}
+```
+
+### 实现位置
+`server/src/routes/index.ts`:
+```typescript
+apiRouter.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'GEO优化系统运行正常（多租户模式）' });
+});
+```
+
+## 🧪 测试场景
+
+### 场景1：正常连接
+1. 启动后端服务（端口3000）
+2. 启动Windows登录管理器
+3. 登录系统
+4. 查看右上角状态
+
+**预期结果：**
+- ✅ 显示绿色"数据库已连接"标签
+
+### 场景2：后端断开
+1. 系统正常运行
+2. 停止后端服务
+3. 等待10秒（下一次检查）
+
+**预期结果：**
+- ✅ 标签变为红色"数据库连接断开"
+- ✅ 控制台显示错误日志
+
+### 场景3：后端恢复
+1. 后端处于断开状态
+2. 重新启动后端服务
+3. 等待10秒（下一次检查）
+
+**预期结果：**
+- ✅ 标签恢复为绿色"数据库已连接"
+
+## 📊 技术细节
+
+### 检查频率
+- **间隔：** 10秒
+- **超时：** 5秒
+- **初始检查：** 组件挂载时立即执行
+
+### 错误处理
+```typescript
+try {
+  await axios.get('/api/health', { timeout: 5000 });
+  setBackendConnected(true);
+} catch (error) {
+  console.error('后端连接检查失败:', error);
+  setBackendConnected(false);
+}
+```
+
+### 性能优化
+1. **轻量级端点：** `/health` 端点不执行复杂逻辑
+2. **超时控制：** 5秒超时避免长时间阻塞
+3. **定时器清理：** 组件卸载时清除定时器
+
+## 🎯 用户体验
+
+### 优势
+1. **实时反馈：** 用户可以立即知道系统连接状态
+2. **视觉明确：** 绿色/红色颜色区分清晰
+3. **自动监控：** 无需手动刷新页面
+
+### 注意事项
+1. 连接检查每10秒执行一次，不是实时的
+2. 如果后端断开，最多需要10秒才能检测到
+3. 网络波动可能导致短暂的状态变化
+
+## 🔄 与前端Web版的一致性
+
+### 相同点
+- ✅ 使用相同的图标（DatabaseOutlined）
+- ✅ 使用相同的文本（"数据库已连接"/"数据库连接断开"）
+- ✅ 使用相同的颜色方案（绿色/红色）
+- ✅ 使用相同的检查间隔（10秒）
+- ✅ 使用相同的健康检查端点（/api/health）
+
+### 不同点
+- Windows版使用原生 `axios`
+- Web版使用 `apiClient`（但都调用相同的端点）
+
+## 📝 相关文件
+
+### 修改的文件
+- `windows-login-manager/src/components/Layout/Header.tsx`
+
+### 依赖的文件
+- `server/src/routes/index.ts` - 健康检查端点
+
+### 对比文件
+- `client/src/components/Layout/Header.tsx` - Web版Header（已同步修改）
+
+## ✅ 完成状态
+
+- ✅ 图标从 ApiOutlined 改为 DatabaseOutlined
+- ✅ 文本从"未配置API"改为"数据库已连接"
+- ✅ 实现后端连接状态监控
+- ✅ 每10秒自动检查连接
+- ✅ 连接断开时显示红色状态
+- ✅ 连接恢复时自动更新为绿色
+- ✅ 与Web版保持一致的用户体验
+
+## 🚀 使用说明
+
+### 启动服务
+```bash
+# 后端服务
+npm run server:dev
+
+# Windows登录管理器
+cd windows-login-manager
+npm run electron:dev
+```
+
+### 测试连接状态
+1. 打开Windows登录管理器应用
+2. 登录系统
+3. 查看右上角连接状态（应显示绿色"数据库已连接"）
+
+### 测试断开
+```bash
+# 停止后端服务
+# 等待10秒观察状态变化（变为红色"数据库连接断开"）
+
+# 重启后端服务
+npm run server:dev
+# 等待10秒观察状态恢复（变回绿色"数据库已连接"）
+```
+
+## 🎉 总结
+
+现在Windows登录管理器和Web前端都实现了统一的数据库连接状态监控功能：
+
+1. **统一的视觉体验** - 两个平台使用相同的图标、颜色和文本
+2. **实时监控** - 每10秒自动检查后端连接状态
+3. **即时反馈** - 连接状态变化时立即更新UI
+4. **用户友好** - 清晰的视觉提示，让用户随时了解系统状态
+
+系统现在可以在两个平台上实时监控后端连接状态，为用户提供更好的体验！🎉
