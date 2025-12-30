@@ -64,27 +64,35 @@ export default function KnowledgeBaseDetailPage() {
 
     setLoading(true);
     try {
-      // 读取文件内容并转换为 base64
-      const filesData = await Promise.all(
-        fileList.map(async (file) => {
-          if (file.originFileObj) {
-            const buffer = await file.originFileObj.arrayBuffer();
-            const base64 = btoa(
-              new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-            );
-            return {
-              filename: file.name,
-              content: base64,
-              mimetype: file.type || 'application/octet-stream'
-            };
-          }
-          return null;
-        })
-      );
-
-      const validFiles = filesData.filter(f => f !== null);
+      console.log('=== 开始上传文件 ===');
+      console.log('文件数量:', fileList.length);
       
-      const res = await ipcBridge.uploadKnowledgeBaseDocuments(parseInt(id!), validFiles);
+      // 使用文件路径传输（Electron 环境下 File 对象有 path 属性）
+      const filesData = fileList.map((file) => {
+        if (file.originFileObj) {
+          const fileObj = file.originFileObj as any;
+          console.log('文件信息:', {
+            name: file.name,
+            type: file.type,
+            size: file.size,
+            hasPath: !!fileObj.path
+          });
+          
+          return {
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            size: file.size,
+            path: fileObj.path // Electron 提供的文件路径
+          };
+        }
+        return null;
+      }).filter(f => f !== null);
+
+      console.log('准备上传的文件:', filesData);
+      
+      const res = await ipcBridge.uploadKnowledgeBaseDocuments(parseInt(id!), filesData);
+      
+      console.log('上传响应:', res);
       
       if (!res.success) throw new Error(res.error || '上传失败');
 
@@ -99,6 +107,7 @@ export default function KnowledgeBaseDetailPage() {
       setFileList([]);
       loadKnowledgeBase();
     } catch (error: any) {
+      console.error('上传失败:', error);
       message.error(error.message || '上传文档失败');
     } finally {
       setLoading(false);

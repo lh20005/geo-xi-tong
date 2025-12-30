@@ -153,10 +153,9 @@ knowledgeBaseRouter.get('/:id', async (req, res) => {
   }
 });
 
-// 更新知识库（验证所有权）
+// 更新知识库
 knowledgeBaseRouter.patch('/:id', async (req, res) => {
   try {
-    const userId = getCurrentTenantId(req);
     const kbId = parseInt(req.params.id);
     if (isNaN(kbId) || kbId <= 0) {
       return res.status(400).json({ error: '无效的知识库ID' });
@@ -164,13 +163,10 @@ knowledgeBaseRouter.patch('/:id', async (req, res) => {
     
     const validatedData = updateKnowledgeBaseSchema.parse(req.body);
     
-    // 检查知识库是否存在且属于当前用户
-    const checkResult = await pool.query(
-      'SELECT id FROM knowledge_bases WHERE id = $1 AND user_id = $2',
-      [kbId, userId]
-    );
+    // 检查知识库是否存在
+    const checkResult = await pool.query('SELECT id FROM knowledge_bases WHERE id = $1', [kbId]);
     if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: '知识库不存在或无权访问' });
+      return res.status(404).json({ error: '知识库不存在' });
     }
     
     // 构建更新语句
@@ -190,13 +186,9 @@ knowledgeBaseRouter.patch('/:id', async (req, res) => {
     
     updates.push(`updated_at = CURRENT_TIMESTAMP`);
     values.push(kbId);
-    values.push(userId);
     
     const result = await pool.query(
-      `UPDATE knowledge_bases 
-       SET ${updates.join(', ' )} 
-       WHERE id = $${paramIndex} AND user_id = $${paramIndex + 1}
-       RETURNING id, name, description, updated_at`,
+      `UPDATE knowledge_bases SET ${updates.join(', ')} WHERE id = $${paramIndex} RETURNING id, name, description, updated_at`,
       values
     );
     
@@ -410,10 +402,9 @@ knowledgeBaseRouter.delete('/documents/:id', async (req, res) => {
   }
 });
 
-// 搜索文档（验证所有权）
+// 搜索文档
 knowledgeBaseRouter.get('/:id/documents/search', async (req, res) => {
   try {
-    const userId = getCurrentTenantId(req);
     const kbId = parseInt(req.params.id);
     const query = req.query.q as string;
     
@@ -423,16 +414,6 @@ knowledgeBaseRouter.get('/:id/documents/search', async (req, res) => {
     
     if (!query || query.trim().length === 0) {
       return res.status(400).json({ error: '请提供搜索关键词' });
-    }
-    
-    // 验证知识库所有权
-    const kbCheck = await pool.query(
-      'SELECT id FROM knowledge_bases WHERE id = $1 AND user_id = $2',
-      [kbId, userId]
-    );
-    
-    if (kbCheck.rows.length === 0) {
-      return res.status(404).json({ error: '知识库不存在或无权访问' });
     }
     
     // 使用PostgreSQL全文搜索

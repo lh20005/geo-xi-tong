@@ -11,6 +11,7 @@ import { wsManager, WebSocketManager } from '../websocket/manager';
 import { AccountEvent } from '../websocket/client';
 import path from 'path';
 import fs from 'fs/promises';
+import * as fsSync from 'fs';
 
 /**
  * IPC处理器
@@ -611,11 +612,26 @@ class IPCHandler {
     // 上传文档
     ipcMain.handle('knowledge-base:upload-documents', async (_event, id: number, files: any[]) => {
       try {
-        log.info(`IPC: knowledge-base:upload-documents - ${id}`);
-        const data = await apiClient.uploadKnowledgeBaseDocuments(id, files);
+        log.info(`IPC: knowledge-base:upload-documents - KB ID: ${id}, 文件数: ${files.length}`);
+        
+        // 直接传递文件路径信息给 API 客户端
+        const filesData = files.map((fileData: any) => {
+          log.info(`准备文件: ${fileData.name}, 路径: ${fileData.path}`);
+          return {
+            name: fileData.name,
+            path: fileData.path,
+            type: fileData.type
+          };
+        });
+        
+        log.info(`所有文件准备完成，开始调用 API...`);
+        const data = await apiClient.uploadKnowledgeBaseDocuments(id, filesData);
+        log.info(`API 调用成功，上传了 ${data.uploadedCount} 个文档`);
+        
         return { success: true, data };
       } catch (error: any) {
         log.error('IPC: knowledge-base:upload-documents failed:', error);
+        log.error('错误详情:', error.response?.data || error.message);
         const message = error?.response?.data?.error || error?.message || '上传文档失败';
         return { success: false, error: message };
       }

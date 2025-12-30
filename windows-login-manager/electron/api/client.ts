@@ -1,6 +1,8 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 import log from 'electron-log';
 import { storageManager } from '../storage/manager';
+import FormData from 'form-data';
+import fs from 'fs';
 
 /**
  * API客户端
@@ -568,11 +570,22 @@ class APIClient {
    */
   async uploadKnowledgeBaseDocuments(id: number, files: any[]): Promise<any> {
     const formData = new FormData();
-    files.forEach((file) => {
-      formData.append('files', file);
+    
+    // 使用文件流添加文件到 FormData
+    files.forEach((fileData) => {
+      const fileStream = fs.createReadStream(fileData.path);
+      formData.append('files', fileStream, {
+        filename: fileData.name,
+        contentType: fileData.type || 'application/octet-stream'
+      });
     });
+    
     const response = await this.axiosInstance.post(`/api/knowledge-bases/${id}/documents`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: {
+        ...formData.getHeaders()
+      },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
     });
     return response.data;
   }
