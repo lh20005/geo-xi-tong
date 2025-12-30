@@ -9,6 +9,66 @@ import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 
 // const { Title } = Typography;
 
+// 平台图标映射 - 优先使用本地图标，回退到在线图标
+const getPlatformIcon = (platformId: string): string => {
+  // 特殊平台使用指定路径
+  const specialIcons: Record<string, string> = {
+    'baijiahao': '/images/baijiahao.png',
+    'baidu': '/images/baijiahao.png',
+    'toutiao': '/images/toutiaohao.png',
+    'toutiaohao': '/images/toutiaohao.png',
+    'xiaohongshu': '/images/xiaohongshu.png',
+    'xhs': '/images/xiaohongshu.png',
+    'weixin': '/images/gongzhonghao.png',
+    'gongzhonghao': '/images/gongzhonghao.png',
+    'wechat': '/images/gongzhonghao.png',
+    'douyin': '/images/douyin.jpeg',
+    'sohu': '/images/souhu.jpeg',
+    'souhu': '/images/souhu.jpeg',
+    'wangyi': '/images/wangyi.png',
+    'netease': '/images/wangyi.png',
+    'bilibili': '/images/bili.png',
+    'bili': '/images/bili.png',
+    'qq': '/images/qie.png',
+    'qie': '/images/qie.png',
+    'penguin': '/images/qie.png',
+    'zhihu': '/images/zhihu.png',
+    'csdn': '/images/csdn.png',
+    'jianshu': '/images/jianshu.png'
+  };
+  
+  if (specialIcons[platformId]) {
+    return specialIcons[platformId];
+  }
+  
+  // 其他平台使用默认路径
+  return `/platform-icons/${platformId}.png`;
+};
+
+// 获取备用在线图标
+const getOnlinePlatformIcon = (platformId: string): string => {
+  const onlineIconMap: Record<string, string> = {
+    'baijiahao': 'https://www.baidu.com/favicon.ico',
+    'toutiao': 'https://lf3-cdn-tos.bytescm.com/obj/static/xitu_juejin_web/img/favicon.ico',
+    'weixin': 'https://res.wx.qq.com/a/wx_fed/assets/res/OTE0YTAw.png',
+    'zhihu': 'https://static.zhihu.com/heifetz/favicon.ico',
+    'douyin': 'https://lf1-cdn-tos.bytegoofy.com/goofy/ies/douyin_web/public/favicon.ico',
+    'xiaohongshu': 'https://fe-video-qc.xhscdn.com/fe-platform/d0a7bf6f8e6e8f5c6e5e5e5e5e5e5e5e.ico',
+    'bilibili': 'https://www.bilibili.com/favicon.ico',
+    'kuaishou': 'https://static.yximgs.com/udata/pkg/fe/kwai-pc-web/favicon.ico',
+    'baidu': 'https://www.baidu.com/favicon.ico',
+    'sohu': 'https://statics.itc.cn/web/static/images/favicon.ico',
+    'sina': 'https://www.sina.com.cn/favicon.ico',
+    'wangyi': 'https://www.163.com/favicon.ico',
+    'qq': 'https://mat1.gtimg.com/www/icon/favicon2.ico',
+    'taobao': 'https://www.taobao.com/favicon.ico',
+    'jd': 'https://www.jd.com/favicon.ico',
+    'pinduoduo': 'https://fundf.pinduoduo.com/favicon.ico'
+  };
+  
+  return onlineIconMap[platformId] || '';
+};
+
 export default function PlatformManagementPage() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -350,13 +410,13 @@ export default function PlatformManagementPage() {
           点击平台卡片打开浏览器进行登录，登录成功后Cookie将自动保存
         </div>
         
-        <Row gutter={[16, 16]}>
+        <Row gutter={[12, 12]}>
           {platforms.map(platform => {
             const bound = isPlatformBound(platform.platform_id);
             const platformAccounts = getPlatformAccounts(platform.platform_id);
             
             return (
-              <Col xs={24} sm={12} md={8} lg={6} key={platform.platform_id}>
+              <Col xs={12} sm={8} md={6} lg={4} xl={3} key={platform.platform_id}>
                 <Card
                   hoverable
                   onClick={() => handlePlatformClick(platform)}
@@ -367,48 +427,79 @@ export default function PlatformManagementPage() {
                     border: bound ? '2px solid #52c41a' : '1px solid #e2e8f0',
                     background: bound ? '#f6ffed' : '#ffffff',
                     transition: 'all 0.3s ease',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    height: '100%'
                   }}
-                  styles={{ body: { padding: '24px 16px' } }}
+                  styles={{ body: { padding: '12px 8px' } }}
                 >
                   {bound && (
                     <div
                       style={{
                         position: 'absolute',
-                        top: 8,
-                        right: 8
+                        top: 4,
+                        right: 4
                       }}
                     >
-                      <CheckCircleOutlined style={{ fontSize: 20, color: '#52c41a' }} />
+                      <CheckCircleOutlined style={{ fontSize: 14, color: '#52c41a' }} />
                     </div>
                   )}
                   
                   <div
                     style={{
-                      width: 64,
-                      height: 64,
-                      margin: '0 auto 12px',
+                      width: 48,
+                      height: 48,
+                      margin: '0 auto 8px',
                       borderRadius: 8,
-                      background: bound ? '#52c41a' : '#0ea5e9',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 28,
-                      fontWeight: 'bold',
-                      color: '#ffffff'
+                      overflow: 'hidden'
                     }}
                   >
-                    {platform.platform_name.charAt(0)}
+                    <img 
+                      src={getPlatformIcon(platform.platform_id)} 
+                      alt={platform.platform_name}
+                      style={{ 
+                        width: '100%', 
+                        height: '100%', 
+                        objectFit: 'contain'
+                      }}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        const onlineIcon = getOnlinePlatformIcon(platform.platform_id);
+                        
+                        // 如果当前不是在线图标，尝试加载在线图标
+                        if (onlineIcon && target.src !== onlineIcon) {
+                          target.src = onlineIcon;
+                        } else {
+                          // 如果在线图标也失败，显示首字母
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.style.background = bound ? '#52c41a' : '#0ea5e9';
+                            parent.innerHTML = `<span style="font-size: 24px; font-weight: bold; color: #ffffff;">${platform.platform_name.charAt(0)}</span>`;
+                          }
+                        }
+                      }}
+                    />
                   </div>
                   
-                  <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8, color: '#1e293b' }}>
+                  <div style={{ 
+                    fontSize: 12, 
+                    fontWeight: 500, 
+                    marginBottom: 4, 
+                    color: '#1e293b',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
                     {platform.platform_name}
                   </div>
                   
-                  {bound ? (
-                    <Tag color="success">已登录 {platformAccounts.length} 个账号</Tag>
-                  ) : (
-                    <Tag color="default">点击登录</Tag>
+                  {bound && platformAccounts.length > 0 && (
+                    <div style={{ fontSize: 11, color: '#52c41a' }}>
+                      {platformAccounts.length}个账号
+                    </div>
                   )}
                 </Card>
               </Col>
