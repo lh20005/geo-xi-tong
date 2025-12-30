@@ -143,7 +143,37 @@ export default function PlatformManagementPage() {
         getPlatforms(),
         getAccounts()
       ]);
-      setPlatforms(platformsData);
+      
+      // 定义平台显示顺序
+      const platformOrder = [
+        'douyin',      // 抖音
+        'toutiao',     // 头条号
+        'xiaohongshu', // 小红书
+        'souhu',       // 搜狐号
+        'wangyi',      // 网易号
+        'zhihu',       // 知乎
+        'qie',         // 企鹅号
+        'baijiahao',   // 百家号
+        'wechat',      // 微信公众号
+        'bilibili',    // 哔哩哔哩
+        'jianshu',     // 简书
+        'csdn'         // CSDN
+      ];
+      
+      // 按照指定顺序排序平台
+      const sortedPlatforms = platformsData.sort((a, b) => {
+        const indexA = platformOrder.indexOf(a.platform_id);
+        const indexB = platformOrder.indexOf(b.platform_id);
+        
+        // 如果平台不在排序列表中，放到最后
+        if (indexA === -1 && indexB === -1) return 0;
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        
+        return indexA - indexB;
+      });
+      
+      setPlatforms(sortedPlatforms);
       setAccounts(accountsData);
     } catch (error) {
       message.error('加载数据失败');
@@ -240,7 +270,7 @@ export default function PlatformManagementPage() {
       }
     },
     {
-      title: '真实用户名',
+      title: '用户名',
       dataIndex: 'real_username',
       key: 'real_username',
       width: 180,
