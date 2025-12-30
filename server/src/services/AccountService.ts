@@ -488,35 +488,55 @@ export class AccountService {
           url: 'https://creator.douyin.com/creator-micro/home',
           waitTime: 5000
         },
+        'souhu': {
+          url: 'https://mp.sohu.com/mpfe/v3/main/index',
+          waitTime: 4000
+        },
         'xiaohongshu': {
           url: 'https://creator.xiaohongshu.com/creator/home',
           waitTime: 3000
         },
-        'bilibili': {
-          url: 'https://member.bilibili.com/platform/home',
-          waitTime: 3000
-        },
-        'wechat': {
-          url: 'https://mp.weixin.qq.com/',
+        'jianshu': {
+          url: 'https://www.jianshu.com/',
           waitTime: 3000
         }
+        // 注意：微信公众号和哔哩哔哩不需要导航，登录成功后已经在正确页面
       };
       
       const navConfig = platformsNeedingNavigation[platform.platform_id];
       if (navConfig) {
-        console.log(`[浏览器登录] ${platform.platform_name}：导航到主页以提取用户名...`);
-        try {
-          await page.goto(navConfig.url, { 
-            waitUntil: 'networkidle2',
-            timeout: 30000 
-          });
+        console.log(`[浏览器登录] ${platform.platform_name}：检查是否需要导航到主页...`);
+        
+        const currentUrl = page.url();
+        const targetUrl = navConfig.url;
+        
+        // 检查当前URL是否已经是目标页面（或其子页面）
+        const isAlreadyOnTargetPage = currentUrl.includes(new URL(targetUrl).pathname);
+        
+        if (isAlreadyOnTargetPage) {
+          console.log(`[浏览器登录] ${platform.platform_name}：已在目标页面，无需导航`);
+          console.log(`[浏览器登录] ${platform.platform_name}：当前URL: ${currentUrl}`);
           // 等待页面渲染完成
           await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
-          console.log(`[浏览器登录] ${platform.platform_name}：已导航到主页，当前URL: ${page.url()}`);
-        } catch (navError: any) {
-          console.log(`[浏览器登录] ${platform.platform_name}：导航到主页失败: ${navError.message}`);
-          // 继续尝试提取，可能当前页面已经有用户名
+        } else {
+          console.log(`[浏览器登录] ${platform.platform_name}：导航到主页以提取用户名...`);
+          try {
+            await page.goto(navConfig.url, { 
+              waitUntil: 'networkidle2',
+              timeout: 30000 
+            });
+            // 等待页面渲染完成
+            await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
+            console.log(`[浏览器登录] ${platform.platform_name}：已导航到主页，当前URL: ${page.url()}`);
+          } catch (navError: any) {
+            console.log(`[浏览器登录] ${platform.platform_name}：导航到主页失败: ${navError.message}`);
+            // 继续尝试提取，可能当前页面已经有用户名
+          }
         }
+      } else {
+        // 对于没有特殊导航配置的平台，等待1秒确保页面加载完成
+        console.log(`[浏览器登录] ${platform.platform_name}：等待页面完全加载...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
       
       // 尝试获取用户信息
@@ -540,9 +560,12 @@ export class AccountService {
       
       console.log(`\n========================================`);
       console.log(`[浏览器登录] 准备保存账号信息`);
+      console.log(`[浏览器登录] 平台ID: ${platform.platform_id}`);
+      console.log(`[浏览器登录] 平台名称: ${platform.platform_name}`);
       console.log(`[浏览器登录] 账号名称: ${accountName}`);
       console.log(`[浏览器登录] 真实用户名: ${realUsername || '未提取到'}`);
       console.log(`[浏览器登录] Cookie数量: ${cookies.length}`);
+      console.log(`[浏览器登录] 用户ID: ${userId}`);
       console.log(`[浏览器登录] 凭证数据:`, JSON.stringify({
         username: credentials.username,
         password: credentials.password,
@@ -623,7 +646,7 @@ export class AccountService {
     const loginUrls: { [key: string]: string } = {
       // 主流自媒体平台
       'wangyi': 'https://mp.163.com/login.html',
-      'souhu': 'https://mp.sohu.com/login',
+      'souhu': 'https://mp.sohu.com/mpfe/v4/login',
       'baijiahao': 'https://baijiahao.baidu.com/builder/author/register/index',
       'toutiao': 'https://mp.toutiao.com/auth/page/login/',
       'qie': 'https://om.qq.com/userAuth/index',
@@ -676,6 +699,50 @@ export class AccountService {
         await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 300000 });
       },
       
+      // 搜狐号：检测登录成功后的元素或URL变化
+      'souhu': async () => {
+        console.log(`[等待登录] 搜狐号：等待登录成功...`);
+        console.log(`[等待登录] 搜狐号：初始URL: ${initialUrl}`);
+        
+        try {
+          // 关键修复：必须同时满足两个条件
+          // 1. URL不再是登录页面（不包含login）
+          // 2. URL包含创作者中心路径（支持多种可能的路径）
+          console.log(`[等待登录] 搜狐号：等待URL跳转到创作者中心（不包含login）...`);
+          
+          await page.waitForFunction(
+            `!window.location.href.includes('login') && 
+             window.location.href.includes('mp.sohu.com/mpfe/') &&
+             (window.location.href.includes('/main/') || 
+              window.location.href.includes('/index') ||
+              window.location.href.includes('/home') ||
+              window.location.href.includes('/contentManagement/') ||
+              window.location.href.includes('/page'))`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] 搜狐号：✅ URL已跳转到创作者中心: ${currentUrl}`);
+          
+          // 额外验证：等待3秒确保页面稳定
+          console.log(`[等待登录] 搜狐号：等待3秒确保页面稳定...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // 验证是否真的在创作者中心（检查是否有用户信息元素）
+          try {
+            console.log(`[等待登录] 搜狐号：验证是否有用户信息元素...`);
+            await page.waitForSelector('.user-info, .user-name, .header-user-name', { timeout: 10000 });
+            console.log(`[等待登录] 搜狐号：✅ 确认检测到用户信息元素，登录成功！`);
+          } catch (e) {
+            console.log(`[等待登录] 搜狐号：⚠️ 未检测到用户信息元素，但URL已变化，继续执行`);
+          }
+          
+        } catch (e) {
+          console.log(`[等待登录] 搜狐号：❌ URL检测超时，登录可能失败`);
+          throw new Error('搜狐号登录超时：URL未跳转到创作者中心');
+        }
+      },
+      
       // 小红书：检测创作者中心元素
       'xiaohongshu': async () => {
         console.log(`[等待登录] 小红书：等待登录成功...`);
@@ -692,34 +759,174 @@ export class AccountService {
       // 微信公众号：检测账号信息
       'wechat': async () => {
         console.log(`[等待登录] 微信公众号：等待登录成功...`);
+        console.log(`[等待登录] 微信公众号：初始URL: ${initialUrl}`);
+        
         try {
-          await page.waitForSelector('.account_info_title, .account-name', { timeout: 300000 });
-          console.log(`[等待登录] 微信公众号：检测到账号信息`);
+          // 第一步：等待URL跳转到后台页面（包含cgi-bin和token参数）
+          console.log(`[等待登录] 微信公众号：等待URL跳转...`);
+          await page.waitForFunction(
+            `window.location.href.includes('mp.weixin.qq.com/cgi-bin/') && 
+             window.location.href.includes('token=')`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] 微信公众号：✅ URL已跳转到后台: ${currentUrl}`);
+          
+          // 第二步：等待侧边栏账号信息元素出现（最多3秒）
+          // 一旦检测到元素就立即继续，不需要等待完整的3秒
+          console.log(`[等待登录] 微信公众号：等待账号信息元素加载（最多3秒）...`);
+          
+          try {
+            await page.waitForSelector('.weui-desktop-account__info, .mp_account_box, #js_mp_sidemenu', { timeout: 3000 });
+            console.log(`[等待登录] 微信公众号：✅ 检测到账号信息元素，登录成功！`);
+          } catch (e) {
+            // 3秒后元素还没出现，但URL已经正确，也认为登录成功
+            console.log(`[等待登录] 微信公众号：⚠️ 3秒内未检测到账号信息元素，但URL已包含token，继续执行`);
+          }
+          
         } catch (e) {
-          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+          console.log(`[等待登录] 微信公众号：❌ 登录检测超时`);
+          throw new Error('微信公众号登录超时：URL未跳转');
         }
       },
       
       // B站：检测用户信息
       'bilibili': async () => {
         console.log(`[等待登录] B站：等待登录成功...`);
+        console.log(`[等待登录] B站：初始URL: ${initialUrl}`);
+        
         try {
-          await page.waitForSelector('.user-name, .username, .uname', { timeout: 300000 });
-          console.log(`[等待登录] B站：检测到用户信息`);
+          // 第一步：等待URL跳转到创作者中心
+          console.log(`[等待登录] B站：等待URL跳转到创作者中心...`);
+          await page.waitForFunction(
+            `window.location.href.includes('member.bilibili.com/platform')`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] B站：✅ URL已跳转到创作者中心: ${currentUrl}`);
+          
+          // 第二步：等待头部登录图标元素加载（最多3秒）
+          // 这是登录成功最可靠的标志
+          console.log(`[等待登录] B站：等待头部登录图标加载（最多3秒）...`);
+          try {
+            await page.waitForSelector('#app > div.cc-header > div > div.right-block > span:nth-child(1) > span > a > img, .cc-header .right-block img, .bili-avatar', { timeout: 3000 });
+            console.log(`[等待登录] B站：✅ 检测到头部登录图标，登录成功！`);
+          } catch (e) {
+            console.log(`[等待登录] B站：⚠️ 3秒内未检测到登录图标，但URL已正确，继续执行`);
+          }
+          
         } catch (e) {
-          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+          console.log(`[等待登录] B站：❌ 登录检测超时`);
+          throw new Error('B站登录超时：URL未跳转到创作者中心');
         }
       },
       
       // 知乎：检测用户头像或名称
       'zhihu': async () => {
         console.log(`[等待登录] 知乎：等待登录成功...`);
+        console.log(`[等待登录] 知乎：初始URL: ${initialUrl}`);
+        
         try {
-          await page.waitForSelector('.AppHeader-profile, .Profile-name', { timeout: 300000 });
-          console.log(`[等待登录] 知乎：检测到用户信息`);
+          // 关键修复：知乎登录成功后会跳转到首页
+          // 检测条件：URL不包含signin且是知乎域名
+          console.log(`[等待登录] 知乎：等待URL跳转（不包含signin）...`);
+          
+          await page.waitForFunction(
+            `!window.location.href.includes('signin') && 
+             !window.location.href.includes('login') &&
+             window.location.href.includes('zhihu.com')`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] 知乎：✅ URL已跳转: ${currentUrl}`);
+          
+          // 等待3秒确保页面稳定
+          console.log(`[等待登录] 知乎：等待3秒确保页面稳定...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // 尝试验证用户信息元素（可选）
+          try {
+            console.log(`[等待登录] 知乎：验证是否有用户信息元素...`);
+            await page.waitForSelector('.AppHeader-profile, .Profile-name, .Avatar, [class*="Avatar"]', { timeout: 10000 });
+            console.log(`[等待登录] 知乎：✅ 确认检测到用户信息元素，登录成功！`);
+          } catch (e) {
+            console.log(`[等待登录] 知乎：⚠️ 未检测到用户信息元素，但URL已变化，继续执行`);
+          }
+          
         } catch (e) {
-          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+          console.log(`[等待登录] 知乎：❌ URL检测超时，登录可能失败`);
+          throw new Error('知乎登录超时：URL未跳转');
         }
+      },
+      
+      // 企鹅号：跳过注册确认页面，等待到达创作者中心
+      'qie': async () => {
+        console.log(`[等待登录] 企鹅号：等待登录成功...`);
+        console.log(`[等待登录] 企鹅号：初始URL: ${initialUrl}`);
+        
+        try {
+          // 关键修复：企鹅号登录后会先跳转到注册确认页面
+          // https://om.qq.com/userReg/register
+          // 然后才跳转到创作者中心
+          // https://om.qq.com/main 或其他页面
+          // 检测条件：URL不包含userAuth、userReg、register、login，且包含om.qq.com
+          console.log(`[等待登录] 企鹅号：等待URL跳转到创作者中心（跳过注册确认页）...`);
+          
+          await page.waitForFunction(
+            `!window.location.href.includes('userAuth') && 
+             !window.location.href.includes('userReg') &&
+             !window.location.href.includes('register') &&
+             !window.location.href.includes('login') &&
+             window.location.href.includes('om.qq.com') &&
+             (window.location.href.includes('/main') ||
+              window.location.href.includes('/article') ||
+              window.location.href.includes('/content'))`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] 企鹅号：✅ URL已跳转到创作者中心: ${currentUrl}`);
+          
+          // 等待3秒确保页面稳定
+          console.log(`[等待登录] 企鹅号：等待3秒确保页面稳定...`);
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // 尝试验证用户信息元素（可选）
+          try {
+            console.log(`[等待登录] 企鹅号：验证是否有用户信息元素...`);
+            await page.waitForSelector('.user-info-name, .user-name, [class*="user"]', { timeout: 10000 });
+            console.log(`[等待登录] 企鹅号：✅ 确认检测到用户信息元素，登录成功！`);
+          } catch (e) {
+            console.log(`[等待登录] 企鹅号：⚠️ 未检测到用户信息元素，但URL已变化，继续执行`);
+          }
+          
+        } catch (e) {
+          console.log(`[等待登录] 企鹅号：❌ URL检测超时，登录可能失败`);
+          throw new Error('企鹅号登录超时：URL未跳转到创作者中心');
+        }
+      },
+      
+      // 简书：简单检测URL变化即可
+      'jianshu': async () => {
+        console.log(`[等待登录] 简书：等待登录成功...`);
+        console.log(`[等待登录] 简书：初始URL: ${initialUrl}`);
+        
+        // 简单检测：URL从登录页跳转到首页
+        console.log(`[等待登录] 简书：等待URL跳转到首页...`);
+        await page.waitForFunction(
+          `window.location.href === 'https://www.jianshu.com/' || 
+           (window.location.href.includes('jianshu.com') && 
+            !window.location.href.includes('sign_in') && 
+            !window.location.href.includes('sign_up'))`,
+          { timeout: 300000 }
+        );
+        
+        const currentUrl = page.url();
+        console.log(`[等待登录] 简书：✅ URL已跳转到: ${currentUrl}`);
+        console.log(`[等待登录] 简书：登录成功！`);
       }
     };
     
@@ -766,13 +973,16 @@ export class AccountService {
           '[class*="username"]'
         ],
         'souhu': [
-          // 搜狐号创作者中心
-          '.user-name',
-          '.username',
-          '.account-name',
-          '.author-name',
-          '[class*="user-name"]',
-          '[class*="username"]'
+          // 搜狐号创作者中心 - 优先级从高到低
+          '.user-info .name',           // 优先级1：用户信息区域的名称
+          '.header-user-name',          // 优先级2：头部用户名
+          '.user-name',                 // 优先级3：通用用户名
+          '.username',                  // 优先级4：用户名
+          '.account-name',              // 优先级5：账号名
+          '.author-name',               // 优先级6：作者名
+          '[class*="user-name"]',       // 优先级7：包含user-name的class
+          '[class*="username"]',        // 优先级8：包含username的class
+          '[class*="account"]'          // 优先级9：包含account的class
         ],
         'baijiahao': [
           // 百家号创作者中心
@@ -805,13 +1015,17 @@ export class AccountService {
         
         // 社交媒体平台 - 已优化
         'wechat': [
-          // 微信公众号
-          '.account_info_title',
-          '.account-name',
-          '.user-name',
-          '.username',
-          '[class*="account"]',
-          '[class*="user-name"]'
+          // 微信公众号 - 使用精确的侧边栏账号信息选择器
+          '.weui-desktop-account__info',      // 优先级1：侧边栏账号信息容器（最可靠）
+          '.weui-desktop-account__nickname',  // 优先级2：账号昵称
+          '.mp_account_box .weui-desktop-account__info', // 优先级3：账号信息框内的信息
+          '#js_account_name',                 // 优先级4：账号名称ID
+          '.account_info_title',              // 优先级5：账号信息标题
+          '.account-name',                    // 优先级6：账号名称
+          '.user-name',                       // 优先级7：用户名
+          '.username',                        // 优先级8：用户名
+          '[class*="account"]',               // 优先级9：包含account的class
+          '[class*="user-name"]'              // 优先级10：包含user-name的class
         ],
         'xiaohongshu': [
           // 小红书创作者中心
@@ -835,13 +1049,15 @@ export class AccountService {
           '[class*="user-name"]'
         ],
         'bilibili': [
-          // B站创作者中心
-          '.user-name',
-          '.username',
-          '.uname',
-          '.up-name',
-          '[class*="user-name"]',
-          '[class*="username"]'
+          // B站创作者中心 - 使用头部登录区域的元素
+          '.cc-header .right-block img',  // 优先级1：头部登录图标（最可靠）
+          '.bili-avatar',                 // 优先级2：B站头像
+          '.user-name',                   // 优先级3：用户名
+          '.username',                    // 优先级4：用户名
+          '.uname',                       // 优先级5：UP主名称
+          '.up-name',                     // 优先级6：UP主名称
+          '[class*="user-name"]',         // 优先级7：包含user-name的class
+          '[class*="username"]'           // 优先级8：包含username的class
         ],
         
         // 技术社区平台 - 已优化
@@ -855,13 +1071,17 @@ export class AccountService {
           '[class*="username"]'
         ],
         'jianshu': [
-          // 简书
-          '.user-name',
-          '.username',
-          '.nickname',
-          '.author-name',
-          '[class*="user-name"]',
-          '[class*="nickname"]'
+          // 简书 - 使用导航栏登录区域的元素
+          'nav .user img',                     // 优先级1：导航栏用户头像图标（最可靠）
+          'body > nav > div > div.user > div > a > img', // 优先级2：完整路径
+          'nav .user div',                     // 优先级3：用户区域
+          '.avatar',                           // 优先级4：头像
+          '.user-name',                        // 优先级5：用户名
+          '.username',                         // 优先级6：用户名
+          '.nickname',                         // 优先级7：昵称
+          '.author-name',                      // 优先级8：作者名
+          '[class*="user-name"]',              // 优先级9：包含user-name的class
+          '[class*="nickname"]'                // 优先级10：包含nickname的class
         ],
         'csdn': [
           // CSDN
@@ -1166,10 +1386,10 @@ export class AccountService {
     const homeUrls: { [key: string]: string } = {
       // 主流自媒体平台
       'wangyi': 'https://mp.163.com/',
-      'souhu': 'https://mp.sohu.com/',
+      'souhu': 'https://mp.sohu.com/mpfe/v3/main/index',
       'baijiahao': 'https://baijiahao.baidu.com/builder/rc/home',
       'toutiao': 'https://mp.toutiao.com/profile_v4/index',
-      'qie': 'https://om.qq.com/userAuth/index',
+      'qie': 'https://om.qq.com/main',  // 修复：改为主页而非登录页
       
       // 社交媒体平台
       'wechat': 'https://mp.weixin.qq.com/',

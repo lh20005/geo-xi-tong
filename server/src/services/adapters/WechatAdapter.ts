@@ -65,14 +65,20 @@ export class WechatAdapter extends PlatformAdapter {
       // 微信公众号需要扫码登录
       console.log('⚠️  微信公众号需要扫码登录，请手动扫码');
       
-      // 等待用户扫码登录
-      const selectors = this.getLoginSelectors();
-      if (selectors.successIndicator) {
-        await page.waitForSelector(selectors.successIndicator, { timeout: 60000 });
+      // 等待登录成功：URL跳转到包含token的后台页面
+      try {
+        await page.waitForFunction(
+          `window.location.href.includes('mp.weixin.qq.com/cgi-bin/') && 
+           window.location.href.includes('token=')`,
+          { timeout: 60000 }
+        );
+        
+        console.log('✅ 微信公众号登录成功');
+        return true;
+      } catch (e) {
+        console.error('❌ 微信公众号登录超时');
+        return false;
       }
-
-      console.log('✅ 微信公众号登录成功');
-      return true;
     } catch (error: any) {
       console.error('❌ 微信公众号登录失败:', error.message);
       return false;

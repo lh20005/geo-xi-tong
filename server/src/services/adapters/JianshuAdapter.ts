@@ -9,6 +9,13 @@ import {
 
 /**
  * 简书平台适配器
+ * 参考搜狐号和头条号最佳实践重新制作
+ * 
+ * 关键改进：
+ * 1. 优化Cookie登录验证逻辑
+ * 2. 增强登录状态检测（URL + 元素双重验证）
+ * 3. 改进用户信息提取
+ * 4. 增强错误处理和日志输出
  */
 export class JianshuAdapter extends PlatformAdapter {
   platformId = 'jianshu';
@@ -27,7 +34,7 @@ export class JianshuAdapter extends PlatformAdapter {
       usernameInput: 'input[name="session[email_or_mobile_number]"]',
       passwordInput: 'input[name="session[password]"]',
       submitButton: 'button[type="submit"]',
-      successIndicator: '.avatar'
+      successIndicator: 'nav .user img, .avatar, nav .user'
     };
   }
 
@@ -40,38 +47,129 @@ export class JianshuAdapter extends PlatformAdapter {
     };
   }
 
+  /**
+   * 执行登录
+   * 参考搜狐号和头条号的成功经验，优先使用Cookie登录
+   */
   async performLogin(
     page: Page,
     credentials: { username: string; password: string; cookies?: any[] }
   ): Promise<boolean> {
     try {
-      // 优先使用Cookie登录
+      // ========== 优先使用Cookie登录 ==========
       if (credentials.cookies && credentials.cookies.length > 0) {
         console.log('[简书] 使用Cookie登录');
+        console.log(`[简书] Cookie数量: ${credentials.cookies.length}`);
         
-        await page.goto('https://www.jianshu.com/', { waitUntil: 'networkidle2' });
+        // 设置Cookie（页面已经在主页了，由PublishingExecutor导航）
         const loginSuccess = await this.loginWithCookies(page, credentials.cookies);
         
-        if (loginSuccess && await this.verifyCookieLogin(page)) {
-          console.log('✅ 简书Cookie登录成功');
-          return true;
+        if (loginSuccess) {
+          console.log('[简书] Cookie已设置，等待3秒让页面加载...');
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
+          // 验证登录状态 - 检查URL和登录元素
+          const currentUrl = page.url();
+          console.log(`[简书] 当前URL: ${currentUrl}`);
+          
+          // 简书登录成功的URL特征：
+          // - 包含 jianshu.com
+          // - 不包含 sign_in 或 sign_up
+          if (currentUrl.includes('jianshu.com') && 
+              !currentUrl.includes('sign_in') && 
+              !currentUrl.includes('sign_up')) {
+            
+            // 双重验证：检查导航栏是否有登录图标
+            try {
+              await page.waitForSelector('nav .user img, nav .user, .avatar', { timeout: 5000 });
+              console.log('✅ 简书Cookie登录成功（URL + 元素双重验证通过）');
+              return true;
+            } catch (e) {
+              console.log('[简书] 未检测到登录元素，但URL正确，继续验证...');
+              // URL正确但元素未找到，可能是页面加载慢，再等待一下
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              // 再次尝试
+              try {
+                await page.waitForSelector('nav .user img, nav .user, .avatar', { timeout: 3000 });
+                console.log('✅ 简书Cookie登录成功（延迟验证通过）');
+                return true;
+              } catch (e2) {
+                console.log('[简书] Cookie登录验证失败，尝试表单登录');
+              }
+            }
+          }
+          
+          console.log('[简书] Cookie登录验证失败，尝试表单登录');
         }
         
-        console.log('[简书] Cookie登录失败，尝试表单登录');
+        // Cookie登录失败，导航到登录页
+        console.log('[简书] 导航到登录页面...');
+        await page.goto(this.getLoginUrl(), { waitUntil: 'networkidle2', timeout: 30000 });
       }
       
+      // ========== 表单登录（后备方案）==========
+      console.log('[简书] 开始表单登录');
       const selectors = this.getLoginSelectors();
-      await page.waitForSelector(selectors.usernameInput, { timeout: 10000 });
+      
+      // 等待登录表单加载
+      console.log('[简书] 等待登录表单加载...');
+      await page.waitForSelector(selectors.usernameInput, { timeout: 15000 });
+      console.log('[简书] 登录表单已加载');
+      
+      // 填写用户名
+      console.log('[简书] 填写用户名...');
       await this.safeType(page, selectors.usernameInput, credentials.username);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 填写密码
+      console.log('[简书] 填写密码...');
       await this.safeType(page, selectors.passwordInput, credentials.password);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 点击登录按钮
+      console.log('[简书] 点击登录按钮...');
       await this.safeClick(page, selectors.submitButton);
-
-      if (selectors.successIndicator) {
-        await page.waitForSelector(selectors.successIndicator, { timeout: 15000 });
+      
+      // 等待登录成功（URL跳转 + 登录元素出现）
+      console.log('[简书] 等待登录成功...');
+      
+      // 方式1：等待URL跳转（离开登录页）
+      try {
+        await page.waitForFunction(
+          `window.location.href !== "${this.getLoginUrl()}" && 
+           !window.location.href.includes('sign_in') && 
+           !window.location.href.includes('sign_up')`,
+          { timeout: 30000 }
+        );
+        console.log('[简书] ✅ URL已跳转，登录成功');
+      } catch (e) {
+        console.log('[简书] ⚠️ URL未跳转，但继续验证登录状态');
       }
-
-      console.log('✅ 简书表单登录成功');
-      return true;
+      
+      // 方式2：等待登录元素出现
+      if (selectors.successIndicator) {
+        try {
+          await page.waitForSelector(selectors.successIndicator, { timeout: 10000 });
+          console.log('[简书] ✅ 检测到登录元素');
+        } catch (e) {
+          console.log('[简书] ⚠️ 未检测到登录元素，但可能已登录');
+        }
+      }
+      
+      // 最终验证：检查当前URL
+      const finalUrl = page.url();
+      console.log(`[简书] 最终URL: ${finalUrl}`);
+      
+      if (finalUrl.includes('jianshu.com') && 
+          !finalUrl.includes('sign_in') && 
+          !finalUrl.includes('sign_up')) {
+        console.log('✅ 简书表单登录成功');
+        return true;
+      }
+      
+      throw new Error('登录后URL未正确跳转');
+      
     } catch (error: any) {
       console.error('❌ 简书登录失败:', error.message);
       return false;
