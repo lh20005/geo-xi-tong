@@ -493,8 +493,8 @@ export class AccountService {
           waitTime: 4000
         },
         'xiaohongshu': {
-          url: 'https://creator.xiaohongshu.com/creator/home',
-          waitTime: 3000
+          url: 'https://creator.xiaohongshu.com/new/home',
+          waitTime: 1000  // 精准选择器，只需等待1秒
         },
         'jianshu': {
           url: 'https://www.jianshu.com/',
@@ -743,16 +743,22 @@ export class AccountService {
         }
       },
       
-      // 小红书：检测创作者中心元素
+      // 小红书：检测URL跳转到新版主页
       'xiaohongshu': async () => {
         console.log(`[等待登录] 小红书：等待登录成功...`);
+        console.log(`[等待登录] 小红书：等待URL跳转到 https://creator.xiaohongshu.com/new/home`);
+        
         try {
-          // 尝试检测创作者中心特定元素
-          await page.waitForSelector('.username, .user-name, [class*="username"]', { timeout: 300000 });
-          console.log(`[等待登录] 小红书：检测到用户信息元素`);
+          // 等待URL跳转到新版主页（精准判断）
+          await page.waitForFunction(
+            `window.location.href.includes('creator.xiaohongshu.com/new/home')`,
+            { timeout: 300000 }
+          );
+          console.log(`[等待登录] 小红书：✅ URL已跳转到新版主页，登录成功`);
+          console.log(`[等待登录] 小红书：当前URL: ${page.url()}`);
         } catch (e) {
-          // 备用：URL变化
-          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+          console.log(`[等待登录] 小红书：❌ URL检测超时，登录可能失败`);
+          throw new Error('小红书登录超时：URL未跳转到新版主页');
         }
       },
       
@@ -947,8 +953,15 @@ export class AccountService {
     const finalUrl = page.url();
     console.log(`[等待登录] ${platformId} 登录成功，当前URL: ${finalUrl}`);
     
-    // 额外等待2秒确保Cookie设置完成和页面渲染
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // 对于使用精准选择器的平台（如小红书），不需要额外等待
+    const platformsWithPreciseSelectors = ['xiaohongshu'];
+    
+    if (!platformsWithPreciseSelectors.includes(platformId)) {
+      // 额外等待2秒确保Cookie设置完成和页面渲染
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    } else {
+      console.log(`[等待登录] ${platformId}：使用精准选择器，跳过额外等待`);
+    }
   }
   
   /**
@@ -1028,13 +1041,8 @@ export class AccountService {
           '[class*="user-name"]'              // 优先级10：包含user-name的class
         ],
         'xiaohongshu': [
-          // 小红书创作者中心
-          '.username',
-          '.user-name',
-          '.nickname',
-          '.author-name',
-          '[class*="username"]',
-          '[class*="nickname"]'
+          // 小红书创作者中心 - 精准选择器
+          '#header-area > div > div > div:nth-child(2) > div > span'
         ],
         'douyin': [
           // 抖音创作者中心（已测试成功）
@@ -1393,7 +1401,7 @@ export class AccountService {
       
       // 社交媒体平台
       'wechat': 'https://mp.weixin.qq.com/',
-      'xiaohongshu': 'https://creator.xiaohongshu.com/creator/home',
+      'xiaohongshu': 'https://creator.xiaohongshu.com/new/home',
       'douyin': 'https://creator.douyin.com/creator-micro/home',
       'bilibili': 'https://member.bilibili.com/platform/home',
       
