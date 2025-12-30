@@ -3,7 +3,6 @@ import {
   ThunderboltOutlined,
   FileTextOutlined,
   RocketOutlined,
-  CheckCircleOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined
 } from '@ant-design/icons';
@@ -12,15 +11,15 @@ import type { MetricsData } from '../../types/dashboard';
 interface MetricsCardsProps {
   data: MetricsData | null;
   loading: boolean;
-  onCardClick?: (type: 'distillations' | 'articles' | 'tasks' | 'success') => void;
+  onCardClick?: (type: 'distillations' | 'articles' | 'tasks') => void;
 }
 
 export default function MetricsCards({ data, loading, onCardClick }: MetricsCardsProps) {
   if (loading || !data) {
     return (
       <Row gutter={[24, 24]}>
-        {[1, 2, 3, 4].map((i) => (
-          <Col xs={24} sm={12} lg={6} key={i}>
+        {[1, 2, 3].map((i) => (
+          <Col xs={24} sm={12} lg={8} key={i}>
             <Card>
               <Skeleton active paragraph={{ rows: 2 }} />
             </Card>
@@ -51,11 +50,9 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
     data.publishingTasks.yesterday
   );
 
-  const successRateChange = data.publishingSuccessRate.rate - data.publishingSuccessRate.previousRate;
-
   return (
     <Row gutter={[24, 24]}>
-      <Col xs={24} sm={12} lg={6}>
+      <Col xs={24} sm={12} lg={8}>
         <Card
           hoverable
           onClick={() => onCardClick?.('distillations')}
@@ -89,7 +86,7 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
         </Card>
       </Col>
 
-      <Col xs={24} sm={12} lg={6}>
+      <Col xs={24} sm={12} lg={8}>
         <Card
           hoverable
           onClick={() => onCardClick?.('articles')}
@@ -123,7 +120,7 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
         </Card>
       </Col>
 
-      <Col xs={24} sm={12} lg={6}>
+      <Col xs={24} sm={12} lg={8}>
         <Card
           hoverable
           onClick={() => onCardClick?.('tasks')}
@@ -153,41 +150,6 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
           />
           <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 8 }}>
             今日新增: {data.publishingTasks.today}
-          </div>
-        </Card>
-      </Col>
-
-      <Col xs={24} sm={12} lg={6}>
-        <Card
-          hoverable
-          onClick={() => onCardClick?.('success')}
-          style={{
-            background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-            border: 'none',
-            cursor: 'pointer'
-          }}
-        >
-          <Statistic
-            title={<span style={{ color: '#fff', fontSize: 14 }}>发布成功率</span>}
-            value={data.publishingSuccessRate.rate.toFixed(1)}
-            prefix={<CheckCircleOutlined />}
-            suffix={
-              <span style={{ fontSize: 14, marginLeft: 8 }}>
-                %
-                {successRateChange >= 0 ? (
-                  <ArrowUpOutlined style={{ color: '#52c41a', marginLeft: 4 }} />
-                ) : (
-                  <ArrowDownOutlined style={{ color: '#ff4d4f', marginLeft: 4 }} />
-                )}
-                <span style={{ marginLeft: 4 }}>
-                  {Math.abs(successRateChange).toFixed(1)}%
-                </span>
-              </span>
-            }
-            valueStyle={{ color: '#fff', fontSize: 28 }}
-          />
-          <div style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 8 }}>
-            成功: {data.publishingSuccessRate.success} / {data.publishingSuccessRate.total}
           </div>
         </Card>
       </Col>

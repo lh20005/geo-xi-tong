@@ -14,6 +14,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // 判断导航项是否激活
   const isActive = (path: string) => {
@@ -99,18 +100,34 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
   return (
     <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-20">
-          <Link to="/" className="flex items-center space-x-3">
+        <div className="flex justify-between items-center h-16 md:h-20">
+          <Link to="/" className="flex items-center space-x-2 md:space-x-3">
             <img 
               src="/images/logo.png" 
               alt="JZ Logo" 
-              className="w-10 h-10 rounded-lg"
+              className="w-8 h-8 md:w-10 md:h-10 rounded-lg"
             />
-            <span className="text-2xl font-bold text-gray-900">
+            <span className="text-lg md:text-2xl font-bold text-gray-900">
               GEO优化SaaS系统
             </span>
           </Link>
           
+          {/* 移动端菜单按钮 */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            aria-label="打开菜单"
+          >
+            <svg className="w-6 h-6 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {mobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+          
+          {/* 桌面端菜单 */}
           <div className="hidden md:flex items-center space-x-8">
             <button
               onClick={() => {
@@ -213,6 +230,134 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
           </div>
         </div>
       </div>
+
+      {/* 移动端菜单面板 */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 top-16 z-40 bg-white">
+          <div className="h-full overflow-y-auto">
+            <div className="px-4 py-6 space-y-4">
+              {/* 导航链接 */}
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  if (window.location.pathname === '/') {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  } else {
+                    navigate('/');
+                  }
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                  isActive('/') && activeSection === 'home' 
+                    ? 'bg-blue-50 text-blue-600' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                首页
+              </button>
+              
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleNavigateToSection('features');
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                  isSectionActive('features') 
+                    ? 'bg-blue-50 text-blue-600' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                核心功能
+              </button>
+              
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleNavigateToSection('advantages');
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                  isSectionActive('advantages') 
+                    ? 'bg-blue-50 text-blue-600' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                产品优势
+              </button>
+              
+              <Link
+                to="/cases"
+                onClick={() => setMobileMenuOpen(false)}
+                className={`block w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                  isActive('/cases') 
+                    ? 'bg-blue-50 text-blue-600' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                应用示例
+              </Link>
+              
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  handleNavigateToSection('pricing');
+                }}
+                className={`w-full text-left px-4 py-3 rounded-lg font-medium transition-colors ${
+                  isSectionActive('pricing') 
+                    ? 'bg-blue-50 text-blue-600' 
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                价格方案
+              </button>
+
+              {/* 分隔线 */}
+              <div className="border-t border-gray-200 my-4"></div>
+
+              {/* 登录/用户信息 */}
+              {isLoggedIn ? (
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      const token = localStorage.getItem('auth_token');
+                      const refreshToken = localStorage.getItem('refresh_token');
+                      const userInfo = localStorage.getItem('user_info');
+                      
+                      if (token && refreshToken && userInfo) {
+                        const params = new URLSearchParams({
+                          token,
+                          refresh_token: refreshToken,
+                          user_info: userInfo
+                        });
+                        window.location.href = `${config.clientUrl}?${params.toString()}`;
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all"
+                  >
+                    进入系统
+                  </button>
+                  
+                  <MobileUserMenu 
+                    username={username}
+                    isAdmin={isAdmin}
+                    onLogout={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                  />
+                </div>
+              ) : (
+                <Link
+                  to="/login"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="block w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all text-center"
+                >
+                  立即登录
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

@@ -36,15 +36,19 @@ export default function PublishingStatusChart({ data, loading }: PublishingStatu
   const statusMap: Record<string, string> = {
     pending: '待发布',
     running: '进行中',
-    completed: '已完成',
-    failed: '失败'
+    success: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+    timeout: '超时'
   };
 
   const colorMap: Record<string, string> = {
     pending: colors.warning,
     running: colors.primary,
-    completed: colors.success,
-    failed: colors.error
+    success: colors.success,
+    failed: colors.error,
+    cancelled: '#8c8c8c',
+    timeout: '#ff7a45'
   };
 
   const chartData = data.data.map(item => ({

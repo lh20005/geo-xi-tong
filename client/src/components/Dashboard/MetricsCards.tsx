@@ -1,9 +1,8 @@
-import { Card, Row, Col, Skeleton, Progress } from 'antd';
+import { Card, Row, Col, Skeleton } from 'antd';
 import {
   ThunderboltOutlined,
   FileTextOutlined,
   RocketOutlined,
-  CheckCircleOutlined,
   RiseOutlined,
   FallOutlined
 } from '@ant-design/icons';
@@ -12,15 +11,15 @@ import type { MetricsData } from '../../types/dashboard';
 interface MetricsCardsProps {
   data: MetricsData | null;
   loading: boolean;
-  onCardClick?: (type: 'distillations' | 'articles' | 'tasks' | 'success') => void;
+  onCardClick?: (type: 'distillations' | 'articles' | 'tasks') => void;
 }
 
 export default function MetricsCards({ data, loading, onCardClick }: MetricsCardsProps) {
   if (loading || !data) {
     return (
       <Row gutter={[16, 16]}>
-        {[1, 2, 3, 4].map((i) => (
-          <Col xs={24} sm={12} xl={6} key={i}>
+        {[1, 2, 3].map((i) => (
+          <Col xs={24} sm={12} xl={8} key={i}>
             <Card style={{ borderRadius: 8 }}>
               <Skeleton active paragraph={{ rows: 2 }} />
             </Card>
@@ -50,8 +49,6 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
     data.publishingTasks.today,
     data.publishingTasks.yesterday
   );
-
-  const successRateChange = data.publishingSuccessRate.rate - data.publishingSuccessRate.previousRate;
 
   // 卡片配置
   const cards = [
@@ -87,26 +84,13 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
       color: '#13c2c2',
       bgColor: '#e6fffb',
       borderColor: '#87e8de'
-    },
-    {
-      key: 'success',
-      title: '文章发布率',
-      value: data.publishingSuccessRate.rate.toFixed(1),
-      suffix: '%',
-      today: `${data.publishingSuccessRate.success}/${data.publishingSuccessRate.total}`,
-      growth: successRateChange,
-      icon: <CheckCircleOutlined />,
-      color: '#52c41a',
-      bgColor: '#f6ffed',
-      borderColor: '#b7eb8f',
-      isRate: true
     }
   ];
 
   return (
     <Row gutter={[16, 16]}>
       {cards.map((card) => (
-        <Col xs={24} sm={12} xl={6} key={card.key}>
+        <Col xs={24} sm={12} xl={8} key={card.key}>
           <Card
             hoverable
             onClick={() => onCardClick?.(card.key as any)}
@@ -173,11 +157,7 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
               borderTop: '1px solid #f0f0f0'
             }}>
               <div style={{ fontSize: 12, color: '#8c8c8c' }}>
-                {card.isRate ? (
-                  <>已发布: <span style={{ color: '#262626', fontWeight: 500 }}>{card.today}</span></>
-                ) : (
-                  <>今日: <span style={{ color: '#262626', fontWeight: 500 }}>{card.today}</span></>
-                )}
+                今日: <span style={{ color: '#262626', fontWeight: 500 }}>{card.today}</span>
               </div>
               <div style={{ 
                 display: 'flex', 
@@ -194,18 +174,6 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
                 {Math.abs(card.growth).toFixed(1)}%
               </div>
             </div>
-
-            {/* 成功率进度条 */}
-            {card.isRate && (
-              <div style={{ marginTop: 12 }}>
-                <Progress 
-                  percent={parseFloat(card.value as string)} 
-                  strokeColor={card.color}
-                  showInfo={false}
-                  size="small"
-                />
-              </div>
-            )}
           </Card>
         </Col>
       ))}

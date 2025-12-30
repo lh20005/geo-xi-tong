@@ -54,3 +54,4 @@ screenshots/
 *.png
 !client/public/**/*.png
 !landing/public/**/*.png
+node_modules

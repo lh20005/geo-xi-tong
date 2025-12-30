@@ -20,7 +20,6 @@ import ArticleStatsChart from '../components/Dashboard/ArticleStatsChart';
 import KeywordDistributionChart from '../components/Dashboard/KeywordDistributionChart';
 import MonthlyComparisonChart from '../components/Dashboard/MonthlyComparisonChart';
 import HourlyActivityChart from '../components/Dashboard/HourlyActivityChart';
-import SuccessRateGauge from '../components/Dashboard/SuccessRateGauge';
 import { getAllDashboardData } from '../api/dashboard';
 import type { TimeRange } from '../types/dashboard';
 
@@ -239,12 +238,9 @@ export default function Dashboard() {
           </Col>
         </Row>
 
-        {/* 第三行：成功率和资源效率 */}
+        {/* 第三行：资源效率 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          <Col xs={24} lg={12}>
-            <SuccessRateGauge data={dashboardData?.successRates} loading={loading} />
-          </Col>
-          <Col xs={24} lg={12}>
+          <Col xs={24}>
             <ResourceEfficiencyChart data={dashboardData?.resourceUsage} loading={loading} />
           </Col>
         </Row>
