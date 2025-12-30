@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import { App as AntApp } from 'antd';
 import { AppProvider, useApp } from './context/AppContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -112,7 +113,9 @@ function AppContent() {
 function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <AntApp>
+        <AppContent />
+      </AntApp>
     </AppProvider>
   );
 }

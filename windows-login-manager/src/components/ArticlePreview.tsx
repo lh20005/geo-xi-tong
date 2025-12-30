@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, Typography, Empty } from 'antd';
 import { processArticleContent } from '../utils/articleUtils';
 
@@ -25,9 +25,45 @@ const ArticlePreview: React.FC<ArticlePreviewProps> = ({
   showTitle = true,
   showImage = true
 }) => {
+  const [serverUrl, setServerUrl] = useState<string>('http://localhost:3000');
+
+  useEffect(() => {
+    // 从 IPC 获取服务器配置
+    const loadServerUrl = async () => {
+      try {
+        if (window.electron?.getConfig) {
+          const config = await window.electron.getConfig();
+          if (config?.serverUrl) {
+            setServerUrl(config.serverUrl);
+          }
+        }
+      } catch (error) {
+        console.error('获取服务器配置失败:', error);
+      }
+    };
+    
+    loadServerUrl();
+  }, []);
+
   if (!content) {
     return <Empty description="暂无文章内容" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
+
+  // 处理图片 URL - 将相对路径转换为完整 URL
+  const getFullImageUrl = (url?: string): string | undefined => {
+    if (!url) return undefined;
+    
+    // 如果已经是完整 URL，直接返回
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    
+    // 如果是相对路径，添加服务器地址
+    const path = url.startsWith('/') ? url : `/${url}`;
+    return `${serverUrl}${path}`;
+  };
+
+  const fullImageUrl = getFullImageUrl(imageUrl);
 
   // 渲染文章内容
   const renderContent = () => {
@@ -61,17 +97,22 @@ const ArticlePreview: React.FC<ArticlePreviewProps> = ({
       )}
 
       {/* 文章图片 */}
-      {showImage && imageUrl && (
+      {showImage && fullImageUrl && (
         <Card size="small" style={{ marginBottom: 16, textAlign: 'center' }}>
           <img 
-            src={imageUrl} 
+            src={fullImageUrl} 
             alt="文章配图" 
             style={{ 
               maxWidth: '100%', 
               maxHeight: 400,
               borderRadius: 8,
               objectFit: 'contain'
-            }} 
+            }}
+            onError={(e) => {
+              console.error('图片加载失败:', fullImageUrl);
+              // 图片加载失败时隐藏
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
           />
         </Card>
       )}

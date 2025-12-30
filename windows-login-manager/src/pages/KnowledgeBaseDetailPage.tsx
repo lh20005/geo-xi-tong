@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Button, message, Space, Modal, Upload, Empty, Input, Tag, Tooltip } from 'antd';
+import { Card, Button, Space, Upload, Empty, Input, Tag, Tooltip, App, Modal } from 'antd';
 import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
@@ -26,6 +26,7 @@ interface KnowledgeBase {
 export default function KnowledgeBaseDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { message, modal } = App.useApp();
   const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [loading, setLoading] = useState(false);
@@ -115,7 +116,7 @@ export default function KnowledgeBaseDetailPage() {
   };
 
   const handleDeleteDocument = (docId: number, filename: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除文档"${filename}"吗？此操作不可恢复。`,
       okText: '确定',
