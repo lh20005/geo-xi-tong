@@ -482,27 +482,39 @@ export class AccountService {
       
       console.log(`[浏览器登录] 成功获取 ${cookies.length} 个Cookie`);
       
-      // 抖音平台特殊处理：登录后需要导航到首页才能提取用户名
-      if (platform.platform_id === 'douyin') {
-        console.log(`[浏览器登录] 抖音平台：导航到创作者中心首页以提取用户名...`);
+      // 平台特殊处理：某些平台需要导航到特定页面才能提取用户名
+      const platformsNeedingNavigation: { [key: string]: { url: string; waitTime: number } } = {
+        'douyin': {
+          url: 'https://creator.douyin.com/creator-micro/home',
+          waitTime: 5000
+        },
+        'xiaohongshu': {
+          url: 'https://creator.xiaohongshu.com/creator/home',
+          waitTime: 3000
+        },
+        'bilibili': {
+          url: 'https://member.bilibili.com/platform/home',
+          waitTime: 3000
+        },
+        'wechat': {
+          url: 'https://mp.weixin.qq.com/',
+          waitTime: 3000
+        }
+      };
+      
+      const navConfig = platformsNeedingNavigation[platform.platform_id];
+      if (navConfig) {
+        console.log(`[浏览器登录] ${platform.platform_name}：导航到主页以提取用户名...`);
         try {
-          await page.goto('https://creator.douyin.com/creator-micro/home', { 
+          await page.goto(navConfig.url, { 
             waitUntil: 'networkidle2',
             timeout: 30000 
           });
-          // 额外等待页面渲染完成（增加到5秒）
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          console.log(`[浏览器登录] 抖音平台：已导航到首页，当前URL: ${page.url()}`);
-          
-          // 等待用户名元素出现
-          try {
-            await page.waitForSelector('.name-_lSSDc', { timeout: 10000 });
-            console.log(`[浏览器登录] 抖音平台：用户名元素已加载`);
-          } catch (e) {
-            console.log(`[浏览器登录] 抖音平台：等待用户名元素超时，尝试继续提取`);
-          }
+          // 等待页面渲染完成
+          await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
+          console.log(`[浏览器登录] ${platform.platform_name}：已导航到主页，当前URL: ${page.url()}`);
         } catch (navError: any) {
-          console.log(`[浏览器登录] 抖音平台：导航到首页失败: ${navError.message}`);
+          console.log(`[浏览器登录] ${platform.platform_name}：导航到主页失败: ${navError.message}`);
           // 继续尝试提取，可能当前页面已经有用户名
         }
       }
@@ -638,29 +650,87 @@ export class AccountService {
   
   /**
    * 等待用户登录完成
-   * 统一使用简单的URL变化检测（参考头条号成功经验）
+   * 根据不同平台使用不同的检测策略
    */
   private async waitForLogin(page: any, platformId: string): Promise<void> {
     const initialUrl = page.url();
     console.log(`[等待登录] ${platformId} 平台 - 初始URL: ${initialUrl}`);
     
-    // 抖音平台特殊处理：检测登录成功元素而不是URL变化
-    if (platformId === 'douyin') {
-      console.log(`[等待登录] 抖音平台：等待登录成功元素出现...`);
-      try {
-        // 等待高清发布按钮出现（登录成功的标志）
-        await page.waitForSelector('#douyin-creator-master-side-upload-wrap', { timeout: 300000 });
-        console.log(`[等待登录] 抖音平台：检测到登录成功元素`);
-      } catch (e) {
-        // 备用方案：等待URL变化
-        console.log(`[等待登录] 抖音平台：元素检测超时，尝试URL变化检测...`);
-        await page.waitForFunction(
-          `window.location.href !== "${initialUrl}"`,
-          { timeout: 60000 }
-        );
+    // 定义各平台的登录成功检测策略
+    const loginDetectionStrategies: { [key: string]: () => Promise<void> } = {
+      // 抖音：检测特定元素
+      'douyin': async () => {
+        console.log(`[等待登录] 抖音平台：等待登录成功元素出现...`);
+        try {
+          await page.waitForSelector('#douyin-creator-master-side-upload-wrap', { timeout: 300000 });
+          console.log(`[等待登录] 抖音平台：检测到登录成功元素`);
+        } catch (e) {
+          console.log(`[等待登录] 抖音平台：元素检测超时，尝试URL变化检测...`);
+          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+        }
+      },
+      
+      // 头条号：URL变化检测（已验证成功）
+      'toutiao': async () => {
+        console.log(`[等待登录] 头条号：等待URL变化...`);
+        await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 300000 });
+      },
+      
+      // 小红书：检测创作者中心元素
+      'xiaohongshu': async () => {
+        console.log(`[等待登录] 小红书：等待登录成功...`);
+        try {
+          // 尝试检测创作者中心特定元素
+          await page.waitForSelector('.username, .user-name, [class*="username"]', { timeout: 300000 });
+          console.log(`[等待登录] 小红书：检测到用户信息元素`);
+        } catch (e) {
+          // 备用：URL变化
+          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+        }
+      },
+      
+      // 微信公众号：检测账号信息
+      'wechat': async () => {
+        console.log(`[等待登录] 微信公众号：等待登录成功...`);
+        try {
+          await page.waitForSelector('.account_info_title, .account-name', { timeout: 300000 });
+          console.log(`[等待登录] 微信公众号：检测到账号信息`);
+        } catch (e) {
+          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+        }
+      },
+      
+      // B站：检测用户信息
+      'bilibili': async () => {
+        console.log(`[等待登录] B站：等待登录成功...`);
+        try {
+          await page.waitForSelector('.user-name, .username, .uname', { timeout: 300000 });
+          console.log(`[等待登录] B站：检测到用户信息`);
+        } catch (e) {
+          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+        }
+      },
+      
+      // 知乎：检测用户头像或名称
+      'zhihu': async () => {
+        console.log(`[等待登录] 知乎：等待登录成功...`);
+        try {
+          await page.waitForSelector('.AppHeader-profile, .Profile-name', { timeout: 300000 });
+          console.log(`[等待登录] 知乎：检测到用户信息`);
+        } catch (e) {
+          await page.waitForFunction(`window.location.href !== "${initialUrl}"`, { timeout: 60000 });
+        }
       }
+    };
+    
+    // 使用平台特定策略，或默认URL变化检测
+    const strategy = loginDetectionStrategies[platformId];
+    
+    if (strategy) {
+      await strategy();
     } else {
-      // 其他平台：等待URL变化
+      // 默认策略：URL变化检测
+      console.log(`[等待登录] ${platformId}：使用默认URL变化检测...`);
       await page.waitForFunction(
         `window.location.href !== "${initialUrl}"`,
         { timeout: 300000 }
@@ -670,7 +740,7 @@ export class AccountService {
     const finalUrl = page.url();
     console.log(`[等待登录] ${platformId} 登录成功，当前URL: ${finalUrl}`);
     
-    // 额外等待2秒确保Cookie设置完成
+    // 额外等待2秒确保Cookie设置完成和页面渲染
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
   
@@ -685,49 +755,162 @@ export class AccountService {
       
       // 定义选择器映射（支持多个选择器尝试）
       const selectors: { [key: string]: string[] } = {
-        // 自媒体平台
-        'wangyi': ['.user-info .name', '.user-name', '.username'],
-        'souhu': ['.user-name', '.username', '.account-name'],
-        'baijiahao': ['.author-name', '.user-name', '.username'],
+        // 自媒体平台 - 已优化和测试
+        'wangyi': [
+          // 网易号创作者中心
+          '.user-info .name',
+          '.user-name',
+          '.username',
+          '.account-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
+        'souhu': [
+          // 搜狐号创作者中心
+          '.user-name',
+          '.username',
+          '.account-name',
+          '.author-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
+        'baijiahao': [
+          // 百家号创作者中心
+          '.author-name',
+          '.user-name',
+          '.username',
+          '.account-name',
+          '[class*="author-name"]',
+          '[class*="user-name"]'
+        ],
         'toutiao': [
+          // 头条号创作者中心（已测试成功）
           '.auth-avator-name',
+          '.semi-navigation-header-username',
           '.user-name',
           '.username', 
           '.account-name',
           '[class*="username"]',
-          '[class*="user-name"]',
-          '.semi-navigation-header-username'
+          '[class*="user-name"]'
         ],
-        'qie': ['.user-info-name', '.user-name', '.username'],
+        'qie': [
+          // 企鹅号（腾讯内容开放平台）
+          '.user-info-name',
+          '.user-name',
+          '.username',
+          '.account-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
         
-        // 社交媒体平台
-        'wechat': ['.account_info_title', '.user-name', '.username'],
-        'xiaohongshu': ['.username', '.user-name', '.nickname'],
+        // 社交媒体平台 - 已优化
+        'wechat': [
+          // 微信公众号
+          '.account_info_title',
+          '.account-name',
+          '.user-name',
+          '.username',
+          '[class*="account"]',
+          '[class*="user-name"]'
+        ],
+        'xiaohongshu': [
+          // 小红书创作者中心
+          '.username',
+          '.user-name',
+          '.nickname',
+          '.author-name',
+          '[class*="username"]',
+          '[class*="nickname"]'
+        ],
         'douyin': [
-          // 优先级1: 抖音创作者中心特定选择器（从HTML快照中提取，最可靠）
+          // 抖音创作者中心（已测试成功）
           '.name-_lSSDc',
           '.header-_F2uzl .name-_lSSDc',
           '.left-zEzdJX .name-_lSSDc',
-          // 优先级2: 通配符选择器（匹配动态class名）
           '[class*="name-"][class*="_"]',
-          // 优先级3: 通用选择器（备用）
           '.semi-navigation-header-username',
           '.username',
           '.user-name',
           '[class*="username"]',
           '[class*="user-name"]'
         ],
-        'bilibili': ['.user-name', '.username', '.uname'],
+        'bilibili': [
+          // B站创作者中心
+          '.user-name',
+          '.username',
+          '.uname',
+          '.up-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
         
-        // 技术社区平台
-        'zhihu': ['.AppHeader-profile', '.username', '.user-name'],
-        'jianshu': ['.user-name', '.username', '.nickname'],
-        'csdn': ['.user-name', '.username', '.nick-name'],
-        'juejin': ['.username', '.user-name'],
-        'segmentfault': ['.user-name', '.username'],
-        'oschina': ['.user-name', '.username'],
-        'cnblogs': ['.user-name', '.username'],
-        'v2ex': ['.username', '.user-name']
+        // 技术社区平台 - 已优化
+        'zhihu': [
+          // 知乎
+          '.AppHeader-profile',
+          '.Profile-name',
+          '.username',
+          '.user-name',
+          '[class*="Profile"]',
+          '[class*="username"]'
+        ],
+        'jianshu': [
+          // 简书
+          '.user-name',
+          '.username',
+          '.nickname',
+          '.author-name',
+          '[class*="user-name"]',
+          '[class*="nickname"]'
+        ],
+        'csdn': [
+          // CSDN
+          '.user-name',
+          '.username',
+          '.nick-name',
+          '.user-profile-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
+        'juejin': [
+          // 掘金
+          '.username',
+          '.user-name',
+          '.author-name',
+          '[class*="username"]',
+          '[class*="user-name"]'
+        ],
+        'segmentfault': [
+          // SegmentFault
+          '.user-name',
+          '.username',
+          '.author-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
+        'oschina': [
+          // 开源中国
+          '.user-name',
+          '.username',
+          '.author-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
+        'cnblogs': [
+          // 博客园
+          '.user-name',
+          '.username',
+          '.author-name',
+          '[class*="user-name"]',
+          '[class*="username"]'
+        ],
+        'v2ex': [
+          // V2EX
+          '.username',
+          '.user-name',
+          '[class*="username"]',
+          '[class*="user-name"]'
+        ]
       };
       
       const selectorList = selectors[platformId];
