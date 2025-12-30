@@ -252,6 +252,19 @@ export async function loginWithBrowser(platformId: string): Promise<{ success: b
   return response.data;
 }
 
+/**
+ * 测试账号登录
+ * 使用保存的Cookie打开浏览器，由用户自己查看登录状态
+ */
+export async function testAccountLogin(accountId: number): Promise<{ success: boolean; message?: string }> {
+  // 打开浏览器供用户查看，不设置超时限制
+  const response = await apiClient.post(`/publishing/accounts/${accountId}/test-login`, 
+    {},
+    { timeout: 120000 } // 2分钟超时（仅用于API响应）
+  );
+  return response.data;
+}
+
 // ==================== 发布记录相关 ====================
 
 export interface PublishingRecord {

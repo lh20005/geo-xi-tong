@@ -275,6 +275,36 @@ router.post('/accounts/:id/set-default', async (req, res) => {
 });
 
 /**
+ * 测试账号登录
+ */
+router.post('/accounts/:id/test-login', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const accountId = parseInt(req.params.id);
+    
+    if (isNaN(accountId)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的账号ID'
+      });
+    }
+    
+    console.log(`[API] 收到测试登录请求 - 账号ID: ${accountId}, 用户ID: ${userId}`);
+    
+    // 调用测试登录服务
+    const result = await accountService.testAccountLogin(accountId, userId);
+    
+    res.json(result);
+  } catch (error: any) {
+    console.error('[API] 测试登录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '测试登录失败'
+    });
+  }
+});
+
+/**
  * 使用浏览器登录平台
  */
 router.post('/browser-login', async (req, res) => {

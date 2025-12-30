@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined } from '@ant-design/icons';
-import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount } from '../api/publishing';
+import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount, testAccountLogin } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
 import AccountBindingModal from '../components/Publishing/AccountBindingModal';
 import AccountManagementModal from '../components/Publishing/AccountManagementModal';
@@ -223,6 +223,34 @@ export default function PlatformManagementPage() {
     }
   };
 
+  const handleTestLogin = async (accountId: number, accountName: string) => {
+    try {
+      console.log('[前端] 点击测试登录按钮:', accountId, accountName);
+      message.loading({ content: '正在打开浏览器...', key: 'test-login', duration: 0 });
+      
+      console.log('[前端] 调用 testAccountLogin API...');
+      const result = await testAccountLogin(accountId);
+      console.log('[前端] API返回结果:', result);
+      
+      message.destroy('test-login');
+      
+      if (result.success) {
+        message.success(result.message || '浏览器已打开，请查看登录状态');
+      } else {
+        message.error(result.message || '打开浏览器失败');
+      }
+    } catch (error: any) {
+      message.destroy('test-login');
+      console.error('[前端] 测试登录失败:', error);
+      console.error('[前端] 错误详情:', {
+        message: error.message,
+        response: error.response,
+        stack: error.stack
+      });
+      message.error(error.message || error.response?.data?.message || '打开浏览器失败');
+    }
+  };
+
   const handleBindingSuccess = () => {
     setBindingModalVisible(false);
     loadData();
@@ -316,6 +344,22 @@ export default function PlatformManagementPage() {
         <span style={{ fontSize: 14, color: date ? '#1e293b' : '#94a3b8' }}>
           {date ? new Date(date).toLocaleString('zh-CN') : '未使用'}
         </span>
+      )
+    },
+    {
+      title: '登录测试',
+      key: 'test_login',
+      width: 120,
+      align: 'center' as const,
+      render: (_: any, record: Account) => (
+        <Button 
+          type="primary"
+          size="small"
+          icon={<LoginOutlined />}
+          onClick={() => handleTestLogin(record.id, record.account_name)}
+        >
+          测试登录
+        </Button>
       )
     },
     {
@@ -523,7 +567,7 @@ export default function PlatformManagementPage() {
             columns={columns}
             dataSource={accounts}
             rowKey="id"
-            scroll={{ x: 800 }}
+            scroll={{ x: 920 }}
             pagination={{
               pageSize: 10,
               showSizeChanger: true,

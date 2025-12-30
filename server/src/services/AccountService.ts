@@ -1048,6 +1048,148 @@ export class AccountService {
     
     return account;
   }
+
+  /**
+   * 测试账号登录
+   * 使用保存的Cookie打开浏览器并导航到平台，由用户自己查看登录状态
+   */
+  async testAccountLogin(accountId: number, userId: number): Promise<{ success: boolean; message?: string }> {
+    try {
+      const puppeteer = require('puppeteer');
+      
+      // 获取账号信息（包含凭证）
+      const account = await this.getAccountById(accountId, userId, true);
+      
+      if (!account) {
+        return {
+          success: false,
+          message: '账号不存在或无权访问'
+        };
+      }
+      
+      if (!account.credentials || !account.credentials.cookies) {
+        return {
+          success: false,
+          message: '账号未保存Cookie信息'
+        };
+      }
+      
+      // 获取平台信息
+      const platformResult = await pool.query(
+        'SELECT * FROM platforms_config WHERE platform_id = $1',
+        [account.platform_id]
+      );
+      
+      if (platformResult.rows.length === 0) {
+        return {
+          success: false,
+          message: '平台配置不存在'
+        };
+      }
+      
+      const platform = platformResult.rows[0];
+      
+      // 获取平台主页URL
+      const homeUrl = this.getPlatformHomeUrl(account.platform_id);
+      
+      if (!homeUrl) {
+        return {
+          success: false,
+          message: `暂不支持 ${platform.platform_name} 的登录测试`
+        };
+      }
+      
+      console.log(`\n========================================`);
+      console.log(`[登录测试] 打开浏览器供用户查看`);
+      console.log(`[登录测试] 平台: ${platform.platform_name} (${account.platform_id})`);
+      console.log(`[登录测试] 账号: ${account.account_name}`);
+      console.log(`[登录测试] 真实用户名: ${account.real_username || '未知'}`);
+      console.log(`[登录测试] 主页URL: ${homeUrl}`);
+      console.log(`========================================\n`);
+      
+      // 查找系统Chrome路径
+      const executablePath = findChromeExecutable();
+      
+      // 使用统一的浏览器配置
+      const launchOptions = getStandardBrowserConfig({
+        headless: false, // 显示浏览器窗口
+        executablePath
+      });
+      
+      console.log(`[登录测试] 正在启动浏览器...`);
+      const browser = await puppeteer.launch(launchOptions);
+      console.log(`[登录测试] 浏览器启动成功`);
+      
+      const page = await browser.newPage();
+      console.log(`[登录测试] 创建新页面成功`);
+      
+      // 设置Cookie
+      console.log(`[登录测试] 正在设置Cookie (${account.credentials.cookies.length}个)...`);
+      await page.setCookie(...account.credentials.cookies);
+      console.log(`[登录测试] Cookie设置成功`);
+      
+      // 导航到平台主页
+      console.log(`[登录测试] 正在导航到平台主页...`);
+      await page.goto(homeUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      console.log(`[登录测试] 页面加载完成，当前URL: ${page.url()}`);
+      
+      console.log(`\n========================================`);
+      console.log(`[登录测试] 浏览器已打开，请用户自行查看登录状态`);
+      console.log(`[登录测试] 用户可以自行关闭浏览器窗口`);
+      console.log(`========================================\n`);
+      
+      // 更新最后使用时间
+      await this.updateLastUsed(accountId);
+      
+      // 不关闭浏览器，让用户自己查看和关闭
+      // 浏览器实例会在用户手动关闭窗口后自动清理
+      
+      return {
+        success: true,
+        message: '浏览器已打开，请查看登录状态。查看完毕后请手动关闭浏览器窗口。'
+      };
+      
+    } catch (error: any) {
+      console.error('[登录测试] 失败:', error);
+      
+      return {
+        success: false,
+        message: error.message || '打开浏览器失败'
+      };
+    }
+  }
+  
+  /**
+   * 获取平台主页URL
+   */
+  private getPlatformHomeUrl(platformId: string): string | null {
+    const homeUrls: { [key: string]: string } = {
+      // 主流自媒体平台
+      'wangyi': 'https://mp.163.com/',
+      'souhu': 'https://mp.sohu.com/',
+      'baijiahao': 'https://baijiahao.baidu.com/builder/rc/home',
+      'toutiao': 'https://mp.toutiao.com/profile_v4/index',
+      'qie': 'https://om.qq.com/userAuth/index',
+      
+      // 社交媒体平台
+      'wechat': 'https://mp.weixin.qq.com/',
+      'xiaohongshu': 'https://creator.xiaohongshu.com/creator/home',
+      'douyin': 'https://creator.douyin.com/creator-micro/home',
+      'bilibili': 'https://member.bilibili.com/platform/home',
+      
+      // 技术社区平台
+      'zhihu': 'https://www.zhihu.com/',
+      'jianshu': 'https://www.jianshu.com/',
+      'csdn': 'https://www.csdn.net/',
+      'juejin': 'https://juejin.cn/',
+      'segmentfault': 'https://segmentfault.com/',
+      'oschina': 'https://www.oschina.net/',
+      'cnblogs': 'https://www.cnblogs.com/',
+      'v2ex': 'https://www.v2ex.com/'
+    };
+    
+    return homeUrls[platformId] || null;
+  }
 }
 
 export const accountService = new AccountService();
