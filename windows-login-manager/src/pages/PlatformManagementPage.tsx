@@ -9,7 +9,7 @@ import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 
 // const { Title } = Typography;
 
-// 平台图标映射 - 优先使用本地图标，回退到在线图标
+// 平台图标映射 - 只使用本地图标
 const getPlatformIcon = (platformId: string): string => {
   // 特殊平台使用指定路径
   const specialIcons: Record<string, string> = {
@@ -43,30 +43,6 @@ const getPlatformIcon = (platformId: string): string => {
   
   // 其他平台使用默认路径
   return `/platform-icons/${platformId}.png`;
-};
-
-// 获取备用在线图标
-const getOnlinePlatformIcon = (platformId: string): string => {
-  const onlineIconMap: Record<string, string> = {
-    'baijiahao': 'https://www.baidu.com/favicon.ico',
-    'toutiao': 'https://lf3-cdn-tos.bytescm.com/obj/static/xitu_juejin_web/img/favicon.ico',
-    'weixin': 'https://res.wx.qq.com/a/wx_fed/assets/res/OTE0YTAw.png',
-    'zhihu': 'https://static.zhihu.com/heifetz/favicon.ico',
-    'douyin': 'https://lf1-cdn-tos.bytegoofy.com/goofy/ies/douyin_web/public/favicon.ico',
-    'xiaohongshu': 'https://fe-video-qc.xhscdn.com/fe-platform/d0a7bf6f8e6e8f5c6e5e5e5e5e5e5e5e.ico',
-    'bilibili': 'https://www.bilibili.com/favicon.ico',
-    'kuaishou': 'https://static.yximgs.com/udata/pkg/fe/kwai-pc-web/favicon.ico',
-    'baidu': 'https://www.baidu.com/favicon.ico',
-    'sohu': 'https://statics.itc.cn/web/static/images/favicon.ico',
-    'sina': 'https://www.sina.com.cn/favicon.ico',
-    'wangyi': 'https://www.163.com/favicon.ico',
-    'qq': 'https://mat1.gtimg.com/www/icon/favicon2.ico',
-    'taobao': 'https://www.taobao.com/favicon.ico',
-    'jd': 'https://www.jd.com/favicon.ico',
-    'pinduoduo': 'https://fundf.pinduoduo.com/favicon.ico'
-  };
-  
-  return onlineIconMap[platformId] || '';
 };
 
 export default function PlatformManagementPage() {
@@ -465,20 +441,13 @@ export default function PlatformManagementPage() {
                         objectFit: 'contain'
                       }}
                       onError={(e) => {
+                        // 图标加载失败，显示首字母
                         const target = e.target as HTMLImageElement;
-                        const onlineIcon = getOnlinePlatformIcon(platform.platform_id);
-                        
-                        // 如果当前不是在线图标，尝试加载在线图标
-                        if (onlineIcon && target.src !== onlineIcon) {
-                          target.src = onlineIcon;
-                        } else {
-                          // 如果在线图标也失败，显示首字母
-                          target.style.display = 'none';
-                          const parent = target.parentElement;
-                          if (parent) {
-                            parent.style.background = bound ? '#52c41a' : '#0ea5e9';
-                            parent.innerHTML = `<span style="font-size: 24px; font-weight: bold; color: #ffffff;">${platform.platform_name.charAt(0)}</span>`;
-                          }
+                        target.style.display = 'none';
+                        const parent = target.parentElement;
+                        if (parent) {
+                          parent.style.background = bound ? '#52c41a' : '#0ea5e9';
+                          parent.innerHTML = `<span style="font-size: 24px; font-weight: bold; color: #ffffff;">${platform.platform_name.charAt(0)}</span>`;
                         }
                       }}
                     />
