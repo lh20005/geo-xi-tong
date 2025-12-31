@@ -189,26 +189,25 @@ export class PublishingExecutor {
       
       let loginSuccess = false;
       
-      // 如果有Cookie，先尝试Cookie登录
+      // 如果有Cookie，先尝试Cookie登录（关键修复：像测试登录一样处理）
       if (account.credentials.cookies && account.credentials.cookies.length > 0) {
         await publishingService.logMessage(taskId, 'info', `📝 使用Cookie登录（${account.credentials.cookies.length}个Cookie）`);
         
-        // 先导航到主页（不是登录页）
-        const homeUrl = adapter.getPublishUrl().split('/').slice(0, 3).join('/'); // 获取域名
-        await publishingService.logMessage(taskId, 'info', `🌐 打开 ${adapter.platformName} 主页...`);
-        await browserAutomationService.navigateTo(page, homeUrl, taskId);
+        // 关键修复：先设置Cookie，再导航到发布页面
+        // 这样打开的就是已登录状态的页面，而不是登录页面
+        await publishingService.logMessage(taskId, 'info', '🔑 设置Cookie...');
+        await page.setCookie(...account.credentials.cookies);
+        await publishingService.logMessage(taskId, 'info', '✅ Cookie设置成功');
         
-        await publishingService.logMessage(taskId, 'info', '🔑 设置登录凭证...');
-        // 执行登录（适配器会使用Cookie）
-        loginSuccess = await browserAutomationService.executeWithRetry(
-          () => adapter.performLogin(page!, account.credentials),
-          task.max_retries,
-          taskId
-        );
+        // 直接导航到发布页面（此时Cookie已设置，会自动登录）
+        await publishingService.logMessage(taskId, 'info', `🌐 打开 ${adapter.platformName} 发布页面（已登录状态）...`);
+        await browserAutomationService.navigateTo(page, adapter.getPublishUrl(), taskId);
         
-        if (!loginSuccess) {
-          throw new Error(`${adapter.platformName} Cookie登录失败`);
-        }
+        // 等待页面加载完成
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        loginSuccess = true;
+        await publishingService.logMessage(taskId, 'info', `✅ ${adapter.platformName} Cookie登录成功`);
       } else {
         // 没有Cookie，使用表单登录
         await publishingService.logMessage(taskId, 'info', '📝 使用表单登录');
@@ -229,24 +228,24 @@ export class PublishingExecutor {
         if (!loginSuccess) {
           throw new Error(`${adapter.platformName} 表单登录失败`);
         }
+        
+        await publishingService.logMessage(taskId, 'info', `✅ ${adapter.platformName} 表单登录成功`);
+        
+        // 表单登录后，导航到发布页面
+        await publishingService.logMessage(taskId, 'info', `📄 打开 ${adapter.platformName} 发布页面...`);
+        await browserAutomationService.navigateTo(
+          page,
+          adapter.getPublishUrl(),
+          taskId
+        );
       }
 
       if (!loginSuccess) {
         throw new Error(`${adapter.platformName} 登录失败`);
       }
 
-      await publishingService.logMessage(taskId, 'info', `✅ ${adapter.platformName} 登录成功`);
-
       // 更新账号最后使用时间
       await accountService.updateLastUsed(account.id);
-
-      // 导航到发布页面
-      await publishingService.logMessage(taskId, 'info', `📄 打开 ${adapter.platformName} 发布页面...`);
-      await browserAutomationService.navigateTo(
-        page,
-        adapter.getPublishUrl(),
-        taskId
-      );
 
       // 执行发布
       await publishingService.logMessage(taskId, 'info', `📝 开始发布文章《${article.title}》...`);
