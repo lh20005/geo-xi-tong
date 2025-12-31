@@ -6,17 +6,15 @@ import { storageManager } from '../storage/manager';
 import { syncService } from '../sync/service';
 
 /**
- * 头条号专用登录管理器
- * 使用 WebView 实现，与其他平台保持一致
+ * 网易号专用登录管理器
+ * 基于 GEO 应用的 wy.js 实现
  * 
  * 核心策略：
- * 1. 使用 webview 标签嵌入登录页面
- * 2. 简单的 URL 变化检测（最可靠）
- * 3. 完整的错误处理和资源清理
- * 4. 详细的日志记录
+ * 1. 检测用户名元素 .topBar__user>span (第3个元素)
+ * 2. 检查间隔: 1000ms
  */
 
-interface ToutiaoLoginResult {
+interface WangyiLoginResult {
   success: boolean;
   account?: {
     platform_id: string;
@@ -32,53 +30,44 @@ interface ToutiaoLoginResult {
   error?: string;
 }
 
-interface ToutiaoUserInfo {
+interface WangyiUserInfo {
   username: string;
   avatar?: string;
 }
 
-class ToutiaoLoginManager {
-  private static instance: ToutiaoLoginManager;
+class WangyiLoginManager {
+  private static instance: WangyiLoginManager;
   private parentWindow: BrowserWindow | null = null;
   private isLoginInProgress = false;
   private isCancelled = false;
   private loginResolve: ((result: boolean) => void) | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
 
-  // 头条号配置
-  private readonly PLATFORM_ID = 'toutiao';
-  private readonly PLATFORM_NAME = '头条号';
-  private readonly LOGIN_URL = 'https://mp.toutiao.com/auth/page/login';
-  private readonly SUCCESS_URL_PATTERNS = [
-    'mp.toutiao.com/profile_v4',
-    'mp.toutiao.com/creator'
-  ];
-  private readonly USERNAME_SELECTORS = [
-    '.auth-avator-name',
-    '.user-name',
-    '.username',
-    '.account-name',
-    '[class*="username"]',
-    '[class*="user-name"]',
-    '.semi-navigation-header-username'
-  ];
+  // 网易号配置 - 从 GEO 应用 wy.js 提取
+  private readonly PLATFORM_ID = 'wangyi';
+  private readonly PLATFORM_NAME = '网易号';
+  private readonly LOGIN_URL = 'https://mp.163.com/login.html';
+  private readonly SUCCESS_URL_PATTERN = 'mp.163.com/';
+  private readonly USERNAME_SELECTOR = '.topBar__user>span';
+  private readonly AVATAR_SELECTOR = '.topBar__user>span>img';
+  private readonly CHECK_INTERVAL = 1000; // 1秒检查间隔
 
   // 当前登录使用的临时 partition
   private currentPartition: string = '';
 
   private constructor() {}
 
-  static getInstance(): ToutiaoLoginManager {
-    if (!ToutiaoLoginManager.instance) {
-      ToutiaoLoginManager.instance = new ToutiaoLoginManager();
+  static getInstance(): WangyiLoginManager {
+    if (!WangyiLoginManager.instance) {
+      WangyiLoginManager.instance = new WangyiLoginManager();
     }
-    return ToutiaoLoginManager.instance;
+    return WangyiLoginManager.instance;
   }
 
   /**
    * 开始登录流程
    */
-  async login(parentWindow: BrowserWindow): Promise<ToutiaoLoginResult> {
+  async login(parentWindow: BrowserWindow): Promise<WangyiLoginResult> {
     if (this.isLoginInProgress) {
       return {
         success: false,
@@ -89,7 +78,7 @@ class ToutiaoLoginManager {
     this.isLoginInProgress = true;
     this.isCancelled = false;
     this.parentWindow = parentWindow;
-    log.info(`[Toutiao] 开始登录流程`);
+    log.info(`[Wangyi] 开始登录流程`);
 
     try {
       // 1. 创建 WebView
@@ -120,7 +109,7 @@ class ToutiaoLoginManager {
         throw new Error('无法提取用户信息');
       }
 
-      log.info(`[Toutiao] 用户信息提取成功: ${userInfo.username}`);
+      log.info(`[Wangyi] 用户信息提取成功: ${userInfo.username}`);
 
       // 5. 捕获登录凭证
       const credentials = await this.captureCredentials();
@@ -145,7 +134,7 @@ class ToutiaoLoginManager {
       // 9. 清理资源
       await this.cleanup();
 
-      log.info(`[Toutiao] 登录成功完成`);
+      log.info(`[Wangyi] 登录成功完成`);
       return {
         success: true,
         account,
@@ -153,7 +142,7 @@ class ToutiaoLoginManager {
       };
 
     } catch (error) {
-      log.error('[Toutiao] 登录失败:', error);
+      log.error('[Wangyi] 登录失败:', error);
       await this.cleanup();
 
       if (this.isCancelled) {
@@ -175,7 +164,7 @@ class ToutiaoLoginManager {
    * 取消登录
    */
   async cancelLogin(): Promise<void> {
-    log.info('[Toutiao] 取消登录');
+    log.info('[Wangyi] 取消登录');
     this.isCancelled = true;
     
     if (this.loginResolve) {
@@ -199,28 +188,27 @@ class ToutiaoLoginManager {
       throw new Error('父窗口不存在');
     }
 
-    log.info('[Toutiao] 创建 WebView');
+    log.info('[Wangyi] 创建 WebView');
 
     // 使用临时 partition，确保每次登录都是全新的会话
     this.currentPartition = `temp-login-${this.PLATFORM_ID}-${Date.now()}`;
-    log.info(`[Toutiao] 使用临时 partition: ${this.currentPartition}`);
+    log.info(`[Wangyi] 使用临时 partition: ${this.currentPartition}`);
 
-    // 使用 webViewManager 创建 webview
     await webViewManager.createWebView(this.parentWindow, {
       url: this.LOGIN_URL,
       partition: this.currentPartition,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     });
 
-    log.info('[Toutiao] WebView 创建成功');
+    log.info('[Wangyi] WebView 创建成功');
   }
 
   /**
    * 等待登录成功
-   * 策略：检测 URL 变化到成功页面
+   * 策略：检测用户名元素出现（第3个span元素）
    */
   private async waitForLoginSuccess(): Promise<boolean> {
-    log.info('[Toutiao] 等待登录成功...');
+    log.info('[Wangyi] 等待登录成功...');
     const startTime = Date.now();
     const timeout = 300000; // 5分钟
 
@@ -244,32 +232,36 @@ class ToutiaoLoginManager {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
           }
-          log.warn('[Toutiao] 登录超时');
+          log.warn('[Wangyi] 登录超时');
           resolve(false);
           return;
         }
 
-        // 检查 URL
+        // 检查用户名元素是否出现（第3个span元素）
         try {
-          const currentUrl = await webViewManager.getCurrentURL();
-          if (!currentUrl) return;
-          
-          // 检查是否匹配成功 URL 模式
-          for (const pattern of this.SUCCESS_URL_PATTERNS) {
-            if (currentUrl.includes(pattern)) {
-              if (this.checkInterval) {
-                clearInterval(this.checkInterval);
-                this.checkInterval = null;
+          const username = await webViewManager.executeJavaScript<string | null>(`
+            (() => {
+              const elements = document.querySelectorAll('${this.USERNAME_SELECTOR}');
+              if (elements.length >= 3) {
+                return elements[2].textContent.trim();
               }
-              log.info(`[Toutiao] 登录成功检测到 URL: ${currentUrl}`);
-              resolve(true);
-              return;
+              return null;
+            })()
+          `);
+
+          if (username) {
+            if (this.checkInterval) {
+              clearInterval(this.checkInterval);
+              this.checkInterval = null;
             }
+            log.info(`[Wangyi] 登录成功检测到用户名: ${username}`);
+            resolve(true);
+            return;
           }
         } catch (error) {
-          log.debug('[Toutiao] 检查 URL 失败:', error);
+          log.debug('[Wangyi] 检查用户名元素失败:', error);
         }
-      }, 500); // 每500ms检查一次
+      }, this.CHECK_INTERVAL);
     });
   }
 
@@ -277,37 +269,46 @@ class ToutiaoLoginManager {
    * 等待页面稳定
    */
   private async waitForPageStable(): Promise<void> {
-    log.info('[Toutiao] 等待页面稳定...');
+    log.info('[Wangyi] 等待页面稳定...');
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   /**
    * 提取用户信息
+   * 注意：用户名在第3个span元素中
    */
-  private async extractUserInfo(): Promise<ToutiaoUserInfo | null> {
-    log.info('[Toutiao] 提取用户信息...');
+  private async extractUserInfo(): Promise<WangyiUserInfo | null> {
+    log.info('[Wangyi] 提取用户信息...');
 
-    // 尝试所有选择器
-    for (const selector of this.USERNAME_SELECTORS) {
-      try {
-        const username = await webViewManager.executeJavaScript<string | null>(`
-          (() => {
-            const element = document.querySelector('${selector}');
-            return element ? element.textContent.trim() : null;
-          })()
-        `);
+    try {
+      const username = await webViewManager.executeJavaScript<string | null>(`
+        (() => {
+          const elements = document.querySelectorAll('${this.USERNAME_SELECTOR}');
+          if (elements.length >= 3) {
+            return elements[2].textContent.trim();
+          }
+          return null;
+        })()
+      `);
 
-        if (username) {
-          log.info(`[Toutiao] 用户名提取成功 (${selector}): ${username}`);
-          return { username };
-        }
-      } catch (error) {
-        log.debug(`[Toutiao] 选择器失败: ${selector}`);
+      const avatar = await webViewManager.executeJavaScript<string | null>(`
+        (() => {
+          const element = document.querySelector('${this.AVATAR_SELECTOR}');
+          return element ? element.src : null;
+        })()
+      `);
+
+      if (username) {
+        log.info(`[Wangyi] 用户名提取成功: ${username}`);
+        return { username, avatar: avatar || undefined };
       }
-    }
 
-    log.warn('[Toutiao] 无法提取用户信息');
-    return null;
+      log.warn('[Wangyi] 无法提取用户信息');
+      return null;
+    } catch (error) {
+      log.error('[Wangyi] 提取用户信息失败:', error);
+      return null;
+    }
   }
 
   /**
@@ -318,16 +319,16 @@ class ToutiaoLoginManager {
       throw new Error('父窗口不存在');
     }
 
-    log.info('[Toutiao] 捕获登录凭证...');
+    log.info('[Wangyi] 捕获登录凭证...');
 
-    // 通过 session 获取 cookies（使用临时 partition）
+    // 通过 session 获取 cookies
     const ses = session.fromPartition(this.currentPartition);
     const electronCookies = await ses.cookies.get({});
     
     const cookies: Cookie[] = electronCookies.map(cookie => ({
       name: cookie.name,
       value: cookie.value,
-      domain: cookie.domain || '',
+      domain: cookie.domain || '.163.com',
       path: cookie.path || '/',
       expires: cookie.expirationDate,
       httpOnly: cookie.httpOnly,
@@ -335,7 +336,7 @@ class ToutiaoLoginManager {
       sameSite: this.convertSameSite(cookie.sameSite)
     }));
 
-    log.info(`[Toutiao] 捕获 ${cookies.length} 个 Cookies`);
+    log.info(`[Wangyi] 捕获 ${cookies.length} 个 Cookies`);
 
     // 捕获 Storage
     const localStorage = await webViewManager.executeJavaScript<Record<string, string>>(`
@@ -368,7 +369,7 @@ class ToutiaoLoginManager {
       })()
     `);
 
-    log.info(`[Toutiao] 捕获 Storage - localStorage: ${Object.keys(localStorage || {}).length}, sessionStorage: ${Object.keys(sessionStorage || {}).length}`);
+    log.info(`[Wangyi] 捕获 Storage - localStorage: ${Object.keys(localStorage || {}).length}, sessionStorage: ${Object.keys(sessionStorage || {}).length}`);
 
     return {
       cookies,
@@ -384,7 +385,7 @@ class ToutiaoLoginManager {
    */
   private async saveAccount(account: any): Promise<void> {
     try {
-      log.info('[Toutiao] 保存账号到本地...');
+      log.info('[Wangyi] 保存账号到本地...');
 
       const existingAccounts = await storageManager.getAccountsCache();
       const existingIndex = existingAccounts.findIndex(
@@ -397,7 +398,7 @@ class ToutiaoLoginManager {
           ...account,
           updated_at: new Date()
         };
-        log.info('[Toutiao] 更新现有账号');
+        log.info('[Wangyi] 更新现有账号');
       } else {
         existingAccounts.push({
           id: Date.now(),
@@ -407,13 +408,13 @@ class ToutiaoLoginManager {
           created_at: new Date(),
           updated_at: new Date()
         });
-        log.info('[Toutiao] 添加新账号');
+        log.info('[Wangyi] 添加新账号');
       }
 
       await storageManager.saveAccountsCache(existingAccounts);
-      log.info('[Toutiao] 账号保存成功');
+      log.info('[Wangyi] 账号保存成功');
     } catch (error) {
-      log.error('[Toutiao] 保存账号失败:', error);
+      log.error('[Wangyi] 保存账号失败:', error);
       throw error;
     }
   }
@@ -423,16 +424,16 @@ class ToutiaoLoginManager {
    */
   private async syncToBackend(account: any): Promise<void> {
     try {
-      log.info('[Toutiao] 同步账号到后端...');
+      log.info('[Wangyi] 同步账号到后端...');
       const result = await syncService.syncAccount(account);
       
       if (result.success) {
-        log.info('[Toutiao] 账号同步成功');
+        log.info('[Wangyi] 账号同步成功');
       } else {
-        log.warn('[Toutiao] 账号同步失败，已加入队列:', result.error);
+        log.warn('[Wangyi] 账号同步失败，已加入队列:', result.error);
       }
     } catch (error) {
-      log.error('[Toutiao] 同步账号失败:', error);
+      log.error('[Wangyi] 同步账号失败:', error);
     }
   }
 
@@ -440,7 +441,7 @@ class ToutiaoLoginManager {
    * 清理资源
    */
   private async cleanup(): Promise<void> {
-    log.info('[Toutiao] 清理资源...');
+    log.info('[Wangyi] 清理资源...');
 
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -480,5 +481,5 @@ class ToutiaoLoginManager {
   }
 }
 
-export const toutiaoLoginManager = ToutiaoLoginManager.getInstance();
-export { ToutiaoLoginManager, ToutiaoLoginResult };
+export const wangyiLoginManager = WangyiLoginManager.getInstance();
+export { WangyiLoginManager, WangyiLoginResult };

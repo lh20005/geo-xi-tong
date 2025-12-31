@@ -4,6 +4,16 @@ import { appManager } from '../main';
 import { loginManager, Platform, LoginResult } from '../login/login-manager';
 import { toutiaoLoginManager } from '../login/toutiao-login-manager';
 import { douyinLoginManager } from '../login/douyin-login-manager';
+import { xiaohongshuLoginManager } from '../login/xiaohongshu-login-manager';
+import { wechatLoginManager } from '../login/wechat-login-manager';
+import { baijiahaoLoginManager } from '../login/baijiahao-login-manager';
+import { jianshuLoginManager } from '../login/jianshu-login-manager';
+import { zhihuLoginManager } from '../login/zhihu-login-manager';
+import { qieLoginManager } from '../login/qie-login-manager';
+import { souhuLoginManager } from '../login/souhu-login-manager';
+import { wangyiLoginManager } from '../login/wangyi-login-manager';
+import { csdnLoginManager } from '../login/csdn-login-manager';
+import { bilibiliLoginManager } from '../login/bilibili-login-manager';
 import { webViewManager } from '../login/webview-manager';
 import { storageManager, AppConfig } from '../storage/manager';
 import { apiClient } from '../api/client';
@@ -210,17 +220,76 @@ class IPCHandler {
           throw new Error('Main window not available');
         }
 
-        // 头条号使用专用登录管理器
+        // 使用平台专用登录管理器
         if (platformId === 'toutiao') {
           log.info('IPC: 使用头条号专用登录管理器');
           const result = await toutiaoLoginManager.login(mainWindow);
           return result;
         }
 
-        // 抖音号使用专用登录管理器
         if (platformId === 'douyin') {
           log.info('IPC: 使用抖音号专用登录管理器');
           const result = await douyinLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'xiaohongshu') {
+          log.info('IPC: 使用小红书专用登录管理器');
+          const result = await xiaohongshuLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'wechat') {
+          log.info('IPC: 使用微信公众号专用登录管理器');
+          const result = await wechatLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'baijiahao') {
+          log.info('IPC: 使用百家号专用登录管理器');
+          const result = await baijiahaoLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'jianshu') {
+          log.info('IPC: 使用简书专用登录管理器');
+          const result = await jianshuLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'zhihu') {
+          log.info('IPC: 使用知乎专用登录管理器');
+          const result = await zhihuLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'qie') {
+          log.info('IPC: 使用企鹅号专用登录管理器');
+          const result = await qieLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'souhu') {
+          log.info('IPC: 使用搜狐号专用登录管理器');
+          const result = await souhuLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'wangyi') {
+          log.info('IPC: 使用网易号专用登录管理器');
+          const result = await wangyiLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'csdn') {
+          log.info('IPC: 使用CSDN专用登录管理器');
+          const result = await csdnLoginManager.login(mainWindow);
+          return result;
+        }
+
+        if (platformId === 'bilibili') {
+          log.info('IPC: 使用哔哩哔哩专用登录管理器');
+          const result = await bilibiliLoginManager.login(mainWindow);
           return result;
         }
 
@@ -254,22 +323,91 @@ class IPCHandler {
           await toutiaoLoginManager.cancelLogin();
         } else if (platformId === 'douyin') {
           await douyinLoginManager.cancelLogin();
+        } else if (platformId === 'xiaohongshu') {
+          await xiaohongshuLoginManager.cancelLogin();
+        } else if (platformId === 'wechat') {
+          await wechatLoginManager.cancelLogin();
+        } else if (platformId === 'baijiahao') {
+          await baijiahaoLoginManager.cancelLogin();
+        } else if (platformId === 'jianshu') {
+          await jianshuLoginManager.cancelLogin();
+        } else if (platformId === 'zhihu') {
+          await zhihuLoginManager.cancelLogin();
+        } else if (platformId === 'qie') {
+          await qieLoginManager.cancelLogin();
+        } else if (platformId === 'souhu') {
+          await souhuLoginManager.cancelLogin();
+        } else if (platformId === 'wangyi') {
+          await wangyiLoginManager.cancelLogin();
+        } else if (platformId === 'csdn') {
+          await csdnLoginManager.cancelLogin();
+        } else if (platformId === 'bilibili') {
+          await bilibiliLoginManager.cancelLogin();
         } else if (platformId) {
           await loginManager.cancelLogin();
         } else {
           // 没有指定平台，取消所有正在进行的登录
           log.info('IPC: 取消所有正在进行的登录');
           
-          // 检查并取消头条号登录
+          // 检查并取消所有平台登录
           if (toutiaoLoginManager.isLoggingIn()) {
             log.info('IPC: 取消头条号登录');
             await toutiaoLoginManager.cancelLogin();
           }
           
-          // 检查并取消抖音号登录
           if (douyinLoginManager.isLoggingIn()) {
             log.info('IPC: 取消抖音号登录');
             await douyinLoginManager.cancelLogin();
+          }
+          
+          if (xiaohongshuLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消小红书登录');
+            await xiaohongshuLoginManager.cancelLogin();
+          }
+          
+          if (wechatLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消微信公众号登录');
+            await wechatLoginManager.cancelLogin();
+          }
+          
+          if (baijiahaoLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消百家号登录');
+            await baijiahaoLoginManager.cancelLogin();
+          }
+          
+          if (jianshuLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消简书登录');
+            await jianshuLoginManager.cancelLogin();
+          }
+          
+          if (zhihuLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消知乎登录');
+            await zhihuLoginManager.cancelLogin();
+          }
+          
+          if (qieLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消企鹅号登录');
+            await qieLoginManager.cancelLogin();
+          }
+          
+          if (souhuLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消搜狐号登录');
+            await souhuLoginManager.cancelLogin();
+          }
+          
+          if (wangyiLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消网易号登录');
+            await wangyiLoginManager.cancelLogin();
+          }
+          
+          if (csdnLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消CSDN登录');
+            await csdnLoginManager.cancelLogin();
+          }
+          
+          if (bilibiliLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消哔哩哔哩登录');
+            await bilibiliLoginManager.cancelLogin();
           }
           
           // 检查并取消通用登录
@@ -282,6 +420,16 @@ class IPCHandler {
           // 直接销毁 WebView
           if (!toutiaoLoginManager.isLoggingIn() && 
               !douyinLoginManager.isLoggingIn() && 
+              !xiaohongshuLoginManager.isLoggingIn() &&
+              !wechatLoginManager.isLoggingIn() &&
+              !baijiahaoLoginManager.isLoggingIn() &&
+              !jianshuLoginManager.isLoggingIn() &&
+              !zhihuLoginManager.isLoggingIn() &&
+              !qieLoginManager.isLoggingIn() &&
+              !souhuLoginManager.isLoggingIn() &&
+              !wangyiLoginManager.isLoggingIn() &&
+              !csdnLoginManager.isLoggingIn() &&
+              !bilibiliLoginManager.isLoggingIn() &&
               !loginManager.isLoggingIn()) {
             log.info('IPC: 没有正在进行的登录，尝试关闭测试 WebView');
             if (webViewManager.hasView()) {
@@ -402,19 +550,17 @@ class IPCHandler {
       try {
         log.info('IPC: get-accounts');
 
-        // 先尝试从后端获取
-        try {
-          const accounts = await apiClient.getAccounts();
-          // 更新本地缓存
-          await storageManager.saveAccountsCache(accounts);
-          return accounts;
-        } catch (error) {
-          // 后端失败，从本地缓存获取
-          log.warn('Failed to get accounts from backend, using cache');
-          return await storageManager.getAccountsCache();
-        }
+        // 从后端获取账号
+        const accounts = await apiClient.getAccounts();
+        log.info(`IPC: 从后端获取到 ${accounts.length} 个账号`);
+        
+        // 更新本地缓存
+        await storageManager.saveAccountsCache(accounts);
+        
+        return accounts;
       } catch (error) {
         log.error('IPC: get-accounts failed:', error);
+        // 后端失败时返回空数组，不使用缓存
         return [];
       }
     });

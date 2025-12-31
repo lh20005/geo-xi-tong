@@ -65,6 +65,9 @@ class DouyinLoginManager {
     '[class*="user-name"]'
   ];
 
+  // 当前登录使用的临时 partition
+  private currentPartition: string = '';
+
   private constructor() {}
 
   static getInstance(): DouyinLoginManager {
@@ -200,10 +203,14 @@ class DouyinLoginManager {
 
     log.info('[Douyin] 创建 WebView');
 
+    // 使用临时 partition，确保每次登录都是全新的会话
+    this.currentPartition = `temp-login-${this.PLATFORM_ID}-${Date.now()}`;
+    log.info(`[Douyin] 使用临时 partition: ${this.currentPartition}`);
+
     // 使用 webViewManager 创建 webview
     await webViewManager.createWebView(this.parentWindow, {
       url: this.LOGIN_URL,
-      partition: `persist:${this.PLATFORM_ID}`,
+      partition: this.currentPartition,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     });
 
@@ -315,8 +322,8 @@ class DouyinLoginManager {
 
     log.info('[Douyin] 捕获登录凭证...');
 
-    // 通过 session 获取 cookies
-    const ses = session.fromPartition(`persist:${this.PLATFORM_ID}`);
+    // 通过 session 获取 cookies（使用临时 partition）
+    const ses = session.fromPartition(this.currentPartition);
     const electronCookies = await ses.cookies.get({});
     
     const cookies: Cookie[] = electronCookies.map(cookie => ({

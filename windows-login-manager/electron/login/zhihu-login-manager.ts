@@ -6,17 +6,16 @@ import { storageManager } from '../storage/manager';
 import { syncService } from '../sync/service';
 
 /**
- * 头条号专用登录管理器
- * 使用 WebView 实现，与其他平台保持一致
+ * 知乎专用登录管理器
+ * 基于 GEO 应用的 zh.js 实现
  * 
  * 核心策略：
- * 1. 使用 webview 标签嵌入登录页面
- * 2. 简单的 URL 变化检测（最可靠）
- * 3. 完整的错误处理和资源清理
- * 4. 详细的日志记录
+ * 1. 检测头像元素 img.AppHeader-profileAvatar
+ * 2. 使用 API 获取用户信息: https://www.zhihu.com/api/v4/me?include=is_realname
+ * 3. 检查间隔: 2000ms
  */
 
-interface ToutiaoLoginResult {
+interface ZhihuLoginResult {
   success: boolean;
   account?: {
     platform_id: string;
@@ -32,53 +31,44 @@ interface ToutiaoLoginResult {
   error?: string;
 }
 
-interface ToutiaoUserInfo {
+interface ZhihuUserInfo {
   username: string;
   avatar?: string;
 }
 
-class ToutiaoLoginManager {
-  private static instance: ToutiaoLoginManager;
+class ZhihuLoginManager {
+  private static instance: ZhihuLoginManager;
   private parentWindow: BrowserWindow | null = null;
   private isLoginInProgress = false;
   private isCancelled = false;
   private loginResolve: ((result: boolean) => void) | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
 
-  // 头条号配置
-  private readonly PLATFORM_ID = 'toutiao';
-  private readonly PLATFORM_NAME = '头条号';
-  private readonly LOGIN_URL = 'https://mp.toutiao.com/auth/page/login';
-  private readonly SUCCESS_URL_PATTERNS = [
-    'mp.toutiao.com/profile_v4',
-    'mp.toutiao.com/creator'
-  ];
-  private readonly USERNAME_SELECTORS = [
-    '.auth-avator-name',
-    '.user-name',
-    '.username',
-    '.account-name',
-    '[class*="username"]',
-    '[class*="user-name"]',
-    '.semi-navigation-header-username'
-  ];
+  // 知乎配置 - 从 GEO 应用 zh.js 提取
+  private readonly PLATFORM_ID = 'zhihu';
+  private readonly PLATFORM_NAME = '知乎';
+  private readonly LOGIN_URL = 'https://www.zhihu.com/signin';
+  private readonly SUCCESS_URL_PATTERN = 'www.zhihu.com';
+  private readonly AVATAR_SELECTOR = 'img.AppHeader-profileAvatar';
+  private readonly USER_API = 'https://www.zhihu.com/api/v4/me?include=is_realname';
+  private readonly CHECK_INTERVAL = 2000; // 2秒检查间隔
 
   // 当前登录使用的临时 partition
   private currentPartition: string = '';
 
   private constructor() {}
 
-  static getInstance(): ToutiaoLoginManager {
-    if (!ToutiaoLoginManager.instance) {
-      ToutiaoLoginManager.instance = new ToutiaoLoginManager();
+  static getInstance(): ZhihuLoginManager {
+    if (!ZhihuLoginManager.instance) {
+      ZhihuLoginManager.instance = new ZhihuLoginManager();
     }
-    return ToutiaoLoginManager.instance;
+    return ZhihuLoginManager.instance;
   }
 
   /**
    * 开始登录流程
    */
-  async login(parentWindow: BrowserWindow): Promise<ToutiaoLoginResult> {
+  async login(parentWindow: BrowserWindow): Promise<ZhihuLoginResult> {
     if (this.isLoginInProgress) {
       return {
         success: false,
@@ -89,7 +79,7 @@ class ToutiaoLoginManager {
     this.isLoginInProgress = true;
     this.isCancelled = false;
     this.parentWindow = parentWindow;
-    log.info(`[Toutiao] 开始登录流程`);
+    log.info(`[Zhihu] 开始登录流程`);
 
     try {
       // 1. 创建 WebView
@@ -120,7 +110,7 @@ class ToutiaoLoginManager {
         throw new Error('无法提取用户信息');
       }
 
-      log.info(`[Toutiao] 用户信息提取成功: ${userInfo.username}`);
+      log.info(`[Zhihu] 用户信息提取成功: ${userInfo.username}`);
 
       // 5. 捕获登录凭证
       const credentials = await this.captureCredentials();
@@ -145,7 +135,7 @@ class ToutiaoLoginManager {
       // 9. 清理资源
       await this.cleanup();
 
-      log.info(`[Toutiao] 登录成功完成`);
+      log.info(`[Zhihu] 登录成功完成`);
       return {
         success: true,
         account,
@@ -153,7 +143,7 @@ class ToutiaoLoginManager {
       };
 
     } catch (error) {
-      log.error('[Toutiao] 登录失败:', error);
+      log.error('[Zhihu] 登录失败:', error);
       await this.cleanup();
 
       if (this.isCancelled) {
@@ -175,7 +165,7 @@ class ToutiaoLoginManager {
    * 取消登录
    */
   async cancelLogin(): Promise<void> {
-    log.info('[Toutiao] 取消登录');
+    log.info('[Zhihu] 取消登录');
     this.isCancelled = true;
     
     if (this.loginResolve) {
@@ -199,28 +189,27 @@ class ToutiaoLoginManager {
       throw new Error('父窗口不存在');
     }
 
-    log.info('[Toutiao] 创建 WebView');
+    log.info('[Zhihu] 创建 WebView');
 
     // 使用临时 partition，确保每次登录都是全新的会话
     this.currentPartition = `temp-login-${this.PLATFORM_ID}-${Date.now()}`;
-    log.info(`[Toutiao] 使用临时 partition: ${this.currentPartition}`);
+    log.info(`[Zhihu] 使用临时 partition: ${this.currentPartition}`);
 
-    // 使用 webViewManager 创建 webview
     await webViewManager.createWebView(this.parentWindow, {
       url: this.LOGIN_URL,
       partition: this.currentPartition,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     });
 
-    log.info('[Toutiao] WebView 创建成功');
+    log.info('[Zhihu] WebView 创建成功');
   }
 
   /**
    * 等待登录成功
-   * 策略：检测 URL 变化到成功页面
+   * 策略：检测头像元素出现
    */
   private async waitForLoginSuccess(): Promise<boolean> {
-    log.info('[Toutiao] 等待登录成功...');
+    log.info('[Zhihu] 等待登录成功...');
     const startTime = Date.now();
     const timeout = 300000; // 5分钟
 
@@ -244,32 +233,33 @@ class ToutiaoLoginManager {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
           }
-          log.warn('[Toutiao] 登录超时');
+          log.warn('[Zhihu] 登录超时');
           resolve(false);
           return;
         }
 
-        // 检查 URL
+        // 检查头像元素是否出现
         try {
-          const currentUrl = await webViewManager.getCurrentURL();
-          if (!currentUrl) return;
-          
-          // 检查是否匹配成功 URL 模式
-          for (const pattern of this.SUCCESS_URL_PATTERNS) {
-            if (currentUrl.includes(pattern)) {
-              if (this.checkInterval) {
-                clearInterval(this.checkInterval);
-                this.checkInterval = null;
-              }
-              log.info(`[Toutiao] 登录成功检测到 URL: ${currentUrl}`);
-              resolve(true);
-              return;
+          const hasAvatar = await webViewManager.executeJavaScript<boolean>(`
+            (() => {
+              const avatar = document.querySelector('${this.AVATAR_SELECTOR}');
+              return avatar !== null;
+            })()
+          `);
+
+          if (hasAvatar) {
+            if (this.checkInterval) {
+              clearInterval(this.checkInterval);
+              this.checkInterval = null;
             }
+            log.info(`[Zhihu] 登录成功检测到头像元素`);
+            resolve(true);
+            return;
           }
         } catch (error) {
-          log.debug('[Toutiao] 检查 URL 失败:', error);
+          log.debug('[Zhihu] 检查头像元素失败:', error);
         }
-      }, 500); // 每500ms检查一次
+      }, this.CHECK_INTERVAL);
     });
   }
 
@@ -277,37 +267,46 @@ class ToutiaoLoginManager {
    * 等待页面稳定
    */
   private async waitForPageStable(): Promise<void> {
-    log.info('[Toutiao] 等待页面稳定...');
+    log.info('[Zhihu] 等待页面稳定...');
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   /**
    * 提取用户信息
+   * 使用 API 获取用户信息
    */
-  private async extractUserInfo(): Promise<ToutiaoUserInfo | null> {
-    log.info('[Toutiao] 提取用户信息...');
+  private async extractUserInfo(): Promise<ZhihuUserInfo | null> {
+    log.info('[Zhihu] 提取用户信息...');
 
-    // 尝试所有选择器
-    for (const selector of this.USERNAME_SELECTORS) {
-      try {
-        const username = await webViewManager.executeJavaScript<string | null>(`
-          (() => {
-            const element = document.querySelector('${selector}');
-            return element ? element.textContent.trim() : null;
-          })()
-        `);
+    try {
+      // 使用 API 获取用户信息
+      const userInfo = await webViewManager.executeJavaScript<any>(`
+        (async () => {
+          try {
+            const response = await fetch('${this.USER_API}');
+            const data = await response.json();
+            return {
+              username: data.name || '',
+              avatar: data.avatar_url || ''
+            };
+          } catch (error) {
+            console.error('获取用户信息失败:', error);
+            return null;
+          }
+        })()
+      `);
 
-        if (username) {
-          log.info(`[Toutiao] 用户名提取成功 (${selector}): ${username}`);
-          return { username };
-        }
-      } catch (error) {
-        log.debug(`[Toutiao] 选择器失败: ${selector}`);
+      if (userInfo && userInfo.username) {
+        log.info(`[Zhihu] 用户名提取成功: ${userInfo.username}`);
+        return userInfo;
       }
-    }
 
-    log.warn('[Toutiao] 无法提取用户信息');
-    return null;
+      log.warn('[Zhihu] 无法提取用户信息');
+      return null;
+    } catch (error) {
+      log.error('[Zhihu] 提取用户信息失败:', error);
+      return null;
+    }
   }
 
   /**
@@ -318,16 +317,16 @@ class ToutiaoLoginManager {
       throw new Error('父窗口不存在');
     }
 
-    log.info('[Toutiao] 捕获登录凭证...');
+    log.info('[Zhihu] 捕获登录凭证...');
 
-    // 通过 session 获取 cookies（使用临时 partition）
+    // 通过 session 获取 cookies
     const ses = session.fromPartition(this.currentPartition);
     const electronCookies = await ses.cookies.get({});
     
     const cookies: Cookie[] = electronCookies.map(cookie => ({
       name: cookie.name,
       value: cookie.value,
-      domain: cookie.domain || '',
+      domain: cookie.domain || '.zhihu.com',
       path: cookie.path || '/',
       expires: cookie.expirationDate,
       httpOnly: cookie.httpOnly,
@@ -335,7 +334,7 @@ class ToutiaoLoginManager {
       sameSite: this.convertSameSite(cookie.sameSite)
     }));
 
-    log.info(`[Toutiao] 捕获 ${cookies.length} 个 Cookies`);
+    log.info(`[Zhihu] 捕获 ${cookies.length} 个 Cookies`);
 
     // 捕获 Storage
     const localStorage = await webViewManager.executeJavaScript<Record<string, string>>(`
@@ -368,7 +367,7 @@ class ToutiaoLoginManager {
       })()
     `);
 
-    log.info(`[Toutiao] 捕获 Storage - localStorage: ${Object.keys(localStorage || {}).length}, sessionStorage: ${Object.keys(sessionStorage || {}).length}`);
+    log.info(`[Zhihu] 捕获 Storage - localStorage: ${Object.keys(localStorage || {}).length}, sessionStorage: ${Object.keys(sessionStorage || {}).length}`);
 
     return {
       cookies,
@@ -384,7 +383,7 @@ class ToutiaoLoginManager {
    */
   private async saveAccount(account: any): Promise<void> {
     try {
-      log.info('[Toutiao] 保存账号到本地...');
+      log.info('[Zhihu] 保存账号到本地...');
 
       const existingAccounts = await storageManager.getAccountsCache();
       const existingIndex = existingAccounts.findIndex(
@@ -397,7 +396,7 @@ class ToutiaoLoginManager {
           ...account,
           updated_at: new Date()
         };
-        log.info('[Toutiao] 更新现有账号');
+        log.info('[Zhihu] 更新现有账号');
       } else {
         existingAccounts.push({
           id: Date.now(),
@@ -407,13 +406,13 @@ class ToutiaoLoginManager {
           created_at: new Date(),
           updated_at: new Date()
         });
-        log.info('[Toutiao] 添加新账号');
+        log.info('[Zhihu] 添加新账号');
       }
 
       await storageManager.saveAccountsCache(existingAccounts);
-      log.info('[Toutiao] 账号保存成功');
+      log.info('[Zhihu] 账号保存成功');
     } catch (error) {
-      log.error('[Toutiao] 保存账号失败:', error);
+      log.error('[Zhihu] 保存账号失败:', error);
       throw error;
     }
   }
@@ -423,16 +422,16 @@ class ToutiaoLoginManager {
    */
   private async syncToBackend(account: any): Promise<void> {
     try {
-      log.info('[Toutiao] 同步账号到后端...');
+      log.info('[Zhihu] 同步账号到后端...');
       const result = await syncService.syncAccount(account);
       
       if (result.success) {
-        log.info('[Toutiao] 账号同步成功');
+        log.info('[Zhihu] 账号同步成功');
       } else {
-        log.warn('[Toutiao] 账号同步失败，已加入队列:', result.error);
+        log.warn('[Zhihu] 账号同步失败，已加入队列:', result.error);
       }
     } catch (error) {
-      log.error('[Toutiao] 同步账号失败:', error);
+      log.error('[Zhihu] 同步账号失败:', error);
     }
   }
 
@@ -440,7 +439,7 @@ class ToutiaoLoginManager {
    * 清理资源
    */
   private async cleanup(): Promise<void> {
-    log.info('[Toutiao] 清理资源...');
+    log.info('[Zhihu] 清理资源...');
 
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
@@ -480,5 +479,5 @@ class ToutiaoLoginManager {
   }
 }
 
-export const toutiaoLoginManager = ToutiaoLoginManager.getInstance();
-export { ToutiaoLoginManager, ToutiaoLoginResult };
+export const zhihuLoginManager = ZhihuLoginManager.getInstance();
+export { ZhihuLoginManager, ZhihuLoginResult };
