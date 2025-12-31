@@ -1705,7 +1705,6 @@ export default function PublishingTasksPage() {
                     padding: '12px 16px',
                     background: '#fff',
                     borderRadius: 6,
-                    borderLeft: `4px solid ${color}`,
                     border: '1px solid #e2e8f0',
                     borderLeftWidth: '4px',
                     borderLeftColor: color,

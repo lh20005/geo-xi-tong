@@ -9,6 +9,8 @@ import { TaskTimeoutError } from '../errors/TaskTimeoutError';
  * 发布执行器
  * 负责执行实际的文章发布流程
  */
+import { normalizeCookies } from '../utils/cookieNormalizer';
+
 export class PublishingExecutor {
   /**
    * 创建发布记录并更新文章状态
@@ -164,7 +166,7 @@ export class PublishingExecutor {
 
       // 获取文章内容
       const articleResult = await pool.query(
-        'SELECT id, title, content FROM articles WHERE id = $1',
+        'SELECT id, title, content, keyword FROM articles WHERE id = $1',
         [task.article_id]
       );
 
@@ -200,7 +202,9 @@ export class PublishingExecutor {
         // Playwright: Cookie 通过 context 设置
         const context = browserAutomationService.getContext();
         if (context) {
-          await context.addCookies(account.credentials.cookies);
+          // 规范化 Cookie 的 sameSite 属性
+          const normalizedCookies = normalizeCookies(account.credentials.cookies);
+          await context.addCookies(normalizedCookies);
         }
         
         await publishingService.logMessage(taskId, 'info', '✅ Cookie设置成功');

@@ -1,4 +1,5 @@
 import { PlatformAdapter } from './PlatformAdapter';
+import { XiaohongshuAdapter } from './XiaohongshuAdapter';
 
 /**
  * 平台适配器注册表 (Playwright)
@@ -29,14 +30,11 @@ export class AdapterRegistry {
    * this.register(new ToutiaoAdapter());
    */
   private registerDefaultAdapters(): void {
-    // 注册所有平台适配器
-    // 示例：
-    // this.register(new ToutiaoAdapter());
-    // this.register(new WechatAdapter());
-    // this.register(new XiaohongshuAdapter());
+    // 注册小红书适配器
+    this.register(new XiaohongshuAdapter());
     
-    console.log('⚠️  当前没有注册任何平台适配器');
-    console.log('💡 请参考 AdapterTemplate.ts 创建新的适配器');
+    console.log('✅ 已注册 1 个平台适配器');
+    console.log('💡 可以参考 XiaohongshuAdapter.ts 创建更多适配器');
   }
 
   /**

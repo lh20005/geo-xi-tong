@@ -1,6 +1,7 @@
 import { pool } from '../db/database';
 import { encryptionService } from './EncryptionService';
 import { getStandardBrowserConfig, findChromeExecutable } from '../config/browserConfig';
+import { normalizeCookies } from '../utils/cookieNormalizer';
 
 export interface Account {
   id: number;
@@ -1357,7 +1358,9 @@ export class AccountService {
       
       // 设置Cookie (Playwright 使用 context.addCookies)
       console.log(`[登录测试] 正在设置Cookie (${account.credentials.cookies.length}个)...`);
-      await context.addCookies(account.credentials.cookies);
+      // 规范化 Cookie 的 sameSite 属性
+      const normalizedCookies = normalizeCookies(account.credentials.cookies);
+      await context.addCookies(normalizedCookies);
       console.log(`[登录测试] Cookie设置成功`);
       
       // 导航到平台主页
