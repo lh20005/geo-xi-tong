@@ -277,6 +277,18 @@ class IPCHandler {
             log.info('IPC: 取消通用登录');
             await loginManager.cancelLogin();
           }
+          
+          // 如果没有正在进行的登录，可能是测试登录的 WebView
+          // 直接销毁 WebView
+          if (!toutiaoLoginManager.isLoggingIn() && 
+              !douyinLoginManager.isLoggingIn() && 
+              !loginManager.isLoggingIn()) {
+            log.info('IPC: 没有正在进行的登录，尝试关闭测试 WebView');
+            if (webViewManager.hasView()) {
+              await webViewManager.destroyWebView();
+              log.info('IPC: 测试 WebView 已关闭');
+            }
+          }
         }
         
         return { success: true };

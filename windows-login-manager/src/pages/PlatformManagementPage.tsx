@@ -54,6 +54,8 @@ export default function PlatformManagementPage() {
   const [managementModalVisible, setManagementModalVisible] = useState(false);
   const [selectedPlatform] = useState<Platform | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     loadData();
@@ -218,7 +220,18 @@ export default function PlatformManagementPage() {
     try {
       await deleteAccount(accountId);
       message.success('账号删除成功');
-      loadData();
+      
+      // 重新加载数据
+      await loadData();
+      
+      // 检查删除后当前页是否还有数据
+      // 如果当前页是最后一页且删除后没有数据了，跳到上一页
+      const totalAccounts = accounts.length - 1; // 删除一个
+      const totalPages = Math.ceil(totalAccounts / pageSize);
+      
+      if (currentPage > totalPages && totalPages > 0) {
+        setCurrentPage(totalPages);
+      }
     } catch (error) {
       message.error('账号删除失败');
       console.error('账号删除失败:', error);
@@ -572,11 +585,16 @@ export default function PlatformManagementPage() {
             rowKey="id"
             scroll={{ x: 920 }}
             pagination={{
-              pageSize: 10,
+              current: currentPage,
+              pageSize: pageSize,
               showSizeChanger: true,
               showQuickJumper: true,
               showTotal: (total) => `共 ${total} 个账号`,
-              pageSizeOptions: ['10', '20', '50', '100']
+              pageSizeOptions: ['10', '20', '50', '100'],
+              onChange: (page, size) => {
+                setCurrentPage(page);
+                setPageSize(size);
+              }
             }}
           />
         </Card>
