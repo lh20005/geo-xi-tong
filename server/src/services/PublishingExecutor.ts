@@ -271,6 +271,10 @@ export class PublishingExecutor {
         throw new Error('文章发布失败');
       }
 
+      // 发布成功后等待4秒再关闭浏览器
+      await publishingService.logMessage(taskId, 'info', '⏳ 等待4秒后关闭浏览器...');
+      await new Promise(resolve => setTimeout(resolve, 4000));
+
       // CRITICAL: 先更新任务状态为成功
       await publishingService.updateTaskStatus(taskId, 'success');
       await publishingService.logMessage(taskId, 'info', '✅ 任务执行成功');
