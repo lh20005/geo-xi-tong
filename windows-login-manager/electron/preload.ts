@@ -11,6 +11,7 @@ export interface ElectronAPI {
   loginPlatform: (platformId: string) => Promise<any>;
   cancelLogin: (platformId?: string) => Promise<any>;
   getLoginStatus: () => Promise<{ isLoggingIn: boolean }>;
+  testAccountLogin: (accountId: number) => Promise<{ success: boolean; message?: string }>;
 
   // 平台列表
   getPlatforms: () => Promise<any[]>;
@@ -90,6 +91,8 @@ const electronAPI = {
     ipcRenderer.invoke('login-platform', platformId),
   cancelLogin: (platformId?: string) => ipcRenderer.invoke('cancel-login', platformId),
   getLoginStatus: () => ipcRenderer.invoke('get-login-status'),
+  testAccountLogin: (accountId: number) =>
+    ipcRenderer.invoke('test-account-login', accountId),
 
   // 平台列表
   getPlatforms: () => ipcRenderer.invoke('get-platforms'),

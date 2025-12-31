@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined } from '@ant-design/icons';
-import { getPlatforms, getAccounts, Platform, Account, loginWithBrowser, deleteAccount, testAccountLogin } from '../api/publishing';
+import { getPlatforms, getAccounts, Platform, Account, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
 import AccountBindingModal from '../components/Publishing/AccountBindingModal';
 import AccountManagementModal from '../components/Publishing/AccountManagementModal';
 import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
+import ipcBridge from '../services/ipc';
 
 // const { Title } = Typography;
 
@@ -186,11 +187,12 @@ export default function PlatformManagementPage() {
   const handlePlatformClick = async (platform: Platform) => {
     try {
       console.log('[前端] 点击平台卡片:', platform.platform_name, platform.platform_id);
-      message.loading({ content: '正在打开浏览器登录页面...', key: 'browser-login', duration: 0 });
+      message.loading({ content: '正在打开登录页面...', key: 'browser-login', duration: 0 });
       
-      console.log('[前端] 调用 loginWithBrowser API...');
-      const result = await loginWithBrowser(platform.platform_id);
-      console.log('[前端] API返回结果:', result);
+      // 使用 Electron IPC 调用本地 webview 登录
+      console.log('[前端] 调用 IPC loginPlatform...');
+      const result = await ipcBridge.loginPlatform(platform.platform_id);
+      console.log('[前端] IPC返回结果:', result);
       
       message.destroy('browser-login');
       
@@ -202,13 +204,13 @@ export default function PlatformManagementPage() {
       }
     } catch (error: any) {
       message.destroy('browser-login');
-      console.error('[前端] 浏览器登录失败:', error);
+      console.error('[前端] 登录失败:', error);
       console.error('[前端] 错误详情:', {
         message: error.message,
         response: error.response,
         stack: error.stack
       });
-      message.error(error.message || error.response?.data?.message || '打开浏览器失败');
+      message.error(error.message || '登录失败');
     }
   };
 
@@ -226,18 +228,19 @@ export default function PlatformManagementPage() {
   const handleTestLogin = async (accountId: number, accountName: string) => {
     try {
       console.log('[前端] 点击测试登录按钮:', accountId, accountName);
-      message.loading({ content: '正在打开浏览器...', key: 'test-login', duration: 0 });
+      message.loading({ content: '正在打开测试页面...', key: 'test-login', duration: 0 });
       
-      console.log('[前端] 调用 testAccountLogin API...');
-      const result = await testAccountLogin(accountId);
-      console.log('[前端] API返回结果:', result);
+      // 使用 Electron IPC 调用本地 webview 测试登录
+      console.log('[前端] 调用 IPC testAccountLogin...');
+      const result = await ipcBridge.testAccountLogin(accountId);
+      console.log('[前端] IPC返回结果:', result);
       
       message.destroy('test-login');
       
       if (result.success) {
-        message.success(result.message || '浏览器已打开，请查看登录状态');
+        message.success(result.message || '已打开测试页面，请查看登录状态');
       } else {
-        message.error(result.message || '打开浏览器失败');
+        message.error(result.message || '打开测试页面失败');
       }
     } catch (error: any) {
       message.destroy('test-login');
@@ -247,7 +250,7 @@ export default function PlatformManagementPage() {
         response: error.response,
         stack: error.stack
       });
-      message.error(error.message || error.response?.data?.message || '打开浏览器失败');
+      message.error(error.message || '打开测试页面失败');
     }
   };
 

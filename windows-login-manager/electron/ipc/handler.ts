@@ -4,6 +4,7 @@ import { appManager } from '../main';
 import { loginManager, Platform, LoginResult } from '../login/login-manager';
 import { toutiaoLoginManager } from '../login/toutiao-login-manager';
 import { douyinLoginManager } from '../login/douyin-login-manager';
+import { webViewManager } from '../login/webview-manager';
 import { storageManager, AppConfig } from '../storage/manager';
 import { apiClient } from '../api/client';
 import { syncService } from '../sync/service';
@@ -276,6 +277,62 @@ class IPCHandler {
       } catch (error) {
         log.error('IPC: get-login-status failed:', error);
         return { isLoggingIn: false };
+      }
+    });
+
+    // 测试账号登录（使用 webview 打开平台页面验证 Cookie 是否有效）
+    ipcMain.handle('test-account-login', async (event, accountId: number) => {
+      try {
+        log.info(`IPC: test-account-login - ${accountId}`);
+
+        // 获取主窗口
+        const mainWindow = appManager.getMainWindow();
+        if (!mainWindow) {
+          throw new Error('Main window not available');
+        }
+
+        // 获取账号信息
+        const accounts = await storageManager.getAccountsCache();
+        const account = accounts.find(a => a.id === accountId);
+        
+        if (!account) {
+          return {
+            success: false,
+            message: '账号不存在'
+          };
+        }
+
+        // 获取平台配置
+        const platforms = await apiClient.getPlatforms();
+        const platform = platforms.find((p: any) => p.platform_id === account.platform_id);
+        
+        if (!platform) {
+          return {
+            success: false,
+            message: '平台配置不存在'
+          };
+        }
+
+        // 使用 webview 打开平台主页
+        const testUrl = (platform as any).home_url || platform.login_url;
+        
+        await webViewManager.createWebView(mainWindow, {
+          url: testUrl,
+          partition: `persist:${account.platform_id}`,
+        });
+
+        log.info(`Test login webview opened for account: ${account.account_name}`);
+        
+        return {
+          success: true,
+          message: '已打开测试页面，请查看登录状态'
+        };
+      } catch (error) {
+        log.error('IPC: test-account-login failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
       }
     });
 

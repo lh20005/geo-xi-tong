@@ -423,7 +423,7 @@ export class AccountService {
     let browser: any = null;
     
     try {
-      const puppeteer = require('puppeteer');
+      const { chromium } = require('playwright');
       
       // 获取平台登录URL
       const loginUrl = this.getPlatformLoginUrl(platform.platform_id);
@@ -444,22 +444,24 @@ export class AccountService {
       // 查找系统Chrome路径
       const executablePath = findChromeExecutable();
       
-      // 使用统一的浏览器配置（参照头条号配置，使用最大化窗口）
-      const launchOptions = getStandardBrowserConfig({
-        headless: false, // 显示浏览器窗口
-        executablePath
-      });
-      
+      // 使用 Playwright 启动浏览器
       console.log(`[浏览器登录] 正在启动浏览器...`);
-      browser = await puppeteer.launch(launchOptions);
+      browser = await chromium.launch({
+        headless: false,
+        executablePath,
+        args: ['--start-maximized']
+      });
       console.log(`[浏览器登录] 浏览器启动成功`);
       
-      const page = await browser.newPage();
+      const context = await browser.newContext({
+        viewport: null // 使用最大化窗口
+      });
+      const page = await context.newPage();
       console.log(`[浏览器登录] 创建新页面成功`);
       
       // 导航到登录页面
       console.log(`[浏览器登录] 正在导航到登录页面...`);
-      await page.goto(loginUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      await page.goto(loginUrl, { waitUntil: 'networkidle', timeout: 60000 });
       console.log(`[浏览器登录] 页面加载完成，当前URL: ${page.url()}`);
       
       console.log(`[浏览器登录] 等待用户完成登录...`);
@@ -469,8 +471,8 @@ export class AccountService {
       
       console.log(`[浏览器登录] 检测到登录成功，正在获取Cookie...`);
       
-      // 获取Cookie
-      const cookies = await page.cookies();
+      // 获取Cookie (Playwright 使用 context.cookies())
+      const cookies = await context.cookies();
       
       if (cookies.length === 0) {
         await browser.close();
@@ -522,7 +524,7 @@ export class AccountService {
           console.log(`[浏览器登录] ${platform.platform_name}：导航到主页以提取用户名...`);
           try {
             await page.goto(navConfig.url, { 
-              waitUntil: 'networkidle2',
+              waitUntil: 'networkidle',
               timeout: 30000 
             });
             // 等待页面渲染完成
@@ -1283,7 +1285,7 @@ export class AccountService {
    */
   async testAccountLogin(accountId: number, userId: number): Promise<{ success: boolean; message?: string }> {
     try {
-      const puppeteer = require('puppeteer');
+      const { chromium } = require('playwright');
       
       // 获取账号信息（包含凭证）
       const account = await this.getAccountById(accountId, userId, true);
@@ -1338,27 +1340,29 @@ export class AccountService {
       // 查找系统Chrome路径
       const executablePath = findChromeExecutable();
       
-      // 使用统一的浏览器配置
-      const launchOptions = getStandardBrowserConfig({
-        headless: false, // 显示浏览器窗口
-        executablePath
-      });
-      
+      // 使用 Playwright 启动浏览器
       console.log(`[登录测试] 正在启动浏览器...`);
-      const browser = await puppeteer.launch(launchOptions);
+      const browser = await chromium.launch({
+        headless: false,
+        executablePath,
+        args: ['--start-maximized']
+      });
       console.log(`[登录测试] 浏览器启动成功`);
       
-      const page = await browser.newPage();
+      const context = await browser.newContext({
+        viewport: null
+      });
+      const page = await context.newPage();
       console.log(`[登录测试] 创建新页面成功`);
       
-      // 设置Cookie
+      // 设置Cookie (Playwright 使用 context.addCookies)
       console.log(`[登录测试] 正在设置Cookie (${account.credentials.cookies.length}个)...`);
-      await page.setCookie(...account.credentials.cookies);
+      await context.addCookies(account.credentials.cookies);
       console.log(`[登录测试] Cookie设置成功`);
       
       // 导航到平台主页
       console.log(`[登录测试] 正在导航到平台主页...`);
-      await page.goto(homeUrl, { waitUntil: 'networkidle2', timeout: 60000 });
+      await page.goto(homeUrl, { waitUntil: 'networkidle', timeout: 60000 });
       console.log(`[登录测试] 页面加载完成，当前URL: ${page.url()}`);
       
       console.log(`\n========================================`);

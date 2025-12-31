@@ -32,6 +32,11 @@ class IPCBridge {
     return await this.api.getLoginStatus();
   }
 
+  // 测试账号登录
+  async testAccountLogin(accountId: number): Promise<{ success: boolean; message?: string }> {
+    return await this.api.testAccountLogin(accountId);
+  }
+
   // 平台列表
   async getPlatforms(): Promise<any[]> {
     return await this.api.getPlatforms();

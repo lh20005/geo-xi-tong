@@ -9,6 +9,7 @@ export interface ElectronAPI {
   loginPlatform: (platformId: string) => Promise<LoginResult>;
   cancelLogin: (platformId?: string) => Promise<any>;
   getLoginStatus: () => Promise<{ isLoggingIn: boolean }>;
+  testAccountLogin: (accountId: number) => Promise<{ success: boolean; message?: string }>;
 
   // 平台列表
   getPlatforms: () => Promise<Platform[]>;

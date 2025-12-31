@@ -147,6 +147,7 @@ class ApplicationManager {
         contextIsolation: true,
         sandbox: true,
         preload: path.join(__dirname, 'preload.js'),
+        webviewTag: true, // 启用 webview 标签
       },
       show: false, // 先不显示，等最大化后再显示
       frame: true, // 使用原生窗口框架
