@@ -182,12 +182,17 @@ class SouhuLoginManager {
 
   /**
    * 等待登录成功
-   * 严格按照 GEO 应用逻辑：检测 .user-name 元素的文本内容
+   * 登录流程：
+   * 1. 用户在登录页面输入账号密码
+   * 2. 可能需要输入验证码
+   * 3. 登录成功后跳转到 contentManagement/first/page
+   * 4. 只有到达成功页面后，才检测 .user-name 元素并保存
    */
   private async waitForLoginSuccess(): Promise<{ name: string; avatar: string | null } | null> {
     log.info('[Souhu] 等待登录成功...');
     const startTime = Date.now();
     const timeout = 300000; // 5分钟
+    const SUCCESS_URL = 'mp.sohu.com/mpfe/v4/contentManagement/first/page';
 
     return new Promise((resolve) => {
       this.checkInterval = setInterval(async () => {
@@ -213,7 +218,17 @@ class SouhuLoginManager {
         }
 
         try {
-          // 严格按照 GEO 应用逻辑：检测 .user-name 元素
+          // 先检查 URL 是否到达成功页面
+          const currentUrl = await webViewManager.executeJavaScript<string>('window.location.href');
+          
+          if (!currentUrl.includes(SUCCESS_URL)) {
+            log.debug(`[Souhu] 当前 URL: ${currentUrl}，等待跳转到成功页面...`);
+            return;
+          }
+          
+          log.info(`[Souhu] ✅ 已到达成功页面: ${currentUrl}`);
+          
+          // 到达成功页面后，检测 .user-name 元素
           const result = await webViewManager.executeJavaScript<{ name: string | null; avatar: string | null }>(`
             (() => {
               let name = null;
@@ -247,7 +262,7 @@ class SouhuLoginManager {
             return;
           }
 
-          log.debug('[Souhu] 还未登录成功，继续等待...');
+          log.debug('[Souhu] 在成功页面但用户名元素未找到，继续等待...');
         } catch (error) {
           log.debug('[Souhu] 检查登录状态失败:', error);
         }
