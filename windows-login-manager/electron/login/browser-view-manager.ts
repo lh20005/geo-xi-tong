@@ -306,21 +306,37 @@ class BrowserViewManager {
    */
   private resizeBrowserView(): void {
     if (!this.currentView || !this.parentWindow) {
+      log.warn('Cannot resize: currentView or parentWindow is null');
       return;
     }
 
-    const bounds = this.parentWindow.getBounds();
+    // 获取窗口的内容区域尺寸
+    const contentBounds = this.parentWindow.getContentBounds();
+    const windowBounds = this.parentWindow.getBounds();
+    
+    // 打印调试信息
+    log.info('=== BrowserView Resize Debug ===');
+    log.info(`Window bounds: ${JSON.stringify(windowBounds)}`);
+    log.info(`Content bounds: ${JSON.stringify(contentBounds)}`);
+    log.info(`Window maximized: ${this.parentWindow.isMaximized()}`);
+    log.info(`Window fullscreen: ${this.parentWindow.isFullScreen()}`);
     
     // 留出顶部50px空间用于显示控制栏（包含关闭按钮）
     const toolbarHeight = 50;
-    this.currentView.setBounds({
+    
+    const viewBounds = {
       x: 0,
       y: toolbarHeight,
-      width: bounds.width,
-      height: bounds.height - toolbarHeight,
-    });
-
-    log.debug(`BrowserView resized: ${bounds.width}x${bounds.height - toolbarHeight} (with ${toolbarHeight}px toolbar)`);
+      width: contentBounds.width,
+      height: contentBounds.height - toolbarHeight,
+    };
+    
+    log.info(`Setting BrowserView bounds: ${JSON.stringify(viewBounds)}`);
+    
+    this.currentView.setBounds(viewBounds);
+    
+    log.info(`BrowserView resized successfully`);
+    log.info('================================');
   }
 
   /**

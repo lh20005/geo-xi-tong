@@ -148,17 +148,29 @@ class ApplicationManager {
         sandbox: true,
         preload: path.join(__dirname, 'preload.js'),
       },
-      show: true, // 立即显示窗口
+      show: false, // 先不显示，等最大化后再显示
       frame: true, // 使用原生窗口框架
       titleBarStyle: 'default' as const,
     };
 
     this.window = new BrowserWindow(windowConfig);
-    logger.info('Main window created and shown');
+    
+    // 窗口创建后立即最大化
+    this.window.maximize();
+    
+    // 最大化后显示窗口
+    this.window.show();
+    
+    logger.info('Main window created, maximized and shown');
 
     // 窗口准备好后的回调
     this.window.once('ready-to-show', () => {
       logger.info('Window ready-to-show event fired');
+      // 确保窗口是最大化的
+      if (!this.window?.isMaximized()) {
+        logger.info('Window not maximized, maximizing now');
+        this.window?.maximize();
+      }
     });
 
     // 加载应用

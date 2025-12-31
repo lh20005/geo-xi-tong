@@ -1,4 +1,4 @@
-import { Page } from 'puppeteer';
+import { Page, BrowserContext } from 'playwright';
 
 export interface LoginSelectors {
   usernameInput: string;
@@ -33,7 +33,7 @@ export interface PublishingConfig {
 }
 
 /**
- * 平台适配器抽象类
+ * 平台适配器抽象类 (Playwright)
  * 每个平台需要实现此类来定义特定的发布逻辑
  */
 export abstract class PlatformAdapter {
@@ -93,7 +93,7 @@ export abstract class PlatformAdapter {
   /**
    * 执行登录流程
    * 支持两种登录方式：
-   * 1. Cookie登录：如果credentials包含cookies数组，直接设置Cookie
+   * 1. Cookie登录：如果credentials包含cookies数组，直接设置Cookie（在context层面）
    * 2. 表单登录：使用用户名密码登录
    */
   abstract performLogin(
@@ -137,7 +137,7 @@ export abstract class PlatformAdapter {
    * 等待页面加载完成
    */
   protected async waitForPageLoad(page: Page, timeout: number = 5000): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, timeout));
+    await page.waitForTimeout(timeout);
   }
 
   /**
@@ -181,7 +181,7 @@ export abstract class PlatformAdapter {
   }
 
   /**
-   * 安全地填充输入框
+   * 安全地填充输入框 (Playwright)
    */
   protected async safeType(
     page: Page,
@@ -196,7 +196,7 @@ export abstract class PlatformAdapter {
   }
 
   /**
-   * 安全地点击元素
+   * 安全地点击元素 (Playwright)
    */
   protected async safeClick(page: Page, selector: string): Promise<void> {
     await page.waitForSelector(selector, { timeout: 10000 });
@@ -205,22 +205,17 @@ export abstract class PlatformAdapter {
 
   /**
    * 使用Cookie登录
-   * 如果凭证中包含cookies，直接设置到浏览器中
+   * Cookie 已在 BrowserContext 层面设置，这里只需要验证
    */
   protected async loginWithCookies(
     page: Page,
     cookies: any[]
   ): Promise<boolean> {
     try {
-      console.log(`[Cookie登录] 开始设置 ${cookies.length} 个Cookie`);
-      
-      // 设置Cookie
-      await page.setCookie(...cookies);
-      
-      console.log(`[Cookie登录] Cookie设置成功`);
+      console.log(`[Cookie登录] Cookie 已在 context 中设置`);
       
       // 刷新页面以应用Cookie
-      await page.reload({ waitUntil: 'networkidle2' });
+      await page.reload({ waitUntil: 'networkidle' });
       
       console.log(`[Cookie登录] 页面刷新完成`);
       
@@ -334,7 +329,7 @@ export abstract class PlatformAdapter {
       await this.waitForPageLoad(page, 500);
       
       // 直接设置innerHTML
-      await page.evaluate((selector: string, html: string) => {
+      await page.evaluate(({ selector, html }) => {
         const editor = document.querySelector(selector);
         if (editor) {
           editor.innerHTML = html;
@@ -343,7 +338,7 @@ export abstract class PlatformAdapter {
           editor.dispatchEvent(new Event('input', { bubbles: true }));
           editor.dispatchEvent(new Event('change', { bubbles: true }));
         }
-      }, editorSelector, htmlContent);
+      }, { selector: editorSelector, html: htmlContent });
       
       console.log(`[${this.platformName}] ✅ 内容已通过DOM设置`);
       

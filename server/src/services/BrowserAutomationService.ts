@@ -1,4 +1,4 @@
-import puppeteer, { Browser, Page } from 'puppeteer';
+import { chromium, Browser, Page, BrowserContext } from 'playwright';
 import { getStandardBrowserConfig, findChromeExecutable } from '../config/browserConfig';
 import { publishingService } from './PublishingService';
 
@@ -12,10 +12,11 @@ export interface BrowserOptions {
 }
 
 /**
- * 浏览器自动化服务
+ * 浏览器自动化服务 (Playwright)
  */
 export class BrowserAutomationService {
   private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
   private defaultOptions: BrowserOptions = {
     headless: true,
     timeout: 30000,
@@ -41,9 +42,20 @@ export class BrowserAutomationService {
         executablePath
       });
 
-      this.browser = await puppeteer.launch(launchOptions);
+      this.browser = await chromium.launch(launchOptions);
 
-      console.log('✅ 浏览器启动成功');
+      // 创建浏览器上下文
+      // 设置 viewport 为 null 让浏览器使用全屏尺寸
+      this.context = await this.browser.newContext({
+        viewport: null, // null = 使用浏览器窗口的实际大小（全屏）
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      });
+
+      // 设置默认超时
+      this.context.setDefaultTimeout(opts.timeout!);
+      this.context.setDefaultNavigationTimeout(opts.timeout!);
+
+      console.log('✅ 浏览器启动成功 (Playwright)');
       return this.browser;
     } catch (error) {
       console.error('❌ 浏览器启动失败:', error);
@@ -55,17 +67,20 @@ export class BrowserAutomationService {
    * 创建新页面
    */
   async createPage(): Promise<Page> {
-    if (!this.browser) {
+    if (!this.browser || !this.context) {
       await this.launchBrowser();
     }
 
-    const page = await this.browser!.newPage();
-    
-    // 设置超时
-    page.setDefaultTimeout(this.defaultOptions.timeout!);
-    page.setDefaultNavigationTimeout(this.defaultOptions.timeout!);
+    const page = await this.context!.newPage();
 
     return page;
+  }
+
+  /**
+   * 获取浏览器上下文（用于 Cookie 管理）
+   */
+  getContext(): BrowserContext | null {
+    return this.context;
   }
 
   /**
@@ -78,7 +93,7 @@ export class BrowserAutomationService {
       }
 
       await page.goto(url, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'networkidle',
         timeout: this.defaultOptions.timeout
       });
 
@@ -127,7 +142,8 @@ export class BrowserAutomationService {
   ): Promise<void> {
     try {
       await this.waitForElement(page, selector);
-      await page.type(selector, value, { delay: 50 });
+      // Playwright 推荐使用 fill，但也支持 type
+      await page.fill(selector, value);
 
       if (taskId) {
         await publishingService.logMessage(
@@ -230,6 +246,10 @@ export class BrowserAutomationService {
    * 关闭浏览器
    */
   async closeBrowser(): Promise<void> {
+    if (this.context) {
+      await this.context.close();
+      this.context = null;
+    }
     if (this.browser) {
       await this.browser.close();
       this.browser = null;
@@ -259,6 +279,14 @@ export class BrowserAutomationService {
    * 强制关闭浏览器（用于超时情况）
    */
   async forceCloseBrowser(): Promise<void> {
+    if (this.context) {
+      try {
+        await this.context.close();
+      } catch (error) {
+        console.error('❌ 强制关闭上下文失败:', error);
+      }
+      this.context = null;
+    }
     if (this.browser) {
       try {
         // 尝试正常关闭

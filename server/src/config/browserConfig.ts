@@ -1,20 +1,18 @@
 /**
- * 浏览器配置
+ * 浏览器配置 (Playwright)
  * 统一管理所有浏览器启动参数，确保一致性
  */
 
 export interface BrowserLaunchOptions {
   headless?: boolean;
   executablePath?: string;
-  defaultViewport?: any;
   args?: string[];
-  ignoreDefaultArgs?: string[];
-  ignoreHTTPSErrors?: boolean;
+  timeout?: number;
 }
 
 /**
  * 获取标准的浏览器启动配置
- * 参照头条号等平台的成功配置
+ * 适配 Playwright API
  */
 export function getStandardBrowserConfig(options: {
   headless?: boolean;
@@ -26,17 +24,15 @@ export function getStandardBrowserConfig(options: {
   return {
     headless: options.headless ?? isServer, // 服务器环境自动使用 headless
     executablePath: options.executablePath, // 可选：指定Chrome路径
-    defaultViewport: null, // 关键：不设置viewport，使用浏览器默认大小（最大化）
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
-      ...(isServer ? [] : ['--start-maximized']), // 本地才最大化，服务器不需要
+      '--start-maximized', // 启动时最大化窗口
       '--disable-blink-features=AutomationControlled', // 隐藏自动化特征
       '--disable-infobars' // 禁用信息栏
     ],
-    ignoreDefaultArgs: ['--enable-automation'], // 移除自动化标识
-    ignoreHTTPSErrors: true // 忽略HTTPS错误
+    timeout: 30000
   };
 }
 
@@ -65,39 +61,6 @@ export function findChromeExecutable(): string | undefined {
     }
   }
 
-  console.log('⚠️  未找到系统Chrome，将使用Puppeteer内置浏览器');
+  console.log('⚠️  未找到系统Chrome，将使用Playwright内置浏览器');
   return undefined;
 }
-
-/**
- * 浏览器配置说明
- * 
- * 为什么使用这些配置：
- * 
- * 1. defaultViewport: null
- *    - 不设置固定的viewport尺寸
- *    - 让浏览器使用默认大小（配合 --start-maximized 实现最大化）
- *    - 避免页面显示不完全的问题
- * 
- * 2. --start-maximized
- *    - 启动时最大化浏览器窗口
- *    - 确保所有内容都能完整显示
- *    - 特别重要：抖音、小红书、B站等平台需要完整显示
- * 
- * 3. --disable-blink-features=AutomationControlled
- *    - 隐藏浏览器的自动化特征
- *    - 避免被平台检测为机器人
- *    - 提高登录和发布的成功率
- * 
- * 4. --disable-infobars
- *    - 禁用"Chrome正在受到自动化测试软件的控制"提示
- *    - 提供更好的用户体验
- * 
- * 5. ignoreDefaultArgs: ['--enable-automation']
- *    - 移除自动化标识
- *    - 配合其他参数隐藏自动化特征
- * 
- * 6. --no-sandbox, --disable-setuid-sandbox, --disable-dev-shm-usage
- *    - 解决Linux环境下的权限和资源问题
- *    - 提高稳定性
- */

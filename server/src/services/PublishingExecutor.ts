@@ -196,7 +196,13 @@ export class PublishingExecutor {
         // 关键修复：先设置Cookie，再导航到发布页面
         // 这样打开的就是已登录状态的页面，而不是登录页面
         await publishingService.logMessage(taskId, 'info', '🔑 设置Cookie...');
-        await page.setCookie(...account.credentials.cookies);
+        
+        // Playwright: Cookie 通过 context 设置
+        const context = browserAutomationService.getContext();
+        if (context) {
+          await context.addCookies(account.credentials.cookies);
+        }
+        
         await publishingService.logMessage(taskId, 'info', '✅ Cookie设置成功');
         
         // 直接导航到发布页面（此时Cookie已设置，会自动登录）
