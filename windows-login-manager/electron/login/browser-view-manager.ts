@@ -79,9 +79,41 @@ class BrowserViewManager {
       // 设置BrowserView的位置和大小
       this.resizeBrowserView();
 
-      // 监听窗口大小变化
+      // 监听窗口事件 - 手动调整 BrowserView 尺寸
+      // 注意：setAutoResize() 在 maximize/unmaximize 时有 bug，所以我们手动处理
       parentWindow.on('resize', () => {
+        log.debug('Window resize event');
         this.resizeBrowserView();
+      });
+
+      parentWindow.on('maximize', () => {
+        log.debug('Window maximize event');
+        // 使用 setImmediate 确保窗口已经完成最大化
+        setImmediate(() => {
+          this.resizeBrowserView();
+        });
+      });
+
+      parentWindow.on('unmaximize', () => {
+        log.debug('Window unmaximize event');
+        // 使用 setImmediate 确保窗口已经完成取消最大化
+        setImmediate(() => {
+          this.resizeBrowserView();
+        });
+      });
+
+      parentWindow.on('enter-full-screen', () => {
+        log.debug('Window enter-full-screen event');
+        setImmediate(() => {
+          this.resizeBrowserView();
+        });
+      });
+
+      parentWindow.on('leave-full-screen', () => {
+        log.debug('Window leave-full-screen event');
+        setImmediate(() => {
+          this.resizeBrowserView();
+        });
       });
 
       // 在主窗口中注入工具栏
@@ -89,6 +121,49 @@ class BrowserViewManager {
 
       // 加载URL
       await this.currentView.webContents.loadURL(config.url);
+
+      // 使用多个时机注入全屏样式，确保生效
+      
+      // 时机1: 页面开始加载时（最早）
+      this.currentView.webContents.on('did-start-loading', () => {
+        log.debug('Page started loading, pre-injecting fullscreen styles...');
+        setTimeout(() => {
+          this.injectFullscreenStyles();
+        }, 50);
+      });
+
+      // 时机2: DOM加载完成时
+      this.currentView.webContents.on('dom-ready', () => {
+        log.debug('DOM ready, injecting fullscreen styles...');
+        setTimeout(() => {
+          this.injectFullscreenStyles();
+        }, 50);
+      });
+
+      // 时机3: 页面完全加载完成时
+      this.currentView.webContents.on('did-finish-load', () => {
+        log.debug('Page loaded, injecting fullscreen styles...');
+        setTimeout(() => {
+          this.injectFullscreenStyles();
+        }, 100);
+        // 再延迟一次，确保动态内容也被处理
+        setTimeout(() => {
+          this.injectFullscreenStyles();
+        }, 500);
+      });
+
+      // 时机4: 页面导航时
+      this.currentView.webContents.on('did-navigate', () => {
+        log.debug('Page navigated, re-injecting fullscreen styles...');
+        setTimeout(() => {
+          this.injectFullscreenStyles();
+        }, 100);
+      });
+
+      // 时机5: 立即注入一次
+      setTimeout(() => {
+        this.injectFullscreenStyles();
+      }, 100);
 
       log.info(`BrowserView created and loaded: ${config.url}`);
       return this.currentView;
@@ -302,6 +377,160 @@ class BrowserViewManager {
   }
 
   /**
+   * 注入全屏样式 - 强制页面内容全屏显示
+   * 使用insertCSS API，优先级更高
+   */
+  private injectFullscreenStyles(): void {
+    if (!this.currentView || this.currentView.webContents.isDestroyed()) {
+      return;
+    }
+
+    // 第一步：设置缩放为1.0
+    this.currentView.webContents.setZoomFactor(1.0);
+    log.info('Set zoom factor to 1.0 for native display');
+
+    // 第二步：使用insertCSS注入样式（优先级更高）
+    const fullscreenCSS = `
+      /* 强制html和body全屏 */
+      html {
+        width: 100vw !important;
+        height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: auto !important;
+        box-sizing: border-box !important;
+      }
+      
+      body {
+        width: 100vw !important;
+        min-height: 100vh !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: auto !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* 强制所有顶层元素全屏 */
+      body > div,
+      body > main,
+      body > section,
+      body > article {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100vw !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* 针对常见容器ID和类 */
+      #app, #root, #__next, #__nuxt,
+      .app, .root, .container, .wrapper, .main, .content,
+      [class*="App"], [class*="Root"], [class*="Container"],
+      [class*="Wrapper"], [class*="Main"], [class*="Content"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        max-width: 100vw !important;
+        box-sizing: border-box !important;
+      }
+      
+      /* 隐藏滚动条 */
+      * {
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+      }
+      
+      *::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+      
+      /* 确保所有元素使用border-box */
+      * {
+        box-sizing: border-box !important;
+      }
+    `;
+
+    // 使用insertCSS API注入（优先级更高，不会被页面覆盖）
+    this.currentView.webContents.insertCSS(fullscreenCSS).then(() => {
+      log.info('✅ Fullscreen CSS inserted successfully via insertCSS API');
+    }).catch(err => {
+      log.error('❌ Failed to insert CSS:', err);
+    });
+
+    // 第三步：同时使用JavaScript强制修改样式（双保险）
+    this.currentView.webContents.executeJavaScript(`
+      (function() {
+        console.log('='.repeat(80));
+        console.log('🔥 [BrowserView FULLSCREEN] Starting injection...');
+        console.log('🔥 [BrowserView FULLSCREEN] Current viewport:', window.innerWidth, 'x', window.innerHeight);
+        console.log('='.repeat(80));
+        
+        // 强制修改html和body的样式
+        if (document.documentElement) {
+          document.documentElement.style.width = '100vw';
+          document.documentElement.style.height = '100vh';
+          document.documentElement.style.margin = '0';
+          document.documentElement.style.padding = '0';
+          document.documentElement.style.overflow = 'auto';
+        }
+        
+        if (document.body) {
+          document.body.style.width = '100vw';
+          document.body.style.minHeight = '100vh';
+          document.body.style.margin = '0';
+          document.body.style.padding = '0';
+          document.body.style.overflow = 'auto';
+        }
+        
+        console.log('✅ [BrowserView FULLSCREEN] Inline styles applied');
+        
+        // 延迟处理固定宽度元素
+        setTimeout(() => {
+          try {
+            let fixedCount = 0;
+            const allElements = document.querySelectorAll('*');
+            
+            allElements.forEach(el => {
+              const computed = window.getComputedStyle(el);
+              const width = parseInt(computed.width);
+              
+              if (width > 0 && width < window.innerWidth * 0.9) {
+                el.style.width = '100%';
+                el.style.maxWidth = '100vw';
+                fixedCount++;
+              }
+            });
+            
+            console.log('✅ [BrowserView FULLSCREEN] Fixed', fixedCount, 'elements with fixed width');
+          } catch (e) {
+            console.warn('⚠️ [BrowserView FULLSCREEN] Failed to fix widths:', e);
+          }
+        }, 100);
+        
+        // 触发重排
+        document.body.offsetHeight;
+        window.dispatchEvent(new Event('resize'));
+        
+        console.log('='.repeat(80));
+        console.log('✅ [BrowserView FULLSCREEN] Injection completed!');
+        console.log('✅ [BrowserView FULLSCREEN] Final viewport:', window.innerWidth, 'x', window.innerHeight);
+        console.log('✅ [BrowserView FULLSCREEN] Body size:', document.body.offsetWidth, 'x', document.body.offsetHeight);
+        console.log('='.repeat(80));
+        
+        return {
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          bodySize: { width: document.body.offsetWidth, height: document.body.offsetHeight },
+          htmlSize: { width: document.documentElement.offsetWidth, height: document.documentElement.offsetHeight }
+        };
+      })();
+    `).then(result => {
+      log.info('✅ Fullscreen JavaScript executed successfully:', JSON.stringify(result));
+    }).catch(err => {
+      log.error('❌ Failed to execute fullscreen JavaScript:', err);
+    });
+  }
+
+  /**
    * 调整BrowserView大小
    */
   private resizeBrowserView(): void {
@@ -311,13 +540,13 @@ class BrowserViewManager {
     }
 
     // 获取窗口的内容区域尺寸
-    const contentBounds = this.parentWindow.getContentBounds();
+    const [width, height] = this.parentWindow.getContentSize();
     const windowBounds = this.parentWindow.getBounds();
     
     // 打印调试信息
     log.info('=== BrowserView Resize Debug ===');
     log.info(`Window bounds: ${JSON.stringify(windowBounds)}`);
-    log.info(`Content bounds: ${JSON.stringify(contentBounds)}`);
+    log.info(`Content size: ${width} x ${height}`);
     log.info(`Window maximized: ${this.parentWindow.isMaximized()}`);
     log.info(`Window fullscreen: ${this.parentWindow.isFullScreen()}`);
     
@@ -327,13 +556,19 @@ class BrowserViewManager {
     const viewBounds = {
       x: 0,
       y: toolbarHeight,
-      width: contentBounds.width,
-      height: contentBounds.height - toolbarHeight,
+      width: width,
+      height: height - toolbarHeight,
     };
     
     log.info(`Setting BrowserView bounds: ${JSON.stringify(viewBounds)}`);
     
+    // 手动设置 BrowserView 尺寸
+    // 注意：不使用 setAutoResize()，因为它在 maximize/unmaximize 时有 bug
+    // 我们通过监听窗口事件来手动调整尺寸
     this.currentView.setBounds(viewBounds);
+    
+    // 重新注入全屏样式和调整缩放
+    this.injectFullscreenStyles();
     
     log.info(`BrowserView resized successfully`);
     log.info('================================');

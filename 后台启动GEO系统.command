@@ -41,6 +41,19 @@ cd server && npm run db:migrate > /dev/null 2>&1 && cd ..
 echo "   ✅ 数据库迁移完成"
 echo ""
 
+# 3.5 检查Playwright浏览器
+echo "🌐 [3.5/6] 检查 Playwright 浏览器..."
+cd server
+if ! npx playwright install --dry-run chromium > /dev/null 2>&1; then
+    echo "   🔄 安装 Playwright 浏览器..."
+    npx playwright install chromium > /dev/null 2>&1
+    echo "   ✅ Playwright 浏览器安装完成"
+else
+    echo "   ✅ Playwright 浏览器已就绪"
+fi
+cd ..
+echo ""
+
 # 4. 创建日志目录
 echo "📁 [4/6] 准备日志目录..."
 mkdir -p logs

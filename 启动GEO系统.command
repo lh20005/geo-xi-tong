@@ -73,6 +73,19 @@ if [ "$NEED_INSTALL" = true ]; then
     echo "   🔄 安装依赖包..."
     npm run install:all
 fi
+
+# 检查并安装Playwright浏览器
+echo "   🔍 检查 Playwright 浏览器..."
+cd server
+if ! npx playwright install --dry-run chromium > /dev/null 2>&1; then
+    echo "   🔄 安装 Playwright 浏览器（首次运行需要）..."
+    npx playwright install chromium
+    echo "   ✅ Playwright 浏览器安装完成"
+else
+    echo "   ✅ Playwright 浏览器已安装"
+fi
+cd ..
+
 echo "   ✅ 依赖检查完成"
 echo ""
 
