@@ -134,9 +134,9 @@ export class CSDNAdapter extends PlatformAdapter {
           let imagePath = imageUrl;
           
           if (imagePath.startsWith('/uploads/')) {
-            imagePath = path.join(process.cwd(), 'server', imagePath);
+            imagePath = path.join(process.cwd(), imagePath);
           } else if (!imagePath.startsWith('http') && !imagePath.startsWith('/')) {
-            imagePath = path.join(process.cwd(), 'server', 'uploads', imagePath);
+            imagePath = path.join(process.cwd(), 'uploads', imagePath);
           }
           
           if (fs.existsSync(imagePath)) {

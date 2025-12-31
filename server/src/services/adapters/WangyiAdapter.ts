@@ -136,9 +136,9 @@ export class WangyiAdapter extends PlatformAdapter {
           let imagePath = imageUrl;
           
           if (imagePath.startsWith('/uploads/')) {
-            imagePath = path.join(process.cwd(), imagePath);
+            imagePath = path.join(process.cwd(), 'server', imagePath);
           } else if (!imagePath.startsWith('http') && !imagePath.startsWith('/')) {
-            imagePath = path.join(process.cwd(), 'uploads', imagePath);
+            imagePath = path.join(process.cwd(), 'server', 'uploads', imagePath);
           }
           
           if (fs.existsSync(imagePath)) {

@@ -324,10 +324,11 @@ export class ToutiaoAdapter extends PlatformAdapter {
           
           // 转换为绝对路径
           if (imagePath.startsWith('/uploads/')) {
-            imagePath = path.join(process.cwd(), imagePath);
+            // 修复：文件实际在server/uploads/目录下
+            imagePath = path.join(process.cwd(), 'server', imagePath);
             console.log(`[头条号] 📁 转换为绝对路径: ${imagePath}`);
           } else if (!imagePath.startsWith('http') && !imagePath.startsWith('/')) {
-            imagePath = path.join(process.cwd(), 'uploads', imagePath);
+            imagePath = path.join(process.cwd(), 'server', 'uploads', imagePath);
             console.log(`[头条号] 📁 添加uploads前缀: ${imagePath}`);
           }
           

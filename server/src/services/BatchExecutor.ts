@@ -263,6 +263,7 @@ export class BatchExecutor {
       const { pool } = require('../db/database');
       
       // 查找所有有 pending 任务的批次
+      // 只查找batch_order最小的pending任务，但要排除正在执行的批次
       const result = await pool.query(`
         SELECT DISTINCT batch_id 
         FROM publishing_tasks 
@@ -282,6 +283,12 @@ export class BatchExecutor {
         console.log(`📋 发现 ${batchIds.length} 个待执行的批次`);
         
         for (const batchId of batchIds) {
+          // 跳过正在执行的批次（关键保护）
+          if (this.executingBatches.has(batchId)) {
+            console.log(`⏭️  批次 ${batchId} 正在执行中，跳过`);
+            continue;
+          }
+          
           // 异步执行批次，不阻塞其他批次
           this.executeBatch(batchId).catch(error => {
             console.error(`批次 ${batchId} 执行失败:`, error);

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Card, Row, Col, Button, Space, Tag, message, 
+  Card, Row, Col, Button, Space, Tag, App,
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
   InputNumber, Switch, Table
 } from 'antd';
@@ -65,6 +65,9 @@ const getPlatformIcon = (platformId: string): string => {
 };
 
 export default function PublishingTasksPage() {
+  // 使用 App 组件的 hooks API
+  const { message } = App.useApp();
+  
   // 文章选择
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
