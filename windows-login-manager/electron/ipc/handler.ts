@@ -249,13 +249,34 @@ class IPCHandler {
       try {
         log.info(`IPC: cancel-login - ${platformId || 'all'}`);
         
-        // 如果是头条号，使用专用管理器
+        // 如果指定了平台，使用对应的管理器
         if (platformId === 'toutiao') {
           await toutiaoLoginManager.cancelLogin();
         } else if (platformId === 'douyin') {
           await douyinLoginManager.cancelLogin();
-        } else {
+        } else if (platformId) {
           await loginManager.cancelLogin();
+        } else {
+          // 没有指定平台，取消所有正在进行的登录
+          log.info('IPC: 取消所有正在进行的登录');
+          
+          // 检查并取消头条号登录
+          if (toutiaoLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消头条号登录');
+            await toutiaoLoginManager.cancelLogin();
+          }
+          
+          // 检查并取消抖音号登录
+          if (douyinLoginManager.isLoggingIn()) {
+            log.info('IPC: 取消抖音号登录');
+            await douyinLoginManager.cancelLogin();
+          }
+          
+          // 检查并取消通用登录
+          if (loginManager.isLoggingIn()) {
+            log.info('IPC: 取消通用登录');
+            await loginManager.cancelLogin();
+          }
         }
         
         return { success: true };

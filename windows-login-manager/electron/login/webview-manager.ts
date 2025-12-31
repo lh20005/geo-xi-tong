@@ -70,6 +70,25 @@ class WebViewManager {
             oldToolbar.remove();
           }
 
+          // 创建全局关闭函数
+          window.__closeWebView = async function() {
+            console.log('[WebView] Global close function called');
+            try {
+              if (window.electronAPI && window.electronAPI.cancelLogin) {
+                console.log('[WebView] Calling cancelLogin via IPC');
+                const result = await window.electronAPI.cancelLogin();
+                console.log('[WebView] cancelLogin result:', result);
+                return result;
+              } else {
+                console.error('[WebView] electronAPI.cancelLogin not available');
+                return { success: false, error: 'electronAPI not available' };
+              }
+            } catch (err) {
+              console.error('[WebView] cancelLogin failed:', err);
+              return { success: false, error: err.message };
+            }
+          };
+
           // 创建工具栏
           const toolbar = document.createElement('div');
           toolbar.id = 'browser-toolbar';
@@ -144,11 +163,11 @@ class WebViewManager {
           });
 
           closeBtn.addEventListener('click', function() {
-            const cancelBtn = document.querySelector('.cancel-btn');
-            if (cancelBtn) {
-              cancelBtn.click();
-            } else if (window.electronAPI && window.electronAPI.cancelLogin) {
-              window.electronAPI.cancelLogin();
+            console.log('[WebView] Close button clicked');
+            if (window.__closeWebView) {
+              window.__closeWebView();
+            } else {
+              console.error('[WebView] __closeWebView function not available');
             }
           });
 
@@ -508,6 +527,11 @@ class WebViewManager {
           const toolbar = document.getElementById('browser-toolbar');
           if (toolbar) {
             toolbar.remove();
+          }
+          
+          // 清理全局关闭函数
+          if (window.__closeWebView) {
+            delete window.__closeWebView;
           }
           
           // 恢复原有的应用内容

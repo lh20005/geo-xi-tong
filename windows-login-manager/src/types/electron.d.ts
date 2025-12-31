@@ -149,5 +149,6 @@ declare global {
   interface Window {
     electronAPI: ElectronAPI;
     electron: ElectronAPI; // 别名，方便使用
+    __closeWebView?: () => Promise<{ success: boolean; error?: string }>; // WebView关闭函数
   }
 }
