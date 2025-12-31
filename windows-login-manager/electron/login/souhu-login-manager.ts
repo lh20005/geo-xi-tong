@@ -7,11 +7,13 @@ import { syncService } from '../sync/service';
 
 /**
  * 搜狐号专用登录管理器
- * 基于 GEO 应用的 sh.js 实现
+ * 严格按照 GEO 应用的 sh.js 实现
  * 
- * 核心策略：
- * 1. 检测用户名元素 .user-name
- * 2. 检查间隔: 1000ms
+ * 核心逻辑：
+ * 1. 检测 .user-name 元素的文本内容
+ * 2. 如果存在用户名，则登录成功
+ * 3. 获取头像 .user-pic 的 src 属性
+ * 4. 获取 document.cookie
  */
 
 interface SouhuLoginResult {
@@ -30,11 +32,6 @@ interface SouhuLoginResult {
   error?: string;
 }
 
-interface SouhuUserInfo {
-  username: string;
-  avatar?: string;
-}
-
 class SouhuLoginManager {
   private static instance: SouhuLoginManager;
   private parentWindow: BrowserWindow | null = null;
@@ -43,13 +40,9 @@ class SouhuLoginManager {
   private loginResolve: ((result: boolean) => void) | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
 
-  // 搜狐号配置 - 从 GEO 应用 sh.js 提取
+  // 搜狐号配置
   private readonly PLATFORM_ID = 'souhu';
-  private readonly PLATFORM_NAME = '搜狐号';
   private readonly LOGIN_URL = 'https://mp.sohu.com/mpfe/v4/login';
-  private readonly SUCCESS_URL_PATTERN = 'mp.sohu.com/mpfe/v3/main';
-  private readonly USERNAME_SELECTOR = '.user-name';
-  private readonly AVATAR_SELECTOR = '.user-pic';
   private readonly CHECK_INTERVAL = 1000; // 1秒检查间隔
 
   // 当前登录使用的临时 partition
@@ -85,56 +78,43 @@ class SouhuLoginManager {
       await this.createWebView();
 
       // 2. 等待登录成功
-      const loginSuccess = await this.waitForLoginSuccess();
-      if (!loginSuccess) {
+      const userInfo = await this.waitForLoginSuccess();
+      if (!userInfo) {
         await this.cleanup();
         if (this.isCancelled) {
-          return {
-            success: false,
-            message: '登录已取消'
-          };
+          return { success: false, message: '登录已取消' };
         }
-        return {
-          success: false,
-          message: '登录超时或失败'
-        };
+        return { success: false, message: '登录超时或失败' };
       }
 
-      // 3. 等待页面稳定
-      await this.waitForPageStable();
+      log.info(`[Souhu] 登录成功，用户名: ${userInfo.name}`);
 
-      // 4. 提取用户信息
-      const userInfo = await this.extractUserInfo();
-      if (!userInfo || !userInfo.username) {
-        throw new Error('无法提取用户信息');
-      }
-
-      log.info(`[Souhu] 用户信息提取成功: ${userInfo.username}`);
-
-      // 5. 捕获登录凭证
+      // 3. 捕获登录凭证
       const credentials = await this.captureCredentials();
 
-      // 6. 构建账号数据
+      // 4. 构建账号数据
       const account = {
         platform_id: this.PLATFORM_ID,
-        account_name: userInfo.username,
-        real_username: userInfo.username,
+        account_name: userInfo.name,
+        real_username: userInfo.name,
         credentials: {
           ...credentials,
           loginTime: new Date().toISOString()
         }
       };
 
-      // 7. 保存账号
-      await this.saveAccount(account);
+      // 5. 同步到后端
+      const backendAccount = await this.syncToBackend(account);
 
-      // 8. 同步到后端
-      await this.syncToBackend(account);
+      // 6. 保存到本地
+      if (backendAccount && backendAccount.id) {
+        (account as any).id = backendAccount.id;
+        await this.saveAccount(account);
+      }
 
-      // 9. 清理资源
+      // 7. 清理资源
       await this.cleanup();
 
-      log.info(`[Souhu] 登录成功完成`);
       return {
         success: true,
         account,
@@ -146,10 +126,7 @@ class SouhuLoginManager {
       await this.cleanup();
 
       if (this.isCancelled) {
-        return {
-          success: false,
-          message: '登录已取消'
-        };
+        return { success: false, message: '登录已取消' };
       }
 
       return {
@@ -190,8 +167,8 @@ class SouhuLoginManager {
 
     log.info('[Souhu] 创建 WebView');
 
-    // 使用临时 partition，确保每次登录都是全新的会话
-    this.currentPartition = `temp-login-${this.PLATFORM_ID}-${Date.now()}`;
+    // 使用临时 partition，确保每次登录都是全新环境
+    this.currentPartition = `login-${this.PLATFORM_ID}-${Date.now()}`;
     log.info(`[Souhu] 使用临时 partition: ${this.currentPartition}`);
 
     await webViewManager.createWebView(this.parentWindow, {
@@ -205,16 +182,14 @@ class SouhuLoginManager {
 
   /**
    * 等待登录成功
-   * 策略：检测用户名元素出现
+   * 严格按照 GEO 应用逻辑：检测 .user-name 元素的文本内容
    */
-  private async waitForLoginSuccess(): Promise<boolean> {
+  private async waitForLoginSuccess(): Promise<{ name: string; avatar: string | null } | null> {
     log.info('[Souhu] 等待登录成功...');
     const startTime = Date.now();
     const timeout = 300000; // 5分钟
 
     return new Promise((resolve) => {
-      this.loginResolve = resolve;
-
       this.checkInterval = setInterval(async () => {
         // 检查是否取消
         if (this.isCancelled) {
@@ -222,7 +197,7 @@ class SouhuLoginManager {
             clearInterval(this.checkInterval);
             this.checkInterval = null;
           }
-          resolve(false);
+          resolve(null);
           return;
         }
 
@@ -233,85 +208,57 @@ class SouhuLoginManager {
             this.checkInterval = null;
           }
           log.warn('[Souhu] 登录超时');
-          resolve(false);
+          resolve(null);
           return;
         }
 
-        // 检查用户名元素是否出现
         try {
-          const username = await webViewManager.executeJavaScript<string | null>(`
+          // 严格按照 GEO 应用逻辑：检测 .user-name 元素
+          const result = await webViewManager.executeJavaScript<{ name: string | null; avatar: string | null }>(`
             (() => {
-              const element = document.querySelector('${this.USERNAME_SELECTOR}');
-              return element ? element.textContent.trim() : null;
+              let name = null;
+              let avatar = null;
+              
+              // 检测用户名
+              const userNameEl = document.querySelector('.user-name');
+              if (userNameEl) {
+                name = userNameEl.textContent;
+              }
+              
+              // 获取头像
+              const avatarEl = document.querySelector('.user-pic');
+              if (avatarEl) {
+                try {
+                  avatar = avatarEl.getAttribute('src');
+                } catch(e) {}
+              }
+              
+              return { name, avatar };
             })()
           `);
 
-          if (username) {
+          if (result.name !== null && result.name !== undefined && result.name.trim() !== '') {
             if (this.checkInterval) {
               clearInterval(this.checkInterval);
               this.checkInterval = null;
             }
-            log.info(`[Souhu] 登录成功检测到用户名: ${username}`);
-            resolve(true);
+            log.info(`[Souhu] ✅ 登录成功！用户名: ${result.name}`);
+            resolve({ name: result.name.trim(), avatar: result.avatar });
             return;
           }
+
+          log.debug('[Souhu] 还未登录成功，继续等待...');
         } catch (error) {
-          log.debug('[Souhu] 检查用户名元素失败:', error);
+          log.debug('[Souhu] 检查登录状态失败:', error);
         }
       }, this.CHECK_INTERVAL);
     });
   }
 
   /**
-   * 等待页面稳定
-   */
-  private async waitForPageStable(): Promise<void> {
-    log.info('[Souhu] 等待页面稳定...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-  }
-
-  /**
-   * 提取用户信息
-   */
-  private async extractUserInfo(): Promise<SouhuUserInfo | null> {
-    log.info('[Souhu] 提取用户信息...');
-
-    try {
-      const username = await webViewManager.executeJavaScript<string | null>(`
-        (() => {
-          const element = document.querySelector('${this.USERNAME_SELECTOR}');
-          return element ? element.textContent.trim() : null;
-        })()
-      `);
-
-      const avatar = await webViewManager.executeJavaScript<string | null>(`
-        (() => {
-          const element = document.querySelector('${this.AVATAR_SELECTOR}');
-          return element ? element.src : null;
-        })()
-      `);
-
-      if (username) {
-        log.info(`[Souhu] 用户名提取成功: ${username}`);
-        return { username, avatar: avatar || undefined };
-      }
-
-      log.warn('[Souhu] 无法提取用户信息');
-      return null;
-    } catch (error) {
-      log.error('[Souhu] 提取用户信息失败:', error);
-      return null;
-    }
-  }
-
-  /**
    * 捕获登录凭证
    */
   private async captureCredentials(): Promise<{ cookies: Cookie[]; storage: StorageData }> {
-    if (!this.parentWindow) {
-      throw new Error('父窗口不存在');
-    }
-
     log.info('[Souhu] 捕获登录凭证...');
 
     // 通过 session 获取 cookies
@@ -338,9 +285,7 @@ class SouhuLoginManager {
         try {
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key) {
-              data[key] = localStorage.getItem(key);
-            }
+            if (key) data[key] = localStorage.getItem(key);
           }
         } catch (e) {}
         return data;
@@ -353,16 +298,12 @@ class SouhuLoginManager {
         try {
           for (let i = 0; i < sessionStorage.length; i++) {
             const key = sessionStorage.key(i);
-            if (key) {
-              data[key] = sessionStorage.getItem(key);
-            }
+            if (key) data[key] = sessionStorage.getItem(key);
           }
         } catch (e) {}
         return data;
       })()
     `);
-
-    log.info(`[Souhu] 捕获 Storage - localStorage: ${Object.keys(localStorage || {}).length}, sessionStorage: ${Object.keys(sessionStorage || {}).length}`);
 
     return {
       cookies,
@@ -391,7 +332,6 @@ class SouhuLoginManager {
           ...account,
           updated_at: new Date()
         };
-        log.info('[Souhu] 更新现有账号');
       } else {
         existingAccounts.push({
           id: Date.now(),
@@ -401,7 +341,6 @@ class SouhuLoginManager {
           created_at: new Date(),
           updated_at: new Date()
         });
-        log.info('[Souhu] 添加新账号');
       }
 
       await storageManager.saveAccountsCache(existingAccounts);
@@ -415,18 +354,21 @@ class SouhuLoginManager {
   /**
    * 同步到后端
    */
-  private async syncToBackend(account: any): Promise<void> {
+  private async syncToBackend(account: any): Promise<any> {
     try {
       log.info('[Souhu] 同步账号到后端...');
       const result = await syncService.syncAccount(account);
       
       if (result.success) {
         log.info('[Souhu] 账号同步成功');
+        return result.account;
       } else {
-        log.warn('[Souhu] 账号同步失败，已加入队列:', result.error);
+        log.error('[Souhu] 账号同步失败:', result.error);
+        throw new Error(result.error || '同步失败');
       }
     } catch (error) {
       log.error('[Souhu] 同步账号失败:', error);
+      throw error;
     }
   }
 
@@ -453,16 +395,12 @@ class SouhuLoginManager {
    */
   private convertSameSite(sameSite: string | undefined): 'Strict' | 'Lax' | 'None' | undefined {
     if (!sameSite) return undefined;
-    
     switch (sameSite.toLowerCase()) {
-      case 'strict':
-        return 'Strict';
-      case 'lax':
-        return 'Lax';
-      case 'none':
-        return 'no_restriction' as any;
-      default:
-        return undefined;
+      case 'strict': return 'Strict';
+      case 'lax': return 'Lax';
+      case 'none': return 'None';
+      case 'no_restriction': return 'None';
+      default: return undefined;
     }
   }
 

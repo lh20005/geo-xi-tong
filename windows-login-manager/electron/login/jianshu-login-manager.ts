@@ -136,11 +136,16 @@ class JianshuLoginManager {
         }
       };
 
-      // 9. 保存到本地
-      await this.saveAccountLocally(account);
-
-      // 10. 同步到后端
-      await this.syncAccountToBackend(account);
+      // 9. 先同步到后端（必须先同步，确保后端有数据）
+      const backendAccount = await this.syncAccountToBackend(account);
+      
+      // 10. 同步成功后，使用后端返回的账号ID保存到本地
+      if (backendAccount && backendAccount.id) {
+        (account as any).id = backendAccount.id;
+        await this.saveAccountLocally(account);
+      } else {
+        log.warn('[Jianshu] 后端同步失败，不保存到本地缓存');
+      }
 
       // 11. 清理
       await this.cleanup();
@@ -167,9 +172,12 @@ class JianshuLoginManager {
   }
 
   private async createWebView(): Promise<void> {
+    // 使用临时 partition，确保每次登录都是全新环境
+    this.currentPartition = `login-${this.PLATFORM_ID}-${Date.now()}`;
+    
     await webViewManager.createWebView(this.parentWindow!, {
       url: this.LOGIN_URL,
-      partition: `persist:${this.PLATFORM_ID}`
+      partition: this.currentPartition
     });
 
     await webViewManager.waitForLoad();
@@ -413,16 +421,19 @@ class JianshuLoginManager {
     }
   }
 
-  private async syncAccountToBackend(account: any): Promise<void> {
+  private async syncAccountToBackend(account: any): Promise<any> {
     try {
       const result = await syncService.syncAccount(account);
       if (result.success) {
         log.info('[Jianshu] 账号已同步到后端');
+        return result.account; // 返回后端创建的账号对象
       } else {
-        log.warn('[Jianshu] 账号同步失败，已加入队列:', result.error);
+        log.error('[Jianshu] 账号同步失败:', result.error);
+        throw new Error(result.error || '同步失败');
       }
     } catch (error) {
       log.error('[Jianshu] 同步账号到后端失败:', error);
+      throw error;
     }
   }
 

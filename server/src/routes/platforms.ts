@@ -19,6 +19,7 @@ router.get('/', async (req, res) => {
       platform_name: row.platform_name,
       icon_url: row.icon_url,
       login_url: row.login_url,
+      home_url: row.home_url,
       selectors: row.selectors || {
         username: [],
         loginSuccess: []
@@ -61,6 +62,7 @@ router.get('/:platformId', async (req, res) => {
       platform_name: row.platform_name,
       icon_url: row.icon_url,
       login_url: row.login_url,
+      home_url: row.home_url,
       selectors: row.selectors || {
         username: [],
         loginSuccess: []

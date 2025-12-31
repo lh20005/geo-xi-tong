@@ -68,6 +68,7 @@
     "appId": "com.yourcompany.platform-login-manager",
     "productName": "平台登录管理器",
     "asar": true,
+    "afterSign": "build/afterSign.js",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -105,6 +106,43 @@
       "runAfterFinish": true,
       "include": "build/installer.nsh",
       "warningsAsErrors": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "signIgnore": [
+        "node_modules"
+      ]
+    },
+    "dmg": {
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
     },
     "publish": {
       "provider": "generic",

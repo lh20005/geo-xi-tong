@@ -125,11 +125,34 @@ class WangyiLoginManager {
         }
       };
 
-      // 7. 保存账号
-      await this.saveAccount(account);
+      // 7. 先同步到后端（必须先同步，确保后端有数据）
 
-      // 8. 同步到后端
-      await this.syncToBackend(account);
+
+      const backendAccount = await this.syncToBackend(account);
+
+
+      
+
+
+      // 8. 同步成功后，使用后端返回的账号ID保存到本地
+
+
+      if (backendAccount && backendAccount.id) {
+
+
+        (account as any).id = backendAccount.id;
+
+
+        await this.saveAccount(account);
+
+
+      } else {
+
+
+        log.warn('[Wangyi] 后端同步失败，不保存到本地缓存');
+
+
+      }
 
       // 9. 清理资源
       await this.cleanup();
@@ -190,8 +213,8 @@ class WangyiLoginManager {
 
     log.info('[Wangyi] 创建 WebView');
 
-    // 使用临时 partition，确保每次登录都是全新的会话
-    this.currentPartition = `temp-login-${this.PLATFORM_ID}-${Date.now()}`;
+    // 使用临时 partition，确保每次登录都是全新环境
+    this.currentPartition = `login-${this.PLATFORM_ID}-${Date.now()}`;
     log.info(`[Wangyi] 使用临时 partition: ${this.currentPartition}`);
 
     await webViewManager.createWebView(this.parentWindow, {
@@ -422,18 +445,22 @@ class WangyiLoginManager {
   /**
    * 同步到后端
    */
-  private async syncToBackend(account: any): Promise<void> {
+  private async syncToBackend(account: any): Promise<any> {
     try {
       log.info('[Wangyi] 同步账号到后端...');
       const result = await syncService.syncAccount(account);
       
       if (result.success) {
         log.info('[Wangyi] 账号同步成功');
+        return result.account; // 返回后端创建的账号对象
       } else {
-        log.warn('[Wangyi] 账号同步失败，已加入队列:', result.error);
+        log.error('[Wangyi] 账号同步失败:', result.error);
+
+        throw new Error(result.error || '同步失败');
       }
     } catch (error) {
       log.error('[Wangyi] 同步账号失败:', error);
+      throw error;
     }
   }
 

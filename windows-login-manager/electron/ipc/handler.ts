@@ -472,16 +472,19 @@ class IPCHandler {
           throw new Error('Main window not available');
         }
 
-        // 获取账号信息
-        const accounts = await storageManager.getAccountsCache();
-        const account = accounts.find(a => a.id === accountId);
+        // 从后端获取账号信息（包含凭证）
+        log.info(`IPC: 从后端获取账号 ${accountId}（包含凭证）`);
+        const account = await apiClient.getAccount(accountId, true);
         
         if (!account) {
+          log.error(`IPC: 账号 ${accountId} 不存在`);
           return {
             success: false,
             message: '账号不存在'
           };
         }
+        
+        log.info(`IPC: 获取到账号: ${account.account_name}, platform: ${account.platform_id}`);
 
         // 获取平台配置
         const platforms = await apiClient.getPlatforms();
@@ -496,10 +499,69 @@ class IPCHandler {
 
         // 使用 webview 打开平台主页
         const testUrl = (platform as any).home_url || platform.login_url;
+        log.info(`IPC: 测试登录 URL: ${testUrl}`);
+        
+        // 使用持久化 partition 用于测试登录
+        const partition = `persist:${account.platform_id}`;
+        
+        // 先设置 cookies 到 session
+        if (account.credentials && account.credentials.cookies) {
+          log.info(`IPC: 设置 ${account.credentials.cookies.length} 个 cookies 到 session`);
+          const { session } = require('electron');
+          const ses = session.fromPartition(partition);
+          
+          // 清除旧的 cookies
+          const oldCookies = await ses.cookies.get({});
+          for (const cookie of oldCookies) {
+            try {
+              const url = `https://${cookie.domain}${cookie.path}`;
+              await ses.cookies.remove(url, cookie.name);
+            } catch (e) {
+              // 忽略删除错误
+            }
+          }
+          
+          // 设置新的 cookies
+          for (const cookie of account.credentials.cookies) {
+            try {
+              const domain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
+              const cookieDetails: Electron.CookiesSetDetails = {
+                url: `https://${domain}${cookie.path || '/'}`,
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path || '/',
+                secure: cookie.secure !== false,
+                httpOnly: cookie.httpOnly,
+                expirationDate: cookie.expires,
+              };
+              
+              // 处理 sameSite
+              if (cookie.sameSite) {
+                const sameSiteMap: Record<string, 'no_restriction' | 'lax' | 'strict'> = {
+                  'None': 'no_restriction',
+                  'Lax': 'lax',
+                  'Strict': 'strict',
+                  'no_restriction': 'no_restriction',
+                  'lax': 'lax',
+                  'strict': 'strict'
+                };
+                cookieDetails.sameSite = sameSiteMap[cookie.sameSite] || 'lax';
+              }
+              
+              await ses.cookies.set(cookieDetails);
+            } catch (e) {
+              log.warn(`IPC: 设置 cookie ${cookie.name} 失败:`, e);
+            }
+          }
+          log.info('IPC: Cookies 设置完成');
+        } else {
+          log.warn('IPC: 账号没有保存的 cookies');
+        }
         
         await webViewManager.createWebView(mainWindow, {
           url: testUrl,
-          partition: `persist:${account.platform_id}`,
+          partition: partition,
         });
 
         log.info(`Test login webview opened for account: ${account.account_name}`);

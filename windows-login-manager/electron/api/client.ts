@@ -361,9 +361,12 @@ class APIClient {
    * 获取单个账号
    * Requirements: 6.1, 12.1
    */
-  async getAccount(accountId: number): Promise<Account> {
+  async getAccount(accountId: number, includeCredentials: boolean = false): Promise<Account> {
     try {
-      const response = await this.axiosInstance.get<{ success: boolean; data: Account }>(`/api/publishing/accounts/${accountId}`);
+      const url = includeCredentials 
+        ? `/api/publishing/accounts/${accountId}?includeCredentials=true`
+        : `/api/publishing/accounts/${accountId}`;
+      const response = await this.axiosInstance.get<{ success: boolean; data: Account }>(url);
       return response.data.data;
     } catch (error) {
       log.error('Failed to get account:', error);

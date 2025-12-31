@@ -20,6 +20,7 @@ interface SyncQueueItem {
 interface SyncResult {
   success: boolean;
   error?: string;
+  account?: any; // 后端返回的账号对象（包含ID）
 }
 
 class SyncService {
@@ -262,11 +263,14 @@ class SyncService {
       if (!this.isOnline) {
         // 离线时添加到队列
         await this.queueSync('create', account);
-        return { success: true };
+        return { 
+          success: false,
+          error: '离线状态，已加入同步队列'
+        };
       }
 
-      // 在线时直接同步
-      await apiClient.createAccount({
+      // 在线时直接同步，获取后端返回的账号对象
+      const createdAccount = await apiClient.createAccount({
         platform_id: account.platform_id,
         account_name: account.account_name,
         real_username: account.real_username,
@@ -274,8 +278,11 @@ class SyncService {
         is_default: account.is_default,
       });
 
-      log.info(`Account synced: ${account.platform_id}`);
-      return { success: true };
+      log.info(`Account synced: ${account.platform_id}, ID: ${createdAccount.id}`);
+      return { 
+        success: true,
+        account: createdAccount // 返回后端创建的账号对象（包含ID）
+      };
     } catch (error) {
       log.error('Failed to sync account:', error);
       
