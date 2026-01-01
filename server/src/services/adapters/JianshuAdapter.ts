@@ -92,4 +92,28 @@ export class JianshuAdapter extends PlatformAdapter {
       return false;
     }
   }
+
+  /**
+   * 检查登录状态
+   * 参考 js.js 的登录检测逻辑
+   */
+  async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '开始检查简书登录状态');
+      
+      // 检查头像元素（登录成功的标志）
+      const avatarVisible = await page.locator('.avatar>img').isVisible({ timeout: 5000 }).catch(() => false);
+      
+      if (avatarVisible) {
+        await this.log('info', '✅ 简书登录状态正常');
+        return true;
+      }
+      
+      await this.log('warning', '❌ 简书登录状态异常，未找到头像元素');
+      return false;
+    } catch (error: any) {
+      await this.log('error', '检查登录状态失败', { error: error.message });
+      return false;
+    }
+  }
 }

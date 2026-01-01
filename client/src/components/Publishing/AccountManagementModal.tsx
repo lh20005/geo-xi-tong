@@ -197,13 +197,13 @@ export default function AccountManagementModal({
                       {account.is_default && <Tag color="gold">默认</Tag>}
                       <Tag color={
                         account.status === 'active' ? 'green' : 
-                        account.status === 'expired' ? 'orange' : 
+                        account.status === 'expired' ? 'red' : 
                         account.status === 'error' ? 'red' : 
                         'default'
                       }>
                         {account.status === 'active' ? '正常' : 
-                         account.status === 'expired' ? 'Cookie已过期' : 
-                         account.status === 'error' ? '登录失败' : 
+                         account.status === 'expired' ? '已掉线' : 
+                         account.status === 'error' ? '已掉线' : 
                          '未激活'}
                       </Tag>
                     </Space>

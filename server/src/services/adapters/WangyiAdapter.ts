@@ -83,8 +83,8 @@ export class WangyiAdapter extends PlatformAdapter {
         await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
-        // 检查是否已登录（查找用户信息区域）
-        const isLoggedIn = await page.locator('.topBar__user').isVisible({ timeout: 5000 }).catch(() => false);
+        // 检查是否已登录
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -99,6 +99,29 @@ export class WangyiAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '登录失败', { error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * 检查登录状态（参考 wy.js 的检测逻辑）
+   */
+  private async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '🔍 检查网易号登录状态...');
+
+      // 检查用户区域（参考 wy.js 中的 .topBar__user）
+      const hasUserArea = await page.locator('.topBar__user').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasUserArea) {
+        await this.log('info', '✅ 检测到用户区域，已登录');
+        return true;
+      }
+
+      await this.log('warning', '❌ 未检测到登录标志，可能未登录或已掉线');
+      return false;
+
+    } catch (error: any) {
+      await this.log('error', '登录状态检查失败', { error: error.message });
       return false;
     }
   }

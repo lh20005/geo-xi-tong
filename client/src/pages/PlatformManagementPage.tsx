@@ -99,13 +99,13 @@ export default function PlatformManagementPage() {
       render: (status: string) => (
         <Tag color={
           status === 'active' ? 'success' : 
-          status === 'expired' ? 'warning' : 
+          status === 'expired' ? 'error' : 
           status === 'error' ? 'error' : 
           'default'
         }>
           {status === 'active' ? '正常' : 
-           status === 'expired' ? 'Cookie已过期' : 
-           status === 'error' ? '登录失败' : 
+           status === 'expired' ? '已掉线' : 
+           status === 'error' ? '已掉线' : 
            '未激活'}
         </Tag>
       )

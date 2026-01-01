@@ -191,9 +191,14 @@ export default function AccountManagementModal({
                         </Tag>
                       )}
                       {account.is_default && <Tag color="gold">默认</Tag>}
-                      <Tag color={account.status === 'active' ? 'green' : 'default'}>
-                        {account.status === 'active' ? '正常' : '未激活'}
-                      </Tag>
+                      {/* 统一状态显示：expired 和 error 都显示为"已掉线"（红色） */}
+                      {(account.status === 'expired' || account.status === 'error') ? (
+                        <Tag color="error">已掉线</Tag>
+                      ) : (
+                        <Tag color={account.status === 'active' ? 'green' : 'default'}>
+                          {account.status === 'active' ? '正常' : '未激活'}
+                        </Tag>
+                      )}
                     </Space>
                   }
                   description={

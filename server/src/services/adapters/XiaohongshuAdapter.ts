@@ -52,8 +52,8 @@ export class XiaohongshuAdapter extends PlatformAdapter {
         await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
-        // 检查是否已登录（查找"发布笔记"按钮）
-        const isLoggedIn = await page.getByText('发布笔记').isVisible({ timeout: 5000 }).catch(() => false);
+        // 检查是否已登录
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -69,6 +69,43 @@ export class XiaohongshuAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '登录失败', { error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * 检查登录状态（参考 xhs.js 的检测逻辑）
+   */
+  private async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '🔍 检查小红书登录状态...');
+
+      // 方法1：检查用户名（参考 xhs.js 中的 .account-name）
+      const hasName = await page.locator('.account-name').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasName) {
+        await this.log('info', '✅ 检测到用户名，已登录');
+        return true;
+      }
+
+      // 方法2：检查用户头像（参考 xhs.js 中的 .avatar img）
+      const hasAvatar = await page.locator('.avatar img').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasAvatar) {
+        await this.log('info', '✅ 检测到用户头像，已登录');
+        return true;
+      }
+
+      // 方法3：检查"发布笔记"按钮
+      const hasPublishButton = await page.getByText('发布笔记').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasPublishButton) {
+        await this.log('info', '✅ 检测到发布笔记按钮，已登录');
+        return true;
+      }
+
+      await this.log('warning', '❌ 未检测到登录标志，可能未登录或已掉线');
+      return false;
+
+    } catch (error: any) {
+      await this.log('error', '登录状态检查失败', { error: error.message });
       return false;
     }
   }

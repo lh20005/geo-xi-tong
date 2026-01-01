@@ -92,4 +92,28 @@ export class QieAdapter extends PlatformAdapter {
       return false;
     }
   }
+
+  /**
+   * 检查登录状态
+   * 参考 qeh.js 的登录检测逻辑
+   */
+  async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '开始检查企鹅号登录状态');
+      
+      // 检查用户名元素（登录成功的标志）
+      const usernameVisible = await page.locator('span.usernameText-cls2j9OE').isVisible({ timeout: 5000 }).catch(() => false);
+      
+      if (usernameVisible) {
+        await this.log('info', '✅ 企鹅号登录状态正常');
+        return true;
+      }
+      
+      await this.log('warning', '❌ 企鹅号登录状态异常，未找到用户名元素');
+      return false;
+    } catch (error: any) {
+      await this.log('error', '检查登录状态失败', { error: error.message });
+      return false;
+    }
+  }
 }

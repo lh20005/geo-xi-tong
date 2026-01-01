@@ -334,11 +334,15 @@ export default function PlatformManagementPage() {
       key: 'status',
       width: 100,
       align: 'center' as const,
-      render: (status: string) => (
-        <Tag color={status === 'active' ? 'success' : 'default'}>
+      render: (status: string) => {
+        // 统一状态显示：expired 和 error 都显示为"已掉线"（红色）
+        if (status === 'expired' || status === 'error') {
+          return <Tag color="error">已掉线</Tag>;
+        }
+        return <Tag color={status === 'active' ? 'success' : 'default'}>
           {status === 'active' ? '正常' : '未激活'}
-        </Tag>
-      )
+        </Tag>;
+      }
     },
     {
       title: '创建时间',

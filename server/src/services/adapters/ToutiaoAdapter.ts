@@ -86,8 +86,8 @@ export class ToutiaoAdapter extends PlatformAdapter {
         await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
-        // 检查是否已登录（查找"文章"链接）
-        const isLoggedIn = await page.getByRole('link', { name: '文章' }).isVisible({ timeout: 5000 }).catch(() => false);
+        // 检查是否已登录
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -103,6 +103,43 @@ export class ToutiaoAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '登录失败', { error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * 检查登录状态（参考 tt.js 的检测逻辑）
+   */
+  private async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '🔍 检查头条登录状态...');
+
+      // 方法1：检查用户名（参考 tt.js 中的 .auth-avator-name）
+      const hasName = await page.locator('.auth-avator-name').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasName) {
+        await this.log('info', '✅ 检测到用户名，已登录');
+        return true;
+      }
+
+      // 方法2：检查用户头像（参考 tt.js 中的 .auth-avator-img）
+      const hasAvatar = await page.locator('.auth-avator-img').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasAvatar) {
+        await this.log('info', '✅ 检测到用户头像，已登录');
+        return true;
+      }
+
+      // 方法3：检查"文章"链接
+      const hasArticleLink = await page.getByRole('link', { name: '文章' }).isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasArticleLink) {
+        await this.log('info', '✅ 检测到文章链接，已登录');
+        return true;
+      }
+
+      await this.log('warning', '❌ 未检测到登录标志，可能未登录或已掉线');
+      return false;
+
+    } catch (error: any) {
+      await this.log('error', '登录状态检查失败', { error: error.message });
       return false;
     }
   }

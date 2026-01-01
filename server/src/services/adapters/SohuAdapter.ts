@@ -88,8 +88,8 @@ export class SohuAdapter extends PlatformAdapter {
         // 这里只需要验证是否登录成功
         await page.waitForTimeout(2000);
 
-        // 检查是否已登录（查找"发布内容"按钮）
-        const isLoggedIn = await page.getByRole('button', { name: '发布内容' }).isVisible({ timeout: 5000 }).catch(() => false);
+        // 检查是否已登录
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -105,6 +105,43 @@ export class SohuAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '登录失败', { error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * 检查登录状态（参考 sh.js 的检测逻辑）
+   */
+  private async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '🔍 检查搜狐号登录状态...');
+
+      // 方法1：检查用户名（参考 sh.js 中的 .user-name）
+      const hasName = await page.locator('.user-name').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasName) {
+        await this.log('info', '✅ 检测到用户名，已登录');
+        return true;
+      }
+
+      // 方法2：检查用户头像（参考 sh.js 中的 .user-pic）
+      const hasAvatar = await page.locator('.user-pic').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasAvatar) {
+        await this.log('info', '✅ 检测到用户头像，已登录');
+        return true;
+      }
+
+      // 方法3：检查"发布内容"按钮
+      const hasPublishButton = await page.getByRole('button', { name: '发布内容' }).isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasPublishButton) {
+        await this.log('info', '✅ 检测到发布内容按钮，已登录');
+        return true;
+      }
+
+      await this.log('warning', '❌ 未检测到登录标志，可能未登录或已掉线');
+      return false;
+
+    } catch (error: any) {
+      await this.log('error', '登录状态检查失败', { error: error.message });
       return false;
     }
   }
