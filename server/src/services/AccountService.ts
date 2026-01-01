@@ -554,7 +554,7 @@ export class AccountService {
       console.log(`[浏览器登录] 成功获取 ${cookies.length} 个Cookie`);
       
       // 平台特殊处理：某些平台需要导航到特定页面才能提取用户名
-      const platformsNeedingNavigation: { [key: string]: { url: string; waitTime: number } } = {
+      const platformsNeedingNavigation: { [key: string]: { url: string; waitTime: number; needsUserPage?: boolean } } = {
         'douyin': {
           url: 'https://creator.douyin.com/creator-micro/home',
           waitTime: 5000
@@ -568,10 +568,27 @@ export class AccountService {
           waitTime: 1000  // 精准选择器，只需等待1秒
         },
         'jianshu': {
-          url: 'https://www.jianshu.com/',
-          waitTime: 3000
+          url: 'https://www.jianshu.com/u/',  // 简书个人主页（需要动态获取）
+          waitTime: 3000,
+          needsUserPage: true  // 标记需要跳转到用户个人主页
+        },
+        'wangyi': {
+          url: 'https://mp.163.com/home/index.html',
+          waitTime: 3000  // 网易号需要导航到首页
+        },
+        'baijiahao': {
+          url: 'https://baijiahao.baidu.com/builder/rc/home',
+          waitTime: 3000  // 百家号需要导航到首页
+        },
+        'bilibili': {
+          url: 'https://member.bilibili.com/platform/home',
+          waitTime: 2000  // B站创作者中心
+        },
+        'csdn': {
+          url: 'https://www.csdn.net/',
+          waitTime: 2000  // CSDN首页
         }
-        // 注意：微信公众号和哔哩哔哩不需要导航，登录成功后已经在正确页面
+        // 注意：微信公众号不需要导航，登录成功后已经在正确页面
       };
       
       const navConfig = platformsNeedingNavigation[platform.platform_id];
@@ -581,27 +598,55 @@ export class AccountService {
         const currentUrl = page.url();
         const targetUrl = navConfig.url;
         
-        // 检查当前URL是否已经是目标页面（或其子页面）
-        const isAlreadyOnTargetPage = currentUrl.includes(new URL(targetUrl).pathname);
-        
-        if (isAlreadyOnTargetPage) {
-          console.log(`[浏览器登录] ${platform.platform_name}：已在目标页面，无需导航`);
-          console.log(`[浏览器登录] ${platform.platform_name}：当前URL: ${currentUrl}`);
-          // 等待页面渲染完成
-          await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
-        } else {
-          console.log(`[浏览器登录] ${platform.platform_name}：导航到主页以提取用户名...`);
+        // 简书特殊处理：需要点击用户头像跳转到个人主页
+        if (platform.platform_id === 'jianshu' && (navConfig as any).needsUserPage) {
+          console.log(`[浏览器登录] 简书：尝试跳转到个人主页...`);
           try {
-            await page.goto(navConfig.url, { 
-              waitUntil: 'networkidle',
-              timeout: 30000 
-            });
+            // 等待页面加载
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            // 尝试点击用户区域
+            const userElement = await page.$('.user');
+            if (userElement) {
+              await userElement.hover();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // 点击用户链接跳转到个人主页
+              const userLink = await page.$('.user li a');
+              if (userLink) {
+                await userLink.click();
+                console.log(`[浏览器登录] 简书：已点击用户链接，等待跳转...`);
+                await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 }).catch(() => {});
+                await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
+                console.log(`[浏览器登录] 简书：已跳转到个人主页，当前URL: ${page.url()}`);
+              }
+            }
+          } catch (navError: any) {
+            console.log(`[浏览器登录] 简书：跳转到个人主页失败: ${navError.message}`);
+          }
+        } else {
+          // 检查当前URL是否已经是目标页面（或其子页面）
+          const isAlreadyOnTargetPage = currentUrl.includes(new URL(targetUrl).pathname);
+          
+          if (isAlreadyOnTargetPage) {
+            console.log(`[浏览器登录] ${platform.platform_name}：已在目标页面，无需导航`);
+            console.log(`[浏览器登录] ${platform.platform_name}：当前URL: ${currentUrl}`);
             // 等待页面渲染完成
             await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
-            console.log(`[浏览器登录] ${platform.platform_name}：已导航到主页，当前URL: ${page.url()}`);
-          } catch (navError: any) {
-            console.log(`[浏览器登录] ${platform.platform_name}：导航到主页失败: ${navError.message}`);
-            // 继续尝试提取，可能当前页面已经有用户名
+          } else {
+            console.log(`[浏览器登录] ${platform.platform_name}：导航到主页以提取用户名...`);
+            try {
+              await page.goto(navConfig.url, { 
+                waitUntil: 'networkidle',
+                timeout: 30000 
+              });
+              // 等待页面渲染完成
+              await new Promise(resolve => setTimeout(resolve, navConfig.waitTime));
+              console.log(`[浏览器登录] ${platform.platform_name}：已导航到主页，当前URL: ${page.url()}`);
+            } catch (navError: any) {
+              console.log(`[浏览器登录] ${platform.platform_name}：导航到主页失败: ${navError.message}`);
+              // 继续尝试提取，可能当前页面已经有用户名
+            }
           }
         }
       } else {
@@ -900,6 +945,116 @@ export class AccountService {
         }
       },
       
+      // 网易号：检测顶部用户信息元素
+      'wangyi': async () => {
+        console.log(`[等待登录] 网易号：等待登录成功...`);
+        console.log(`[等待登录] 网易号：初始URL: ${initialUrl}`);
+        
+        try {
+          // 等待URL跳转到首页（不包含login）
+          console.log(`[等待登录] 网易号：等待URL跳转...`);
+          await page.waitForFunction(
+            `!window.location.href.includes('login') && 
+             window.location.href.includes('mp.163.com')`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] 网易号：✅ URL已跳转: ${currentUrl}`);
+          
+          // 等待顶部用户信息元素出现（参考脚本使用 .topBar__user>span）
+          console.log(`[等待登录] 网易号：等待用户信息元素加载...`);
+          try {
+            await page.waitForSelector('.topBar__user>span, .topBar__user span', { timeout: 10000 });
+            console.log(`[等待登录] 网易号：✅ 检测到用户信息元素，登录成功！`);
+          } catch (e) {
+            console.log(`[等待登录] 网易号：⚠️ 未检测到用户信息元素，但URL已变化，继续执行`);
+          }
+          
+        } catch (e) {
+          console.log(`[等待登录] 网易号：❌ 登录检测超时`);
+          throw new Error('网易号登录超时：URL未跳转');
+        }
+      },
+      
+      // 百家号：检测头像元素
+      'baijiahao': async () => {
+        console.log(`[等待登录] 百家号：等待登录成功...`);
+        console.log(`[等待登录] 百家号：初始URL: ${initialUrl}`);
+        
+        try {
+          // 等待URL跳转（不包含register/login）
+          console.log(`[等待登录] 百家号：等待URL跳转...`);
+          await page.waitForFunction(
+            `!window.location.href.includes('register') && 
+             !window.location.href.includes('login') &&
+             window.location.href.includes('baijiahao.baidu.com')`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] 百家号：✅ URL已跳转: ${currentUrl}`);
+          
+          // 等待头像元素出现（参考脚本使用 .UjPPKm89R4RrZTKhwG5H）
+          console.log(`[等待登录] 百家号：等待头像元素加载...`);
+          try {
+            await page.waitForSelector('.UjPPKm89R4RrZTKhwG5H, .user-name, [class*="avatar"]', { timeout: 10000 });
+            console.log(`[等待登录] 百家号：✅ 检测到头像元素，登录成功！`);
+            
+            // 百家号需要触发 mouseover 事件来显示用户名
+            try {
+              const element = await page.$('.p7Psc5P3uJ5lyxeI0ETR');
+              if (element) {
+                await element.hover();
+                console.log(`[等待登录] 百家号：已触发hover事件`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            } catch (hoverError) {
+              console.log(`[等待登录] 百家号：hover事件触发失败，继续执行`);
+            }
+          } catch (e) {
+            console.log(`[等待登录] 百家号：⚠️ 未检测到头像元素，但URL已变化，继续执行`);
+          }
+          
+        } catch (e) {
+          console.log(`[等待登录] 百家号：❌ 登录检测超时`);
+          throw new Error('百家号登录超时：URL未跳转');
+        }
+      },
+      
+      // CSDN：检测头像元素并通过API获取用户信息
+      'csdn': async () => {
+        console.log(`[等待登录] CSDN：等待登录成功...`);
+        console.log(`[等待登录] CSDN：初始URL: ${initialUrl}`);
+        
+        try {
+          // 等待URL跳转（不包含login/passport）
+          console.log(`[等待登录] CSDN：等待URL跳转...`);
+          await page.waitForFunction(
+            `!window.location.href.includes('passport') && 
+             !window.location.href.includes('login') &&
+             (window.location.href.includes('csdn.net') || window.location.href.includes('blog.csdn.net'))`,
+            { timeout: 300000 }
+          );
+          
+          const currentUrl = page.url();
+          console.log(`[等待登录] CSDN：✅ URL已跳转: ${currentUrl}`);
+          
+          // 等待头像元素出现（参考脚本使用 .hasAvatar）
+          console.log(`[等待登录] CSDN：等待头像元素加载...`);
+          try {
+            await page.waitForSelector('.hasAvatar, .avatar, [class*="avatar"]', { timeout: 10000 });
+            console.log(`[等待登录] CSDN：✅ 检测到头像元素，登录成功！`);
+          } catch (e) {
+            console.log(`[等待登录] CSDN：⚠️ 未检测到头像元素，但URL已变化，继续执行`);
+          }
+          
+        } catch (e) {
+          console.log(`[等待登录] CSDN：❌ 登录检测超时`);
+          throw new Error('CSDN登录超时：URL未跳转');
+        }
+      },
+      
       // 知乎：检测用户头像或名称
       'zhihu': async () => {
         console.log(`[等待登录] 知乎：等待登录成功...`);
@@ -986,20 +1141,52 @@ export class AccountService {
         }
       },
       
-      // 简书：简单检测URL变化即可
+      // 简书：检测头像元素出现，然后点击跳转到个人主页
       'jianshu': async () => {
         console.log(`[等待登录] 简书：等待登录成功...`);
         console.log(`[等待登录] 简书：初始URL: ${initialUrl}`);
         
-        // 简单检测：URL从登录页跳转到首页
-        console.log(`[等待登录] 简书：等待URL跳转到首页...`);
-        await page.waitForFunction(
-          `window.location.href === 'https://www.jianshu.com/' || 
-           (window.location.href.includes('jianshu.com') && 
-            !window.location.href.includes('sign_in') && 
-            !window.location.href.includes('sign_up'))`,
-          { timeout: 300000 }
-        );
+        // 检测头像元素出现（参考脚本使用 .avatar>img）
+        console.log(`[等待登录] 简书：等待头像元素出现...`);
+        try {
+          await page.waitForSelector('.avatar>img, nav .user img', { timeout: 300000 });
+          console.log(`[等待登录] 简书：✅ 检测到头像元素，登录成功`);
+          
+          // 等待页面稳定
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // 尝试点击用户区域跳转到个人主页（参考脚本的做法）
+          try {
+            console.log(`[等待登录] 简书：尝试点击用户区域跳转到个人主页...`);
+            const userElement = await page.$('.user');
+            if (userElement) {
+              // 触发 mouseover 事件
+              await userElement.hover();
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              // 点击用户链接
+              const userLink = await page.$('.user li a');
+              if (userLink) {
+                await userLink.click();
+                console.log(`[等待登录] 简书：已点击用户链接，等待跳转...`);
+                await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 }).catch(() => {});
+              }
+            }
+          } catch (navError: any) {
+            console.log(`[等待登录] 简书：跳转到个人主页失败: ${navError.message}，继续执行`);
+          }
+          
+        } catch (e) {
+          // 回退到URL检测
+          console.log(`[等待登录] 简书：头像检测超时，尝试URL检测...`);
+          await page.waitForFunction(
+            `window.location.href === 'https://www.jianshu.com/' || 
+             (window.location.href.includes('jianshu.com') && 
+              !window.location.href.includes('sign_in') && 
+              !window.location.href.includes('sign_up'))`,
+            { timeout: 60000 }
+          );
+        }
         
         const currentUrl = page.url();
         console.log(`[等待登录] 简书：✅ URL已跳转到: ${currentUrl}`);
@@ -1037,6 +1224,7 @@ export class AccountService {
   
   /**
    * 提取用户信息
+   * 优先使用 API 调用获取用户信息，失败时回退到 DOM 选择器
    */
   private async extractUserInfo(page: any, platformId: string): Promise<any> {
     try {
@@ -1044,11 +1232,23 @@ export class AccountService {
       console.log(`[提取用户信息] 开始提取 ${platformId} 平台的用户名`);
       console.log(`[提取用户信息] 当前页面URL: ${page.url()}`);
       
+      // 优先尝试通过 API 获取用户信息
+      const apiResult = await this.extractUserInfoViaAPI(page, platformId);
+      if (apiResult && apiResult.username) {
+        console.log(`[提取用户信息] ✅ 通过API成功获取用户名: "${apiResult.username}"`);
+        console.log(`========================================\n`);
+        return apiResult;
+      }
+      
+      console.log(`[提取用户信息] API方式未获取到用户名，尝试DOM选择器方式...`);
+      
       // 定义选择器映射（支持多个选择器尝试）
       const selectors: { [key: string]: string[] } = {
         // 自媒体平台 - 已优化和测试
         'wangyi': [
-          // 网易号创作者中心
+          // 网易号创作者中心 - 根据参考脚本优化
+          '.topBar__user>span:nth-child(3)',  // 优先级1：顶部用户名（参考脚本）
+          '.topBar__user span:nth-child(3)',  // 优先级2：备选写法
           '.user-info .name',
           '.user-name',
           '.username',
@@ -1057,29 +1257,32 @@ export class AccountService {
           '[class*="username"]'
         ],
         'souhu': [
-          // 搜狐号创作者中心 - 优先级从高到低
-          '.user-info .name',           // 优先级1：用户信息区域的名称
-          '.header-user-name',          // 优先级2：头部用户名
-          '.user-name',                 // 优先级3：通用用户名
-          '.username',                  // 优先级4：用户名
-          '.account-name',              // 优先级5：账号名
-          '.author-name',               // 优先级6：作者名
-          '[class*="user-name"]',       // 优先级7：包含user-name的class
-          '[class*="username"]',        // 优先级8：包含username的class
-          '[class*="account"]'          // 优先级9：包含account的class
+          // 搜狐号创作者中心 - 根据参考脚本优化
+          '.user-name',                       // 优先级1：用户名（参考脚本）
+          '.user-pic',                        // 优先级2：用户头像（用于检测登录）
+          '.user-info .name',
+          '.header-user-name',
+          '.username',
+          '.account-name',
+          '.author-name',
+          '[class*="user-name"]',
+          '[class*="username"]',
+          '[class*="account"]'
         ],
         'baijiahao': [
-          // 百家号创作者中心
+          // 百家号创作者中心 - 根据参考脚本优化
+          '.user-name',                       // 优先级1：用户名元素（参考脚本）
+          '.p7Psc5P3uJ5lyxeI0ETR',           // 优先级2：头像元素class（用于检测登录）
           '.author-name',
-          '.user-name',
           '.username',
           '.account-name',
           '[class*="author-name"]',
           '[class*="user-name"]'
         ],
         'toutiao': [
-          // 头条号创作者中心（已测试成功）
-          '.auth-avator-name',
+          // 头条号创作者中心 - 根据参考脚本优化
+          '.auth-avator-name',                // 优先级1：用户名（参考脚本）
+          '.auth-avator-img',                 // 优先级2：头像（用于检测登录）
           '.semi-navigation-header-username',
           '.user-name',
           '.username', 
@@ -1112,12 +1315,18 @@ export class AccountService {
           '[class*="user-name"]'              // 优先级10：包含user-name的class
         ],
         'xiaohongshu': [
-          // 小红书创作者中心 - 精准选择器
-          '#header-area > div > div > div:nth-child(2) > div > span'
+          // 小红书创作者中心 - 根据参考脚本优化
+          '.account-name',                    // 优先级1：账号名称（参考脚本）
+          '#header-area > div > div > div:nth-child(2) > div > span',  // 优先级2：精准选择器
+          '.avatar img',                      // 优先级3：头像图片
+          '.user-name',
+          '.username'
         ],
         'douyin': [
-          // 抖音创作者中心（已测试成功）
-          '.name-_lSSDc',
+          // 抖音创作者中心 - 根据参考脚本优化
+          '.name-_lSSDc',                     // 优先级1：用户名（参考脚本）
+          '.img-PeynF_',                      // 优先级2：头像（用于检测登录）
+          '.unique_id-EuH8eA',                // 优先级3：抖音号
           '.header-_F2uzl .name-_lSSDc',
           '.left-zEzdJX .name-_lSSDc',
           '[class*="name-"][class*="_"]',
@@ -1128,20 +1337,22 @@ export class AccountService {
           '[class*="user-name"]'
         ],
         'bilibili': [
-          // B站创作者中心 - 使用头部登录区域的元素
-          '.cc-header .right-block img',  // 优先级1：头部登录图标（最可靠）
-          '.bili-avatar',                 // 优先级2：B站头像
-          '.user-name',                   // 优先级3：用户名
-          '.username',                    // 优先级4：用户名
-          '.uname',                       // 优先级5：UP主名称
-          '.up-name',                     // 优先级6：UP主名称
-          '[class*="user-name"]',         // 优先级7：包含user-name的class
-          '[class*="username"]'           // 优先级8：包含username的class
+          // B站创作者中心 - 通过API获取更可靠
+          'span.right-entry-text',            // 优先级1：右侧入口文字（参考脚本）
+          '.cc-header .right-block img',      // 优先级2：头部登录图标
+          '.bili-avatar',                     // 优先级3：B站头像
+          '.user-name',                       // 优先级4：用户名
+          '.username',                        // 优先级5：用户名
+          '.uname',                           // 优先级6：UP主名称
+          '.up-name',                         // 优先级7：UP主名称
+          '[class*="user-name"]',             // 优先级8：包含user-name的class
+          '[class*="username"]'               // 优先级9：包含username的class
         ],
         
         // 技术社区平台 - 已优化
         'zhihu': [
-          // 知乎
+          // 知乎 - 根据参考脚本优化，优先使用API
+          'img.AppHeader-profileAvatar',      // 优先级1：头像（用于检测登录，参考脚本）
           '.AppHeader-profile',
           '.Profile-name',
           '.username',
@@ -1150,20 +1361,23 @@ export class AccountService {
           '[class*="username"]'
         ],
         'jianshu': [
-          // 简书 - 使用导航栏登录区域的元素
-          'nav .user img',                     // 优先级1：导航栏用户头像图标（最可靠）
-          'body > nav > div > div.user > div > a > img', // 优先级2：完整路径
-          'nav .user div',                     // 优先级3：用户区域
-          '.avatar',                           // 优先级4：头像
-          '.user-name',                        // 优先级5：用户名
-          '.username',                         // 优先级6：用户名
-          '.nickname',                         // 优先级7：昵称
-          '.author-name',                      // 优先级8：作者名
-          '[class*="user-name"]',              // 优先级9：包含user-name的class
-          '[class*="nickname"]'                // 优先级10：包含nickname的class
+          // 简书 - 根据参考脚本优化
+          '.main-top .name',                   // 优先级1：个人主页名称（参考脚本）
+          '.avatar>img',                       // 优先级2：头像图片（用于检测登录）
+          'nav .user img',                     // 优先级3：导航栏用户头像图标
+          'body > nav > div > div.user > div > a > img', // 优先级4：完整路径
+          'nav .user div',                     // 优先级5：用户区域
+          '.avatar',                           // 优先级6：头像
+          '.user-name',                        // 优先级7：用户名
+          '.username',                         // 优先级8：用户名
+          '.nickname',                         // 优先级9：昵称
+          '.author-name',                      // 优先级10：作者名
+          '[class*="user-name"]',              // 优先级11：包含user-name的class
+          '[class*="nickname"]'                // 优先级12：包含nickname的class
         ],
         'csdn': [
-          // CSDN
+          // CSDN - 根据参考脚本优化，通过API获取
+          '.hasAvatar',                        // 优先级1：有头像的元素（用于检测登录）
           '.user-name',
           '.username',
           '.nick-name',
@@ -1289,6 +1503,88 @@ export class AccountService {
       console.error('[提取用户信息] 失败:', error);
       console.log(`========================================\n`);
       return { username: '' };
+    }
+  }
+  
+  /**
+   * 通过 API 调用获取用户信息
+   * 参考 Electron 版本的实现，使用平台 API 获取更准确的用户信息
+   */
+  private async extractUserInfoViaAPI(page: any, platformId: string): Promise<any> {
+    try {
+      console.log(`[API提取] 尝试通过API获取 ${platformId} 平台的用户信息...`);
+      
+      // 定义各平台的 API 配置
+      const apiConfigs: { [key: string]: { url: string; extractUsername: (data: any) => string; extractAvatar?: (data: any) => string } } = {
+        // B站 - 使用 web-interface/nav API
+        'bilibili': {
+          url: 'https://api.bilibili.com/x/web-interface/nav',
+          extractUsername: (data) => data?.data?.uname || '',
+          extractAvatar: (data) => data?.data?.face || ''
+        },
+        // CSDN - 使用 toolbar-api 获取用户信息
+        'csdn': {
+          url: 'https://g-api.csdn.net/community/toolbar-api/v1/get-user-info',
+          extractUsername: (data) => data?.data?.nickName || '',
+          extractAvatar: (data) => data?.avatar || ''
+        },
+        // 知乎 - 使用 me API 获取用户信息
+        'zhihu': {
+          url: 'https://www.zhihu.com/api/v4/me?include=is_realname',
+          extractUsername: (data) => data?.name || '',
+          extractAvatar: (data) => data?.avatar_url || ''
+        }
+      };
+      
+      const apiConfig = apiConfigs[platformId];
+      
+      if (!apiConfig) {
+        console.log(`[API提取] ${platformId} 平台未配置API，跳过`);
+        return null;
+      }
+      
+      console.log(`[API提取] 调用API: ${apiConfig.url}`);
+      
+      // 在页面上下文中执行 fetch 请求
+      const result = await page.evaluate(async (config: { url: string }) => {
+        try {
+          const response = await fetch(config.url, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              'Content-Type': 'application/json',
+              'User-Agent': navigator.userAgent
+            }
+          });
+          
+          if (response.ok) {
+            return await response.json();
+          }
+          return null;
+        } catch (error) {
+          console.error('API请求失败:', error);
+          return null;
+        }
+      }, { url: apiConfig.url });
+      
+      if (result) {
+        console.log(`[API提取] API返回数据:`, JSON.stringify(result).substring(0, 200));
+        
+        const username = apiConfig.extractUsername(result);
+        const avatar = apiConfig.extractAvatar ? apiConfig.extractAvatar(result) : '';
+        
+        if (username) {
+          console.log(`[API提取] ✅ 成功提取用户名: "${username}"`);
+          return { username, avatar };
+        }
+      }
+      
+      console.log(`[API提取] ❌ API未返回有效数据`);
+      return null;
+      
+    } catch (error: any) {
+      console.log(`[API提取] ❌ API调用失败: ${error.message}`);
+      return null;
     }
   }
   
