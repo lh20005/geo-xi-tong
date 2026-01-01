@@ -3,6 +3,14 @@ import { XiaohongshuAdapter } from './XiaohongshuAdapter';
 import { DouyinAdapter } from './DouyinAdapter';
 import { ToutiaoAdapter } from './ToutiaoAdapter';
 import { SohuAdapter } from './SohuAdapter';
+import { WangyiAdapter } from './WangyiAdapter';
+import { BaijiahaoAdapter } from './BaijiahaoAdapter';
+import { ZhihuAdapter } from './ZhihuAdapter';
+import { CSDNAdapter } from './CSDNAdapter';
+import { JianshuAdapter } from './JianshuAdapter';
+import { WechatAdapter } from './WechatAdapter';
+import { QieAdapter } from './QieAdapter';
+import { BilibiliAdapter } from './BilibiliAdapter';
 
 /**
  * 平台适配器注册表 (Playwright)
@@ -33,20 +41,24 @@ export class AdapterRegistry {
    * this.register(new ToutiaoAdapter());
    */
   private registerDefaultAdapters(): void {
-    // 注册小红书适配器
+    // 注册工作良好的适配器
     this.register(new XiaohongshuAdapter());
-    
-    // 注册抖音适配器
     this.register(new DouyinAdapter());
-    
-    // 注册头条适配器
     this.register(new ToutiaoAdapter());
-    
-    // 注册搜狐号适配器
     this.register(new SohuAdapter());
     
-    console.log('✅ 已注册 4 个平台适配器');
-    console.log('💡 可以参考 XiaohongshuAdapter.ts 或 DouyinAdapter.ts 创建更多适配器');
+    // 注册新创建的适配器
+    this.register(new WangyiAdapter());
+    this.register(new BaijiahaoAdapter());
+    this.register(new ZhihuAdapter());
+    this.register(new CSDNAdapter());
+    this.register(new JianshuAdapter());
+    this.register(new WechatAdapter());
+    this.register(new QieAdapter());
+    this.register(new BilibiliAdapter());
+    
+    console.log('✅ 已注册 12 个平台适配器');
+    console.log('💡 参考登录器代码已应用到所有平台');
   }
 
   /**
