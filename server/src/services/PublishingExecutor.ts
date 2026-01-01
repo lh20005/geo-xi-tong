@@ -216,8 +216,24 @@ export class PublishingExecutor {
         // 等待页面加载完成
         await new Promise(resolve => setTimeout(resolve, 2000));
         
-        loginSuccess = true;
-        await publishingService.logMessage(taskId, 'info', `✅ ${adapter.platformName} Cookie登录成功`);
+        // 🔍 关键改进：验证Cookie是否有效（检测是否掉线）
+        await publishingService.logMessage(taskId, 'info', '🔍 验证登录状态...');
+        loginSuccess = await browserAutomationService.executeWithRetry(
+          () => adapter.performLogin(page!, account.credentials),
+          1, // 只尝试1次，因为Cookie要么有效要么无效
+          taskId
+        );
+        
+        if (loginSuccess) {
+          await publishingService.logMessage(taskId, 'info', `✅ ${adapter.platformName} Cookie有效，已登录`);
+          // 标记账号为在线状态
+          await accountService.markAccountOnline(account.id);
+        } else {
+          await publishingService.logMessage(taskId, 'error', `❌ ${adapter.platformName} Cookie已失效或平台已掉线`);
+          // 🔥 关键修复：标记账号为掉线状态
+          await accountService.markAccountOffline(account.id, 'Cookie已失效或平台已掉线');
+          throw new Error(`${adapter.platformName} Cookie已失效，请重新登录`);
+        }
       } else {
         // 没有Cookie，使用表单登录
         await publishingService.logMessage(taskId, 'info', '📝 使用表单登录');

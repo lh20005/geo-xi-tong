@@ -389,6 +389,74 @@ export class AccountService {
       [accountId]
     );
   }
+
+  /**
+   * 更新账号状态
+   * @param accountId 账号ID
+   * @param status 状态：'active' | 'inactive' | 'expired' | 'error'
+   * @param userId 用户ID（用于验证所有权）
+   */
+  async updateAccountStatus(accountId: number, status: 'active' | 'inactive' | 'expired' | 'error', userId?: number): Promise<void> {
+    console.log(`[AccountService] 更新账号状态: ID=${accountId}, status=${status}`);
+    
+    if (userId) {
+      // 验证所有权
+      const result = await pool.query(
+        'UPDATE platform_accounts SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND user_id = $3',
+        [status, accountId, userId]
+      );
+      
+      if (result.rowCount === 0) {
+        throw new Error('账号不存在或无权访问');
+      }
+    } else {
+      // 不验证所有权（系统内部调用）
+      await pool.query(
+        'UPDATE platform_accounts SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [status, accountId]
+      );
+    }
+    
+    console.log(`[AccountService] 账号状态已更新: ID=${accountId}, status=${status}`);
+  }
+
+  /**
+   * 标记账号为掉线状态（使用 'expired' 状态）
+   * @param accountId 账号ID
+   * @param reason 掉线原因
+   */
+  async markAccountOffline(accountId: number, reason: string = 'Cookie已失效'): Promise<void> {
+    console.log(`[AccountService] 标记账号为掉线: ID=${accountId}, reason=${reason}`);
+    
+    await pool.query(
+      `UPDATE platform_accounts 
+       SET status = 'expired', 
+           updated_at = CURRENT_TIMESTAMP 
+       WHERE id = $1`,
+      [accountId]
+    );
+    
+    console.log(`[AccountService] 账号已标记为掉线（expired）: ID=${accountId}`);
+  }
+
+  /**
+   * 标记账号为在线状态（登录成功后调用）
+   * @param accountId 账号ID
+   */
+  async markAccountOnline(accountId: number): Promise<void> {
+    console.log(`[AccountService] 标记账号为在线: ID=${accountId}`);
+    
+    await pool.query(
+      `UPDATE platform_accounts 
+       SET status = 'active', 
+           updated_at = CURRENT_TIMESTAMP,
+           last_used_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [accountId]
+    );
+    
+    console.log(`[AccountService] 账号已标记为在线（active）: ID=${accountId}`);
+  }
   
   /**
    * 验证凭证格式

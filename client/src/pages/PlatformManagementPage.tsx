@@ -97,8 +97,16 @@ export default function PlatformManagementPage() {
       width: 100,
       align: 'center' as const,
       render: (status: string) => (
-        <Tag color={status === 'active' ? 'success' : 'default'}>
-          {status === 'active' ? '正常' : '未激活'}
+        <Tag color={
+          status === 'active' ? 'success' : 
+          status === 'expired' ? 'warning' : 
+          status === 'error' ? 'error' : 
+          'default'
+        }>
+          {status === 'active' ? '正常' : 
+           status === 'expired' ? 'Cookie已过期' : 
+           status === 'error' ? '登录失败' : 
+           '未激活'}
         </Tag>
       )
     },

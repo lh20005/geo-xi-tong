@@ -93,8 +93,8 @@ export class DouyinAdapter extends PlatformAdapter {
         await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
-        // 检查是否已登录（查找"高清发布"按钮）
-        const isLoggedIn = await page.getByRole('button', { name: '高清发布' }).isVisible({ timeout: 5000 }).catch(() => false);
+        // 检查是否已登录（使用多种方式验证）
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -110,6 +110,51 @@ export class DouyinAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '登录失败', { error: error.message });
+      return false;
+    }
+  }
+
+  /**
+   * 检查登录状态（参考 dy.js 的检测逻辑）
+   * 检查多个关键元素来确认是否已登录
+   */
+  private async checkLoginStatus(page: Page): Promise<boolean> {
+    try {
+      await this.log('info', '🔍 检查抖音登录状态...');
+
+      // 方法1：检查用户头像（参考 dy.js 中的 .img-PeynF_）
+      const hasAvatar = await page.locator('.img-PeynF_').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasAvatar) {
+        await this.log('info', '✅ 检测到用户头像，已登录');
+        return true;
+      }
+
+      // 方法2：检查用户名（参考 dy.js 中的 .name-_lSSDc）
+      const hasName = await page.locator('.name-_lSSDc').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasName) {
+        await this.log('info', '✅ 检测到用户名，已登录');
+        return true;
+      }
+
+      // 方法3：检查"高清发布"按钮
+      const hasPublishButton = await page.getByRole('button', { name: '高清发布' }).isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasPublishButton) {
+        await this.log('info', '✅ 检测到发布按钮，已登录');
+        return true;
+      }
+
+      // 方法4：检查账号ID（参考 dy.js 中的 .unique_id-EuH8eA）
+      const hasAccount = await page.locator('.unique_id-EuH8eA').isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasAccount) {
+        await this.log('info', '✅ 检测到账号ID，已登录');
+        return true;
+      }
+
+      await this.log('warning', '❌ 未检测到登录标志，可能未登录或已掉线');
+      return false;
+
+    } catch (error: any) {
+      await this.log('error', '登录状态检查失败', { error: error.message });
       return false;
     }
   }
