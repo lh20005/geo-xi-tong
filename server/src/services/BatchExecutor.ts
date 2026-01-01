@@ -226,15 +226,36 @@ export class BatchExecutor {
 
         // 如果不是最后一个任务，等待间隔时间
         if (i < tasks.length - 1) {
-          const intervalMinutes = task.interval_minutes || 0;
+          const nextTask = tasks[i + 1];
           
           console.log(`\n⏸️  [批次 ${batchId}] 任务 ${i + 1} 完成，准备等待间隔...`);
           
-          if (intervalMinutes > 0) {
-            await this.waitWithStopCheck(batchId, intervalMinutes);
-            console.log(`✅ [批次 ${batchId}] 间隔等待完成，准备执行下一个任务\n`);
+          // 优先使用下一个任务的定时时间（scheduled_at）
+          if (nextTask.scheduled_at) {
+            const now = Date.now();
+            const scheduledTime = new Date(nextTask.scheduled_at).getTime();
+            const waitMs = scheduledTime - now;
+            
+            if (waitMs > 0) {
+              const waitMinutes = Math.ceil(waitMs / 60000);
+              console.log(`⏰ 下一个任务定时发布时间: ${new Date(nextTask.scheduled_at).toLocaleString('zh-CN')}`);
+              console.log(`⏳ 需要等待 ${waitMinutes} 分钟（从任务完成时间计算）`);
+              await this.waitWithStopCheck(batchId, waitMinutes);
+              console.log(`✅ [批次 ${batchId}] 间隔等待完成，准备执行下一个任务\n`);
+            } else {
+              console.log(`⏭️  下一个任务的定时时间已到，立即执行\n`);
+            }
           } else {
-            console.log(`⏭️  [批次 ${batchId}] 无需等待，立即执行下一个任务\n`);
+            // 如果没有定时时间，使用 interval_minutes
+            const intervalMinutes = task.interval_minutes || 0;
+            
+            if (intervalMinutes > 0) {
+              console.log(`⏳ 使用固定间隔: ${intervalMinutes} 分钟（从任务完成时间计算）`);
+              await this.waitWithStopCheck(batchId, intervalMinutes);
+              console.log(`✅ [批次 ${batchId}] 间隔等待完成，准备执行下一个任务\n`);
+            } else {
+              console.log(`⏭️  [批次 ${batchId}] 无需等待，立即执行下一个任务\n`);
+            }
           }
         }
       }

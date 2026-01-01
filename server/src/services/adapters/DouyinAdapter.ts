@@ -48,27 +48,34 @@ export class DouyinAdapter extends PlatformAdapter {
   }
 
   /**
-   * 人性化点击（点击前后都有随机等待）
+   * 标准操作间隔（3-5秒）
+   */
+  private async standardWait(): Promise<void> {
+    await this.randomWait(3000, 5000); // 3-5秒
+  }
+
+  /**
+   * 人性化点击（点击前后都有3-5秒等待）
    */
   private async humanClick(locator: any, description: string = ''): Promise<void> {
-    await this.randomWait(300, 800); // 点击前等待 0.3-0.8 秒
+    await this.standardWait(); // 点击前等待 3-5秒
     await locator.click();
     if (description) {
       await this.log('info', `已点击: ${description}`);
     }
-    await this.randomWait(500, 1200); // 点击后等待 0.5-1.2 秒
+    await this.standardWait(); // 点击后等待 3-5秒
   }
 
   /**
-   * 人性化输入（输入前后都有随机等待）
+   * 人性化输入（输入前后都有3-5秒等待）
    */
   private async humanType(locator: any, text: string, description: string = ''): Promise<void> {
-    await this.randomWait(500, 1000); // 输入前思考 0.5-1 秒
+    await this.standardWait(); // 输入前等待 3-5秒
     await locator.fill(text);
     if (description) {
       await this.log('info', `已输入: ${description}`);
     }
-    await this.randomWait(800, 1500); // 输入后停顿 0.8-1.5 秒
+    await this.standardWait(); // 输入后等待 3-5秒
   }
 
   /**
@@ -118,7 +125,7 @@ export class DouyinAdapter extends PlatformAdapter {
       // 第一步：导航到发布页面
       await this.log('info', '第一步：导航到发布页面');
       await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
-      await this.randomWait(2500, 3500); // 等待页面加载 2.5-3.5秒
+      await this.standardWait(); // 等待页面加载 3-5秒
 
       // 第二步：点击"高清发布"
       await this.log('info', '第二步：点击高清发布');
@@ -131,21 +138,24 @@ export class DouyinAdapter extends PlatformAdapter {
       // 第四步：准备图片上传（在点击"上传图文"之前先设置好文件）
       await this.log('info', '第四步：准备图片上传');
       const imagePath = await this.prepareImage(article);
-      await this.randomWait(1500, 2500); // 模拟人类思考 1.5-2.5秒
+      await this.standardWait(); // 等待 3-5秒
       
       // 监听文件选择器，自动设置文件（不显示对话框）
       const fileChooserPromise = page.waitForEvent('filechooser');
       
       // 第五步：点击"上传图文"按钮（会触发文件选择器）
       await this.log('info', '第五步：点击上传图文');
-      await this.randomWait(300, 800); // 点击前等待
+      await this.standardWait(); // 点击前等待 3-5秒
       await page.getByRole('button', { name: '上传图文' }).click();
+      await this.log('info', '已点击上传图文按钮');
       
       // 拦截文件选择器并自动设置文件
       const fileChooser = await fileChooserPromise;
       await fileChooser.setFiles(imagePath);
       await this.log('info', '已自动设置图片文件');
-      await this.randomWait(4000, 6000); // 等待图片上传完成 4-6秒
+      await this.standardWait(); // 等待 3-5秒
+      await this.log('info', '等待图片上传完成...');
+      await this.randomWait(3000, 5000); // 额外等待图片上传 3-5秒
 
       // 第六步：填写标题
       await this.log('info', '第六步：填写标题');
@@ -171,15 +181,16 @@ export class DouyinAdapter extends PlatformAdapter {
       await this.log('info', `使用关键词: ${keywords}`);
       
       // 在话题输入框中输入关键词
-      await this.randomWait(800, 1500); // 思考时间
+      await this.standardWait(); // 输入前等待 3-5秒
       await page.keyboard.type(keywords, { delay: 150 }); // 模拟人类输入
-      await this.randomWait(2500, 3500); // 等待话题列表加载 2.5-3.5秒
+      await this.log('info', '已输入关键词');
+      await this.standardWait(); // 等待话题列表加载 3-5秒
 
       // 第十步：选择话题（点击第一个匹配的话题）
       await this.log('info', '第十步：选择话题');
       try {
         // 等待话题列表出现
-        await this.randomWait(3000, 5000); // 3-5秒
+        await this.standardWait(); // 3-5秒
         
         // 尝试多种方式点击话题
         let topicClicked = false;
@@ -190,10 +201,10 @@ export class DouyinAdapter extends PlatformAdapter {
           const topic1 = page.getByText('装修公司怎么选');
           const isVisible1 = await topic1.isVisible({ timeout: 2000 }).catch(() => false);
           if (isVisible1) {
-            await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+            await this.standardWait(); // 点击前等待 3-5秒
             await topic1.click();
             await this.log('info', '已点击: 话题：装修公司怎么选');
-            await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+            await this.standardWait(); // 点击后等待 3-5秒
             topicClicked = true;
             await this.log('info', '✅ 方式1成功');
           }
@@ -208,10 +219,10 @@ export class DouyinAdapter extends PlatformAdapter {
             const topic2 = page.locator('text=装修公司怎么选').first();
             const isVisible2 = await topic2.isVisible({ timeout: 2000 }).catch(() => false);
             if (isVisible2) {
-              await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+              await this.standardWait(); // 点击前等待 3-5秒
               await topic2.click();
               await this.log('info', '已点击: 话题：装修公司怎么选');
-              await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+              await this.standardWait(); // 点击后等待 3-5秒
               topicClicked = true;
               await this.log('info', '✅ 方式2成功');
             }
@@ -227,10 +238,10 @@ export class DouyinAdapter extends PlatformAdapter {
             const topic3 = page.locator(':has-text("装修公司怎么选")').first();
             const isVisible3 = await topic3.isVisible({ timeout: 2000 }).catch(() => false);
             if (isVisible3) {
-              await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+              await this.standardWait(); // 点击前等待 3-5秒
               await topic3.click();
               await this.log('info', '已点击: 话题：装修公司怎么选');
-              await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+              await this.standardWait(); // 点击后等待 3-5秒
               topicClicked = true;
               await this.log('info', '✅ 方式3成功');
             }
@@ -246,10 +257,10 @@ export class DouyinAdapter extends PlatformAdapter {
             const topic4 = page.locator('xpath=//*[contains(text(), "装修公司怎么选")]').first();
             const isVisible4 = await topic4.isVisible({ timeout: 2000 }).catch(() => false);
             if (isVisible4) {
-              await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+              await this.standardWait(); // 点击前等待 3-5秒
               await topic4.click();
               await this.log('info', '已点击: 话题：装修公司怎么选');
-              await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+              await this.standardWait(); // 点击后等待 3-5秒
               topicClicked = true;
               await this.log('info', '✅ 方式4成功');
             }
@@ -261,45 +272,47 @@ export class DouyinAdapter extends PlatformAdapter {
         if (!topicClicked) {
           await this.log('warning', '所有方式都失败，跳过话题选择');
           // 按 ESC 键关闭话题选择框
-          await this.randomWait(3000, 5000); // 3-5秒
+          await this.standardWait(); // 3-5秒
           await page.keyboard.press('Escape');
-          await this.randomWait(3000, 5000); // 3-5秒
+          await this.log('info', '已按ESC键关闭话题选择框');
+          await this.standardWait(); // 3-5秒
         }
       } catch (error: any) {
         await this.log('warning', '话题选择失败，继续发布流程', { error: error.message });
         // 按 ESC 键关闭话题选择框
-        await this.randomWait(3000, 5000); // 3-5秒
+        await this.standardWait(); // 3-5秒
         await page.keyboard.press('Escape');
-        await this.randomWait(3000, 5000); // 3-5秒
+        await this.log('info', '已按ESC键关闭话题选择框');
+        await this.standardWait(); // 3-5秒
       }
 
       // 第十一步：点击"添加声明"
       await this.log('info', '第十一步：点击添加声明');
-      await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+      await this.standardWait(); // 点击前等待 3-5秒
       await page.getByText('添加声明').click();
       await this.log('info', '已点击: 添加声明按钮');
-      await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+      await this.standardWait(); // 点击后等待 3-5秒
 
       // 第十二步：选择"内容由AI生成"
       await this.log('info', '第十二步：选择内容由AI生成');
-      await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+      await this.standardWait(); // 点击前等待 3-5秒
       await page.locator('label').filter({ hasText: '内容由AI生成' }).click();
       await this.log('info', '已点击: AI生成选项');
-      await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+      await this.standardWait(); // 点击后等待 3-5秒
 
       // 第十三步：点击确定按钮
       await this.log('info', '第十三步：点击确定按钮');
-      await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+      await this.standardWait(); // 点击前等待 3-5秒
       await page.getByRole('button', { name: '确定' }).click();
       await this.log('info', '已点击: 确定按钮');
-      await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+      await this.standardWait(); // 点击后等待 3-5秒
 
       // 第十四步：点击发布按钮
       await this.log('info', '第十四步：点击发布按钮');
-      await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+      await this.standardWait(); // 点击前等待 3-5秒
       await page.getByRole('button', { name: '发布', exact: true }).click();
       await this.log('info', '已点击: 发布按钮');
-      await this.randomWait(3000, 5000); // 点击后等待 3-5秒
+      await this.standardWait(); // 点击后等待 3-5秒
 
       // 验证发布结果（主动检测，不固定等待）
       const success = await this.verifyPublishSuccess(page);
