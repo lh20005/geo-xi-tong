@@ -2,6 +2,7 @@ import { PlatformAdapter } from './PlatformAdapter';
 import { XiaohongshuAdapter } from './XiaohongshuAdapter';
 import { DouyinAdapter } from './DouyinAdapter';
 import { ToutiaoAdapter } from './ToutiaoAdapter';
+import { SohuAdapter } from './SohuAdapter';
 
 /**
  * 平台适配器注册表 (Playwright)
@@ -41,7 +42,10 @@ export class AdapterRegistry {
     // 注册头条适配器
     this.register(new ToutiaoAdapter());
     
-    console.log('✅ 已注册 3 个平台适配器');
+    // 注册搜狐号适配器
+    this.register(new SohuAdapter());
+    
+    console.log('✅ 已注册 4 个平台适配器');
     console.log('💡 可以参考 XiaohongshuAdapter.ts 或 DouyinAdapter.ts 创建更多适配器');
   }
 
