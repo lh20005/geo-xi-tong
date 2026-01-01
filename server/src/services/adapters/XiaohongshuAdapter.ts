@@ -162,16 +162,6 @@ export class XiaohongshuAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '发布失败', { error: error.message });
-      
-      // 截图保存错误状态
-      try {
-        const screenshotPath = `error-xiaohongshu-${Date.now()}.png`;
-        await page.screenshot({ path: screenshotPath, fullPage: true });
-        await this.log('info', '已保存错误截图', { path: screenshotPath });
-      } catch (e) {
-        // 忽略截图错误
-      }
-      
       return false;
     }
   }
