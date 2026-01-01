@@ -61,7 +61,8 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
       icon: <ThunderboltOutlined />,
       color: '#1890ff',
       bgColor: '#e6f7ff',
-      borderColor: '#91d5ff'
+      borderColor: '#91d5ff',
+      suffix: undefined as string | undefined
     },
     {
       key: 'articles',
@@ -72,7 +73,8 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
       icon: <FileTextOutlined />,
       color: '#722ed1',
       bgColor: '#f9f0ff',
-      borderColor: '#d3adf7'
+      borderColor: '#d3adf7',
+      suffix: undefined as string | undefined
     },
     {
       key: 'tasks',
@@ -83,7 +85,8 @@ export default function MetricsCards({ data, loading, onCardClick }: MetricsCard
       icon: <RocketOutlined />,
       color: '#13c2c2',
       bgColor: '#e6fffb',
-      borderColor: '#87e8de'
+      borderColor: '#87e8de',
+      suffix: undefined as string | undefined
     }
   ];
 

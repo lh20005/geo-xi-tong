@@ -185,21 +185,6 @@ export class WebSocketClient {
   }
 
   /**
-   * Authenticate with server
-   */
-  private authenticate(): void {
-    if (!this.token) {
-      console.warn('No token available for authentication');
-      return;
-    }
-
-    this.send({
-      type: 'auth',
-      data: { token: this.token }
-    });
-  }
-
-  /**
    * Handle incoming message
    */
   private handleMessage(message: WebSocketMessage): void {

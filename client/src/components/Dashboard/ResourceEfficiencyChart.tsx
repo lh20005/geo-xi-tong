@@ -1,7 +1,7 @@
 import ReactECharts from 'echarts-for-react';
 import { Card, Empty, Spin } from 'antd';
 import type { ResourceUsageData } from '../../types/dashboard';
-import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
+import { cardStyle, cardTitleStyle, colors } from './chartStyles';
 
 interface ResourceEfficiencyChartProps {
   data: ResourceUsageData | null;

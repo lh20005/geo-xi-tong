@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, InputNumber, message, Card, Statistic, Tag, Tabs } from 'antd';
+import { Table, Button, Modal, Form, InputNumber, message, Card, Statistic, Tag } from 'antd';
 import { EditOutlined, HistoryOutlined, DollarOutlined, SettingOutlined } from '@ant-design/icons';
 import axios from 'axios';
 

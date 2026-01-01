@@ -5,7 +5,6 @@ import {
   ThunderboltOutlined, 
   FileTextOutlined, 
   RocketOutlined,
-  PlusOutlined,
   BarChartOutlined,
   DashboardOutlined
 } from '@ant-design/icons';

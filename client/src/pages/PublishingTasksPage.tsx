@@ -212,8 +212,9 @@ export default function PublishingTasksPage() {
     const accountIds = Array.from(selectedAccounts);
     const totalTasks = articleIds.length * accountIds.length;
     
-    // 计算总耗时：总任务数减1，乘以间隔时间
-    const totalMinutes = (totalTasks - 1) * publishInterval;
+    // 计算总耗时：每个任务之间都等待（除了最后一个）
+    const totalWaitTimes = totalTasks - 1;
+    const totalMinutes = totalWaitTimes * publishInterval;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     const timeDesc = hours > 0 ? `${hours}小时${minutes}分钟` : `${minutes}分钟`;
@@ -226,7 +227,10 @@ export default function PublishingTasksPage() {
           <p>发布间隔：<strong>{publishInterval}</strong> 分钟</p>
           <p>预计完成时间：约 <strong>{timeDesc}</strong></p>
           <p style={{ color: '#666', fontSize: 12, marginTop: 8 }}>
-            ⚠️ 串行发布：每个任务完成后，等待 {publishInterval} 分钟，再发布下一个任务
+            ⚠️ 发布逻辑：每个任务完成后，等待 {publishInterval} 分钟，再发布下一个任务
+          </p>
+          <p style={{ color: '#999', fontSize: 11, marginTop: 4 }}>
+            例如：文章1-平台A → 等待 → 文章1-平台B → 等待 → 文章1-平台C → 等待 → 文章2-平台A → ...
           </p>
         </div>
       ),
@@ -238,14 +242,22 @@ export default function PublishingTasksPage() {
           const tasks = [];
           let batchOrder = 0;
           
-          // 为每篇文章创建任务
-          // 所有任务都是 pending 状态，由批次执行器按顺序执行
+          // 按文章 × 平台的顺序创建任务
+          // 每个任务都设置间隔（除了最后一个）
           for (let i = 0; i < articleIds.length; i++) {
             const articleId = articleIds[i];
             
-            for (const accountId of accountIds) {
+            for (let j = 0; j < accountIds.length; j++) {
+              const accountId = accountIds[j];
               const account = accounts.find(a => a.id === accountId);
+              
               if (account) {
+                // 判断是否是最后一个任务
+                const isLastTask = (i === articleIds.length - 1) && (j === accountIds.length - 1);
+                
+                // 除了最后一个任务，其他任务都设置间隔
+                const intervalMinutes = isLastTask ? 0 : publishInterval;
+                
                 tasks.push(
                   createPublishingTask({
                     article_id: articleId,
@@ -254,14 +266,14 @@ export default function PublishingTasksPage() {
                     scheduled_time: null, // 不使用定时，由批次执行器控制
                     batch_id: batchId,
                     batch_order: batchOrder,
-                    interval_minutes: publishInterval,
+                    interval_minutes: intervalMinutes,
                     config: {
                       headless: headlessMode
                     }
                   })
                 );
                 
-                // 每创建一个任务就增加 batch_order，确保所有任务按顺序执行
+                // 每创建一个任务就增加 batch_order
                 batchOrder++;
               }
             }

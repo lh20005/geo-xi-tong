@@ -1,7 +1,6 @@
 import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
 import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import type { MenuProps } from 'antd';
 import { config } from '../../config/env';
@@ -11,7 +10,6 @@ const { Text } = Typography;
 
 export default function Header() {
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
-  const navigate = useNavigate();
   
   // 从localStorage获取用户信息
   const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}');

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined } from '@ant-design/icons';
 import { getPlatforms, getAccounts, Platform, Account, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
 
@@ -46,10 +46,6 @@ export default function PlatformManagementPage() {
       const errorMessage = error?.message || '账号删除失败';
       message.error(errorMessage);
     }
-  };
-
-  const getPlatformAccounts = (platformId: string) => {
-    return accounts.filter(acc => acc.platform_id === platformId);
   };
 
   // 统计数据
