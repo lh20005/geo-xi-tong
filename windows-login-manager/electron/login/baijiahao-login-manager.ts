@@ -110,7 +110,10 @@ class BaijiahaoLoginManager {
 
       // 4. 触发鼠标悬停事件（显示用户名）
       await this.triggerMouseOver();
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // 关键：等待更长时间让用户名元素完全加载
+      log.info('[Baijiahao] 等待用户名元素加载...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // 5. 提取用户信息
       const userInfo = await this.extractUserInfo();
@@ -279,50 +282,157 @@ class BaijiahaoLoginManager {
 
   /**
    * 提取用户信息
+   * 根据实际页面结构：
+   * 用户名在 #header-wrapper 中的链接里，格式如："晚上好,超说新商业"
+   * 需要提取逗号后面的部分
    */
   private async extractUserInfo(): Promise<{ username: string; avatar?: string } | null> {
     log.info('[Baijiahao] 提取用户信息...');
 
     try {
-      // 尝试所有用户名选择器
-      for (const selector of this.USERNAME_SELECTORS) {
-        try {
-          const result = await webViewManager.executeJavaScript<{ username: string; avatar?: string } | null>(`
-            (function() {
-              const nameElement = document.querySelector('${selector}');
-              if (nameElement) {
-                let nameText = nameElement.textContent || nameElement.innerText || '';
-                // 按照GEO原始脚本处理：split(',')[1]
-                const nameParts = nameText.split(',');
-                const username = nameParts.length > 1 ? nameParts[1].trim() : nameText.trim();
+      const result = await webViewManager.executeJavaScript<{ username: string; avatar?: string } | null>(`
+        (function() {
+          console.log('[Baijiahao] ========== 开始提取用户信息 ==========');
+          
+          // 获取头像
+          let avatar = '';
+          try {
+            const imgElement = document.querySelector('#header-wrapper img[alt="头像"]');
+            if (imgElement) {
+              avatar = imgElement.getAttribute('src') || '';
+              console.log('[Baijiahao] ✅ 头像:', avatar);
+            } else {
+              console.log('[Baijiahao] ❌ 未找到头像元素');
+            }
+          } catch (e) {
+            console.log('[Baijiahao] ❌ 获取头像失败:', e);
+          }
+          
+          let username = '';
+          
+          // 方法1：查找 #header-wrapper 中所有链接
+          console.log('[Baijiahao] --- 方法1：查找 #header-wrapper 中的链接 ---');
+          try {
+            const headerWrapper = document.querySelector('#header-wrapper');
+            if (headerWrapper) {
+              console.log('[Baijiahao] 找到 #header-wrapper');
+              const links = headerWrapper.querySelectorAll('a');
+              console.log('[Baijiahao] 找到', links.length, '个链接');
+              
+              for (let i = 0; i < links.length; i++) {
+                const link = links[i];
+                const text = link.textContent || '';
+                console.log('[Baijiahao] 链接', i, '文本:', text);
                 
-                if (username) {
-                  console.log('[Baijiahao] 找到用户名:', username);
-                  
-                  // 尝试获取头像
-                  let avatar = '';
-                  const avatarElement = document.querySelector('${this.AVATAR_SELECTOR}');
-                  if (avatarElement) {
-                    avatar = avatarElement.getAttribute('src') || '';
+                if (text.includes(',') || text.includes('，')) {
+                  const parts = text.split(/[,，]/);
+                  console.log('[Baijiahao] 分割结果:', parts);
+                  if (parts.length > 1 && parts[1].trim()) {
+                    username = parts[1].trim();
+                    console.log('[Baijiahao] ✅ 方法1成功，用户名:', username);
+                    break;
                   }
-                  
-                  return { username, avatar };
                 }
               }
-              return null;
-            })();
-          `);
-
-          if (result && result.username) {
-            log.info(`[Baijiahao] 用户名提取成功 (${selector}): ${result.username}`);
-            return result;
+            } else {
+              console.log('[Baijiahao] ❌ 未找到 #header-wrapper');
+            }
+          } catch (e) {
+            console.log('[Baijiahao] ❌ 方法1失败:', e);
           }
-        } catch (error) {
-          log.debug(`[Baijiahao] 选择器失败: ${selector}`);
-        }
+          
+          // 方法2：查找所有包含"好"的链接
+          if (!username) {
+            console.log('[Baijiahao] --- 方法2：查找包含"好"的链接 ---');
+            try {
+              const allLinks = document.querySelectorAll('a');
+              console.log('[Baijiahao] 页面总共', allLinks.length, '个链接');
+              
+              for (let i = 0; i < allLinks.length; i++) {
+                const link = allLinks[i];
+                const text = link.textContent || '';
+                
+                if (text.includes('好') && (text.includes(',') || text.includes('，'))) {
+                  console.log('[Baijiahao] 找到候选链接:', text);
+                  const parts = text.split(/[,，]/);
+                  if (parts.length > 1 && parts[1].trim()) {
+                    username = parts[1].trim();
+                    console.log('[Baijiahao] ✅ 方法2成功，用户名:', username);
+                    break;
+                  }
+                }
+              }
+            } catch (e) {
+              console.log('[Baijiahao] ❌ 方法2失败:', e);
+            }
+          }
+          
+          // 方法3：使用 .user-name 选择器
+          if (!username) {
+            console.log('[Baijiahao] --- 方法3：使用 .user-name 选择器 ---');
+            try {
+              const nameElement = document.querySelector('.user-name');
+              if (nameElement) {
+                const nameText = nameElement.textContent || nameElement.innerText || '';
+                console.log('[Baijiahao] .user-name 文本:', nameText);
+                
+                if (nameText.includes(',') || nameText.includes('，')) {
+                  const parts = nameText.split(/[,，]/);
+                  username = parts[1] ? parts[1].trim() : nameText.trim();
+                } else {
+                  username = nameText.trim();
+                }
+                console.log('[Baijiahao] ✅ 方法3成功，用户名:', username);
+              } else {
+                console.log('[Baijiahao] ❌ 未找到 .user-name 元素');
+              }
+            } catch (e) {
+              console.log('[Baijiahao] ❌ 方法3失败:', e);
+            }
+          }
+          
+          // 方法4：打印页面HTML结构用于调试
+          if (!username) {
+            console.log('[Baijiahao] --- 方法4：打印页面结构用于调试 ---');
+            try {
+              const header = document.querySelector('#header-wrapper');
+              if (header) {
+                console.log('[Baijiahao] #header-wrapper HTML:', header.innerHTML.substring(0, 500));
+              }
+              
+              // 打印所有包含"好"的元素
+              const allElements = document.querySelectorAll('*');
+              let count = 0;
+              for (const el of allElements) {
+                const text = el.textContent || '';
+                if (text.includes('好') && text.length < 50) {
+                  console.log('[Baijiahao] 包含"好"的元素:', el.tagName, el.className, text);
+                  count++;
+                  if (count > 10) break; // 只打印前10个
+                }
+              }
+            } catch (e) {
+              console.log('[Baijiahao] ❌ 方法4失败:', e);
+            }
+          }
+          
+          console.log('[Baijiahao] ========== 提取结束 ==========');
+          console.log('[Baijiahao] 最终用户名:', username || '未提取到');
+          
+          if (!username) {
+            return null;
+          }
+          
+          return { username, avatar };
+        })();
+      `);
+
+      if (result && result.username) {
+        log.info(`[Baijiahao] ✅ 用户名提取成功: ${result.username}`);
+        return result;
       }
 
-      log.warn('[Baijiahao] 无法提取用户名，使用默认值');
+      log.warn('[Baijiahao] ⚠️ 所有方法都未能提取用户名，请查看浏览器控制台日志');
       return null;
     } catch (error) {
       log.error('[Baijiahao] 提取用户信息失败:', error);

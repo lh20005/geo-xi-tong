@@ -16,7 +16,7 @@ export class BaijiahaoAdapter extends PlatformAdapter {
   }
 
   getPublishUrl(): string {
-    return 'https://baijiahao.baidu.com/builder/app/homepage';
+    return 'https://baijiahao.baidu.com/builder/rc/home';
   }
 
   getLoginSelectors(): LoginSelectors {
@@ -64,14 +64,16 @@ export class BaijiahaoAdapter extends PlatformAdapter {
     try {
       await this.log('info', '开始登录百家号');
 
+      // 优先使用 Cookie 登录
       if (credentials.cookies && credentials.cookies.length > 0) {
         await this.log('info', '尝试使用 Cookie 登录');
         
+        // 导航到发布页面
         await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
-        // 检查是否已登录（查找头像元素）
-        const isLoggedIn = await page.locator('.UjPPKm89R4RrZTKhwG5H').isVisible({ timeout: 5000 }).catch(() => false);
+        // 检查是否已登录
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -81,6 +83,7 @@ export class BaijiahaoAdapter extends PlatformAdapter {
         await this.log('warning', 'Cookie 登录失败，需要手动登录');
       }
 
+      // Cookie 登录失败，需要手动登录
       await this.log('warning', '百家号需要扫码或手动登录');
       return false;
 
@@ -94,39 +97,157 @@ export class BaijiahaoAdapter extends PlatformAdapter {
     try {
       await this.log('info', '开始发布百家号文章', { title: article.title });
 
-      await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
+      // 不再重复导航，因为登录时已经导航到发布页面了
+      // 等待页面完全加载
+      await this.log('info', '等待页面加载完成...');
+      await this.randomWait(3000, 5000); // 等待更长时间让页面和弹窗完全加载
+
+      // 第一步：点击下一步
+      await this.log('info', '第一步：点击下一步');
+      await page.getByText('下一步').click();
+      await this.log('info', '已点击: 下一步');
       await this.randomWait(3000, 5000);
 
-      // 点击发布按钮
-      await this.humanClick(page.getByRole('button', { name: '发布' }), '发布按钮');
+      // 第二步：点击下一步
+      await this.log('info', '第二步：点击下一步');
+      await page.getByText('下一步').click();
+      await this.log('info', '已点击: 下一步');
+      await this.randomWait(3000, 5000);
 
-      // 输入标题
-      const titleInput = page.getByRole('textbox', { name: '请输入标题' });
-      await this.humanClick(titleInput, '标题输入框');
-      await this.humanType(titleInput, article.title, '标题内容');
+      // 第三步：点击立即体验
+      await this.log('info', '第三步：点击立即体验');
+      await page.getByText('立即体验').click();
+      await this.log('info', '已点击: 立即体验');
+      await this.randomWait(3000, 5000);
 
-      // 输入正文
+      // 第四步：点击我知道了
+      await this.log('info', '第四步：点击我知道了');
+      await page.getByRole('button', { name: '我知道了' }).click();
+      await this.log('info', '已点击: 我知道了');
+      await this.randomWait(3000, 5000);
+
+      // 第五步：关闭弹窗
+      await this.log('info', '第五步：关闭弹窗');
+      await page.locator('.c9a2214b6873cbb6-closeBtn').click();
+      await this.log('info', '已点击: 关闭按钮');
+      await this.randomWait(3000, 5000);
+
+      // 第六步：点击下一步
+      await this.log('info', '第六步：点击下一步');
+      await page.getByRole('button', { name: '下一步' }).click();
+      await this.log('info', '已点击: 下一步');
+      await this.randomWait(3000, 5000);
+
+      // 第七步：点击完成
+      await this.log('info', '第七步：点击完成');
+      await page.getByRole('button', { name: '完成' }).click();
+      await this.log('info', '已点击: 完成');
+      await this.randomWait(3000, 5000);
+
+      // 第八步：点击我知道了
+      await this.log('info', '第八步：点击我知道了');
+      await page.getByRole('button', { name: '我知道了' }).click();
+      await this.log('info', '已点击: 我知道了');
+      await this.randomWait(3000, 5000);
+
+      // 第九步：点击发布作品
+      await this.log('info', '第九步：点击发布作品');
+      await page.getByText('发布作品').click();
+      await this.log('info', '已点击: 发布作品');
+      await this.randomWait(3000, 5000);
+
+      // 第十步：点击发布作品
+      await this.log('info', '第十步：点击发布作品');
+      await page.getByText('发布作品').click();
+      await this.log('info', '已点击: 发布作品');
+      await this.randomWait(3000, 5000);
+
+      // 第十一步：点击下一步
+      await this.log('info', '第十一步：点击下一步');
+      await page.getByRole('button', { name: '下一步' }).click();
+      await this.log('info', '已点击: 下一步');
+      await this.randomWait(3000, 5000);
+
+      // 第十二步：点击下一步
+      await this.log('info', '第十二步：点击下一步');
+      await page.getByRole('button', { name: '下一步' }).click();
+      await this.log('info', '已点击: 下一步');
+      await this.randomWait(3000, 5000);
+
+      // 第十三步：悬停在"发布作品"按钮上，然后点击发布图文
+      await this.log('info', '第十三步：悬停在发布作品按钮上并点击发布图文');
+      await this.randomWait(3000, 5000);
+      
+      // 先悬停在"发布作品"按钮上，显示下拉菜单
+      await page.getByText('发布作品').hover();
+      await this.log('info', '已悬停: 发布作品按钮');
+      await this.randomWait(1000, 2000); // 等待菜单出现
+      
+      // 然后点击"发布图文"菜单项
+      await page.locator('div').filter({ hasText: /^发布图文$/ }).first().click();
+      await this.log('info', '已点击: 发布图文菜单项');
+      await this.randomWait(3000, 5000);
+
+      // 第十四步：输入标题
+      await this.log('info', '第十四步：输入标题');
+      await page.getByRole('paragraph').filter({ hasText: /^$/ }).click();
+      await this.log('info', '已点击: 标题输入框');
+      await this.randomWait(3000, 5000);
+      await page.locator('._9ddb7e475b559749-editor').fill(article.title);
+      await this.log('info', '已输入: 标题内容');
+      await this.randomWait(3000, 5000);
+
+      // 第十五步：输入正文
+      await this.log('info', '第十五步：输入正文');
       const cleanContent = this.cleanArticleContent(article.content);
-      const contentEditor = page.locator('.ProseMirror');
-      await this.humanClick(contentEditor, '正文编辑器');
-      await this.humanType(contentEditor, cleanContent, '正文内容');
+      await page.locator('p[data-diagnose-id="3c01dbc2027f6e9cc949f4602ccb4271"]').click();
+      await this.log('info', '已点击: 正文编辑器');
+      await this.randomWait(3000, 5000);
+      await page.locator('p[data-diagnose-id="3c01dbc2027f6e9cc949f4602ccb4271"]').fill(cleanContent);
+      await this.log('info', '已输入: 正文内容');
+      await this.randomWait(3000, 5000);
 
-      // 上传封面图片
+      // 第十六步：点击选择封面
+      await this.log('info', '第十六步：点击选择封面');
+      await page.locator('div').filter({ hasText: /^选择封面$/ }).nth(5).click();
+      await this.log('info', '已点击: 选择封面按钮');
+      await this.randomWait(3000, 5000);
+
+      // 第十七步：上传图片
+      await this.log('info', '第十七步：上传图片');
       const imagePath = await this.prepareImage(article);
+      
+      // 在点击之前设置 fileChooser 监听
       const fileChooserPromise = page.waitForEvent('filechooser');
       
-      await this.randomWait(3000, 5000);
-      await page.getByRole('button', { name: '上传封面' }).click();
-      await this.log('info', '已点击: 上传封面按钮');
+      await page.getByText('点击本地上传').click();
+      await this.log('info', '已点击: 点击本地上传按钮');
       
+      // 立即等待 fileChooser 并设置文件
       const fileChooser = await fileChooserPromise;
       await fileChooser.setFiles(imagePath);
       await this.log('info', '已自动设置图片文件');
       await this.randomWait(3000, 5000);
 
-      // 点击发布按钮
-      await this.humanClick(page.getByRole('button', { name: '发布', exact: true }), '发布按钮');
+      // 第十八步：点击确定按钮
+      await this.log('info', '第十八步：点击确定按钮');
+      await page.getByRole('button', { name: '确定 (1)' }).click();
+      await this.log('info', '已点击: 确定按钮');
+      await this.randomWait(3000, 5000);
 
+      // 第十九步：勾选AI创作声明
+      await this.log('info', '第十九步：勾选AI创作声明');
+      await page.getByRole('checkbox', { name: 'AI创作声明' }).check();
+      await this.log('info', '已勾选: AI创作声明');
+      await this.randomWait(3000, 5000);
+
+      // 第二十步：点击发布按钮
+      await this.log('info', '第二十步：点击发布按钮');
+      await page.getByRole('button', { name: '发布', exact: true }).click();
+      await this.log('info', '已点击: 发布按钮');
+      await this.randomWait(3000, 5000);
+
+      // 验证发布结果
       const success = await this.verifyPublishSuccess(page);
       
       if (success) {
