@@ -117,15 +117,38 @@ export class ZhihuAdapter extends PlatformAdapter {
       // 第一步：点击"创作"按钮
       await this.log('info', '第一步：点击创作按钮');
       await this.humanClick(page.getByRole('button', { name: '创作' }), '创作按钮');
+      
+      // 等待5秒，确保下拉菜单完全加载
+      await this.log('info', '等待菜单加载...');
+      await this.randomWait(5000, 6000);
 
       // 第二步：点击"写文章"，会打开新窗口
       await this.log('info', '第二步：点击写文章（等待新窗口）');
-      const page5Promise = page.waitForEvent('popup');
-      await this.humanClick(page.getByRole('button', { name: '写文章' }), '写文章按钮');
-      const articlePage = await page5Promise;
       
-      // 等待新窗口加载完成
-      await articlePage.waitForLoadState('networkidle');
+      // 设置超时的 popup 等待（30秒超时，避免无限等待导致卡死）
+      const popupPromise = Promise.race([
+        page.waitForEvent('popup'),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('等待新窗口超时（30秒）')), 30000)
+        )
+      ]);
+      
+      await this.humanClick(page.getByRole('button', { name: '写文章' }), '写文章按钮');
+      
+      let articlePage;
+      try {
+        articlePage = await popupPromise;
+      } catch (error: any) {
+        await this.log('error', '等待新窗口失败', { error: error.message });
+        throw new Error('点击"写文章"后未能打开新窗口，可能是页面加载问题或登录状态异常');
+      }
+      
+      // 等待新窗口加载完成（带超时）
+      try {
+        await articlePage.waitForLoadState('networkidle', { timeout: 30000 });
+      } catch (error) {
+        await this.log('warning', '新窗口加载超时，继续尝试');
+      }
       await this.randomWait(2000, 4000);
       await this.log('info', '新窗口已打开');
 
@@ -148,15 +171,25 @@ export class ZhihuAdapter extends PlatformAdapter {
       await this.log('info', '第五步：添加封面图片');
       const imagePath = await this.prepareImage(article);
       
-      // 必须在点击之前设置 waitForEvent('filechooser')
-      const fileChooserPromise = articlePage.waitForEvent('filechooser');
+      // 设置超时的 filechooser 等待（20秒超时）
+      const fileChooserPromise = Promise.race([
+        articlePage.waitForEvent('filechooser'),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('等待文件选择器超时（20秒）')), 20000)
+        )
+      ]);
+      
       await articlePage.getByText('添加文章封面').click();
       await this.log('info', '已点击: 添加文章封面');
       
       // 等待文件选择器并设置文件
-      const fileChooser = await fileChooserPromise;
-      await fileChooser.setFiles(imagePath);
-      await this.log('info', '已自动设置封面图片');
+      try {
+        const fileChooser = await fileChooserPromise;
+        await (fileChooser as any).setFiles(imagePath);
+        await this.log('info', '已自动设置封面图片');
+      } catch (error: any) {
+        await this.log('warning', '封面上传失败，跳过', { error: error.message });
+      }
       await this.randomWait(3000, 5000); // 等待图片上传完成
 
       // 第六步：点击"添加话题"按钮
