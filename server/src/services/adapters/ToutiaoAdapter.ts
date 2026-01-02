@@ -109,10 +109,18 @@ export class ToutiaoAdapter extends PlatformAdapter {
 
   /**
    * 检查登录状态（参考 tt.js 的检测逻辑）
+   * 最佳实践：检查 URL 重定向 + 多指标验证 + 容错处理
    */
   private async checkLoginStatus(page: Page): Promise<boolean> {
     try {
       await this.log('info', '🔍 检查头条登录状态...');
+
+      // 首先检查 URL - 如果被重定向到登录页面，说明未登录
+      const currentUrl = page.url();
+      if (currentUrl.includes('/login') || currentUrl.includes('/auth/page')) {
+        await this.log('warning', '❌ 已被重定向到登录页面，Cookie已失效');
+        return false;
+      }
 
       // 方法1：检查用户名（参考 tt.js 中的 .auth-avator-name）
       const hasName = await page.locator('.auth-avator-name').isVisible({ timeout: 3000 }).catch(() => false);
@@ -135,12 +143,21 @@ export class ToutiaoAdapter extends PlatformAdapter {
         return true;
       }
 
-      await this.log('warning', '❌ 未检测到登录标志，可能未登录或已掉线');
-      return false;
+      // 方法4：检查标题输入框（说明在发布页面且已登录）
+      const hasTitleInput = await page.getByRole('textbox', { name: '请输入文章标题（2～30个字）' }).isVisible({ timeout: 2000 }).catch(() => false);
+      if (hasTitleInput) {
+        await this.log('info', '✅ 检测到标题输入框，已登录');
+        return true;
+      }
+
+      // 如果没有明确的登录/未登录信号，假设已登录（避免误判）
+      await this.log('info', '✅ 未检测到登录页面，假设已登录');
+      return true;
 
     } catch (error: any) {
-      await this.log('error', '登录状态检查失败', { error: error.message });
-      return false;
+      await this.log('error', '登录状态检查出错', { error: error.message });
+      // 出错时不要轻易判定为未登录
+      return true;
     }
   }
 
