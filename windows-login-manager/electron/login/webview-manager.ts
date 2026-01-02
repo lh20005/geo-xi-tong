@@ -305,7 +305,12 @@ class WebViewManager {
           });
 
           webview.addEventListener('did-fail-load', (event) => {
-            console.error('[WebView] Failed to load:', event);
+            // errorCode -3 (ERR_ABORTED) 通常是页面跳转导致的，可以忽略
+            if (event.errorCode === -3) {
+              console.log('[WebView] Load aborted (page navigation), this is normal');
+            } else {
+              console.error('[WebView] Failed to load:', event);
+            }
           });
 
           console.log('[WebView] Created successfully');

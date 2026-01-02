@@ -7,13 +7,12 @@ import { syncService } from '../sync/service';
 
 /**
  * 百家号专用登录管理器
- * 参照GEO应用的bjh.js实现
+ * 参照头条号成功模式重写
  * 
- * GEO应用关键代码：
- * - 登录检测: .UjPPKm89R4RrZTKhwG5H (头像元素)
- * - 用户名选择器: .user-name (需要split(',')[1])
- * - 需要触发鼠标悬停事件: .p7Psc5P3uJ5lyxeI0ETR
- * - 检查间隔: 500ms (最快)
+ * 核心策略：
+ * 1. 使用 webview 标签嵌入登录页面
+ * 2. 检测 URL 跳转到 /builder/rc/home 判断登录成功
+ * 3. 使用 session.fromPartition 获取 Cookie
  */
 
 interface BaijiahaoLoginResult {
@@ -41,9 +40,10 @@ class BaijiahaoLoginManager {
   private parentWindow: BrowserWindow | null = null;
   private isLoginInProgress = false;
   private isCancelled = false;
+  private loginResolve: ((result: boolean) => void) | null = null;
   private checkInterval: NodeJS.Timeout | null = null;
 
-  // 百家号配置 - 从GEO应用的bjh.js提取
+  // 百家号配置
   private readonly PLATFORM_ID = 'baijiahao';
   private readonly PLATFORM_NAME = '百家号';
   private readonly LOGIN_URL = 'https://baijiahao.baidu.com/builder/author/register/index';
@@ -51,11 +51,19 @@ class BaijiahaoLoginManager {
     'baijiahao.baidu.com/builder/rc/home'
   ];
   
-  // 从GEO应用bjh.js提取的选择器
-  private readonly AVATAR_SELECTOR = '.UjPPKm89R4RrZTKhwG5H'; // 用于检测登录成功
-  private readonly USERNAME_SELECTOR = '.user-name';
-  private readonly HOVER_SELECTOR = '.p7Psc5P3uJ5lyxeI0ETR'; // 需要触发鼠标悬停
-  private readonly CHECK_INTERVAL = 500; // GEO应用使用500ms间隔（最快）
+  // 用户名选择器
+  private readonly USERNAME_SELECTORS = [
+    '.user-name',
+    '.author-name',
+    '.username',
+    '[class*="user-name"]'
+  ];
+  
+  // 头像选择器
+  private readonly AVATAR_SELECTOR = '.UjPPKm89R4RrZTKhwG5H';
+  
+  // 需要触发悬停的元素
+  private readonly HOVER_SELECTOR = '.p7Psc5P3uJ5lyxeI0ETR';
 
   // 当前登录使用的临时 partition
   private currentPartition: string = '';
@@ -86,7 +94,7 @@ class BaijiahaoLoginManager {
       // 1. 创建 WebView
       await this.createWebView();
 
-      // 2. 等待登录成功
+      // 2. 等待登录成功（检测URL跳转）
       const loginSuccess = await this.waitForLoginSuccess();
       if (!loginSuccess) {
         await this.cleanup();
@@ -96,45 +104,45 @@ class BaijiahaoLoginManager {
         return { success: false, message: '登录超时或失败' };
       }
 
-      // 3. 触发鼠标悬停事件 - 按照GEO应用bjh.js的方式
+      // 3. 等待页面稳定
+      log.info('[Baijiahao] 等待页面稳定...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      // 4. 触发鼠标悬停事件（显示用户名）
       await this.triggerMouseOver();
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 4. 等待页面稳定
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // 5. 提取用户信息 - 完全按照GEO应用的方式
+      // 5. 提取用户信息
       const userInfo = await this.extractUserInfo();
-      if (!userInfo || !userInfo.username) {
+      const username = userInfo?.username || `百家号用户_${Date.now()}`;
+      log.info(`[Baijiahao] 用户信息: ${username}`);
+
+      // 6. 捕获登录凭证
+      const credentials = await this.captureCredentials();
+      log.info(`[Baijiahao] 获取到 ${credentials.cookies.length} 个Cookie`);
+
+      if (credentials.cookies.length === 0) {
         await this.cleanup();
-        return { success: false, message: '无法提取用户信息' };
+        return { success: false, message: '未能获取到Cookie，登录可能失败' };
       }
 
-      log.info(`[Baijiahao] 用户信息提取成功: ${userInfo.username}`);
-
-      // 6. 获取 Cookies
-      const cookies = await this.getCookies();
-      log.info(`[Baijiahao] 获取到 ${cookies.length} 个Cookie`);
-
-      // 7. 获取 Storage
-      const storage = await this.getStorage();
-
-      // 8. 构建账号数据
+      // 7. 构建账号数据
       const account = {
         platform_id: this.PLATFORM_ID,
-        account_name: userInfo.username,
-        real_username: userInfo.username,
+        account_name: username,
+        real_username: username,
         credentials: {
-          cookies,
-          storage,
-          userInfo,
+          cookies: credentials.cookies,
+          storage: credentials.storage,
+          userInfo: userInfo || { username },
           loginTime: new Date().toISOString()
         }
       };
 
-      // 9. 先同步到后端（必须先同步，确保后端有数据）
+      // 8. 先同步到后端
       const backendAccount = await this.syncAccountToBackend(account);
       
-      // 10. 同步成功后，使用后端返回的账号ID保存到本地
+      // 9. 同步成功后，使用后端返回的账号ID保存到本地
       if (backendAccount && backendAccount.id) {
         (account as any).id = backendAccount.id;
         await this.saveAccountLocally(account);
@@ -142,7 +150,7 @@ class BaijiahaoLoginManager {
         log.warn('[Baijiahao] 后端同步失败，不保存到本地缓存');
       }
 
-      // 11. 清理
+      // 10. 清理
       await this.cleanup();
 
       this.isLoginInProgress = false;
@@ -167,10 +175,15 @@ class BaijiahaoLoginManager {
   }
 
   private async createWebView(): Promise<void> {
+    if (!this.parentWindow) {
+      throw new Error('父窗口不存在');
+    }
+
     // 使用临时 partition，确保每次登录都是全新环境
     this.currentPartition = `login-${this.PLATFORM_ID}-${Date.now()}`;
+    log.info(`[Baijiahao] 使用临时 partition: ${this.currentPartition}`);
     
-    await webViewManager.createWebView(this.parentWindow!, {
+    await webViewManager.createWebView(this.parentWindow, {
       url: this.LOGIN_URL,
       partition: this.currentPartition
     });
@@ -181,65 +194,70 @@ class BaijiahaoLoginManager {
 
   /**
    * 等待登录成功
-   * 参照GEO应用bjh.js: 检测头像元素 .UjPPKm89R4RrZTKhwG5H
+   * 策略：检测 URL 跳转到成功页面（参照头条号）
    */
   private async waitForLoginSuccess(): Promise<boolean> {
+    log.info('[Baijiahao] 等待登录成功（检测URL跳转）...');
+    const startTime = Date.now();
+    const timeout = 300000; // 5分钟
+
     return new Promise((resolve) => {
-      let checkCount = 0;
-      const maxChecks = 600; // 500ms * 600 = 5分钟超时
+      this.loginResolve = resolve;
 
       this.checkInterval = setInterval(async () => {
+        // 检查是否取消
         if (this.isCancelled) {
-          if (this.checkInterval) clearInterval(this.checkInterval);
+          if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+            this.checkInterval = null;
+          }
           resolve(false);
           return;
         }
 
-        checkCount++;
-        if (checkCount > maxChecks) {
+        // 检查超时
+        if (Date.now() - startTime > timeout) {
+          if (this.checkInterval) {
+            clearInterval(this.checkInterval);
+            this.checkInterval = null;
+          }
           log.warn('[Baijiahao] 登录超时');
-          if (this.checkInterval) clearInterval(this.checkInterval);
           resolve(false);
           return;
         }
 
+        // 检查 URL（使用 webViewManager.getCurrentURL，参照头条号）
         try {
-          // 按照GEO应用bjh.js的检测逻辑：检测头像元素的src属性
-          const isLoggedIn = await webViewManager.executeJavaScript<boolean>(`
-            (function() {
-              const imgElement = document.querySelector('${this.AVATAR_SELECTOR}');
-              if (imgElement) {
-                const srcValue = imgElement.getAttribute('src');
-                if (srcValue) {
-                  console.log('[Baijiahao] 检测到登录成功，头像:', srcValue);
-                  return true;
-                }
+          const currentUrl = await webViewManager.getCurrentURL();
+          if (!currentUrl) return;
+          
+          // 检查是否匹配成功 URL 模式
+          for (const pattern of this.SUCCESS_URL_PATTERNS) {
+            if (currentUrl.includes(pattern)) {
+              if (this.checkInterval) {
+                clearInterval(this.checkInterval);
+                this.checkInterval = null;
               }
-              return false;
-            })();
-          `);
-
-          if (isLoggedIn) {
-            log.info('[Baijiahao] 登录成功');
-            if (this.checkInterval) clearInterval(this.checkInterval);
-            resolve(true);
+              log.info(`[Baijiahao] ✅ 登录成功！检测到 URL: ${currentUrl}`);
+              resolve(true);
+              return;
+            }
           }
         } catch (error) {
           // 继续检测
         }
-      }, this.CHECK_INTERVAL);
+      }, 500); // 每500ms检查一次
     });
   }
 
   /**
-   * 触发鼠标悬停事件
-   * 按照GEO应用bjh.js的方式
+   * 触发鼠标悬停事件（显示用户名）
    */
   private async triggerMouseOver(): Promise<void> {
     try {
+      log.info('[Baijiahao] 触发鼠标悬停事件...');
       await webViewManager.executeJavaScript(`
         (function() {
-          console.log('[Baijiahao] 触发鼠标悬停事件');
           const element = document.querySelector('${this.HOVER_SELECTOR}');
           if (element) {
             const mouseOverEvent = new MouseEvent('mouseover', {
@@ -261,107 +279,166 @@ class BaijiahaoLoginManager {
 
   /**
    * 提取用户信息
-   * 完全按照GEO应用bjh.js的方式
-   * 注意：用户名需要 split(',')[1]
    */
   private async extractUserInfo(): Promise<{ username: string; avatar?: string } | null> {
+    log.info('[Baijiahao] 提取用户信息...');
+
     try {
-      const userInfo = await webViewManager.executeJavaScript<any>(`
-        (function() {
-          console.log('[Baijiahao] 开始提取用户信息');
-          
-          // 提取头像 - 按照GEO应用bjh.js
-          let avatar = '';
-          try {
-            const imgElement = document.querySelector('${this.AVATAR_SELECTOR}');
-            if (imgElement) {
-              avatar = imgElement.getAttribute('src') || '';
-              console.log('[Baijiahao] 头像:', avatar);
-            }
-          } catch (e) {
-            console.log('[Baijiahao] 获取头像失败:', e);
+      // 尝试所有用户名选择器
+      for (const selector of this.USERNAME_SELECTORS) {
+        try {
+          const result = await webViewManager.executeJavaScript<{ username: string; avatar?: string } | null>(`
+            (function() {
+              const nameElement = document.querySelector('${selector}');
+              if (nameElement) {
+                let nameText = nameElement.textContent || nameElement.innerText || '';
+                // 按照GEO原始脚本处理：split(',')[1]
+                const nameParts = nameText.split(',');
+                const username = nameParts.length > 1 ? nameParts[1].trim() : nameText.trim();
+                
+                if (username) {
+                  console.log('[Baijiahao] 找到用户名:', username);
+                  
+                  // 尝试获取头像
+                  let avatar = '';
+                  const avatarElement = document.querySelector('${this.AVATAR_SELECTOR}');
+                  if (avatarElement) {
+                    avatar = avatarElement.getAttribute('src') || '';
+                  }
+                  
+                  return { username, avatar };
+                }
+              }
+              return null;
+            })();
+          `);
+
+          if (result && result.username) {
+            log.info(`[Baijiahao] 用户名提取成功 (${selector}): ${result.username}`);
+            return result;
           }
+        } catch (error) {
+          log.debug(`[Baijiahao] 选择器失败: ${selector}`);
+        }
+      }
 
-          // 提取用户名 - 按照GEO应用bjh.js (需要split(',')[1])
-          const nameElement = document.querySelector('${this.USERNAME_SELECTOR}');
-          if (!nameElement || !nameElement.textContent) {
-            console.log('[Baijiahao] 未找到用户名元素');
-            return null;
-          }
-
-          const nameText = nameElement.textContent;
-          console.log('[Baijiahao] 原始用户名文本:', nameText);
-          
-          // 按照GEO应用的方式处理：split(',')[1]
-          const nameParts = nameText.split(',');
-          const username = nameParts.length > 1 ? nameParts[1].trim() : nameText.trim();
-          console.log('[Baijiahao] 处理后的用户名:', username);
-
-          return {
-            username,
-            avatar
-          };
-        })();
-      `);
-
-      return userInfo;
+      log.warn('[Baijiahao] 无法提取用户名，使用默认值');
+      return null;
     } catch (error) {
       log.error('[Baijiahao] 提取用户信息失败:', error);
       return null;
     }
   }
 
-  private async getCookies(): Promise<Cookie[]> {
-    try {
-      const partition = this.currentPartition;
-      const ses = session.fromPartition(partition);
-      const cookies = await ses.cookies.get({});
+  /**
+   * 捕获登录凭证（参照头条号成功模式）
+   */
+  private async captureCredentials(): Promise<{ cookies: Cookie[]; storage: StorageData }> {
+    log.info('[Baijiahao] 捕获登录凭证...');
 
-      return cookies.map(cookie => ({
-        name: cookie.name,
-        value: cookie.value,
-        domain: cookie.domain || '.baidu.com',
-        path: cookie.path || '/',
-        expires: cookie.expirationDate,
-        httpOnly: cookie.httpOnly,
-        secure: cookie.secure,
-        sameSite: cookie.sameSite as any
-      }));
-    } catch (error) {
-      log.error('[Baijiahao] 获取Cookie失败:', error);
-      return [];
+    // 通过 session 获取 cookies（使用临时 partition）
+    const ses = session.fromPartition(this.currentPartition);
+    const electronCookies = await ses.cookies.get({});
+    
+    log.info(`[Baijiahao] session.cookies.get 获取到 ${electronCookies.length} 个Cookie`);
+    
+    // 过滤百度相关Cookie
+    const baiduCookies = electronCookies.filter(cookie => 
+      cookie.domain && (
+        cookie.domain.includes('baidu.com') ||
+        cookie.domain.includes('baijiahao')
+      )
+    );
+    
+    log.info(`[Baijiahao] 过滤后百度相关Cookie: ${baiduCookies.length} 个`);
+    
+    // 打印关键Cookie
+    const keyCookies = baiduCookies.filter(c => 
+      c.name.includes('BDUSS') || 
+      c.name.includes('STOKEN') ||
+      c.name.includes('BAIDUID')
+    );
+    if (keyCookies.length > 0) {
+      log.info(`[Baijiahao] 关键Cookie: ${keyCookies.map(c => c.name).join(', ')}`);
     }
-  }
+    
+    const cookies: Cookie[] = baiduCookies.map(cookie => ({
+      name: cookie.name,
+      value: cookie.value,
+      domain: cookie.domain || '.baidu.com',
+      path: cookie.path || '/',
+      expires: cookie.expirationDate,
+      httpOnly: cookie.httpOnly,
+      secure: cookie.secure,
+      sameSite: this.convertSameSite(cookie.sameSite)
+    }));
 
-  private async getStorage(): Promise<StorageData> {
+    // 捕获 Storage
+    let localStorage: Record<string, string> = {};
+    let sessionStorage: Record<string, string> = {};
+    
     try {
-      const storage = await webViewManager.executeJavaScript<StorageData>(`
-        (function() {
-          const localStorageData = {};
-          const sessionStorageData = {};
-
+      localStorage = await webViewManager.executeJavaScript<Record<string, string>>(`
+        (() => {
+          const data = {};
           try {
             for (let i = 0; i < localStorage.length; i++) {
               const key = localStorage.key(i);
-              if (key) localStorageData[key] = localStorage.getItem(key) || '';
+              if (key) {
+                data[key] = localStorage.getItem(key);
+              }
             }
           } catch (e) {}
+          return data;
+        })()
+      `) || {};
+    } catch (e) {
+      log.warn('[Baijiahao] 获取localStorage失败');
+    }
 
+    try {
+      sessionStorage = await webViewManager.executeJavaScript<Record<string, string>>(`
+        (() => {
+          const data = {};
           try {
             for (let i = 0; i < sessionStorage.length; i++) {
               const key = sessionStorage.key(i);
-              if (key) sessionStorageData[key] = sessionStorage.getItem(key) || '';
+              if (key) {
+                data[key] = sessionStorage.getItem(key);
+              }
             }
           } catch (e) {}
+          return data;
+        })()
+      `) || {};
+    } catch (e) {
+      log.warn('[Baijiahao] 获取sessionStorage失败');
+    }
 
-          return { localStorage: localStorageData, sessionStorage: sessionStorageData };
-        })();
-      `);
+    log.info(`[Baijiahao] Storage - localStorage: ${Object.keys(localStorage).length}, sessionStorage: ${Object.keys(sessionStorage).length}`);
 
-      return storage || { localStorage: {}, sessionStorage: {} };
-    } catch (error) {
-      log.error('[Baijiahao] 获取Storage失败:', error);
-      return { localStorage: {}, sessionStorage: {} };
+    return {
+      cookies,
+      storage: { localStorage, sessionStorage }
+    };
+  }
+
+  /**
+   * 转换 SameSite 属性
+   */
+  private convertSameSite(sameSite: string | undefined): 'Strict' | 'Lax' | 'None' | undefined {
+    if (!sameSite) return undefined;
+    
+    switch (sameSite.toLowerCase()) {
+      case 'strict':
+        return 'Strict';
+      case 'lax':
+        return 'Lax';
+      case 'none':
+      case 'no_restriction':
+        return 'None';
+      default:
+        return undefined;
     }
   }
 
@@ -399,10 +476,11 @@ class BaijiahaoLoginManager {
 
   private async syncAccountToBackend(account: any): Promise<any> {
     try {
+      log.info('[Baijiahao] 同步账号到后端...');
       const result = await syncService.syncAccount(account);
       if (result.success) {
         log.info('[Baijiahao] 账号已同步到后端');
-        return result.account; // 返回后端创建的账号对象
+        return result.account;
       } else {
         log.error('[Baijiahao] 账号同步失败:', result.error);
         throw new Error(result.error || '同步失败');
@@ -420,6 +498,8 @@ class BaijiahaoLoginManager {
         this.checkInterval = null;
       }
       await webViewManager.destroyWebView();
+      this.parentWindow = null;
+      this.loginResolve = null;
     } catch (error) {
       log.error('[Baijiahao] 清理资源失败:', error);
     }
@@ -430,6 +510,11 @@ class BaijiahaoLoginManager {
 
     log.info('[Baijiahao] 取消登录');
     this.isCancelled = true;
+
+    if (this.loginResolve) {
+      this.loginResolve(false);
+      this.loginResolve = null;
+    }
 
     if (this.checkInterval) {
       clearInterval(this.checkInterval);
