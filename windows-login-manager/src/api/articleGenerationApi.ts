@@ -105,3 +105,11 @@ export async function deleteAllTasks(): Promise<{ success: boolean; message: str
   const response = await apiClient.delete('/article-generation/tasks');
   return response.data;
 }
+
+/**
+ * 终止任务
+ */
+export async function cancelTask(taskId: number): Promise<{ success: boolean; message: string }> {
+  const response = await apiClient.post(`/article-generation/tasks/${taskId}/cancel`);
+  return response.data;
+}

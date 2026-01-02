@@ -14,7 +14,6 @@ import {
   CheckCircleOutlined,
   SyncOutlined
 } from '@ant-design/icons';
-import axios from 'axios';
 import TaskConfigModal from '../components/TaskConfigModal';
 import ResizableTable from '../components/ResizableTable';
 import { 
@@ -22,7 +21,8 @@ import {
   fetchTasks, 
   deleteTask, 
   batchDeleteTasks, 
-  deleteAllTasks 
+  deleteAllTasks,
+  cancelTask
 } from '../api/articleGenerationApi';
 import type { GenerationTask, TaskConfig } from '../types/articleGeneration';
 
@@ -175,11 +175,13 @@ export default function ArticleGenerationPage() {
 
   const getStatusTag = (status: string) => {
     const statusMap: Record<string, { color: string; text: string }> = {
+      pending: { color: 'default', text: '等待中' },
       running: { color: 'processing', text: '执行中' },
-      completed: { color: 'success', text: '已完成' }
+      completed: { color: 'success', text: '已完成' },
+      failed: { color: 'error', text: '已终止' }
     };
     const config = statusMap[status];
-    if (!config) return null;
+    if (!config) return <Tag>{status}</Tag>;
     return <Tag color={config.color}>{config.text}</Tag>;
   };
 
@@ -187,7 +189,7 @@ export default function ArticleGenerationPage() {
   const handleCancelTask = async (taskId: number) => {
     try {
       setDeleting(true);
-      await axios.post(`/api/article-generation/tasks/${taskId}/cancel`);
+      await cancelTask(taskId);
       message.success('任务已终止');
       loadTasks();
     } catch (error: any) {

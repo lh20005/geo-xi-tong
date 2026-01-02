@@ -4,6 +4,107 @@ import { ContentCleaner } from './contentCleaner';
 import { TopicSelectionService } from './topicSelectionService';
 import { ImageSelectionService } from './imageSelectionService';
 
+/**
+ * 全局任务队列执行器（单例模式）
+ * 确保所有任务按顺序执行，新任务加入队列等待
+ */
+class TaskQueueExecutor {
+  private static instance: TaskQueueExecutor;
+  private isRunning: boolean = false;
+  private taskQueue: number[] = [];
+  private service: ArticleGenerationService | null = null;
+
+  private constructor() {}
+
+  static getInstance(): TaskQueueExecutor {
+    if (!TaskQueueExecutor.instance) {
+      TaskQueueExecutor.instance = new TaskQueueExecutor();
+    }
+    return TaskQueueExecutor.instance;
+  }
+
+  setService(service: ArticleGenerationService) {
+    this.service = service;
+  }
+
+  /**
+   * 将任务添加到队列
+   */
+  addTasks(taskIds: number[]) {
+    console.log(`[任务队列] 添加 ${taskIds.length} 个任务到队列: [${taskIds.join(', ')}]`);
+    this.taskQueue.push(...taskIds);
+    console.log(`[任务队列] 当前队列长度: ${this.taskQueue.length}`);
+    
+    // 如果执行器没有运行，启动它
+    if (!this.isRunning) {
+      this.startExecutor();
+    }
+  }
+
+  /**
+   * 启动执行器
+   */
+  private async startExecutor() {
+    if (this.isRunning) {
+      console.log(`[任务队列] 执行器已在运行中`);
+      return;
+    }
+
+    this.isRunning = true;
+    console.log(`[任务队列] 启动执行器`);
+
+    while (this.taskQueue.length > 0) {
+      const taskId = this.taskQueue.shift()!;
+      console.log(`[任务队列] 从队列取出任务 ${taskId}，剩余队列长度: ${this.taskQueue.length}`);
+
+      // 检查任务状态
+      const taskStatus = await this.service?.getTaskStatus(taskId);
+      console.log(`[任务队列] 任务 ${taskId} 当前状态: ${taskStatus}`);
+
+      if (taskStatus === 'failed') {
+        console.log(`[任务队列] 任务 ${taskId} 已被取消，跳过执行`);
+        continue;
+      }
+
+      if (taskStatus !== 'pending') {
+        console.log(`[任务队列] 任务 ${taskId} 状态为 ${taskStatus}，跳过执行`);
+        continue;
+      }
+
+      try {
+        console.log(`[任务队列] 开始执行任务 ${taskId}`);
+        await this.service?.executeTask(taskId);
+        console.log(`[任务队列] 任务 ${taskId} 执行完成`);
+      } catch (error: any) {
+        console.error(`[任务队列] 任务 ${taskId} 执行出错:`, error.message);
+      }
+
+      // 添加短暂延迟
+      if (this.taskQueue.length > 0) {
+        console.log(`[任务队列] 等待1秒后执行下一个任务...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    this.isRunning = false;
+    console.log(`[任务队列] 执行器停止，队列已清空`);
+  }
+
+  /**
+   * 获取队列状态
+   */
+  getStatus() {
+    return {
+      isRunning: this.isRunning,
+      queueLength: this.taskQueue.length,
+      queuedTaskIds: [...this.taskQueue]
+    };
+  }
+}
+
+// 导出全局队列执行器实例
+export const taskQueueExecutor = TaskQueueExecutor.getInstance();
+
 export interface TaskConfig {
   distillationId: number;
   albumId: number;
@@ -257,39 +358,27 @@ export class ArticleGenerationService {
     
     console.log(`[任务创建] 批次任务创建成功，共创建 ${taskIds.length} 个独立任务`);
     
-    // 3. 串行执行任务（确保话题不重复，标题多样化）
-    console.log(`[任务创建] 开始串行执行任务...`);
-    this.executeTasksSequentially(taskIds).catch(error => {
-      console.error(`批次任务执行失败:`, error);
-    });
+    // 3. 将任务添加到全局队列（而不是直接执行）
+    console.log(`[任务创建] 将任务添加到全局队列...`);
+    taskQueueExecutor.setService(this);
+    taskQueueExecutor.addTasks(taskIds);
     
     // 4. 返回第一个任务的ID（用于前端显示）
     return taskIds[0];
   }
   
   /**
-   * 串行执行多个任务
+   * 获取任务状态
    */
-  private async executeTasksSequentially(taskIds: number[]): Promise<void> {
-    for (let i = 0; i < taskIds.length; i++) {
-      const taskId = taskIds[i];
-      console.log(`[串行执行] 开始执行任务 ${i + 1}/${taskIds.length}，ID: ${taskId}`);
-      
-      try {
-        await this.executeTask(taskId);
-        console.log(`[串行执行] 任务 ${taskId} 执行完成`);
-      } catch (error: any) {
-        console.error(`[串行执行] 任务 ${taskId} 执行失败:`, error.message);
-        // 继续执行下一个任务
-      }
-      
-      // 添加短暂延迟，确保AI调用完全独立
-      if (i < taskIds.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
+  async getTaskStatus(taskId: number): Promise<string | null> {
+    const result = await pool.query(
+      'SELECT status FROM generation_tasks WHERE id = $1',
+      [taskId]
+    );
+    if (result.rows.length === 0) {
+      return null;
     }
-    
-    console.log(`[串行执行] 所有任务执行完成`);
+    return result.rows[0].status;
   }
 
   /**
@@ -504,6 +593,17 @@ export class ArticleGenerationService {
   async executeTask(taskId: number): Promise<void> {
     console.log(`[任务 ${taskId}] 开始执行`);
     
+    // 首先检查任务状态
+    const currentStatus = await this.getTaskStatus(taskId);
+    if (currentStatus === 'failed') {
+      console.log(`[任务 ${taskId}] 任务已被取消（状态为failed），跳过执行`);
+      return;
+    }
+    if (currentStatus !== 'pending') {
+      console.log(`[任务 ${taskId}] 任务状态为 ${currentStatus}，跳过执行`);
+      return;
+    }
+    
     try {
       // 更新状态为运行中
       await this.updateTaskStatus(taskId, 'running');
@@ -631,6 +731,13 @@ export class ArticleGenerationService {
       const errors: string[] = [];
 
       for (let i = 0; i < actualCount; i++) {
+        // 在生成每篇文章前检查任务是否已被取消
+        const currentStatus = await this.getTaskStatus(taskId);
+        if (currentStatus === 'failed') {
+          console.log(`[任务 ${taskId}] 任务已被用户取消（状态变为failed），停止生成`);
+          return; // 直接返回，任务队列会继续执行下一个任务
+        }
+        
         console.log(`\n[任务 ${taskId}] ========== 开始生成第 ${i + 1}/${actualCount} 篇文章 ==========`);
         
         const distillationData = distillationDataArray[i];
