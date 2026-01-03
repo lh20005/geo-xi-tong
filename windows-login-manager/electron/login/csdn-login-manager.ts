@@ -127,32 +127,14 @@ class CsdnLoginManager {
       };
 
       // 7. 先同步到后端（必须先同步，确保后端有数据）
-
-
       const backendAccount = await this.syncToBackend(account);
 
-
-      
-
-
       // 8. 同步成功后，使用后端返回的账号ID保存到本地
-
-
       if (backendAccount && backendAccount.id) {
-
-
         (account as any).id = backendAccount.id;
-
-
         await this.saveAccount(account);
-
-
       } else {
-
-
         log.warn('[CSDN] 后端同步失败，不保存到本地缓存');
-
-
       }
 
       // 9. 清理资源
@@ -229,7 +211,7 @@ class CsdnLoginManager {
 
   /**
    * 等待登录成功
-   * 策略：检测头像元素出现
+   * 策略：检测 URL 跳转到 www.csdn.net 或检测头像元素出现
    */
   private async waitForLoginSuccess(): Promise<boolean> {
     log.info('[CSDN] 等待登录成功...');
@@ -261,8 +243,22 @@ class CsdnLoginManager {
           return;
         }
 
-        // 检查头像元素是否出现
         try {
+          // 方法1：检查 URL 是否跳转到 CSDN 主站（登录成功后会跳转）
+          const currentUrl = await webViewManager.executeJavaScript<string>(`window.location.href`);
+          log.debug(`[CSDN] 当前URL: ${currentUrl}`);
+          
+          if (currentUrl && (currentUrl.includes('www.csdn.net') || currentUrl.includes('blog.csdn.net') || currentUrl.includes('mp.csdn.net'))) {
+            if (this.checkInterval) {
+              clearInterval(this.checkInterval);
+              this.checkInterval = null;
+            }
+            log.info(`[CSDN] 登录成功，已跳转到: ${currentUrl}`);
+            resolve(true);
+            return;
+          }
+
+          // 方法2：检查头像元素是否出现
           const hasAvatar = await webViewManager.executeJavaScript<boolean>(`
             (() => {
               const avatar = document.querySelector('${this.AVATAR_SELECTOR}');
@@ -275,12 +271,12 @@ class CsdnLoginManager {
               clearInterval(this.checkInterval);
               this.checkInterval = null;
             }
-            log.info(`[CSDN] 登录成功检测到头像元素`);
+            log.info(`[CSDN] 登录成功，检测到头像元素`);
             resolve(true);
             return;
           }
         } catch (error) {
-          log.debug('[CSDN] 检查头像元素失败:', error);
+          log.debug('[CSDN] 检查登录状态失败:', error);
         }
       }, this.CHECK_INTERVAL);
     });
@@ -290,46 +286,87 @@ class CsdnLoginManager {
    * 等待页面稳定
    */
   private async waitForPageStable(): Promise<void> {
-    log.info('[CSDN] 等待页面稳定...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    log.info('[CSDN] 等待页面稳定（5秒）...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    log.info('[CSDN] 页面稳定完成');
   }
 
   /**
    * 提取用户信息
-   * 使用 API 获取用户信息
+   * 使用 API 获取用户信息，增加重试机制
    */
   private async extractUserInfo(): Promise<CsdnUserInfo | null> {
     log.info('[CSDN] 提取用户信息...');
 
-    try {
-      // 使用 API 获取用户信息
-      const userInfo = await webViewManager.executeJavaScript<any>(`
-        (async () => {
-          try {
-            const response = await fetch('${this.USER_API}');
-            const data = await response.json();
-            return {
-              username: data.data?.userName || data.data?.nickName || '',
-              avatar: data.data?.avatar || ''
-            };
-          } catch (error) {
-            console.error('获取用户信息失败:', error);
+    const maxRetries = 5;
+    const retryDelay = 2000;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        log.info(`[CSDN] 第 ${attempt}/${maxRetries} 次尝试获取用户信息...`);
+
+        const userInfo = await webViewManager.executeJavaScript<any>(`
+          (async () => {
+            try {
+              // 方法1：从 API 获取用户信息
+              const response = await fetch('https://g-api.csdn.net/community/toolbar-api/v1/get-user-info', {
+                method: 'GET',
+                credentials: 'include',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'User-Agent': navigator.userAgent
+                }
+              });
+              
+              if (response.ok) {
+                const data = await response.json();
+                console.log('[CSDN] API返回数据:', JSON.stringify(data));
+                
+                if (data && data.data && (data.data.nickName || data.data.userName)) {
+                  return {
+                    username: data.data.nickName || data.data.userName,
+                    avatar: data.data.avatar || ''
+                  };
+                }
+              }
+              
+              // 方法2：从页面元素获取用户名
+              const nameElement = document.querySelector('.toolbar-btn-username') || 
+                                  document.querySelector('.user-name') ||
+                                  document.querySelector('.hasAvatar');
+              if (nameElement && nameElement.textContent) {
+                console.log('[CSDN] 从页面元素获取用户名:', nameElement.textContent.trim());
+                return {
+                  username: nameElement.textContent.trim(),
+                  avatar: ''
+                };
+              }
+            } catch (error) {
+              console.error('[CSDN] 获取用户信息失败:', error);
+            }
             return null;
-          }
-        })()
-      `);
+          })()
+        `);
 
-      if (userInfo && userInfo.username) {
-        log.info(`[CSDN] 用户名提取成功: ${userInfo.username}`);
-        return userInfo;
+        if (userInfo && userInfo.username) {
+          log.info(`[CSDN] 用户名提取成功: ${userInfo.username}`);
+          return userInfo;
+        }
+
+        if (attempt < maxRetries) {
+          log.warn(`[CSDN] 第 ${attempt} 次尝试未获取到用户信息，${retryDelay/1000}秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      } catch (error) {
+        log.error(`[CSDN] 第 ${attempt} 次提取用户信息失败:`, error);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
       }
-
-      log.warn('[CSDN] 无法提取用户信息');
-      return null;
-    } catch (error) {
-      log.error('[CSDN] 提取用户信息失败:', error);
-      return null;
     }
+
+    log.error('[CSDN] 所有尝试都失败，无法提取用户信息');
+    return null;
   }
 
   /**
