@@ -763,6 +763,14 @@ export default function PublishingTasksPage() {
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
+      title: '文章设置',
+      dataIndex: 'articleSettingName',
+      key: 'articleSettingName',
+      width: 120,
+      align: 'center' as const,
+      render: (text: string) => text ? <Tag color="purple">{text}</Tag> : <Text type="secondary">-</Text>,
+    },
+    {
       title: '蒸馏结果',
       dataIndex: 'topicQuestion',
       key: 'topicQuestion',
