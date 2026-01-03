@@ -51,7 +51,7 @@ class BilibiliLoginManager {
   private readonly SUCCESS_URL_PATTERN = 'member.bilibili.com/platform';
   private readonly DETECT_SELECTOR = 'span.right-entry-text';
   private readonly USER_API = 'https://api.bilibili.com/x/web-interface/nav';
-  private readonly CHECK_INTERVAL = 2000; // 2秒检查间隔
+  private readonly CHECK_INTERVAL = 1000; // 1秒检查间隔（参考 bili.js）
 
   // 当前登录使用的临时 partition
   private currentPartition: string = '';
@@ -107,7 +107,12 @@ class BilibiliLoginManager {
       // 4. 提取用户信息
       const userInfo = await this.extractUserInfo();
       if (!userInfo || !userInfo.username) {
-        throw new Error('无法提取用户信息');
+        log.error('[Bilibili] 无法提取用户信息，登录流程终止');
+        await this.cleanup();
+        return {
+          success: false,
+          message: '无法提取用户信息，请重试'
+        };
       }
 
       log.info(`[Bilibili] 用户信息提取成功: ${userInfo.username}`);
@@ -127,32 +132,14 @@ class BilibiliLoginManager {
       };
 
       // 7. 先同步到后端（必须先同步，确保后端有数据）
-
-
       const backendAccount = await this.syncToBackend(account);
 
-
-      
-
-
       // 8. 同步成功后，使用后端返回的账号ID保存到本地
-
-
       if (backendAccount && backendAccount.id) {
-
-
         (account as any).id = backendAccount.id;
-
-
         await this.saveAccount(account);
-
-
       } else {
-
-
         log.warn('[Bilibili] 后端同步失败，不保存到本地缓存');
-
-
       }
 
       // 9. 清理资源
@@ -229,7 +216,7 @@ class BilibiliLoginManager {
 
   /**
    * 等待登录成功
-   * 策略：检测特定元素出现
+   * 策略：检测 URL 是否到达 member.bilibili.com/platform/home
    */
   private async waitForLoginSuccess(): Promise<boolean> {
     log.info('[Bilibili] 等待登录成功...');
@@ -261,8 +248,23 @@ class BilibiliLoginManager {
           return;
         }
 
-        // 检查元素是否出现
+        // 检查 URL 是否到达目标页面（登录成功的标志）
         try {
+          const currentUrl = await webViewManager.executeJavaScript<string>(`window.location.href`);
+          log.debug(`[Bilibili] 当前URL: ${currentUrl}`);
+          
+          // 检查是否到达 member.bilibili.com/platform 页面
+          if (currentUrl && currentUrl.includes('member.bilibili.com/platform')) {
+            if (this.checkInterval) {
+              clearInterval(this.checkInterval);
+              this.checkInterval = null;
+            }
+            log.info(`[Bilibili] 登录成功，已到达目标页面: ${currentUrl}`);
+            resolve(true);
+            return;
+          }
+          
+          // 备选：检查元素是否出现
           const hasElement = await webViewManager.executeJavaScript<boolean>(`
             (() => {
               const element = document.querySelector('${this.DETECT_SELECTOR}');
@@ -275,12 +277,12 @@ class BilibiliLoginManager {
               clearInterval(this.checkInterval);
               this.checkInterval = null;
             }
-            log.info(`[Bilibili] 登录成功检测到元素`);
+            log.info(`[Bilibili] 登录成功，检测到用户元素`);
             resolve(true);
             return;
           }
         } catch (error) {
-          log.debug('[Bilibili] 检查元素失败:', error);
+          log.debug('[Bilibili] 检查登录状态失败:', error);
         }
       }, this.CHECK_INTERVAL);
     });
@@ -290,46 +292,113 @@ class BilibiliLoginManager {
    * 等待页面稳定
    */
   private async waitForPageStable(): Promise<void> {
-    log.info('[Bilibili] 等待页面稳定...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    log.info('[Bilibili] 等待页面稳定（5秒）...');
+    await new Promise(resolve => setTimeout(resolve, 5000)); // 增加到5秒，确保cookies完全设置
+    log.info('[Bilibili] 页面稳定完成');
   }
 
   /**
    * 提取用户信息
-   * 使用 API 获取用户信息
+   * 完全参照 GEO 应用 bili.js 的实现
+   * 增加重试机制，确保能获取到用户信息
    */
   private async extractUserInfo(): Promise<BilibiliUserInfo | null> {
-    log.info('[Bilibili] 提取用户信息...');
+    log.info('[Bilibili] 提取用户信息（参照bili.js）...');
 
-    try {
-      // 使用 API 获取用户信息
-      const userInfo = await webViewManager.executeJavaScript<any>(`
-        (async () => {
-          try {
-            const response = await fetch('${this.USER_API}');
-            const data = await response.json();
-            return {
-              username: data.data?.uname || '',
-              avatar: data.data?.face || ''
-            };
-          } catch (error) {
-            console.error('获取用户信息失败:', error);
+    const maxRetries = 5;
+    const retryDelay = 2000; // 2秒重试间隔
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        log.info(`[Bilibili] 第 ${attempt}/${maxRetries} 次尝试获取用户信息...`);
+
+        // 完全按照 bili.js 的方式获取用户信息
+        const userInfo = await webViewManager.executeJavaScript<any>(`
+          (async () => {
+            try {
+              console.log('[Bilibili] 开始获取用户信息（参照bili.js）');
+              
+              // 方法1：先尝试从页面元素获取用户名（作为备选）
+              let usernameFromElement = null;
+              try {
+                const nameElement = document.querySelector('span.right-entry-text');
+                if (nameElement && nameElement.textContent) {
+                  usernameFromElement = nameElement.textContent.trim();
+                  console.log('[Bilibili] 从页面元素获取到用户名:', usernameFromElement);
+                }
+              } catch (e) {
+                console.log('[Bilibili] 从页面元素获取用户名失败');
+              }
+              
+              // 方法2：参照 bili.js - 尝试请求 Bilibili API 获取用户信息
+              const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {
+                method: 'GET',
+                credentials: 'include', // 包含cookies
+                headers: {
+                  'Content-Type': 'application/json',
+                  'User-Agent': navigator.userAgent
+                }
+              });
+
+              if (response.ok) {
+                const userData = await response.json();
+                console.log('[Bilibili] API返回数据:', JSON.stringify(userData));
+                
+                // 参照 bili.js: 检查 userData.data.uname
+                if (userData && userData.data && userData.data.uname) {
+                  console.log('[Bilibili] 登录成功，用户信息:', userData.data.uname);
+                  
+                  // 参照 bili.js 返回格式
+                  return {
+                    username: userData.data.uname,
+                    avatar: userData.data.face || ''
+                  };
+                } else if (userData && userData.code === -101) {
+                  // 未登录状态
+                  console.log('[Bilibili] API返回未登录状态，code:', userData.code);
+                } else {
+                  console.log('[Bilibili] API返回数据中没有用户名，userData:', JSON.stringify(userData));
+                }
+              } else {
+                console.log('[Bilibili] API请求失败，状态码:', response.status);
+              }
+              
+              // 如果API失败但页面元素有用户名，使用页面元素的值
+              if (usernameFromElement) {
+                console.log('[Bilibili] API失败，使用页面元素获取的用户名:', usernameFromElement);
+                return {
+                  username: usernameFromElement,
+                  avatar: ''
+                };
+              }
+            } catch (error) {
+              console.error('[Bilibili] 请求API出错:', error);
+            }
+            
             return null;
-          }
-        })()
-      `);
+          })()
+        `);
 
-      if (userInfo && userInfo.username) {
-        log.info(`[Bilibili] 用户名提取成功: ${userInfo.username}`);
-        return userInfo;
+        if (userInfo && userInfo.username) {
+          log.info(`[Bilibili] 用户名提取成功: ${userInfo.username}`);
+          return userInfo;
+        }
+
+        // 如果没有获取到，等待后重试
+        if (attempt < maxRetries) {
+          log.warn(`[Bilibili] 第 ${attempt} 次尝试未获取到用户信息，${retryDelay/1000}秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      } catch (error) {
+        log.error(`[Bilibili] 第 ${attempt} 次提取用户信息失败:`, error);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
       }
-
-      log.warn('[Bilibili] 无法提取用户信息');
-      return null;
-    } catch (error) {
-      log.error('[Bilibili] 提取用户信息失败:', error);
-      return null;
     }
+
+    log.error('[Bilibili] 所有尝试都失败，无法提取用户信息');
+    return null;
   }
 
   /**
