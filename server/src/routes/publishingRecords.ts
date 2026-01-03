@@ -67,10 +67,13 @@ router.get('/records', async (req, res) => {
         t.question as topic_question,
         pc.platform_name,
         pt.status as task_status,
-        pa.credentials
+        pa.credentials,
+        ast.name as article_setting_name
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
+       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
        LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
@@ -146,10 +149,13 @@ router.get('/records/:id', async (req, res) => {
         pc.platform_name,
         pt.status as task_status,
         pt.error_message as task_error,
-        pa.credentials
+        pa.credentials,
+        ast.name as article_setting_name
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
+       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
        LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
@@ -214,8 +220,12 @@ router.get('/articles/:articleId/records', async (req, res) => {
         pr.published_at,
         pc.platform_name,
         pt.status as task_status,
-        pa.credentials
+        pa.credentials,
+        ast.name as article_setting_name
        FROM publishing_records pr
+       LEFT JOIN articles a ON pr.article_id = a.id
+       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
        LEFT JOIN platform_accounts pa ON pr.account_id = pa.id

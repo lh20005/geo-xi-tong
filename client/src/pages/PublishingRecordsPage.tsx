@@ -149,6 +149,14 @@ export default function PublishingRecordsPage() {
       key: 'article_keyword',
       width: 120,
       align: 'center' as const,
+      render: (text: string) => text ? <Tag color="blue">{text}</Tag> : <Text type="secondary">-</Text>
+    },
+    {
+      title: '文章设置',
+      dataIndex: 'article_setting_name',
+      key: 'article_setting_name',
+      width: 120,
+      align: 'center' as const,
       render: (text: string) => text ? <Tag color="purple">{text}</Tag> : <Text type="secondary">-</Text>
     },
     {
