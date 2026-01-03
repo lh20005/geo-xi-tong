@@ -150,16 +150,16 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已点击: 我知道了');
       await this.randomWait(3000, 5000);
 
-      // 第九步：点击发布作品
+      // 第九步：点击发布作品（使用force强制点击，避免被遮挡）
       await this.log('info', '第九步：点击发布作品');
-      await page.getByText('发布作品').click();
+      await page.getByText('发布作品').click({ force: true });
       await this.log('info', '已点击: 发布作品');
       await this.randomWait(3000, 5000);
 
-      // 第十步：点击发布作品
-      await this.log('info', '第十步：点击发布作品');
-      await page.getByText('发布作品').click();
-      await this.log('info', '已点击: 发布作品');
+      // 第十步：点击下一步
+      await this.log('info', '第十步：点击下一步');
+      await page.getByRole('button', { name: '下一步' }).click();
+      await this.log('info', '已点击: 下一步');
       await this.randomWait(3000, 5000);
 
       // 第十一步：点击下一步
@@ -174,18 +174,10 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已点击: 下一步');
       await this.randomWait(3000, 5000);
 
-      // 第十三步：悬停在"发布作品"按钮上，然后点击发布图文
-      await this.log('info', '第十三步：悬停在发布作品按钮上并点击发布图文');
-      await this.randomWait(3000, 5000);
-      
-      // 先悬停在"发布作品"按钮上，显示下拉菜单
-      await page.getByText('发布作品').hover();
-      await this.log('info', '已悬停: 发布作品按钮');
-      await this.randomWait(1000, 2000); // 等待菜单出现
-      
-      // 然后点击"发布图文"菜单项
-      await page.locator('div').filter({ hasText: /^发布图文$/ }).first().click();
-      await this.log('info', '已点击: 发布图文菜单项');
+      // 第十三步：点击完成
+      await this.log('info', '第十三步：点击完成');
+      await page.getByRole('button', { name: '完成' }).click();
+      await this.log('info', '已点击: 完成');
       await this.randomWait(3000, 5000);
 
       // 第十四步：输入标题
@@ -197,24 +189,57 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已输入: 标题内容');
       await this.randomWait(3000, 5000);
 
-      // 第十五步：输入正文
-      await this.log('info', '第十五步：输入正文');
-      const cleanContent = this.cleanArticleContent(article.content);
-      await page.locator('p[data-diagnose-id="3c01dbc2027f6e9cc949f4602ccb4271"]').click();
-      await this.log('info', '已点击: 正文编辑器');
+
+      // 第十五步：点击"内容润色"
+      await this.log('info', '第十五步：点击内容润色');
+      
+      // 等待页面稳定后再查找按钮
       await this.randomWait(3000, 5000);
-      await page.locator('p[data-diagnose-id="3c01dbc2027f6e9cc949f4602ccb4271"]').fill(cleanContent);
-      await this.log('info', '已输入: 正文内容');
+      
+      try {
+        // 等待"内容润色"按钮出现（增加超时时间）
+        await page.waitForSelector('text=内容润色', { timeout: 15000 });
+        await page.getByText('内容润色').click();
+        await this.log('info', '已点击: 内容润色');
+        await this.randomWait(3000, 5000);
+      } catch (error: any) {
+        await this.log('error', '找不到"内容润色"按钮', { error: error.message });
+        await this.log('info', '尝试截图以便调试...');
+        await page.screenshot({ path: 'baijiahao-debug-step15.png' });
+        throw new Error('找不到"内容润色"按钮，请检查页面是否正确加载');
+      }
+
+      // 第十六步：输入需要润色的内容
+      await this.log('info', '第十六步：输入需要润色的内容');
+      const cleanContent = this.cleanArticleContent(article.content);
+      await page.getByRole('textbox', { name: '输入需要润色的内容' }).click();
+      await this.log('info', '已点击: 润色输入框');
+      await this.randomWait(3000, 5000);
+      await page.getByRole('textbox', { name: '输入需要润色的内容' }).fill(cleanContent);
+      await this.log('info', '已输入: 文章内容');
       await this.randomWait(3000, 5000);
 
-      // 第十六步：点击选择封面
-      await this.log('info', '第十六步：点击选择封面');
+      // 第十七步：点击生成按钮
+      await this.log('info', '第十七步：点击生成按钮');
+      await page.locator('.ac71384b1d7fa6ba-wrap > img').click();
+      await this.log('info', '已点击: 生成按钮');
+      await this.log('info', '等待20秒，给AI充足时间生成文章...');
+      await page.waitForTimeout(20000); // 等待20秒
+
+      // 第十八步：点击"采纳"
+      await this.log('info', '第十八步：点击采纳');
+      await page.locator('div').filter({ hasText: /^采纳$/ }).first().click();
+      await this.log('info', '已点击: 采纳按钮');
+      await this.randomWait(3000, 5000);
+
+      // 第十九步：点击选择封面
+      await this.log('info', '第十九步：点击选择封面');
       await page.locator('div').filter({ hasText: /^选择封面$/ }).nth(5).click();
       await this.log('info', '已点击: 选择封面按钮');
       await this.randomWait(3000, 5000);
 
-      // 第十七步：上传图片
-      await this.log('info', '第十七步：上传图片');
+      // 第二十步：上传图片
+      await this.log('info', '第二十步：上传图片');
       const imagePath = await this.prepareImage(article);
       
       // 在点击之前设置 fileChooser 监听
@@ -229,20 +254,28 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已自动设置图片文件');
       await this.randomWait(3000, 5000);
 
-      // 第十八步：点击确定按钮
-      await this.log('info', '第十八步：点击确定按钮');
+      // 第二十一步：点击确定按钮
+      await this.log('info', '第二十一步：点击确定按钮');
       await page.getByRole('button', { name: '确定 (1)' }).click();
       await this.log('info', '已点击: 确定按钮');
       await this.randomWait(3000, 5000);
 
-      // 第十九步：勾选AI创作声明
-      await this.log('info', '第十九步：勾选AI创作声明');
-      await page.getByRole('checkbox', { name: 'AI创作声明' }).check();
-      await this.log('info', '已勾选: AI创作声明');
+      // 第二十二步：勾选AI创作声明
+      await this.log('info', '第二十二步：勾选AI创作声明');
+      try {
+        // 尝试直接点击 checkbox（而不是 check，因为可能需要点击 label）
+        await page.getByRole('checkbox', { name: 'AI创作声明' }).click({ force: true });
+        await this.log('info', '已勾选: AI创作声明');
+      } catch (error: any) {
+        await this.log('warning', '使用 checkbox 点击失败，尝试点击文本标签', { error: error.message });
+        // 如果失败，尝试点击包含"AI创作声明"的文本
+        await page.getByText('AI创作声明').click();
+        await this.log('info', '已通过文本标签勾选: AI创作声明');
+      }
       await this.randomWait(3000, 5000);
 
-      // 第二十步：点击发布按钮
-      await this.log('info', '第二十步：点击发布按钮');
+      // 第二十三步：点击发布按钮
+      await this.log('info', '第二十三步：点击发布按钮');
       await page.getByRole('button', { name: '发布', exact: true }).click();
       await this.log('info', '已点击: 发布按钮');
       await this.randomWait(3000, 5000);
