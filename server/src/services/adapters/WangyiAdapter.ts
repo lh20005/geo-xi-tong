@@ -149,39 +149,120 @@ export class WangyiAdapter extends PlatformAdapter {
     try {
       await this.log('info', '开始发布网易号文章', { title: article.title });
 
-      // 导航到发布页面
-      await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
+      // 不再重复导航，因为登录时已经导航到发布页面了
+      // 等待页面完全加载
+      await this.log('info', '等待页面加载完成...');
       await this.randomWait(3000, 5000);
 
-      // 点击发布按钮
-      await this.humanClick(page.getByRole('button', { name: '发布' }), '发布按钮');
+      // 第一步：点击按钮
+      await this.log('info', '第一步：点击按钮');
+      await this.randomWait(3000, 5000);
+      await page.getByRole('button').click();
+      await this.log('info', '已点击: 按钮');
+      await this.randomWait(3000, 5000);
 
-      // 输入标题
-      const titleInput = page.getByRole('textbox', { name: '请输入标题' });
-      await this.humanClick(titleInput, '标题输入框');
-      await this.humanType(titleInput, article.title, '标题内容');
+      // 第二步：点击"文章"
+      await this.log('info', '第二步：点击文章');
+      await page.getByText('文章').click();
+      await this.log('info', '已点击: 文章');
+      await this.randomWait(3000, 5000);
 
-      // 输入正文
+      // 第三步：输入标题
+      await this.log('info', '第三步：输入标题');
+      await page.getByRole('textbox', { name: '请输入标题 (5~30个字)' }).click();
+      await this.log('info', '已点击: 标题输入框');
+      await this.randomWait(3000, 5000);
+      await page.getByRole('textbox', { name: '请输入标题 (5~30个字)' }).fill(article.title);
+      await this.log('info', '已输入: 标题内容');
+      await this.randomWait(3000, 5000);
+
+      // 第四步：输入正文
+      await this.log('info', '第四步：输入正文');
       const cleanContent = this.cleanArticleContent(article.content);
-      const contentEditor = page.locator('.ProseMirror');
-      await this.humanClick(contentEditor, '正文编辑器');
-      await this.humanType(contentEditor, cleanContent, '正文内容');
+      await page.locator('.public-DraftStyleDefault-block').click();
+      await this.log('info', '已点击: 正文编辑器');
+      await this.randomWait(3000, 5000);
+      await page.getByRole('button', { name: '请输入正文' }).getByRole('textbox').fill(cleanContent);
+      await this.log('info', '已输入: 正文内容');
+      await this.randomWait(3000, 5000);
 
-      // 上传封面图片
+      // 第五步：点击"图片"按钮
+      await this.log('info', '第五步：点击图片按钮');
+      await page.locator('#root > div > div.layout__content.layout__content-article > div > div.post-header__nav > div > div > button:nth-child(18) > div').click();
+      await this.log('info', '已点击: 图片按钮');
+      await this.randomWait(3000, 5000);
+
+      // 第六步：上传图片
+      await this.log('info', '第六步：上传图片');
       const imagePath = await this.prepareImage(article);
+      
+      // 必须在点击之前设置 waitForEvent
       const fileChooserPromise = page.waitForEvent('filechooser');
       
-      await this.randomWait(3000, 5000);
-      await page.getByRole('button', { name: '上传封面' }).click();
-      await this.log('info', '已点击: 上传封面按钮');
+      await page.locator('div').filter({ hasText: /^请上传大于160x160的图片$/ }).nth(2).click();
+      await this.log('info', '已点击: 上传图片区域');
       
+      // 点击后立即等待 fileChooserPromise
       const fileChooser = await fileChooserPromise;
       await fileChooser.setFiles(imagePath);
       await this.log('info', '已自动设置图片文件');
+      
+      // 上传后需要和下一个操作间隔6秒
+      await page.waitForTimeout(6000);
+
+      // 第七步：点击"确定(1)"
+      await this.log('info', '第七步：点击确定按钮');
+      await page.getByRole('button', { name: '确定(1)' }).click();
+      await this.log('info', '已点击: 确定(1)');
       await this.randomWait(3000, 5000);
 
-      // 点击发布按钮
-      await this.humanClick(page.getByRole('button', { name: '发布', exact: true }), '发布按钮');
+      // 第八步：选择"单图"
+      await this.log('info', '第八步：选择单图');
+      await page.getByRole('radio', { name: '单图' }).check();
+      await this.log('info', '已选择: 单图');
+      await this.randomWait(3000, 5000);
+
+      // 第九步：点击"上传图片"
+      await this.log('info', '第九步：点击上传图片');
+      await page.locator('div').filter({ hasText: /^上传图片$/ }).nth(2).click();
+      await this.log('info', '已点击: 上传图片');
+      await this.randomWait(3000, 5000);
+
+      // 第十步：选择已上传的图片
+      await this.log('info', '第十步：选择已上传的图片');
+      await page.locator('.cover-picture__item-img').click();
+      await this.log('info', '已点击: 封面图片');
+      await this.randomWait(3000, 5000);
+
+      // 第十一步：点击"确认"
+      await this.log('info', '第十一步：点击确认');
+      await page.getByText('确认').click();
+      await this.log('info', '已点击: 确认');
+      await this.randomWait(3000, 5000);
+
+      // 第十二步：点击声明开关
+      await this.log('info', '第十二步：点击声明开关');
+      await page.locator('.box-trigger.custom-switcher').click();
+      await this.log('info', '已点击: 声明开关');
+      await this.randomWait(3000, 5000);
+
+      // 第十三步：点击"选择声明内容"
+      await this.log('info', '第十三步：点击选择声明内容');
+      await page.getByText('选择声明内容').click();
+      await this.log('info', '已点击: 选择声明内容');
+      await this.randomWait(3000, 5000);
+
+      // 第十四步：选择"个人原创，仅供参考"
+      await this.log('info', '第十四步：选择个人原创');
+      await page.getByText('个人原创，仅供参考').click();
+      await this.log('info', '已点击: 个人原创，仅供参考');
+      await this.randomWait(3000, 5000);
+
+      // 第十五步：点击"发布"按钮
+      await this.log('info', '第十五步：点击发布按钮');
+      await page.getByRole('button', { name: '发布', exact: true }).click();
+      await this.log('info', '已点击: 发布按钮');
+      await this.randomWait(3000, 5000);
 
       // 验证发布结果
       const success = await this.verifyPublishSuccess(page);
