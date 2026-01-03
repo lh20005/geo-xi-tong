@@ -74,8 +74,9 @@ export default function PlatformManagementPage() {
 
   const initializeWebSocketConnection = () => {
     try {
-      // Get WebSocket URL from environment or use default
-      const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:3000/ws';
+      // Get WebSocket URL from config
+      const wsUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3000';
+      const wsFullUrl = `${wsUrl}/ws`;
       
       // Get auth token from localStorage
       const token = localStorage.getItem('auth_token');
@@ -85,8 +86,8 @@ export default function PlatformManagementPage() {
         return;
       }
 
-      console.log('[WebSocket] 初始化WebSocket连接');
-      const wsClient = initializeWebSocket(wsUrl);
+      console.log('[WebSocket] 初始化WebSocket连接:', wsFullUrl);
+      const wsClient = initializeWebSocket(wsFullUrl);
 
       // Set up event listeners
       wsClient.on('connected', () => {

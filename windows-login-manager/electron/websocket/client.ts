@@ -6,6 +6,7 @@
 
 import { EventEmitter } from 'events';
 import log from 'electron-log';
+import WebSocket from 'ws';
 
 export interface WebSocketMessage {
   type: string;
@@ -70,7 +71,8 @@ export class WebSocketClient extends EventEmitter {
 
       this.ws.onmessage = (event) => {
         try {
-          const message: WebSocketMessage = JSON.parse(event.data);
+          const data = typeof event.data === 'string' ? event.data : event.data.toString();
+          const message: WebSocketMessage = JSON.parse(data);
           this.handleMessage(message);
         } catch (error) {
           log.error('Failed to parse WebSocket message:', error);

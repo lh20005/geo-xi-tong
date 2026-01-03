@@ -2,9 +2,9 @@ import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from
 import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import type { MenuProps } from 'antd';
 import { useApp } from '../../context/AppContext';
+import { apiClient } from '../../api/client';
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
@@ -32,8 +32,8 @@ export default function Header({ onLogout }: HeaderProps) {
 
   const checkBackendConnection = async () => {
     try {
-      // 使用一个轻量级的API端点来检查连接
-      await axios.get('/api/health', { timeout: 5000 });
+      // 使用配置好的 apiClient 来检查连接
+      await apiClient.get('/health', { timeout: 5000 });
       setBackendConnected(true);
     } catch (error) {
       console.error('后端连接检查失败:', error);
