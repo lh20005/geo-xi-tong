@@ -24,6 +24,7 @@ export interface GenerationTask {
   createdAt: string;
   updatedAt: string;
   conversionTargetName?: string | null;  // 转化目标名称
+  articleSettingName?: string | null;  // 文章设置名称
   keyword: string;  // 关键词
   provider: string;  // AI提供商
   distillationResult?: string | null;  // 蒸馏结果

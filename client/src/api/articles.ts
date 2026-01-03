@@ -21,6 +21,8 @@ export interface Article {
   taskId?: number;
   conversionTargetId?: number;
   conversionTargetName?: string;
+  articleSettingId?: number;
+  articleSettingName?: string;
 }
 
 export interface ArticleStats {

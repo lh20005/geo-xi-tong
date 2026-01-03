@@ -47,7 +47,7 @@ class WangyiLoginManager {
   private readonly PLATFORM_ID = 'wangyi';
   private readonly PLATFORM_NAME = '网易号';
   private readonly LOGIN_URL = 'https://mp.163.com/login.html';
-  private readonly SUCCESS_URL_PATTERN = 'mp.163.com/';
+  private readonly SUCCESS_URL_PATTERN = 'mp.163.com/subscribe_v4';
   private readonly USERNAME_SELECTOR = '.topBar__user>span';
   private readonly AVATAR_SELECTOR = '.topBar__user>span>img';
   private readonly CHECK_INTERVAL = 1000; // 1秒检查间隔

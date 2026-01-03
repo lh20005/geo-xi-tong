@@ -573,7 +573,7 @@ export class AccountService {
           needsUserPage: true  // 标记需要跳转到用户个人主页
         },
         'wangyi': {
-          url: 'https://mp.163.com/home/index.html',
+          url: 'https://mp.163.com/subscribe_v4/index.html#/',
           waitTime: 3000  // 网易号需要导航到首页
         },
         'baijiahao': {
@@ -1729,7 +1729,18 @@ export class AccountService {
       
       // 导航到平台主页
       console.log(`[登录测试] 正在导航到平台主页...`);
-      await page.goto(homeUrl, { waitUntil: 'networkidle', timeout: 60000 });
+      
+      // 网易号特殊处理：先访问登录页面让 Cookie 生效，再跳转到主页
+      if (account.platform_id === 'wangyi') {
+        console.log(`[登录测试] 网易号特殊处理：先访问登录页面`);
+        await page.goto('https://mp.163.com/login.html', { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(1000);
+        console.log(`[登录测试] 现在跳转到主页: ${homeUrl}`);
+        await page.goto(homeUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      } else {
+        await page.goto(homeUrl, { waitUntil: 'networkidle', timeout: 60000 });
+      }
+      
       console.log(`[登录测试] 页面加载完成，当前URL: ${page.url()}`);
       
       console.log(`\n========================================`);
@@ -1764,7 +1775,7 @@ export class AccountService {
   private getPlatformHomeUrl(platformId: string): string | null {
     const homeUrls: { [key: string]: string } = {
       // 主流自媒体平台
-      'wangyi': 'https://mp.163.com/',
+      'wangyi': 'https://mp.163.com/subscribe_v4/index.html#/',
       'souhu': 'https://mp.sohu.com/mpfe/v3/main/index',
       'baijiahao': 'https://baijiahao.baidu.com/builder/rc/home',
       'toutiao': 'https://mp.toutiao.com/profile_v4/index',

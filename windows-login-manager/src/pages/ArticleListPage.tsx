@@ -311,6 +311,14 @@ export default function ArticleListPage() {
       render: (text: string) => text ? <Tag color="orange">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
     },
     {
+      title: '文章设置',
+      dataIndex: 'articleSettingName',
+      key: 'articleSettingName',
+      width: 120,
+      align: 'center' as const,
+      render: (text: string) => text ? <Tag color="purple">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+    },
+    {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',

@@ -349,6 +349,8 @@ articleRouter.get('/', async (req, res) => {
         a.task_id,
         gt.conversion_target_id,
         ct.company_name as conversion_target_name,
+        gt.article_setting_id,
+        ast.name as article_setting_name,
         a.image_url,
         a.is_published,
         a.published_at,
@@ -359,6 +361,7 @@ articleRouter.get('/', async (req, res) => {
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        ${whereClause}
        ORDER BY a.created_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
@@ -377,6 +380,8 @@ articleRouter.get('/', async (req, res) => {
         taskId: row.task_id,
         conversionTargetId: row.conversion_target_id,
         conversionTargetName: row.conversion_target_name,
+        articleSettingId: row.article_setting_id,
+        articleSettingName: row.article_setting_name,
         imageUrl: row.image_url,
         isPublished: row.is_published,
         publishedAt: row.published_at,
@@ -411,6 +416,8 @@ articleRouter.get('/:id', async (req, res) => {
         a.task_id,
         gt.conversion_target_id,
         ct.company_name as conversion_target_name,
+        gt.article_setting_id,
+        ast.name as article_setting_name,
         a.requirements,
         a.content,
         a.image_url,
@@ -424,6 +431,7 @@ articleRouter.get('/:id', async (req, res) => {
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        WHERE a.id = $1 AND a.user_id = $2`,
       [id, userId]
     );
@@ -444,6 +452,8 @@ articleRouter.get('/:id', async (req, res) => {
       taskId: article.task_id,
       conversionTargetId: article.conversion_target_id,
       conversionTargetName: article.conversion_target_name,
+      articleSettingId: article.article_setting_id,
+      articleSettingName: article.article_setting_name,
       requirements: article.requirements,
       content: article.content,
       imageUrl: article.image_url,

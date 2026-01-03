@@ -229,8 +229,15 @@ export class PublishingExecutor {
           // 标记账号为在线状态
           await accountService.markAccountOnline(account.id);
         } else {
+          // 检查任务是否被用户取消
+          const currentTask = await publishingService.getTaskById(taskId);
+          if (currentTask && currentTask.status === 'cancelled') {
+            await publishingService.logMessage(taskId, 'info', '⚠️ 任务已被用户取消，跳过账号状态更新');
+            throw new Error('任务已被用户取消');
+          }
+          
           await publishingService.logMessage(taskId, 'error', `❌ ${adapter.platformName} Cookie已失效或平台已掉线`);
-          // 🔥 关键修复：标记账号为掉线状态
+          // 🔥 关键修复：只有在任务未被取消时才标记账号为掉线状态
           await accountService.markAccountOffline(account.id, 'Cookie已失效或平台已掉线');
           throw new Error(`${adapter.platformName} Cookie已失效，请重新登录`);
         }
@@ -323,15 +330,22 @@ export class PublishingExecutor {
    * 处理任务失败，包含重试逻辑
    */
   private async handleTaskFailure(taskId: number, error: Error, isTimeout: boolean = false): Promise<void> {
-    // 增加重试次数
-    await publishingService.incrementRetryCount(taskId);
-
-    // 获取当前任务信息
+    // 检查任务是否被用户取消
     const task = await publishingService.getTaskById(taskId);
     if (!task) {
       console.error(`❌ 任务 #${taskId} 不存在，无法处理失败`);
       return;
     }
+    
+    // 如果任务已被取消，不做任何处理
+    if (task.status === 'cancelled') {
+      console.log(`⚠️ 任务 #${taskId} 已被用户取消，跳过失败处理`);
+      await this.clearArticleLock(task.article_id);
+      return;
+    }
+    
+    // 增加重试次数
+    await publishingService.incrementRetryCount(taskId);
 
     const nextRetryCount = task.retry_count + 1;
     const failureType = isTimeout ? '超时' : '失败';

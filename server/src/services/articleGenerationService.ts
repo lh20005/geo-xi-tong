@@ -418,6 +418,7 @@ export class ArticleGenerationService {
         gt.user_id,
         gt.selected_distillation_ids,
         ct.company_name as conversion_target_name,
+        ast.name as article_setting_name,
         d.keyword,
         d.provider,
         (
@@ -428,6 +429,7 @@ export class ArticleGenerationService {
         ) as distillation_result
        FROM generation_tasks gt
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        INNER JOIN distillations d ON gt.distillation_id = d.id
        ${whereClause}
        ORDER BY gt.created_at DESC
@@ -458,6 +460,7 @@ export class ArticleGenerationService {
           updatedAt: row.updated_at,
           userId: row.user_id,
           conversionTargetName: row.conversion_target_name || null,
+          articleSettingName: row.article_setting_name || null,
           keyword,
           provider: row.provider,
           distillationResult
@@ -492,6 +495,7 @@ export class ArticleGenerationService {
         gt.updated_at,
         gt.user_id,
         ct.company_name as conversion_target_name,
+        ast.name as article_setting_name,
         d.keyword,
         d.provider,
         (
@@ -502,6 +506,7 @@ export class ArticleGenerationService {
         ) as distillation_result
        FROM generation_tasks gt
        LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        INNER JOIN distillations d ON gt.distillation_id = d.id
        ${whereClause}`,
       queryParams
@@ -528,6 +533,7 @@ export class ArticleGenerationService {
       updatedAt: row.updated_at,
       userId: row.user_id,
       conversionTargetName: row.conversion_target_name || null,
+      articleSettingName: row.article_setting_name || null,
       keyword: row.keyword,
       provider: row.provider,
       distillationResult: row.distillation_result || null

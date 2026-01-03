@@ -16,7 +16,7 @@ export class WangyiAdapter extends PlatformAdapter {
   }
 
   getPublishUrl(): string {
-    return 'https://mp.163.com/v4/home';
+    return 'https://mp.163.com/subscribe_v4/index.html#/';
   }
 
   getLoginSelectors(): LoginSelectors {

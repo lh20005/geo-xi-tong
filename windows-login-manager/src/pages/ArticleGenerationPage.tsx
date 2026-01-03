@@ -342,6 +342,19 @@ export default function ArticleGenerationPage() {
       )
     },
     {
+      title: '文章设置',
+      dataIndex: 'articleSettingName',
+      key: 'articleSettingName',
+      width: 120,
+      align: 'center' as const,
+      ellipsis: { showTitle: false },
+      render: (text: string | null) => (
+        <Tooltip title={text || '未设置'}>
+          <span>{text ? <Tag color="purple">{text}</Tag> : '-'}</span>
+        </Tooltip>
+      )
+    },
+    {
       title: '关键词',
       dataIndex: 'keyword',
       key: 'keyword',
