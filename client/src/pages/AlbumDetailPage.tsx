@@ -58,6 +58,22 @@ export default function AlbumDetailPage() {
 
     setLoading(true);
     try {
+      // 计算总文件大小
+      const totalSize = fileList.reduce((sum, file) => {
+        return sum + (file.originFileObj?.size || 0);
+      }, 0);
+
+      // 检查配额
+      const quotaCheck = await apiClient.post('/storage/check-quota', {
+        sizeBytes: totalSize,
+        resourceType: 'image'
+      });
+
+      if (!quotaCheck.data.allowed) {
+        message.error(quotaCheck.data.message || '存储空间不足，请升级套餐');
+        return;
+      }
+
       const formData = new FormData();
       fileList.forEach((file) => {
         if (file.originFileObj) {

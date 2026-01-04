@@ -29,7 +29,7 @@ export class WebSocketService {
       server,
       path: '/ws',
       // 添加验证选项，允许所有来源（因为我们通过 JWT 验证）
-      verifyClient: (info) => {
+      verifyClient: (info: { origin: string; secure: boolean; req: any }) => {
         // 允许所有连接尝试，在连接后验证 JWT
         return true;
       }

@@ -48,18 +48,36 @@ export class AuthService {
    * 创建用户
    */
   async createUser(username: string, password: string, email?: string, role: 'admin' | 'user' = 'user'): Promise<User> {
-    const passwordHash = await this.hashPassword(password);
+    const client = await pool.connect();
     
-    // 生成唯一的邀请码
-    const invitationCode = await invitationService.generate();
-    
-    const result = await pool.query(
-      'INSERT INTO users (username, password_hash, email, role, invitation_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [username, passwordHash, email, role, invitationCode]
-    );
-    
-    console.log(`[Auth] 用户创建成功: ${username}, 邀请码: ${invitationCode}`);
-    return result.rows[0];
+    try {
+      await client.query('BEGIN');
+      
+      const passwordHash = await this.hashPassword(password);
+      
+      // 生成唯一的邀请码
+      const invitationCode = await invitationService.generate();
+      
+      const result = await client.query(
+        'INSERT INTO users (username, password_hash, email, role, invitation_code) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [username, passwordHash, email, role, invitationCode]
+      );
+      
+      const user = result.rows[0];
+      
+      // 初始化用户存储记录
+      await client.query('SELECT initialize_user_storage($1)', [user.id]);
+      
+      await client.query('COMMIT');
+      
+      console.log(`[Auth] 用户创建成功: ${username}, 邀请码: ${invitationCode}`);
+      return user;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -109,28 +127,44 @@ export class AuthService {
       }
     }
     
-    // 哈希密码
-    const passwordHash = await this.hashPassword(password);
+    const client = await pool.connect();
     
-    // 生成唯一的邀请码
-    const invitationCode = await invitationService.generate();
-    
-    // 创建用户
-    const result = await pool.query(
-      `INSERT INTO users (username, password_hash, invitation_code, invited_by_code, role, is_temp_password) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
-       RETURNING *`,
-      [username, passwordHash, invitationCode, invitedByCode || null, 'user', false]
-    );
-    
-    const user = result.rows[0];
-    
-    // 保存密码历史
-    await passwordService.savePasswordHistory(user.id, passwordHash);
-    
-    console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}`);
-    
-    return user;
+    try {
+      await client.query('BEGIN');
+      
+      // 哈希密码
+      const passwordHash = await this.hashPassword(password);
+      
+      // 生成唯一的邀请码
+      const invitationCode = await invitationService.generate();
+      
+      // 创建用户
+      const result = await client.query(
+        `INSERT INTO users (username, password_hash, invitation_code, invited_by_code, role, is_temp_password) 
+         VALUES ($1, $2, $3, $4, $5, $6) 
+         RETURNING *`,
+        [username, passwordHash, invitationCode, invitedByCode || null, 'user', false]
+      );
+      
+      const user = result.rows[0];
+      
+      // 保存密码历史
+      await passwordService.savePasswordHistory(user.id, passwordHash);
+      
+      // 初始化用户存储记录
+      await client.query('SELECT initialize_user_storage($1)', [user.id]);
+      
+      await client.query('COMMIT');
+      
+      console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}`);
+      
+      return user;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**

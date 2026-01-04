@@ -7,6 +7,8 @@ import fs from 'fs';
 import { DocumentParserService } from '../services/documentParser';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
+import { storageQuotaService } from '../services/StorageQuotaService';
+import { storageService } from '../services/StorageService';
 
 export const knowledgeBaseRouter = Router();
 
@@ -279,6 +281,32 @@ knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req
       return res.status(404).json({ error: '知识库不存在或无权访问' });
     }
     
+    // 计算总文件大小
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    
+    // 检查每个文件的大小限制
+    for (const file of files) {
+      const sizeValidation = await storageQuotaService.validateFileSize('document', file.size);
+      if (!sizeValidation.valid) {
+        // 清理已上传的文件
+        files.forEach(f => fs.existsSync(f.path) && fs.unlinkSync(f.path));
+        return res.status(413).json({ error: sizeValidation.reason });
+      }
+    }
+    
+    // 检查存储配额
+    const quotaCheck = await storageQuotaService.checkQuota(userId, totalSize);
+    if (!quotaCheck.allowed) {
+      // 清理已上传的文件
+      files.forEach(file => fs.existsSync(file.path) && fs.unlinkSync(file.path));
+      return res.status(403).json({ 
+        error: quotaCheck.reason,
+        currentUsage: quotaCheck.currentUsageBytes,
+        quota: quotaCheck.quotaBytes,
+        available: quotaCheck.availableBytes
+      });
+    }
+    
     const parser = new DocumentParserService();
     const uploadedDocuments = [];
     const errors = [];
@@ -303,6 +331,21 @@ knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req
              VALUES ($1, $2, $3, $4, $5) 
              RETURNING id, filename, file_type, file_size, created_at`,
             [kbId, originalname, path.extname(originalname), file.size, content]
+          );
+          
+          const docId = result.rows[0].id;
+          
+          // 记录存储使用
+          await storageService.recordStorageUsage(
+            userId,
+            'document',
+            docId,
+            file.size,
+            {
+              filename: originalname,
+              fileType: path.extname(originalname),
+              knowledgeBaseId: kbId
+            }
           );
           
           uploadedDocuments.push(result.rows[0]);
@@ -388,20 +431,33 @@ knowledgeBaseRouter.delete('/documents/:id', async (req, res) => {
       return res.status(400).json({ error: '无效的文档ID' });
     }
     
-    // 验证文档所属的知识库是否属于当前用户，然后删除
-    const result = await pool.query(
-      `DELETE FROM knowledge_documents kd
-       USING knowledge_bases kb
-       WHERE kd.knowledge_base_id = kb.id
-         AND kd.id = $1
-         AND kb.user_id = $2
-       RETURNING kd.id`,
-      [docId, userId]
+    // 获取文档信息并验证所有权
+    const docResult = await pool.query(
+      `SELECT kd.id, kd.file_size, kb.user_id
+       FROM knowledge_documents kd
+       JOIN knowledge_bases kb ON kd.knowledge_base_id = kb.id
+       WHERE kd.id = $1`,
+      [docId]
     );
     
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: '文档不存在或无权访问' });
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: '文档不存在' });
     }
+    
+    const doc = docResult.rows[0];
+    
+    // 验证所有权
+    if (doc.user_id !== userId) {
+      return res.status(403).json({ error: '无权删除此文档' });
+    }
+    
+    const fileSize = doc.file_size;
+    
+    // 删除文档记录
+    await pool.query('DELETE FROM knowledge_documents WHERE id = $1', [docId]);
+    
+    // 减少存储使用
+    await storageService.removeStorageUsage(userId, 'document', docId, fileSize);
     
     res.json({ success: true });
   } catch (error: any) {

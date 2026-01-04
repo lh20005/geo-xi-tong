@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
+import { storageQuotaService } from '../services/StorageQuotaService';
+import { storageService } from '../services/StorageService';
 
 export const galleryRouter = Router();
 
@@ -318,7 +320,43 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
       return res.status(404).json({ error: '相册不存在或无权访问' });
     }
     
-    // 插入图片记录
+    // 计算总文件大小
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    
+    // 检查每个文件的大小限制
+    for (const file of files) {
+      const sizeValidation = await storageQuotaService.validateFileSize('image', file.size);
+      if (!sizeValidation.valid) {
+        // 删除已上传的文件
+        files.forEach(f => {
+          const filePath = path.join(uploadDir, f.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        });
+        return res.status(413).json({ error: sizeValidation.reason });
+      }
+    }
+    
+    // 检查存储配额
+    const quotaCheck = await storageQuotaService.checkQuota(userId, totalSize);
+    if (!quotaCheck.allowed) {
+      // 删除已上传的文件
+      files.forEach(file => {
+        const filePath = path.join(uploadDir, file.filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      });
+      return res.status(403).json({ 
+        error: quotaCheck.reason,
+        currentUsage: quotaCheck.currentUsageBytes,
+        quota: quotaCheck.quotaBytes,
+        available: quotaCheck.availableBytes
+      });
+    }
+    
+    // 插入图片记录并记录存储使用
     const uploadedImages = [];
     for (const file of files) {
       const decodedFilename = decodeFilename(file.originalname);
@@ -326,6 +364,22 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
         'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id, filename, created_at',
         [albumId, decodedFilename, file.filename, file.mimetype, file.size]
       );
+      
+      const imageId = result.rows[0].id;
+      
+      // 记录存储使用
+      await storageService.recordStorageUsage(
+        userId,
+        'image',
+        imageId,
+        file.size,
+        {
+          filename: decodedFilename,
+          mimetype: file.mimetype,
+          albumId: albumId
+        }
+      );
+      
       uploadedImages.push(result.rows[0]);
     }
     
@@ -366,26 +420,54 @@ galleryRouter.get('/images/:id', async (req, res) => {
 // 删除图片
 galleryRouter.delete('/images/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const imageId = parseInt(req.params.id);
     if (isNaN(imageId) || imageId <= 0) {
       return res.status(400).json({ error: '无效的图片ID' });
     }
     
-    // 获取图片信息
-    const imageResult = await pool.query('SELECT filepath FROM images WHERE id = $1', [imageId]);
+    // 获取图片信息并验证所有权
+    const imageResult = await pool.query(
+      `SELECT i.filepath, i.size, i.album_id, a.user_id 
+       FROM images i 
+       JOIN albums a ON i.album_id = a.id 
+       WHERE i.id = $1`,
+      [imageId]
+    );
+    
     if (imageResult.rows.length === 0) {
       return res.status(404).json({ error: '图片不存在' });
     }
     
-    const filepath = imageResult.rows[0].filepath;
+    const image = imageResult.rows[0];
+    
+    // 验证所有权
+    if (image.user_id !== userId) {
+      return res.status(403).json({ error: '无权删除此图片' });
+    }
+    
+    const filepath = image.filepath;
+    const fileSize = image.size;
     
     // 删除数据库记录
     await pool.query('DELETE FROM images WHERE id = $1', [imageId]);
     
     // 删除文件系统中的文件
     const fullPath = path.join(uploadDir, filepath);
+    let fileDeleted = false;
     if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
+      try {
+        fs.unlinkSync(fullPath);
+        fileDeleted = true;
+      } catch (error) {
+        console.error('删除文件失败:', error);
+        // 继续执行，但记录错误
+      }
+    }
+    
+    // 只有文件成功删除后才减少存储使用
+    if (fileDeleted) {
+      await storageService.removeStorageUsage(userId, 'image', imageId, fileSize);
     }
     
     res.json({ success: true });

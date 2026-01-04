@@ -27,12 +27,16 @@ import subscriptionRouter from './subscription';
 import quotaRouter from './quota';
 import usageTrackingRouter from './usageTracking';
 import productManagementRouter from './admin/productManagement';
+import storageRouter from './storage';
+import adminStorageRouter from './admin/storage';
+import storageProductsRouter from './storageProducts';
 
 export const apiRouter = Router();
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/admin/products', productManagementRouter);
+apiRouter.use('/admin/storage', adminStorageRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/invitations', invitationsRouter);
 apiRouter.use('/confirm', confirmationRouter);
@@ -43,6 +47,8 @@ apiRouter.use('/orders', ordersRouter);
 apiRouter.use('/subscription', subscriptionRouter);
 apiRouter.use('/quota', quotaRouter);  // 配额管理API
 apiRouter.use('/usage', usageTrackingRouter);  // 使用量追踪API
+apiRouter.use('/storage', storageRouter);  // 存储管理API
+apiRouter.use('/storage-products', storageProductsRouter);  // 存储产品购买API
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);

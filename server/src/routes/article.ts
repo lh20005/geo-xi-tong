@@ -4,6 +4,8 @@ import { AIService } from '../services/aiService';
 import { KnowledgeBaseService } from '../services/knowledgeBaseService';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
+import { storageQuotaService } from '../services/StorageQuotaService';
+import { storageService, StorageService } from '../services/StorageService';
 
 export const articleRouter = Router();
 
@@ -142,6 +144,20 @@ articleRouter.post('/generate', async (req, res) => {
       knowledgeContext
     );
     
+    // 计算文章内容大小
+    const contentSize = StorageService.calculateTextSize(content);
+    
+    // 检查存储配额
+    const quotaCheck = await storageQuotaService.checkQuota(userId, contentSize);
+    if (!quotaCheck.allowed) {
+      return res.status(403).json({ 
+        error: quotaCheck.reason,
+        currentUsage: quotaCheck.currentUsageBytes,
+        quota: quotaCheck.quotaBytes,
+        available: quotaCheck.availableBytes
+      });
+    }
+    
     // 保存文章（关联用户）
     const articleResult = await pool.query(
       `INSERT INTO articles (keyword, distillation_id, requirements, content, provider, user_id)
@@ -150,9 +166,24 @@ articleRouter.post('/generate', async (req, res) => {
       [keyword, distillationId, requirements, content, provider, userId]
     );
     
+    const articleId = articleResult.rows[0].id;
+    
+    // 记录存储使用
+    await storageService.recordStorageUsage(
+      userId,
+      'article',
+      articleId,
+      contentSize,
+      {
+        keyword,
+        distillationId,
+        provider
+      }
+    );
+    
     res.json({
       success: true,
-      articleId: articleResult.rows[0].id,
+      articleId,
       content
     });
   } catch (error: any) {
@@ -660,9 +691,9 @@ articleRouter.delete('/:id', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // 验证文章所有权并获取distillation_id
+    // 验证文章所有权并获取信息
     const articleResult = await client.query(
-      'SELECT distillation_id FROM articles WHERE id = $1 AND user_id = $2',
+      'SELECT distillation_id, content FROM articles WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     
@@ -671,7 +702,9 @@ articleRouter.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: '文章不存在或无权访问' });
     }
     
-    const distillationId = articleResult.rows[0].distillation_id;
+    const article = articleResult.rows[0];
+    const distillationId = article.distillation_id;
+    const contentSize = StorageService.calculateTextSize(article.content || '');
     
     // 删除文章（仅当前用户的）
     await client.query('DELETE FROM articles WHERE id = $1 AND user_id = $2', [id, userId]);
@@ -684,6 +717,9 @@ articleRouter.delete('/:id', async (req, res) => {
     }
     
     await client.query('COMMIT');
+    
+    // 减少存储使用
+    await storageService.removeStorageUsage(userId, 'article', parseInt(id), contentSize);
     
     res.json({ success: true, message: '文章删除成功' });
   } catch (error: any) {
