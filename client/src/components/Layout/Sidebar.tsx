@@ -1,4 +1,4 @@
-import { Layout, Menu } from 'antd';
+import { Layout, Menu, Modal, message } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   DashboardOutlined,
@@ -19,8 +19,11 @@ import {
   LockOutlined,
   TeamOutlined,
   ShoppingOutlined,
+  UserOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
+import { config } from '../../config/env';
 
 const { Sider } = Layout;
 
@@ -28,6 +31,31 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const userIsAdmin = isAdmin();
+
+  const handleLogout = () => {
+    Modal.confirm({
+      title: '确认退出',
+      content: '确定要退出登录吗？',
+      okText: '确认退出',
+      cancelText: '取消',
+      onOk: () => {
+        console.log('[Auth] 用户退出登录');
+        
+        // 清除所有认证信息
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_info');
+        
+        message.success('已退出登录');
+        
+        // 延迟跳转，让用户看到提示
+        setTimeout(() => {
+          // 跳转到 Landing 首页（营销网站）
+          window.location.href = config.landingUrl;
+        }, 500);
+      }
+    });
+  };
 
   const menuItems = [
     {
@@ -146,7 +174,25 @@ export default function Sidebar() {
       icon: <BookOutlined />,
       label: '使用说明书',
     },
+    {
+      key: '/user-center',
+      icon: <UserOutlined />,
+      label: '个人中心',
+    },
+    {
+      key: 'logout',
+      icon: <LogoutOutlined />,
+      label: '退出登录',
+    },
   ];
+
+  const handleMenuClick = ({ key }: { key: string }) => {
+    if (key === 'logout') {
+      handleLogout();
+    } else {
+      navigate(key);
+    }
+  };
 
   return (
     <Sider
@@ -190,7 +236,7 @@ export default function Sidebar() {
         mode="inline"
         selectedKeys={[location.pathname]}
         items={menuItems}
-        onClick={({ key }) => navigate(key)}
+        onClick={handleMenuClick}
         style={{
           background: 'transparent',
           border: 'none',

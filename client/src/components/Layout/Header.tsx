@@ -1,16 +1,12 @@
-import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
-import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Layout, Space, Tag, Avatar, Typography } from 'antd';
+import { DatabaseOutlined, UserOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../api/client';
-import type { MenuProps } from 'antd';
-import { config } from '../../config/env';
 
 const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 export default function Header() {
-  const navigate = useNavigate();
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
   
   // 从localStorage获取用户信息
@@ -39,52 +35,6 @@ export default function Header() {
     }
   };
 
-  const handleLogout = () => {
-    Modal.confirm({
-      title: '确认退出',
-      content: '确定要退出登录吗？',
-      okText: '确认退出',
-      cancelText: '取消',
-      onOk: () => {
-        console.log('[Auth] 用户退出登录');
-        
-        // 清除所有认证信息
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_info');
-        
-        message.success('已退出登录');
-        
-        // 延迟跳转，让用户看到提示
-        setTimeout(() => {
-          // 跳转到 Landing 首页（营销网站）
-          window.location.href = config.landingUrl;
-        }, 500);
-      }
-    });
-  };
-
-  const menuItems: MenuProps['items'] = [
-    {
-      key: 'profile',
-      icon: <UserOutlined />,
-      label: '个人中心',
-      onClick: () => {
-        // 使用 React Router 导航到用户中心页面
-        navigate('/user-center');
-      }
-    },
-    {
-      type: 'divider'
-    },
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '返回主页',
-      onClick: handleLogout
-    }
-  ];
-
   return (
     <AntHeader
       style={{
@@ -110,13 +60,11 @@ export default function Header() {
           </Tag>
         )}
         
-        {/* 用户信息下拉菜单 */}
-        <Dropdown menu={{ items: menuItems }} placement="bottomRight">
-          <Space style={{ cursor: 'pointer' }}>
-            <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-            <Text strong>{userInfo.username || '用户'}</Text>
-          </Space>
-        </Dropdown>
+        {/* 用户信息显示 */}
+        <Space>
+          <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+          <Text strong>{userInfo.username || '用户'}</Text>
+        </Space>
       </Space>
     </AntHeader>
   );

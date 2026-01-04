@@ -1,8 +1,6 @@
-import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
-import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
+import { Layout, Space, Tag, Avatar, Typography } from 'antd';
+import { DatabaseOutlined, UserOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { MenuProps } from 'antd';
 import { useApp } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
 
@@ -15,7 +13,6 @@ interface HeaderProps {
 
 export default function Header({ onLogout }: HeaderProps) {
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
-  const navigate = useNavigate();
   const { user } = useApp();
 
   useEffect(() => {
@@ -40,44 +37,6 @@ export default function Header({ onLogout }: HeaderProps) {
       setBackendConnected(false);
     }
   };
-
-  const handleLogout = () => {
-    Modal.confirm({
-      title: '确认退出',
-      content: '确定要退出登录吗？',
-      okText: '确认退出',
-      cancelText: '取消',
-      onOk: () => {
-        console.log('[Auth] 用户退出登录');
-        message.success('已退出登录');
-        
-        // 调用父组件的登出处理
-        if (onLogout) {
-          onLogout();
-        }
-      }
-    });
-  };
-
-  const menuItems: MenuProps['items'] = [
-    {
-      key: 'user-center',
-      icon: <UserOutlined />,
-      label: '个人中心',
-      onClick: () => {
-        navigate('/user-center');
-      }
-    },
-    {
-      type: 'divider'
-    },
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: '退出登录',
-      onClick: handleLogout
-    }
-  ];
 
   return (
     <AntHeader
@@ -104,13 +63,11 @@ export default function Header({ onLogout }: HeaderProps) {
           </Tag>
         )}
         
-        {/* 用户信息下拉菜单 */}
-        <Dropdown menu={{ items: menuItems }} placement="bottomRight">
-          <Space style={{ cursor: 'pointer' }}>
-            <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-            <Text strong>{user?.username || '用户'}</Text>
-          </Space>
-        </Dropdown>
+        {/* 用户信息显示 */}
+        <Space>
+          <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+          <Text strong>{user?.username || '用户'}</Text>
+        </Space>
       </Space>
     </AntHeader>
   );

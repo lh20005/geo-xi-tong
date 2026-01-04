@@ -13,7 +13,7 @@ interface LayoutProps {
 const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
   return (
     <AntLayout style={{ minHeight: '100vh', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+      <Sidebar onLogout={onLogout} />
       <AntLayout style={{ marginLeft: 240, height: '100vh', display: 'flex', flexDirection: 'column' }}>
         <Header onLogout={onLogout} />
         <Content
