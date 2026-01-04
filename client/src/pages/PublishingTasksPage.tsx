@@ -1005,7 +1005,7 @@ export default function PublishingTasksPage() {
             刷新
           </Button>
         }
-        bordered={false}
+        variant="borderless"
         style={{ marginBottom: 24 }}
       >
         {articles.length === 0 ? (
@@ -1058,7 +1058,7 @@ export default function PublishingTasksPage() {
             刷新
           </Button>
         }
-        bordered={false}
+        variant="borderless"
         style={{ marginBottom: 24 }}
       >
         {accounts.length === 0 ? (
@@ -1294,7 +1294,7 @@ export default function PublishingTasksPage() {
             </Button>
           </Space>
         }
-        bordered={false}
+        variant="borderless"
       >
         {(() => {
           const { batches } = groupTasksByBatch();

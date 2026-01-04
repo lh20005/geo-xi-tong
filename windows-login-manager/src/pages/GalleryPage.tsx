@@ -159,7 +159,7 @@ export default function GalleryPage() {
             创建相册
           </Button>
         }
-        bordered={false}
+        variant="borderless"
       >
         {!albums || albums.length === 0 ? (
           <Empty

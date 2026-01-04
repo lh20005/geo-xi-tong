@@ -300,7 +300,7 @@ export default function KnowledgeBaseDetailPage() {
             </Button>
           </Space>
         }
-        bordered={false}
+        variant="borderless"
       >
         {documents.length === 0 ? (
           <Empty

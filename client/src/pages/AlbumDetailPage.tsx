@@ -210,7 +210,7 @@ export default function AlbumDetailPage() {
           </Space>
         }
         loading={loading}
-        bordered={false}
+        variant="borderless"
       >
         {album && album.images.length === 0 ? (
           <Empty

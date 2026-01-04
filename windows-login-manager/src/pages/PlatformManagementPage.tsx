@@ -474,7 +474,7 @@ export default function PlatformManagementPage() {
             </Button>
           </Space>
         }
-        bordered={false}
+        variant="borderless"
         style={{ marginBottom: 24 }}
       >
         <div style={{ marginBottom: 16, color: '#64748b' }}>
@@ -581,7 +581,7 @@ export default function PlatformManagementPage() {
               <span>账号管理</span>
             </Space>
           }
-          bordered={false}
+          variant="borderless"
         >
           <ResizableTable<Account>
             tableId="platform-accounts-list"

@@ -188,20 +188,20 @@ export class DashboardService {
         FROM publishing_records pr
         INNER JOIN publishing_tasks pt ON pr.task_id = pt.id
         LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
-        WHERE pt.user_id = $1
+        WHERE pt.user_id = $1 AND pr.user_id = $1
       `;
 
       const params: any[] = [userId];
       const conditions: string[] = [];
 
       if (startDate) {
-        conditions.push(`pr.published_at >= $${params.length + 1}`);
         params.push(startDate);
+        conditions.push(`pr.published_at >= $${params.length}`);
       }
 
       if (endDate) {
-        conditions.push(`pr.published_at <= $${params.length + 1}`);
         params.push(endDate);
+        conditions.push(`pr.published_at <= $${params.length}`);
       }
 
       if (conditions.length > 0) {
@@ -247,13 +247,15 @@ export class DashboardService {
       const conditions: string[] = [];
 
       if (startDate) {
-        conditions.push(`created_at >= $${params.length + 1}`);
         params.push(startDate);
+
+        conditions.push(`created_at >= $${params.length}`);
       }
 
       if (endDate) {
-        conditions.push(`created_at <= $${params.length + 1}`);
         params.push(endDate);
+
+        conditions.push(`created_at <= $${params.length}`);
       }
 
       if (conditions.length > 0) {
@@ -356,13 +358,15 @@ export class DashboardService {
       const conditions: string[] = [];
 
       if (startDate) {
-        conditions.push(`created_at >= $${params.length + 1}`);
         params.push(startDate);
+
+        conditions.push(`created_at >= $${params.length}`);
       }
 
       if (endDate) {
-        conditions.push(`created_at <= $${params.length + 1}`);
         params.push(endDate);
+
+        conditions.push(`created_at <= $${params.length}`);
       }
 
       if (conditions.length > 0) {

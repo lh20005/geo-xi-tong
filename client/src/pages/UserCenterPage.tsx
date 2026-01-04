@@ -511,7 +511,7 @@ const UserCenterPage = () => {
                 <Row gutter={[16, 16]}>
                   {usageStats.map(stat => (
                     <Col span={12} key={stat.feature_code}>
-                      <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
+                      <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
                         <div style={{ marginBottom: 8 }}>
                           <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                             <span style={{ fontWeight: 500 }}>{stat.feature_name}</span>
@@ -681,7 +681,7 @@ const UserCenterPage = () => {
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   color: 'white'
                 }}
-                headStyle={{ color: 'white', borderBottom: '1px solid rgba(255,255,255,0.2)' }}
+                styles={{ header: { color: 'white', borderBottom: '1px solid rgba(255,255,255,0.2)' } }}
               >
                 {userProfile ? (
                   <div>

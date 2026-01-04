@@ -1,14 +1,22 @@
 import express from 'express';
 import { pool } from '../db/database';
 import { encryptionService } from '../services/EncryptionService';
+import { authenticate } from '../middleware/adminAuth';
+import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
 const router = express.Router();
+
+// 应用认证和租户中间件
+router.use(authenticate);
+router.use(setTenantContext);
+router.use(requireTenantContext);
 
 /**
  * 获取发布记录列表
  */
 router.get('/records', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { 
       platform_id, 
       article_id, 
@@ -17,9 +25,10 @@ router.get('/records', async (req, res) => {
       pageSize = 20 
     } = req.query;
 
-    const conditions: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
+    // 添加用户隔离条件
+    const conditions: string[] = ['pr.user_id = $1'];
+    const params: any[] = [userId];
+    let paramIndex = 2;
 
     if (platform_id) {
       conditions.push(`pr.platform_id = $${paramIndex}`);
@@ -39,7 +48,7 @@ router.get('/records', async (req, res) => {
       paramIndex++;
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     // 获取总数
     const countResult = await pool.query(
@@ -128,6 +137,7 @@ router.get('/records', async (req, res) => {
  */
 router.get('/records/:id', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const recordId = parseInt(req.params.id);
 
     const result = await pool.query(
@@ -159,14 +169,14 @@ router.get('/records/:id', async (req, res) => {
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
        LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
-       WHERE pr.id = $1`,
-      [recordId]
+       WHERE pr.id = $1 AND pr.user_id = $2`,
+      [recordId, userId]
     );
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '发布记录不存在'
+        message: '发布记录不存在或无权访问'
       });
     }
 
@@ -206,7 +216,21 @@ router.get('/records/:id', async (req, res) => {
  */
 router.get('/articles/:articleId/records', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const articleId = parseInt(req.params.articleId);
+
+    // 先验证文章所有权
+    const articleCheck = await pool.query(
+      'SELECT id FROM articles WHERE id = $1 AND user_id = $2',
+      [articleId, userId]
+    );
+    
+    if (articleCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '文章不存在或无权访问'
+      });
+    }
 
     const result = await pool.query(
       `SELECT 
@@ -229,9 +253,9 @@ router.get('/articles/:articleId/records', async (req, res) => {
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
        LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
-       WHERE pr.article_id = $1
+       WHERE pr.article_id = $1 AND pr.user_id = $2
        ORDER BY pr.published_at DESC`,
-      [articleId]
+      [articleId, userId]
     );
 
     // 解密并提取真实用户名
@@ -277,12 +301,15 @@ router.get('/articles/:articleId/records', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   try {
-    // 总发布次数
+    const userId = getCurrentTenantId(req);
+
+    // 总发布次数（仅当前用户）
     const totalResult = await pool.query(
-      'SELECT COUNT(*) as total FROM publishing_records'
+      'SELECT COUNT(*) as total FROM publishing_records WHERE user_id = $1',
+      [userId]
     );
 
-    // 按平台统计
+    // 按平台统计（仅当前用户）
     const platformResult = await pool.query(
       `SELECT 
         pr.platform_id,
@@ -290,29 +317,34 @@ router.get('/stats', async (req, res) => {
         COUNT(*) as count
        FROM publishing_records pr
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
+       WHERE pr.user_id = $1
        GROUP BY pr.platform_id, pc.platform_name
-       ORDER BY count DESC`
+       ORDER BY count DESC`,
+      [userId]
     );
 
-    // 今日发布数
+    // 今日发布数（仅当前用户）
     const todayResult = await pool.query(
       `SELECT COUNT(*) as today_count 
        FROM publishing_records 
-       WHERE DATE(published_at) = CURRENT_DATE`
+       WHERE DATE(published_at) = CURRENT_DATE AND user_id = $1`,
+      [userId]
     );
 
-    // 本周发布数
+    // 本周发布数（仅当前用户）
     const weekResult = await pool.query(
       `SELECT COUNT(*) as week_count 
        FROM publishing_records 
-       WHERE published_at >= DATE_TRUNC('week', CURRENT_DATE)`
+       WHERE published_at >= DATE_TRUNC('week', CURRENT_DATE) AND user_id = $1`,
+      [userId]
     );
 
-    // 本月发布数
+    // 本月发布数（仅当前用户）
     const monthResult = await pool.query(
       `SELECT COUNT(*) as month_count 
        FROM publishing_records 
-       WHERE published_at >= DATE_TRUNC('month', CURRENT_DATE)`
+       WHERE published_at >= DATE_TRUNC('month', CURRENT_DATE) AND user_id = $1`,
+      [userId]
     );
 
     res.json({

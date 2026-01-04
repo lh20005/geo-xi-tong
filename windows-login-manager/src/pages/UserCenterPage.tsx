@@ -345,7 +345,7 @@ const UserCenterPage = () => {
             <Row gutter={[16, 16]}>
               {usageStats.map(stat => (
                 <Col span={12} key={stat.feature_code}>
-                  <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
+                  <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
                     <div style={{ marginBottom: 8 }}>
                       <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                         <span style={{ fontWeight: 500 }}>{stat.feature_name}</span>

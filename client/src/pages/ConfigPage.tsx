@@ -335,7 +335,7 @@ export default function ConfigPage() {
     <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
       <Card
         title="系统配置"
-        bordered={false}
+        variant="borderless"
       >
         <Tabs
           defaultActiveKey="api"

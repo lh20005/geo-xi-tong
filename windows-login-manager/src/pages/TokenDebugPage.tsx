@@ -89,7 +89,7 @@ const TokenDebugPage = () => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Card title="Token 调试工具" bordered={false}>
+      <Card title="Token 调试工具" variant="borderless">
         <Space direction="vertical" size="large" style={{ width: '100%' }}>
           <Space wrap>
             <Button 

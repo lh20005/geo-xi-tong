@@ -311,7 +311,7 @@ const ProductManagementPage = () => {
 
   return (
     <div style={{ padding: 24 }}>
-      <Card title="商品管理" bordered={false}>
+      <Card title="商品管理" variant="borderless">
         <Table
           columns={columns}
           dataSource={plans}

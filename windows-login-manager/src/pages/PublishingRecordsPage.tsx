@@ -263,7 +263,7 @@ export default function PublishingRecordsPage() {
             </Text>
           </Space>
         }
-        bordered={false}
+        variant="borderless"
         extra={
           <Space>
             <Select 

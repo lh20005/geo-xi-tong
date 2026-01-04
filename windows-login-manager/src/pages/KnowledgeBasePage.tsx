@@ -162,7 +162,7 @@ export default function KnowledgeBasePage() {
             新建知识库
           </Button>
         }
-        bordered={false}
+        variant="borderless"
       >
         {knowledgeBases.length === 0 ? (
           <Empty

@@ -118,7 +118,7 @@ export default function ArticlePage() {
             <span>文章生成</span>
           </Space>
         }
-        bordered={false}
+        variant="borderless"
       >
         <div style={{ marginBottom: 24 }}>
           <Title level={4}>关键词: {keyword}</Title>

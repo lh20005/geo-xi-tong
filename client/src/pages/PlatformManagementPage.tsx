@@ -204,7 +204,7 @@ export default function PlatformManagementPage() {
               刷新
             </Button>
           }
-          bordered={false}
+          variant="borderless"
         >
           <ResizableTable<Account>
             tableId="platform-accounts-list"

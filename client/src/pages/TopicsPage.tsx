@@ -122,7 +122,7 @@ export default function TopicsPage() {
             )}
           </Space>
         }
-        bordered={false}
+        variant="borderless"
         extra={
           <Space>
             <Button

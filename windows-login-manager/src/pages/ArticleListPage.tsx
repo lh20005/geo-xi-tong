@@ -508,7 +508,7 @@ export default function ArticleListPage() {
         </Space>
       </Card>
 
-      <Card title="文章管理" bordered={false} extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
+      <Card title="文章管理" variant="borderless" extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
         <ResizableTable<Article>
           tableId="article-list"
           columns={columns} 

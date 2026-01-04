@@ -25,17 +25,18 @@ export class PublishingExecutor {
     try {
       await client.query('BEGIN');
       
-      // 创建发布记录
+      // 创建发布记录（添加 user_id）
       await client.query(
         `INSERT INTO publishing_records 
-         (article_id, task_id, platform_id, account_id, account_name, published_at)
-         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+         (article_id, task_id, platform_id, account_id, account_name, user_id, published_at)
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
         [
           task.article_id,
           taskId,
           task.platform_id,
           task.account_id,
-          account.account_name
+          account.account_name,
+          task.user_id
         ]
       );
       

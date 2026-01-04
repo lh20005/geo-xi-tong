@@ -73,6 +73,11 @@ function App() {
 
   // Initialize WebSocket for user management events
   useEffect(() => {
+    // Skip WebSocket on login page
+    if (location.pathname === '/login') {
+      return;
+    }
+
     const currentUser = getCurrentUser();
     
     if (!currentUser) {

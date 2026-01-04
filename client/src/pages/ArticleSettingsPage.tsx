@@ -139,7 +139,7 @@ export default function ArticleSettingsPage() {
             新建文章设置
           </Button>
         }
-        bordered={false}
+        variant="borderless"
       >
         {settings.length === 0 && !loading ? (
           <Empty
