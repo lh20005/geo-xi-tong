@@ -130,6 +130,7 @@ export interface GenerationTask {
   createdAt: string;
   updatedAt: string;
   conversionTargetName?: string | null;
+  articleSettingName?: string | null;  // 添加文章设置名称
   keyword: string;
   provider: string;
   distillationResult?: string | null;

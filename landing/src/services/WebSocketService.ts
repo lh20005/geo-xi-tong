@@ -15,7 +15,7 @@ export class WebSocketService {
   private eventHandlers: Map<string, Set<EventHandler>> = new Map();
   private isConnecting = false;
   private shouldReconnect = true;
-  private heartbeatInterval: number | null = null;
+  private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   /**
    * 连接到 WebSocket 服务器
