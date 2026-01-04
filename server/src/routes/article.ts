@@ -158,34 +158,52 @@ articleRouter.post('/generate', async (req, res) => {
       });
     }
     
-    // 保存文章（关联用户）
-    const articleResult = await pool.query(
-      `INSERT INTO articles (keyword, distillation_id, requirements, content, provider, user_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id`,
-      [keyword, distillationId, requirements, content, provider, userId]
-    );
+    // 使用事务保存文章并记录存储使用
+    const client = await pool.connect();
     
-    const articleId = articleResult.rows[0].id;
-    
-    // 记录存储使用
-    await storageService.recordStorageUsage(
-      userId,
-      'article',
-      articleId,
-      contentSize,
-      {
-        keyword,
-        distillationId,
-        provider
+    try {
+      await client.query('BEGIN');
+      
+      // 保存文章（关联用户）
+      const articleResult = await client.query(
+        `INSERT INTO articles (keyword, distillation_id, requirements, content, provider, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [keyword, distillationId, requirements, content, provider, userId]
+      );
+      
+      const articleId = articleResult.rows[0].id;
+      
+      // 记录存储使用（在同一事务中）
+      await client.query(
+        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+        [userId, 'article', articleId, 'add', contentSize, JSON.stringify({
+          keyword,
+          distillationId,
+          provider
+        })]
+      );
+      
+      await client.query('COMMIT');
+      
+      // 清除缓存（在事务外）
+      try {
+        await storageService.getUserStorageUsage(userId, true);
+      } catch (cacheError) {
+        console.error('[Article] 清除缓存失败:', cacheError);
       }
-    );
-    
-    res.json({
-      success: true,
-      articleId,
-      content
-    });
+      
+      res.json({
+        success: true,
+        articleId,
+        content
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('文章生成错误:', error);
     res.status(500).json({ 

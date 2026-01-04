@@ -8,6 +8,7 @@ import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 import { storageQuotaService } from '../services/StorageQuotaService';
 import { storageService } from '../services/StorageService';
+import { usageTrackingService } from '../services/UsageTrackingService';
 
 export const galleryRouter = Router();
 
@@ -115,6 +116,26 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
     const validatedData = createAlbumSchema.parse(req.body);
     const files = req.files as Express.Multer.File[];
     
+    // 检查相册配额
+    const albumQuota = await usageTrackingService.checkQuota(userId, 'gallery_albums');
+    if (!albumQuota.hasQuota) {
+      // 删除已上传的文件
+      if (files && files.length > 0) {
+        files.forEach(file => {
+          const filePath = path.join(uploadDir, file.filename);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        });
+      }
+      return res.status(403).json({ 
+        error: '相册配额不足',
+        quota: albumQuota.quotaLimit,
+        used: albumQuota.currentUsage,
+        remaining: albumQuota.remaining
+      });
+    }
+    
     // 开始事务
     const client = await pool.connect();
     try {
@@ -127,6 +148,15 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
       );
       
       const album = albumResult.rows[0];
+      
+      // 记录相册配额使用
+      await usageTrackingService.recordUsage(
+        userId,
+        'gallery_albums',
+        'album',
+        album.id,
+        1
+      );
       
       // 插入图片（如果有）
       if (files && files.length > 0) {
@@ -270,6 +300,15 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
     // 删除相册（级联删除图片记录）
     await pool.query('DELETE FROM albums WHERE id = $1 AND user_id = $2', [albumId, userId]);
     
+    // 减少相册配额使用（恢复配额）
+    await usageTrackingService.recordUsage(
+      userId,
+      'gallery_albums',
+      'album',
+      albumId,
+      -1
+    );
+    
     // 删除文件系统中的图片文件
     imagesResult.rows.forEach(row => {
       const filePath = path.join(uploadDir, row.filepath);
@@ -356,37 +395,65 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
       });
     }
     
-    // 插入图片记录并记录存储使用
+    // 使用事务插入图片记录并记录存储使用
+    const client = await pool.connect();
     const uploadedImages = [];
-    for (const file of files) {
-      const decodedFilename = decodeFilename(file.originalname);
-      const result = await pool.query(
-        'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id, filename, created_at',
-        [albumId, decodedFilename, file.filename, file.mimetype, file.size]
-      );
-      
-      const imageId = result.rows[0].id;
-      
-      // 记录存储使用
-      await storageService.recordStorageUsage(
-        userId,
-        'image',
-        imageId,
-        file.size,
-        {
-          filename: decodedFilename,
-          mimetype: file.mimetype,
-          albumId: albumId
-        }
-      );
-      
-      uploadedImages.push(result.rows[0]);
-    }
     
-    res.json({
-      uploadedCount: uploadedImages.length,
-      images: uploadedImages
-    });
+    try {
+      await client.query('BEGIN');
+      
+      for (const file of files) {
+        const decodedFilename = decodeFilename(file.originalname);
+        
+        // 插入图片记录
+        const result = await client.query(
+          'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id, filename, created_at',
+          [albumId, decodedFilename, file.filename, file.mimetype, file.size]
+        );
+        
+        const imageId = result.rows[0].id;
+        
+        // 记录存储使用（在同一事务中）
+        await client.query(
+          'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+          [userId, 'image', imageId, 'add', file.size, JSON.stringify({
+            filename: decodedFilename,
+            mimetype: file.mimetype,
+            albumId: albumId
+          })]
+        );
+        
+        uploadedImages.push(result.rows[0]);
+      }
+      
+      await client.query('COMMIT');
+      
+      // 清除缓存并推送更新（在事务外，失败不影响主流程）
+      try {
+        await storageService.getUserStorageUsage(userId, true); // 跳过缓存，刷新数据
+      } catch (cacheError) {
+        console.error('[Gallery] 清除缓存失败:', cacheError);
+      }
+      
+      res.json({
+        uploadedCount: uploadedImages.length,
+        images: uploadedImages
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      
+      // 删除已上传的文件
+      files.forEach(file => {
+        const filePath = path.join(uploadDir, file.filename);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+      });
+      
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('上传图片错误:', error);
     res.status(500).json({ error: error.message || '上传图片失败' });
@@ -449,28 +516,47 @@ galleryRouter.delete('/images/:id', async (req, res) => {
     const filepath = image.filepath;
     const fileSize = image.size;
     
-    // 删除数据库记录
-    await pool.query('DELETE FROM images WHERE id = $1', [imageId]);
+    // 使用事务删除记录和更新存储使用
+    const client = await pool.connect();
     
-    // 删除文件系统中的文件
-    const fullPath = path.join(uploadDir, filepath);
-    let fileDeleted = false;
-    if (fs.existsSync(fullPath)) {
-      try {
-        fs.unlinkSync(fullPath);
-        fileDeleted = true;
-      } catch (error) {
-        console.error('删除文件失败:', error);
-        // 继续执行，但记录错误
+    try {
+      await client.query('BEGIN');
+      
+      // 删除数据库记录
+      await client.query('DELETE FROM images WHERE id = $1', [imageId]);
+      
+      // 记录存储使用减少（在同一事务中）
+      await client.query(
+        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+        [userId, 'image', imageId, 'remove', fileSize, null]
+      );
+      
+      await client.query('COMMIT');
+      
+      // 删除文件系统中的文件（在事务外，失败不影响数据库）
+      const fullPath = path.join(uploadDir, filepath);
+      if (fs.existsSync(fullPath)) {
+        try {
+          fs.unlinkSync(fullPath);
+        } catch (error) {
+          console.error('[Gallery] 删除文件失败:', error);
+        }
       }
+      
+      // 清除缓存
+      try {
+        await storageService.getUserStorageUsage(userId, true);
+      } catch (cacheError) {
+        console.error('[Gallery] 清除缓存失败:', cacheError);
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-    
-    // 只有文件成功删除后才减少存储使用
-    if (fileDeleted) {
-      await storageService.removeStorageUsage(userId, 'image', imageId, fileSize);
-    }
-    
-    res.json({ success: true });
   } catch (error: any) {
     console.error('删除图片错误:', error);
     res.status(500).json({ error: '删除图片失败', details: error.message });

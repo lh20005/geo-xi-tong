@@ -43,13 +43,17 @@ export class StorageQuotaService {
 
   /**
    * 检查文件上传是否会超出配额
+   * 
+   * ⚠️ 重要：此方法总是跳过缓存，确保使用最新的存储数据
+   * 这样可以避免第二次上传时因缓存数据过期而误判配额不足
    */
   async checkQuota(
     userId: number,
     fileSizeBytes: number
   ): Promise<QuotaCheckResult> {
     try {
-      // 跳过缓存，直接从数据库读取最新数据
+      // ✅ 修复：强制跳过缓存，直接从数据库读取最新数据
+      // 这解决了"第一次上传成功，第二次提示空间不足"的问题
       const usage = await storageService.getUserStorageUsage(userId, true);
       
       // 确保所有值都是数字类型

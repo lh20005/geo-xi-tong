@@ -5,6 +5,7 @@ import { ConfigHelper } from '../services/ConfigHelper';
 import { DistillationService } from '../services/distillationService';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
+import { usageTrackingService } from '../services/UsageTrackingService';
 
 export const distillationRouter = Router();
 const distillationService = new DistillationService();
@@ -22,6 +23,19 @@ distillationRouter.post('/', async (req, res) => {
     
     if (!keyword) {
       return res.status(400).json({ error: '请提供关键词' });
+    }
+    
+    // ========== 配额检查 ==========
+    const quota = await usageTrackingService.checkQuota(userId, 'keyword_distillation');
+    if (!quota.hasQuota || quota.remaining < 1) {
+      return res.status(403).json({ 
+        error: '关键词蒸馏配额不足',
+        message: `您本月的蒸馏配额不足。剩余 ${quota.remaining} 次`,
+        quota: {
+          remaining: quota.remaining,
+          total: quota.quotaLimit
+        }
+      });
     }
     
     // 使用ConfigHelper获取AI服务（自动解密）
@@ -65,6 +79,15 @@ distillationRouter.post('/', async (req, res) => {
       );
     }
     
+    // ========== 记录配额使用 ==========
+    await usageTrackingService.recordUsage(
+      userId,
+      'keyword_distillation',
+      'distillation',
+      distillationId,
+      1
+    );
+    
     res.json({
       success: true,
       distillationId,
@@ -94,6 +117,19 @@ distillationRouter.post('/manual', async (req, res) => {
     
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return res.status(400).json({ error: '请至少提供一个蒸馏结果' });
+    }
+    
+    // ========== 配额检查 ==========
+    const quota = await usageTrackingService.checkQuota(userId, 'keyword_distillation');
+    if (!quota.hasQuota || quota.remaining < 1) {
+      return res.status(403).json({ 
+        error: '关键词蒸馏配额不足',
+        message: `您本月的蒸馏配额不足。剩余 ${quota.remaining} 次`,
+        quota: {
+          remaining: quota.remaining,
+          total: quota.quotaLimit
+        }
+      });
     }
     
     // 验证每个问题都是非空字符串
@@ -127,6 +163,15 @@ distillationRouter.post('/manual', async (req, res) => {
       }
       
       await client.query('COMMIT');
+      
+      // ========== 记录配额使用 ==========
+      await usageTrackingService.recordUsage(
+        userId,
+        'keyword_distillation',
+        'distillation',
+        distillationId,
+        1
+      );
       
       res.json({
         success: true,

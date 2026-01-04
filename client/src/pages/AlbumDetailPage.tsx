@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Button, message, Space, Modal, Upload, Empty, Image, Row, Col, Input } from 'antd';
+import { Card, Button, Space, Modal, Upload, Empty, Image, Row, Col, Input, App } from 'antd';
 import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
@@ -22,6 +22,7 @@ interface AlbumDetail {
 }
 
 export default function AlbumDetailPage() {
+  const { message, modal } = App.useApp();
   const navigate = useNavigate();
   const { albumId } = useParams<{ albumId: string }>();
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
@@ -108,7 +109,7 @@ export default function AlbumDetailPage() {
   };
 
   const handleDeleteImage = (imageId: number) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: '确定要删除这张图片吗？此操作不可恢复。',
       okText: '确定',
@@ -131,7 +132,7 @@ export default function AlbumDetailPage() {
     
     let newName = album.name;
     
-    Modal.confirm({
+    modal.confirm({
       title: '编辑相册名称',
       content: (
         <Input
@@ -161,7 +162,7 @@ export default function AlbumDetailPage() {
   };
 
   const handleDeleteAlbum = () => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除相册',
       content: '确定要删除这个相册吗？相册中的所有图片也会被删除，此操作不可恢复。',
       okText: '确定删除',

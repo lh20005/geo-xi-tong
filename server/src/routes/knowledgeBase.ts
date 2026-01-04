@@ -9,6 +9,7 @@ import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 import { storageQuotaService } from '../services/StorageQuotaService';
 import { storageService } from '../services/StorageService';
+import { usageTrackingService } from '../services/UsageTrackingService';
 
 export const knowledgeBaseRouter = Router();
 
@@ -99,12 +100,34 @@ knowledgeBaseRouter.post('/', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const validatedData = createKnowledgeBaseSchema.parse(req.body);
     
+    // 检查知识库配额
+    const kbQuota = await usageTrackingService.checkQuota(userId, 'knowledge_bases');
+    if (!kbQuota.hasQuota) {
+      return res.status(403).json({ 
+        error: '知识库配额不足',
+        quota: kbQuota.quotaLimit,
+        used: kbQuota.currentUsage,
+        remaining: kbQuota.remaining
+      });
+    }
+    
     const result = await pool.query(
       'INSERT INTO knowledge_bases (name, description, user_id) VALUES ($1, $2, $3) RETURNING id, name, description, created_at',
       [validatedData.name, validatedData.description || null, userId]
     );
     
-    res.json(result.rows[0]);
+    const kb = result.rows[0];
+    
+    // 记录知识库配额使用
+    await usageTrackingService.recordUsage(
+      userId,
+      'knowledge_bases',
+      'knowledge_base',
+      kb.id,
+      1
+    );
+    
+    res.json(kb);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: '数据验证失败', details: error.errors });
@@ -240,6 +263,15 @@ knowledgeBaseRouter.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: '知识库不存在或无权访问' });
     }
     
+    // 减少知识库配额使用（恢复配额）
+    await usageTrackingService.recordUsage(
+      userId,
+      'knowledge_bases',
+      'knowledge_base',
+      kbId,
+      -1
+    );
+    
     res.json({
       success: true,
       deletedDocuments
@@ -335,17 +367,14 @@ knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req
           
           const docId = result.rows[0].id;
           
-          // 记录存储使用
-          await storageService.recordStorageUsage(
-            userId,
-            'document',
-            docId,
-            file.size,
-            {
+          // 记录存储使用（在同一事务中，使用数据库函数）
+          await client.query(
+            'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+            [userId, 'document', docId, 'add', file.size, JSON.stringify({
               filename: originalname,
               fileType: path.extname(originalname),
               knowledgeBaseId: kbId
-            }
+            })]
           );
           
           uploadedDocuments.push(result.rows[0]);
@@ -370,6 +399,13 @@ knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req
       }
       
       await client.query('COMMIT');
+      
+      // 清除缓存并推送更新（在事务外，失败不影响主流程）
+      try {
+        await storageService.getUserStorageUsage(userId, true); // 跳过缓存，刷新数据
+      } catch (cacheError) {
+        console.error('[KnowledgeBase] 清除缓存失败:', cacheError);
+      }
       
       res.json({
         uploadedCount: uploadedDocuments.length,
@@ -453,13 +489,37 @@ knowledgeBaseRouter.delete('/documents/:id', async (req, res) => {
     
     const fileSize = doc.file_size;
     
-    // 删除文档记录
-    await pool.query('DELETE FROM knowledge_documents WHERE id = $1', [docId]);
+    // 使用事务删除记录和更新存储使用
+    const client = await pool.connect();
     
-    // 减少存储使用
-    await storageService.removeStorageUsage(userId, 'document', docId, fileSize);
-    
-    res.json({ success: true });
+    try {
+      await client.query('BEGIN');
+      
+      // 删除文档记录
+      await client.query('DELETE FROM knowledge_documents WHERE id = $1', [docId]);
+      
+      // 记录存储使用减少（在同一事务中）
+      await client.query(
+        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+        [userId, 'document', docId, 'remove', fileSize, null]
+      );
+      
+      await client.query('COMMIT');
+      
+      // 清除缓存
+      try {
+        await storageService.getUserStorageUsage(userId, true);
+      } catch (cacheError) {
+        console.error('[KnowledgeBase] 清除缓存失败:', cacheError);
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('删除文档错误:', error);
     res.status(500).json({ error: '删除文档失败', details: error.message });

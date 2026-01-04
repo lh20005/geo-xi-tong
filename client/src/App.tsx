@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { Layout, message } from 'antd';
+import { Layout, message, App as AntApp } from 'antd';
 import { useEffect } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
@@ -172,10 +172,11 @@ function App() {
   }, [navigate]);
 
   return (
-    <Routes>
-      {/* 公开路由 */}
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/payment/:orderNo" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
+    <AntApp>
+      <Routes>
+        {/* 公开路由 */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/payment/:orderNo" element={<ProtectedRoute><PaymentPage /></ProtectedRoute>} />
       
       {/* 受保护的路由 */}
       <Route
@@ -222,7 +223,8 @@ function App() {
           </ProtectedRoute>
         }
       />
-    </Routes>
+      </Routes>
+    </AntApp>
   );
 }
 

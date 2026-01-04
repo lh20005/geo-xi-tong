@@ -94,6 +94,15 @@ router.post('/tasks', async (req, res) => {
       interval_minutes
     });
 
+    // ========== 记录配额使用 ==========
+    await usageTrackingService.recordUsage(
+      userId,
+      'publish_per_month',
+      'publish',
+      task.id,
+      1
+    );
+
     // 标记文章为"发布中"状态（在文章列表中暂时隐藏）
     await pool.query(
       `UPDATE articles 

@@ -4,6 +4,7 @@ import { pool } from '../db/database';
 import { getWebSocketService } from '../services/WebSocketService';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
+import { usageTrackingService } from '../services/UsageTrackingService';
 
 const router = express.Router();
 
@@ -133,6 +134,30 @@ router.post('/accounts', async (req, res) => {
       });
     }
     
+    // ========== 配额检查（仅对新账号） ==========
+    // 先检查账号是否已存在
+    const uniqueKey = real_username || account_name;
+    const existingAccount = await pool.query(
+      'SELECT id FROM platform_accounts WHERE platform_id = $1 AND real_username = $2 AND user_id = $3',
+      [platform_id, uniqueKey, userId]
+    );
+    
+    const isNewAccount = existingAccount.rows.length === 0;
+    
+    if (isNewAccount) {
+      const quota = await usageTrackingService.checkQuota(userId, 'platform_accounts');
+      if (!quota.hasQuota || quota.remaining < 1) {
+        return res.status(403).json({ 
+          error: '平台账号配额不足',
+          message: `您的平台账号数量已达上限。当前 ${quota.currentUsage}/${quota.quotaLimit}`,
+          quota: {
+            current: quota.currentUsage,
+            total: quota.quotaLimit
+          }
+        });
+      }
+    }
+    
     console.log('[创建账号] 参数验证通过，开始创建/更新账号');
     
     // 使用 createOrUpdateAccount 实现去重
@@ -155,6 +180,17 @@ router.post('/accounts', async (req, res) => {
     const { account, isNew } = result;
     
     console.log('[创建账号] 账号保存成功, ID:', account.id, 'isNew:', isNew);
+    
+    // ========== 记录配额使用（仅对新账号） ==========
+    if (isNew) {
+      await usageTrackingService.recordUsage(
+        userId,
+        'platform_accounts',
+        'platform_account',
+        account.id,
+        1
+      );
+    }
     
     // 广播账号事件（只发送给当前用户）
     if (isNew) {
@@ -224,6 +260,15 @@ router.delete('/accounts/:id', async (req, res) => {
     await accountService.deleteAccount(accountId, userId);
     
     console.log(`[DELETE] 账号删除成功: ID=${accountId}`);
+    
+    // ========== 减少配额使用 ==========
+    await usageTrackingService.recordUsage(
+      userId,
+      'platform_accounts',
+      'platform_account',
+      accountId,
+      -1  // 负数表示减少
+    );
     
     // 广播账号删除事件（只发送给当前用户）
     getWebSocketService().broadcastAccountEvent('deleted', { id: accountId }, userId);

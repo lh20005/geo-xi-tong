@@ -1,0 +1,91 @@
+{
+  "timestamp": "2026-01-04T13:44:52.195Z",
+  "summary": {
+    "total": 9,
+    "pass": 9,
+    "fail": 0
+  },
+  "results": [
+    {
+      "test": "checkQuota(gallery_albums)",
+      "status": "PASS",
+      "message": "配额检查正常",
+      "details": {
+        "hasQuota": true,
+        "quotaLimit": 10,
+        "currentUsage": 1,
+        "remaining": 9
+      }
+    },
+    {
+      "test": "相册配额一致性",
+      "status": "PASS",
+      "message": "配额记录与实际数据一致",
+      "details": {
+        "recorded": 1,
+        "actual": 1
+      }
+    },
+    {
+      "test": "checkQuota(knowledge_bases)",
+      "status": "PASS",
+      "message": "配额检查正常",
+      "details": {
+        "hasQuota": true,
+        "quotaLimit": 5,
+        "currentUsage": 1,
+        "remaining": 4
+      }
+    },
+    {
+      "test": "知识库配额一致性",
+      "status": "PASS",
+      "message": "配额记录与实际数据一致",
+      "details": {
+        "recorded": 1,
+        "actual": 1
+      }
+    },
+    {
+      "test": "相册使用记录",
+      "status": "PASS",
+      "message": "使用记录数量正确",
+      "details": {
+        "records": 1,
+        "albums": 1
+      }
+    },
+    {
+      "test": "知识库使用记录",
+      "status": "PASS",
+      "message": "使用记录数量正确",
+      "details": {
+        "records": 1,
+        "knowledgeBases": 1
+      }
+    },
+    {
+      "test": "数据一致性 - gallery_albums",
+      "status": "PASS",
+      "message": "数据一致",
+      "details": {
+        "recorded": 1,
+        "actual": "1"
+      }
+    },
+    {
+      "test": "数据一致性 - knowledge_bases",
+      "status": "PASS",
+      "message": "数据一致",
+      "details": {
+        "recorded": 1,
+        "actual": "1"
+      }
+    },
+    {
+      "test": "整体数据一致性",
+      "status": "PASS",
+      "message": "所有数据一致"
+    }
+  ]
+}
