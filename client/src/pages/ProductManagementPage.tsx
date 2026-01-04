@@ -60,8 +60,8 @@ export default function ProductManagementPage() {
 
   // 功能配额选项
   const featureOptions = [
-    { code: 'articles_per_day', name: '每日生成文章数', unit: '篇' },
-    { code: 'publish_per_day', name: '每日发布文章数', unit: '篇' },
+    { code: 'articles_per_month', name: '每月生成文章数', unit: '篇' },
+    { code: 'publish_per_month', name: '每月发布文章数', unit: '篇' },
     { code: 'platform_accounts', name: '可管理平台账号数', unit: '个' },
     { code: 'keyword_distillation', name: '关键词蒸馏数', unit: '个' }
   ];

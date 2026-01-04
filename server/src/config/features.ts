@@ -4,21 +4,21 @@
  */
 
 export const FEATURE_DEFINITIONS = {
-  articles_per_day: {
-    code: 'articles_per_day',
-    name: '每日生成文章数',
+  articles_per_month: {
+    code: 'articles_per_month',
+    name: '每月生成文章数',
     unit: '篇',
-    defaultValue: 10,
-    description: '每天可生成的文章数量',
-    resetPeriod: 'daily' as const
+    defaultValue: 100,
+    description: '每月可生成的文章数量',
+    resetPeriod: 'monthly' as const
   },
-  publish_per_day: {
-    code: 'publish_per_day',
-    name: '每日发布文章数',
+  publish_per_month: {
+    code: 'publish_per_month',
+    name: '每月发布文章数',
     unit: '篇',
-    defaultValue: 20,
-    description: '每天可发布的文章数量',
-    resetPeriod: 'daily' as const
+    defaultValue: 200,
+    description: '每月可发布的文章数量',
+    resetPeriod: 'monthly' as const
   },
   platform_accounts: {
     code: 'platform_accounts',

@@ -18,8 +18,8 @@ export class SchedulerService {
     // 1. 订单超时关闭任务（每5分钟执行）
     this.scheduleOrderTimeoutTask();
 
-    // 2. 每日配额重置任务（每天00:00执行）
-    this.scheduleDailyQuotaResetTask();
+    // 2. 每月配额重置任务（每月1号00:00执行）
+    this.scheduleMonthlyQuotaResetTask();
 
     // 3. 每月配额重置任务（每月1日00:00执行）
     this.scheduleMonthlyQuotaResetTask();
@@ -62,29 +62,29 @@ export class SchedulerService {
   }
 
   /**
-   * 每日配额重置任务
-   * 每天00:00执行，重置 articles_per_day 和 publish_per_day
+   * 每月配额重置任务
+   * 每月1号00:00执行，重置 articles_per_month 和 publish_per_month
    */
-  private scheduleDailyQuotaResetTask() {
-    const task = cron.schedule('0 0 * * *', async () => {
+  private scheduleMonthlyQuotaResetTask() {
+    const task = cron.schedule('0 0 1 * *', async () => {
       try {
-        console.log('[定时任务] 开始执行每日配额重置任务...');
+        console.log('[定时任务] 开始执行每月配额重置任务...');
         
-        // 重置每日配额
+        // 重置每月配额
         const result = await pool.query(`
           DELETE FROM user_usage 
-          WHERE feature_code IN ('articles_per_day', 'publish_per_day')
-          AND period_start < CURRENT_DATE
+          WHERE feature_code IN ('articles_per_month', 'publish_per_month')
+          AND period_start < DATE_TRUNC('month', CURRENT_DATE)
         `);
 
-        console.log(`[定时任务] 已重置 ${result.rowCount} 条每日配额记录`);
+        console.log(`[定时任务] 已重置 ${result.rowCount} 条每月配额记录`);
       } catch (error) {
-        console.error('[定时任务] 每日配额重置任务失败:', error);
+        console.error('[定时任务] 每月配额重置任务失败:', error);
       }
     });
 
     this.tasks.push(task);
-    console.log('✅ 每日配额重置任务已安排（每天00:00执行）');
+    console.log('✅ 每月配额重置任务已安排（每月1号00:00执行）');
   }
 
   /**

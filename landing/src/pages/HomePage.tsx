@@ -393,7 +393,7 @@ export default function HomePage() {
               <p className="text-gray-600">暂无套餐信息</p>
             </div>
           ) : (
-            <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
               {plans.map((plan) => {
                 const badge = getPlanBadge(plan.plan_code);
                 const price = typeof plan.price === 'string' ? parseFloat(plan.price) : plan.price;
@@ -402,44 +402,44 @@ export default function HomePage() {
                 return (
                   <div 
                     key={plan.id}
-                    className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative"
+                    className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative flex flex-col"
                   >
-                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
                       {badge.text}
                     </div>
-                    <div className="text-center mb-8">
-                      <h3 className="text-2xl font-bold text-white mb-2">{plan.plan_name}</h3>
-                      <p className="text-blue-100 mb-6">{plan.description || '适合个人用户'}</p>
-                      <div className="mb-6">
-                        <span className="text-5xl font-bold text-white">¥{formatPrice(price)}</span>
-                        <span className="text-blue-100">/月</span>
+                    <div className="text-center mb-6 flex-grow">
+                      <h3 className="text-xl font-bold text-white mb-2 mt-2">{plan.plan_name}</h3>
+                      <p className="text-blue-100 text-sm mb-4 line-clamp-2">{plan.description || '适合个人用户'}</p>
+                      <div className="mb-4">
+                        <span className="text-4xl font-bold text-white">¥{formatPrice(price)}</span>
+                        <span className="text-blue-100 text-sm">/月</span>
                       </div>
                       {isFree ? (
                         <Link
                           to="/login"
-                          className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                          className="block w-full py-2.5 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
                         >
                           免费试用
                         </Link>
                       ) : (
                         <button
                           onClick={() => handlePurchase(plan.id, plan.plan_name, price)}
-                          className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                          className="block w-full py-2.5 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
                         >
-                          点击购买
+                          立即购买
                         </button>
                       )}
                     </div>
                     
                     {/* 功能列表 */}
-                    <div className="border-t border-white/20 pt-6">
-                      <ul className="space-y-4 text-white">
+                    <div className="border-t border-white/20 pt-4 mt-auto">
+                      <ul className="space-y-2.5 text-white">
                         {plan.features.map((feature) => (
                           <li key={feature.feature_code} className="flex items-start">
-                            <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                            <svg className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
-                            <span className="text-sm">
+                            <span className="text-xs leading-relaxed">
                               {feature.feature_name} <span className="font-bold">{getFeatureDisplayValue(feature.feature_value)}</span>
                             </span>
                           </li>

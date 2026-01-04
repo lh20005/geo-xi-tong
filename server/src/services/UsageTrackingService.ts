@@ -116,8 +116,8 @@ export class UsageTrackingService {
         SELECT 
           ur.*,
           CASE 
-            WHEN ur.feature_code = 'articles_per_day' THEN '每日生成文章数'
-            WHEN ur.feature_code = 'publish_per_day' THEN '每日发布文章数'
+            WHEN ur.feature_code = 'articles_per_month' THEN '每月生成文章数'
+            WHEN ur.feature_code = 'publish_per_month' THEN '每月发布文章数'
             WHEN ur.feature_code = 'platform_accounts' THEN '平台账号数'
             WHEN ur.feature_code = 'keyword_distillation' THEN '关键词蒸馏数'
             ELSE ur.feature_code
