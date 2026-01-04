@@ -15,6 +15,7 @@ interface Plan {
     feature_code: string;
     feature_name: string;
     feature_value: number;
+    feature_unit: string;
   }[];
   description?: string;
 }
@@ -129,9 +130,9 @@ export default function HomePage() {
     return numPrice.toFixed(2);
   };
 
-  // 辅助函数：获取功能显示值
-  const getFeatureDisplayValue = (value: number): string => {
-    return value === -1 ? '不限' : value.toString();
+  // 辅助函数：获取功能显示值（包含单位）
+  const getFeatureDisplayValue = (value: number, unit: string): string => {
+    return value === -1 ? '不限' : `${value}${unit}`;
   };
 
   // 辅助函数：根据plan_code获取套餐标签
@@ -440,7 +441,7 @@ export default function HomePage() {
                               <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                             </svg>
                             <span className="text-xs leading-relaxed">
-                              {feature.feature_name} <span className="font-bold">{getFeatureDisplayValue(feature.feature_value)}</span>
+                              {feature.feature_name} <span className="font-bold">{getFeatureDisplayValue(feature.feature_value, feature.feature_unit)}</span>
                             </span>
                           </li>
                         ))}
