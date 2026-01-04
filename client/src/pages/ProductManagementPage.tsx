@@ -108,6 +108,24 @@ export default function ProductManagementPage() {
     }
   };
 
+  // 打开新增模态框
+  const handleCreate = () => {
+    setCurrentPlan(null);
+    form.resetFields();
+    form.setFieldsValue({
+      planName: '',
+      planCode: '',
+      price: 0,
+      billingCycle: 'monthly',
+      durationDays: 30,
+      description: '',
+      displayOrder: plans.length + 1,
+      isActive: true,
+      features: []
+    });
+    setEditModalVisible(true);
+  };
+
   // 打开编辑模态框
   const handleEdit = (plan: Plan) => {
     console.log('[ProductManagement] 编辑套餐:', plan);
@@ -138,29 +156,38 @@ export default function ProductManagementPage() {
     setEditModalVisible(true);
   };
 
-  // 保存修改
+  // 保存修改或新增
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
       
-      if (!currentPlan) return;
-
       console.log('[ProductManagement] 准备保存的数据:', values);
 
       const token = localStorage.getItem('auth_token');
-      const response = await axios.put(`/api/admin/products/plans/${currentPlan.id}`, values, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
       
-      console.log('[ProductManagement] 保存成功:', response.data);
-      message.success('套餐更新成功');
+      if (currentPlan) {
+        // 更新现有套餐
+        const response = await axios.put(`/api/admin/products/plans/${currentPlan.id}`, values, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        console.log('[ProductManagement] 更新成功:', response.data);
+        message.success('套餐更新成功');
+      } else {
+        // 新增套餐
+        const response = await axios.post('/api/admin/products/plans', values, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        console.log('[ProductManagement] 新增成功:', response.data);
+        message.success('套餐新增成功');
+      }
+      
       setEditModalVisible(false);
       loadPlans();
     } catch (error: any) {
       console.error('[ProductManagement] 保存失败:', error);
       console.error('[ProductManagement] 错误详情:', error.response?.data);
       if (error.response) {
-        message.error(error.response.data.message || '更新失败');
+        message.error(error.response.data.message || (currentPlan ? '更新失败' : '新增失败'));
       } else {
         message.error('网络错误，请稍后重试');
       }
@@ -302,7 +329,7 @@ export default function ProductManagementPage() {
             <Button 
               type="primary" 
               icon={<PlusOutlined />}
-              disabled
+              onClick={() => handleCreate()}
             >
               新增套餐
             </Button>
@@ -318,9 +345,9 @@ export default function ProductManagementPage() {
         />
       </Card>
 
-      {/* 编辑模态框 */}
+      {/* 编辑/新增模态框 */}
       <Modal
-        title={`编辑套餐 - ${currentPlan?.planName}`}
+        title={currentPlan ? `编辑套餐 - ${currentPlan.planName}` : '新增套餐'}
         open={editModalVisible}
         onOk={handleSave}
         onCancel={() => setEditModalVisible(false)}
@@ -332,6 +359,20 @@ export default function ProductManagementPage() {
           form={form}
           layout="vertical"
         >
+          {!currentPlan && (
+            <Form.Item
+              label="套餐代码"
+              name="planCode"
+              rules={[
+                { required: true, message: '请输入套餐代码' },
+                { pattern: /^[a-z_]+$/, message: '只能使用小写字母和下划线' }
+              ]}
+              tooltip="套餐的唯一标识，如：free, professional, enterprise"
+            >
+              <Input placeholder="例如：professional" />
+            </Form.Item>
+          )}
+
           <Form.Item
             label="套餐名称"
             name="planName"
@@ -363,6 +404,17 @@ export default function ProductManagementPage() {
               <Select.Option value="yearly">年付</Select.Option>
             </Select>
           </Form.Item>
+
+          {!currentPlan && (
+            <Form.Item
+              label="有效天数"
+              name="durationDays"
+              rules={[{ required: true, message: '请输入有效天数' }]}
+              tooltip="套餐购买后的有效期，单位：天"
+            >
+              <InputNumber min={1} style={{ width: '100%' }} placeholder="例如：30" />
+            </Form.Item>
+          )}
 
           <Form.Item
             label="描述"

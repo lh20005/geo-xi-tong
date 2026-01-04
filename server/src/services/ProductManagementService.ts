@@ -23,6 +23,7 @@ export interface SubscriptionPlan {
   planName: string;
   price: number;
   billingCycle: 'monthly' | 'yearly';
+  durationDays: number;
   isActive: boolean;
   description?: string;
   displayOrder: number;
@@ -60,6 +61,7 @@ export class ProductManagementService {
           sp.plan_name as "planName",
           sp.price,
           sp.billing_cycle as "billingCycle",
+          sp.duration_days as "durationDays",
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
@@ -107,6 +109,7 @@ export class ProductManagementService {
           sp.plan_name as "planName",
           sp.price,
           sp.billing_cycle as "billingCycle",
+          sp.duration_days as "durationDays",
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
@@ -151,15 +154,16 @@ export class ProductManagementService {
       // 插入套餐
       const planResult = await client.query(
         `INSERT INTO subscription_plans (
-          plan_code, plan_name, price, billing_cycle,
+          plan_code, plan_name, price, billing_cycle, duration_days,
           is_active, description, display_order
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *`,
         [
           plan.planCode,
           plan.planName,
           plan.price,
           plan.billingCycle,
+          plan.durationDays,
           plan.isActive,
           plan.description || null,
           plan.displayOrder
@@ -241,6 +245,7 @@ export class ProductManagementService {
           sp.plan_name as "planName",
           sp.price,
           sp.billing_cycle as "billingCycle",
+          sp.duration_days as "durationDays",
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
