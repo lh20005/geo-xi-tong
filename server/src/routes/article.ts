@@ -151,10 +151,12 @@ articleRouter.post('/generate', async (req, res) => {
     const quotaCheck = await storageQuotaService.checkQuota(userId, contentSize);
     if (!quotaCheck.allowed) {
       return res.status(403).json({ 
-        error: quotaCheck.reason,
+        error: '存储空间不足，无法生成文章。请升级套餐以获取更多存储空间。',
+        reason: quotaCheck.reason,
         currentUsage: quotaCheck.currentUsageBytes,
         quota: quotaCheck.quotaBytes,
-        available: quotaCheck.availableBytes
+        available: quotaCheck.availableBytes,
+        needUpgrade: true
       });
     }
     

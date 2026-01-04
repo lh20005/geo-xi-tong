@@ -9,7 +9,6 @@ import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 import { storageQuotaService } from '../services/StorageQuotaService';
 import { storageService } from '../services/StorageService';
-import { usageTrackingService } from '../services/UsageTrackingService';
 
 export const knowledgeBaseRouter = Router();
 
@@ -100,34 +99,12 @@ knowledgeBaseRouter.post('/', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const validatedData = createKnowledgeBaseSchema.parse(req.body);
     
-    // 检查知识库配额
-    const kbQuota = await usageTrackingService.checkQuota(userId, 'knowledge_bases');
-    if (!kbQuota.hasQuota) {
-      return res.status(403).json({ 
-        error: '知识库配额不足',
-        quota: kbQuota.quotaLimit,
-        used: kbQuota.currentUsage,
-        remaining: kbQuota.remaining
-      });
-    }
-    
     const result = await pool.query(
       'INSERT INTO knowledge_bases (name, description, user_id) VALUES ($1, $2, $3) RETURNING id, name, description, created_at',
       [validatedData.name, validatedData.description || null, userId]
     );
     
-    const kb = result.rows[0];
-    
-    // 记录知识库配额使用
-    await usageTrackingService.recordUsage(
-      userId,
-      'knowledge_bases',
-      'knowledge_base',
-      kb.id,
-      1
-    );
-    
-    res.json(kb);
+    res.json(result.rows[0]);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: '数据验证失败', details: error.errors });
@@ -263,15 +240,6 @@ knowledgeBaseRouter.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: '知识库不存在或无权访问' });
     }
     
-    // 减少知识库配额使用（恢复配额）
-    await usageTrackingService.recordUsage(
-      userId,
-      'knowledge_bases',
-      'knowledge_base',
-      kbId,
-      -1
-    );
-    
     res.json({
       success: true,
       deletedDocuments
@@ -332,10 +300,12 @@ knowledgeBaseRouter.post('/:id/documents', upload.array('files', 20), async (req
       // 清理已上传的文件
       files.forEach(file => fs.existsSync(file.path) && fs.unlinkSync(file.path));
       return res.status(403).json({ 
-        error: quotaCheck.reason,
+        error: '存储空间不足，无法上传文档。请升级套餐以获取更多存储空间。',
+        reason: quotaCheck.reason,
         currentUsage: quotaCheck.currentUsageBytes,
         quota: quotaCheck.quotaBytes,
-        available: quotaCheck.availableBytes
+        available: quotaCheck.availableBytes,
+        needUpgrade: true
       });
     }
     

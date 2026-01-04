@@ -43,22 +43,6 @@ export const FEATURE_DEFINITIONS = {
     defaultValue: 100,
     description: '可使用的存储空间大小',
     resetPeriod: 'never' as const
-  },
-  gallery_albums: {
-    code: 'gallery_albums',
-    name: '企业图库相册数',
-    unit: '个',
-    defaultValue: 10,
-    description: '可创建的相册数量',
-    resetPeriod: 'never' as const
-  },
-  knowledge_bases: {
-    code: 'knowledge_bases',
-    name: '企业知识库数',
-    unit: '个',
-    defaultValue: 5,
-    description: '可创建的知识库数量',
-    resetPeriod: 'never' as const
   }
 } as const;
 

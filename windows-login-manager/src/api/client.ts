@@ -168,7 +168,11 @@ apiClient.interceptors.response.use(
     
     console.error('[API Client] 最终错误消息:', message);
     
-    // 返回统一的 Error 对象
-    return Promise.reject(new Error(message));
+    // 保留原始错误对象，但添加友好的消息
+    const enhancedError = error as any;
+    enhancedError.message = message;
+    
+    // 返回原始错误对象（保留 response 属性）
+    return Promise.reject(enhancedError);
   }
 );

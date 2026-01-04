@@ -8,7 +8,6 @@ import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 import { storageQuotaService } from '../services/StorageQuotaService';
 import { storageService } from '../services/StorageService';
-import { usageTrackingService } from '../services/UsageTrackingService';
 
 export const galleryRouter = Router();
 
@@ -116,26 +115,6 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
     const validatedData = createAlbumSchema.parse(req.body);
     const files = req.files as Express.Multer.File[];
     
-    // 检查相册配额
-    const albumQuota = await usageTrackingService.checkQuota(userId, 'gallery_albums');
-    if (!albumQuota.hasQuota) {
-      // 删除已上传的文件
-      if (files && files.length > 0) {
-        files.forEach(file => {
-          const filePath = path.join(uploadDir, file.filename);
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
-        });
-      }
-      return res.status(403).json({ 
-        error: '相册配额不足',
-        quota: albumQuota.quotaLimit,
-        used: albumQuota.currentUsage,
-        remaining: albumQuota.remaining
-      });
-    }
-    
     // 开始事务
     const client = await pool.connect();
     try {
@@ -148,15 +127,6 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
       );
       
       const album = albumResult.rows[0];
-      
-      // 记录相册配额使用
-      await usageTrackingService.recordUsage(
-        userId,
-        'gallery_albums',
-        'album',
-        album.id,
-        1
-      );
       
       // 插入图片（如果有）
       if (files && files.length > 0) {
@@ -300,15 +270,6 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
     // 删除相册（级联删除图片记录）
     await pool.query('DELETE FROM albums WHERE id = $1 AND user_id = $2', [albumId, userId]);
     
-    // 减少相册配额使用（恢复配额）
-    await usageTrackingService.recordUsage(
-      userId,
-      'gallery_albums',
-      'album',
-      albumId,
-      -1
-    );
-    
     // 删除文件系统中的图片文件
     imagesResult.rows.forEach(row => {
       const filePath = path.join(uploadDir, row.filepath);
@@ -388,10 +349,12 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
         }
       });
       return res.status(403).json({ 
-        error: quotaCheck.reason,
+        error: '存储空间不足，无法上传图片。请升级套餐以获取更多存储空间。',
+        reason: quotaCheck.reason,
         currentUsage: quotaCheck.currentUsageBytes,
         quota: quotaCheck.quotaBytes,
-        available: quotaCheck.availableBytes
+        available: quotaCheck.availableBytes,
+        needUpgrade: true
       });
     }
     

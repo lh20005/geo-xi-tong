@@ -220,8 +220,40 @@ export class SubscriptionService {
     const stats: UsageStats[] = [];
 
     for (const feature of plan.features) {
-      const used = await this.getUserUsage(userId, feature.feature_code as FeatureCode);
-      const limit = feature.feature_value;
+      let used: number;
+      let limit = feature.feature_value;
+      
+      // 存储空间需要特殊处理，从 user_storage_usage 表获取实际使用量
+      if (feature.feature_code === 'storage_space') {
+        const storageResult = await pool.query(
+          `SELECT 
+            total_storage_bytes,
+            storage_quota_bytes,
+            purchased_storage_bytes
+          FROM user_storage_usage
+          WHERE user_id = $1`,
+          [userId]
+        );
+        
+        if (storageResult.rows.length > 0) {
+          const row = storageResult.rows[0];
+          // 将字节转换为 MB（与 plan_features 中的单位一致）
+          const totalBytes = Number(row.total_storage_bytes) || 0;
+          const quotaBytes = Number(row.storage_quota_bytes) || 0;
+          const purchasedBytes = Number(row.purchased_storage_bytes) || 0;
+          
+          // used 和 limit 都以 MB 为单位
+          used = Math.round((totalBytes / (1024 * 1024)) * 100) / 100; // 保留两位小数
+          // 使用实际的配额（包括购买的额外存储）
+          const effectiveQuotaBytes = quotaBytes + purchasedBytes;
+          limit = effectiveQuotaBytes === -1 ? -1 : Math.round((effectiveQuotaBytes / (1024 * 1024)) * 100) / 100;
+        } else {
+          used = 0;
+        }
+      } else {
+        used = await this.getUserUsage(userId, feature.feature_code as FeatureCode);
+      }
+      
       const remaining = limit === -1 ? -1 : Math.max(0, limit - used);
       const percentage = limit === -1 ? 0 : Math.min(100, (used / limit) * 100);
 

@@ -66,14 +66,49 @@ export default function KnowledgeBaseDetailPage() {
       }, 0);
 
       // 检查配额
-      const quotaCheck = await apiClient.post('/storage/check-quota', {
-        fileSizeBytes: totalSize,
-        resourceType: 'document'
-      });
+      try {
+        const quotaCheck = await apiClient.post('/storage/check-quota', {
+          fileSizeBytes: totalSize,
+          resourceType: 'document'
+        });
 
-      if (!quotaCheck.data.allowed) {
-        message.error(quotaCheck.data.message || '存储空间不足，请升级套餐');
-        return;
+        if (!quotaCheck.data.success || !quotaCheck.data.data?.allowed) {
+          const errorMsg = quotaCheck.data.data?.reason || '存储空间不足，无法上传文档';
+          setLoading(false);
+          Modal.error({
+            title: '存储空间不足',
+            content: (
+              <div>
+                <p>{errorMsg}</p>
+                <p style={{ marginTop: 8 }}>请前往个人中心购买存储空间或升级套餐。</p>
+              </div>
+            ),
+            okText: '前往个人中心',
+            onOk: () => navigate('/user-center')
+          });
+          return;
+        }
+      } catch (quotaError: any) {
+        // 处理配额检查失败（403 表示配额不足）
+        if (quotaError.response?.status === 403) {
+          const errorData = quotaError.response.data;
+          setLoading(false);
+          Modal.error({
+            title: '存储空间不足',
+            content: (
+              <div>
+                <p>存储空间不足，无法上传文档。</p>
+                <p style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                  {errorData.message || errorData.data?.reason || '请升级套餐以获取更多存储空间'}
+                </p>
+              </div>
+            ),
+            okText: '前往个人中心',
+            onOk: () => navigate('/user-center')
+          });
+          return;
+        }
+        throw quotaError;
       }
 
       const formData = new FormData();
@@ -101,11 +136,20 @@ export default function KnowledgeBaseDetailPage() {
       loadKnowledgeBase();
     } catch (error: any) {
       // 处理存储空间不足的错误
-      if (error.response?.status === 403 && error.response?.data?.error) {
+      if (error.response?.status === 403 && error.response?.data?.needUpgrade) {
         const errorData = error.response.data;
-        message.error({
-          content: `${errorData.error}。请前往个人中心购买存储空间。`,
-          duration: 5
+        Modal.error({
+          title: '存储空间不足',
+          content: (
+            <div>
+              <p>{errorData.error}</p>
+              <p style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                {errorData.reason}
+              </p>
+            </div>
+          ),
+          okText: '前往个人中心',
+          onOk: () => navigate('/user-center')
         });
       } else {
         message.error(error.response?.data?.error || '上传文档失败');

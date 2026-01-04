@@ -66,6 +66,57 @@ export default function AlbumDetailPage() {
 
     setLoading(true);
     try {
+      // 计算总文件大小
+      const totalSize = fileList.reduce((sum, file) => {
+        return sum + (file.originFileObj?.size || 0);
+      }, 0);
+
+      // 检查配额
+      try {
+        const quotaCheck = await apiClient.post('/storage/check-quota', {
+          fileSizeBytes: totalSize,
+          resourceType: 'image'
+        });
+
+        if (!quotaCheck.data.success || !quotaCheck.data.data?.allowed) {
+          const errorMsg = quotaCheck.data.data?.reason || '存储空间不足，无法上传图片';
+          setLoading(false);
+          Modal.error({
+            title: '存储空间不足',
+            content: (
+              <div>
+                <p>{errorMsg}</p>
+                <p style={{ marginTop: 8 }}>请前往个人中心购买存储空间或升级套餐。</p>
+              </div>
+            ),
+            okText: '前往个人中心',
+            onOk: () => navigate('/user-center')
+          });
+          return;
+        }
+      } catch (quotaError: any) {
+        // 处理配额检查失败（403 表示配额不足）
+        if (quotaError.response?.status === 403) {
+          const errorData = quotaError.response.data;
+          setLoading(false);
+          Modal.error({
+            title: '存储空间不足',
+            content: (
+              <div>
+                <p>存储空间不足，无法上传图片。</p>
+                <p style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                  {errorData.message || errorData.data?.reason || '请升级套餐以获取更多存储空间'}
+                </p>
+              </div>
+            ),
+            okText: '前往个人中心',
+            onOk: () => navigate('/user-center')
+          });
+          return;
+        }
+        throw quotaError;
+      }
+
       const formData = new FormData();
       fileList.forEach((file) => {
         if (file.originFileObj) {
@@ -84,7 +135,25 @@ export default function AlbumDetailPage() {
       setFileList([]);
       loadAlbumDetail(parseInt(albumId!));
     } catch (error: any) {
-      message.error(error.message || '上传图片失败');
+      // 处理存储空间不足的错误
+      if (error.response?.status === 403 && error.response?.data?.needUpgrade) {
+        const errorData = error.response.data;
+        Modal.error({
+          title: '存储空间不足',
+          content: (
+            <div>
+              <p>{errorData.error}</p>
+              <p style={{ marginTop: 8, color: '#666', fontSize: 12 }}>
+                {errorData.reason}
+              </p>
+            </div>
+          ),
+          okText: '前往个人中心',
+          onOk: () => navigate('/user-center')
+        });
+      } else {
+        message.error(error.message || '上传图片失败');
+      }
     } finally {
       setLoading(false);
     }
