@@ -73,8 +73,8 @@ function App() {
 
   // Initialize WebSocket for user management events
   useEffect(() => {
-    // Skip WebSocket on login page
-    if (location.pathname === '/login') {
+    // Skip WebSocket on login page and payment page
+    if (location.pathname === '/login' || location.pathname.startsWith('/payment/')) {
       return;
     }
 
@@ -87,9 +87,10 @@ function App() {
 
     const wsService = getUserWebSocketService();
 
-    // Connect to WebSocket
+    // Connect to WebSocket (with graceful error handling)
     wsService.connect().catch((error) => {
-      console.error('[Client] Failed to connect to WebSocket:', error);
+      // Silently handle connection errors - WebSocket is not critical for basic functionality
+      console.warn('[Client] WebSocket connection failed - real-time updates will be unavailable');
     });
 
     // Handle user:updated event

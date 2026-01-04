@@ -27,11 +27,16 @@ export class WebSocketService {
   initialize(server: Server): void {
     this.wss = new WebSocketServer({ 
       server,
-      path: '/ws'
+      path: '/ws',
+      // 添加验证选项，允许所有来源（因为我们通过 JWT 验证）
+      verifyClient: (info) => {
+        // 允许所有连接尝试，在连接后验证 JWT
+        return true;
+      }
     });
 
     this.wss.on('connection', (ws: AuthenticatedWebSocket, req) => {
-      console.log('[WebSocket] New connection attempt');
+      console.log('[WebSocket] New connection attempt from:', req.headers.origin || 'unknown origin');
 
       // 从 URL 参数或 header 中获取 token
       const url = new URL(req.url || '', `http://${req.headers.host}`);
@@ -49,7 +54,7 @@ export class WebSocketService {
         ws.userId = decoded.userId;
         ws.username = decoded.username;
 
-        console.log(`[WebSocket] User ${decoded.username} (ID: ${decoded.userId}) authenticated`);
+        console.log(`[WebSocket] ✅ User ${decoded.username} (ID: ${decoded.userId}) authenticated`);
 
         // 订阅用户
         this.subscribe(decoded.userId, ws);
@@ -74,16 +79,16 @@ export class WebSocketService {
         });
 
         // 处理连接关闭
-        ws.on('close', () => {
+        ws.on('close', (code, reason) => {
           if (ws.userId) {
-            console.log(`[WebSocket] User ${ws.username} (ID: ${ws.userId}) disconnected`);
+            console.log(`[WebSocket] User ${ws.username} (ID: ${ws.userId}) disconnected (code: ${code})`);
             this.unsubscribe(ws.userId, ws);
           }
         });
 
         // 处理错误
         ws.on('error', (error) => {
-          console.error('[WebSocket] Connection error:', error);
+          console.error('[WebSocket] Connection error for user', ws.userId, ':', error.message);
           if (ws.userId) {
             this.unsubscribe(ws.userId, ws);
           }
@@ -95,7 +100,7 @@ export class WebSocketService {
         });
 
       } catch (error) {
-        console.error('[WebSocket] Authentication failed:', error);
+        console.error('[WebSocket] Authentication failed:', error instanceof Error ? error.message : error);
         ws.close(1008, 'Invalid token');
       }
     });

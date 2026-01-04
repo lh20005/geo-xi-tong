@@ -37,6 +37,24 @@ router.post('/tasks', async (req, res) => {
       });
     }
 
+    // ========== 配额检查 ==========
+    // 检查用户是否有足够的发布配额
+    const { usageTrackingService } = await import('../services/UsageTrackingService');
+    const quota = await usageTrackingService.checkQuota(userId, 'publish_per_day');
+    
+    if (!quota.hasQuota || quota.remaining < 1) {
+      return res.status(403).json({ 
+        success: false,
+        error: '发布配额不足',
+        message: `您今日的发布配额已用完。剩余 ${quota.remaining} 次`,
+        quota: {
+          remaining: quota.remaining,
+          total: quota.quotaLimit,
+          resetTime: '明天 00:00'
+        }
+      });
+    }
+
     // 验证文章所有权
     const articleCheck = await pool.query(
       'SELECT id FROM articles WHERE id = $1 AND user_id = $2',

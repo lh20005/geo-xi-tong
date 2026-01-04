@@ -51,8 +51,9 @@ export class UserWebSocketService {
       }
 
       // Build WebSocket URL
-      const wsUrl = config.apiUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-      const url = `${wsUrl.replace('/api', '')}/ws?token=${token}`;
+      // Use the configured wsUrl directly
+      const wsUrl = config.wsUrl || 'ws://localhost:3000/ws';
+      const url = `${wsUrl}?token=${token}`;
 
       console.log('[UserWebSocket] Connecting to:', url);
 

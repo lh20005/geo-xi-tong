@@ -1,8 +1,23 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Header from '../components/Header';
 import PaymentModal from '../components/PaymentModal';
 import { config } from '../config/env';
+
+interface Plan {
+  id: number;
+  plan_name: string;
+  plan_code: string;
+  price: string | number;
+  billing_cycle: string;
+  features: {
+    feature_code: string;
+    feature_name: string;
+    feature_value: number;
+  }[];
+  description?: string;
+}
 
 export default function HomePage() {
   const [activeSection, setActiveSection] = useState('home');
@@ -14,6 +29,8 @@ export default function HomePage() {
     name: string;
     price: number;
   } | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [plansLoading, setPlansLoading] = useState(true);
 
   // 轮播图片列表
   const carouselImages = [
@@ -46,6 +63,27 @@ export default function HomePage() {
   const goToImage = (index: number) => {
     setCurrentImageIndex(index);
   };
+
+  // 获取套餐列表
+  useEffect(() => {
+    const fetchPlans = async () => {
+      try {
+        setPlansLoading(true);
+        const response = await axios.get(`${config.apiUrl}/subscription/plans`);
+        if (response.data.success) {
+          setPlans(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('获取套餐列表失败:', error);
+        // 失败时使用默认套餐数据
+        setPlans([]);
+      } finally {
+        setPlansLoading(false);
+      }
+    };
+
+    fetchPlans();
+  }, []);
 
   // 检查登录状态
   useEffect(() => {
@@ -83,6 +121,27 @@ export default function HomePage() {
         window.location.href = `${config.clientUrl}?${params.toString()}`;
       }
     }
+  };
+
+  // 辅助函数：格式化价格
+  const formatPrice = (price: string | number): string => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    return numPrice.toFixed(2);
+  };
+
+  // 辅助函数：获取功能显示值
+  const getFeatureDisplayValue = (value: number): string => {
+    return value === -1 ? '不限' : value.toString();
+  };
+
+  // 辅助函数：根据plan_code获取套餐标签
+  const getPlanBadge = (planCode: string): { text: string; color: string } => {
+    const badges: { [key: string]: { text: string; color: string } } = {
+      'free': { text: '入门首选', color: 'yellow' },
+      'professional': { text: '最受欢迎', color: 'yellow' },
+      'enterprise': { text: '运营必备', color: 'yellow' }
+    };
+    return badges[planCode] || { text: '推荐', color: 'yellow' };
   };
 
   // 处理购买按钮点击
@@ -324,214 +383,74 @@ export default function HomePage() {
             </h2>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-            {/* 免费版 */}
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
-                入门首选
-              </div>
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-white mb-2">免费版</h3>
-                <p className="text-blue-100 mb-6">适合个人用户</p>
-                <div className="mb-6">
-                  <span className="text-5xl font-bold text-white">¥0</span>
-                  <span className="text-blue-100">/月</span>
-                </div>
-                <Link
-                  to="/login"
-                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  免费试用
-                </Link>
-              </div>
-              
-              {/* 功能列表 */}
-              <div className="border-t border-white/20 pt-6">
-                <ul className="space-y-4 text-white">
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">每日生成 <span className="font-bold">10篇</span> 文章</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">每日发布 <span className="font-bold">20篇</span> 文章</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">管理 <span className="font-bold">1个</span> 平台账号</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">关键词蒸馏 <span className="font-bold">50个</span></span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">企业知识库 <span className="font-bold">100MB</span></span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">基础数据分析</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">邮件支持</span>
-                  </li>
-                </ul>
-              </div>
+          {plansLoading ? (
+            <div className="text-center py-20">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">加载套餐信息中...</p>
             </div>
+          ) : plans.length === 0 ? (
+            <div className="text-center py-20">
+              <p className="text-gray-600">暂无套餐信息</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+              {plans.map((plan) => {
+                const badge = getPlanBadge(plan.plan_code);
+                const price = typeof plan.price === 'string' ? parseFloat(plan.price) : plan.price;
+                const isFree = plan.plan_code === 'free';
 
-            {/* 专业版 */}
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
-                最受欢迎
-              </div>
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-white mb-2">专业版</h3>
-                <p className="text-blue-100 mb-6">适合个人用户</p>
-                <div className="mb-6">
-                  <span className="text-5xl font-bold text-white">¥99</span>
-                  <span className="text-blue-100">/月</span>
-                </div>
-                <button
-                  onClick={() => handlePurchase(2, '专业版', 99)}
-                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  点击购买
-                </button>
-              </div>
-              
-              {/* 功能列表 */}
-              <div className="border-t border-white/20 pt-6">
-                <ul className="space-y-4 text-white">
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">每日生成 <span className="font-bold">100篇</span> 文章</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">每日发布 <span className="font-bold">200篇</span> 文章</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">管理 <span className="font-bold">3个</span> 平台账号</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">关键词蒸馏 <span className="font-bold">500个</span></span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">企业知识库 <span className="font-bold">1GB</span></span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">高级数据分析</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">优先技术支持</span>
-                  </li>
-                </ul>
-              </div>
+                return (
+                  <div 
+                    key={plan.id}
+                    className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative"
+                  >
+                    <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
+                      {badge.text}
+                    </div>
+                    <div className="text-center mb-8">
+                      <h3 className="text-2xl font-bold text-white mb-2">{plan.plan_name}</h3>
+                      <p className="text-blue-100 mb-6">{plan.description || '适合个人用户'}</p>
+                      <div className="mb-6">
+                        <span className="text-5xl font-bold text-white">¥{formatPrice(price)}</span>
+                        <span className="text-blue-100">/月</span>
+                      </div>
+                      {isFree ? (
+                        <Link
+                          to="/login"
+                          className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          免费试用
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={() => handlePurchase(plan.id, plan.plan_name, price)}
+                          className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          点击购买
+                        </button>
+                      )}
+                    </div>
+                    
+                    {/* 功能列表 */}
+                    <div className="border-t border-white/20 pt-6">
+                      <ul className="space-y-4 text-white">
+                        {plan.features.map((feature) => (
+                          <li key={feature.feature_code} className="flex items-start">
+                            <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                            <span className="text-sm">
+                              {feature.feature_name} <span className="font-bold">{getFeatureDisplayValue(feature.feature_value)}</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            {/* 企业版 */}
-            <div className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-8 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative">
-              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-4 py-1 rounded-full text-sm font-bold">
-                运营必备
-              </div>
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold text-white mb-2">企业版</h3>
-                <p className="text-blue-100 mb-6">适合企业用户</p>
-                <div className="mb-6">
-                  <span className="text-5xl font-bold text-white">¥299</span>
-                  <span className="text-blue-100">/月</span>
-                </div>
-                <button
-                  onClick={() => handlePurchase(3, '企业版', 299)}
-                  className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  点击购买
-                </button>
-              </div>
-              
-              {/* 功能列表 */}
-              <div className="border-t border-white/20 pt-6">
-                <ul className="space-y-4 text-white">
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">每日生成 <span className="font-bold">不限</span> 文章</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">每日发布 <span className="font-bold">不限</span> 文章</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">管理 <span className="font-bold">10个</span> 平台账号</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">关键词蒸馏 <span className="font-bold">不限</span></span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">企业知识库 <span className="font-bold">10GB</span></span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">专属数据报告</span>
-                  </li>
-                  <li className="flex items-start">
-                    <svg className="w-5 h-5 mr-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                    </svg>
-                    <span className="text-sm">7×24小时专属客服</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 

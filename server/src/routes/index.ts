@@ -25,11 +25,14 @@ import paymentRouter from './payment';
 import ordersRouter from './orders';
 import subscriptionRouter from './subscription';
 import quotaRouter from './quota';
+import usageTrackingRouter from './usageTracking';
+import productManagementRouter from './admin/productManagement';
 
 export const apiRouter = Router();
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/admin', adminRouter);
+apiRouter.use('/admin/products', productManagementRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/invitations', invitationsRouter);
 apiRouter.use('/confirm', confirmationRouter);
@@ -39,6 +42,7 @@ apiRouter.use('/payment', paymentRouter);
 apiRouter.use('/orders', ordersRouter);
 apiRouter.use('/subscription', subscriptionRouter);
 apiRouter.use('/quota', quotaRouter);  // 配额管理API
+apiRouter.use('/usage', usageTrackingRouter);  // 使用量追踪API
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);

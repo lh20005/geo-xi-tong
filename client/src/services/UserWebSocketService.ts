@@ -44,25 +44,24 @@ export class UserWebSocketService {
       const token = localStorage.getItem('auth_token');
 
       if (!token) {
-        console.error('[UserWebSocket] No auth token found');
+        console.warn('[UserWebSocket] No auth token found, skipping connection');
         this.isConnecting = false;
         reject(new Error('No auth token'));
         return;
       }
 
       // Build WebSocket URL
-      // Extract the base URL without /api path
-      const baseUrl = config.apiUrl.replace('/api', '');
-      const wsUrl = baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
-      const url = `${wsUrl}/ws?token=${token}`;
+      // Use the configured wsUrl directly
+      const wsUrl = config.wsUrl || 'ws://localhost:3000/ws';
+      const url = `${wsUrl}?token=${token}`;
 
-      console.log('[UserWebSocket] Connecting to:', url);
+      console.log('[UserWebSocket] Connecting to:', wsUrl);
 
       try {
         this.ws = new WebSocket(url);
 
         this.ws.onopen = () => {
-          console.log('[UserWebSocket] Connected successfully');
+          console.log('[UserWebSocket] ✅ Connected successfully');
           this.isConnecting = false;
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
@@ -81,18 +80,22 @@ export class UserWebSocketService {
         };
 
         this.ws.onerror = (error) => {
-          console.error('[UserWebSocket] Connection error:', error);
+          console.warn('[UserWebSocket] Connection error - this is normal if server is not running');
           this.isConnecting = false;
-          reject(error);
+          // Don't reject immediately, let onclose handle reconnection
         };
 
         this.ws.onclose = (event) => {
-          console.log('[UserWebSocket] Connection closed:', event.code, event.reason);
+          console.log('[UserWebSocket] Connection closed:', event.code, event.reason || 'No reason provided');
           this.isConnecting = false;
           this.stopHeartbeat();
 
-          if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+          // Only attempt reconnection if it's not an authentication failure
+          if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts && event.code !== 1008) {
             this.scheduleReconnect();
+          } else if (event.code === 1008) {
+            console.error('[UserWebSocket] Authentication failed, please re-login');
+            reject(new Error('Authentication failed'));
           }
         };
       } catch (error) {

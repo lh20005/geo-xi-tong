@@ -4,6 +4,7 @@ import { ArticleGenerationService } from '../services/articleGenerationService';
 import { pool } from '../db/database';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
+import { usageTrackingService } from '../services/UsageTrackingService';
 
 export const articleGenerationRouter = Router();
 
@@ -32,6 +33,23 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
     const validatedData = createTaskSchema.parse(req.body);
+
+    // ========== 配额检查 ==========
+    // 检查用户是否有足够的文章生成配额
+    const quota = await usageTrackingService.checkQuota(userId, 'articles_per_day');
+    
+    if (!quota.hasQuota || quota.remaining < validatedData.articleCount) {
+      return res.status(403).json({ 
+        error: '文章生成配额不足',
+        message: `您今日的文章生成配额不足。需要 ${validatedData.articleCount} 篇，剩余 ${quota.remaining} 篇`,
+        quota: {
+          required: validatedData.articleCount,
+          remaining: quota.remaining,
+          total: quota.quotaLimit,
+          resetTime: '明天 00:00'
+        }
+      });
+    }
 
     // 验证引用的资源是否存在
     const distillationCheck = await pool.query('SELECT id FROM distillations WHERE id = $1', [validatedData.distillationId]);

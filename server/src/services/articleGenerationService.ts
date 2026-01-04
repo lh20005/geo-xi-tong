@@ -1662,6 +1662,22 @@ export class ArticleGenerationService {
         console.log(`[保存文章] 图片 ${imageId} 的usage_count已更新`);
       }
 
+      // 6. 记录配额使用（文章生成）
+      try {
+        const { usageTrackingService } = await import('./UsageTrackingService');
+        await usageTrackingService.recordUsage(
+          userId,
+          'articles_per_day',
+          'article',
+          articleId,
+          1,
+          { title, keyword, taskId }
+        );
+        console.log(`[保存文章] 配额使用已记录`);
+      } catch (error: any) {
+        console.error(`[保存文章] 记录配额使用失败（不影响文章保存）:`, error.message);
+      }
+
       await client.query('COMMIT');
       console.log(`[保存文章] 事务提交成功`);
 
@@ -1727,6 +1743,21 @@ export class ArticleGenerationService {
            ON CONFLICT (image_id, article_id) DO NOTHING`,
           [imageId, articleId]
         );
+      }
+
+      // 5. 记录配额使用（文章生成）
+      try {
+        const { usageTrackingService } = await import('./UsageTrackingService');
+        await usageTrackingService.recordUsage(
+          userId,
+          'articles_per_day',
+          'article',
+          articleId,
+          1,
+          { title, keyword, taskId }
+        );
+      } catch (error: any) {
+        console.error(`[保存文章] 记录配额使用失败（不影响文章保存）:`, error.message);
       }
 
       await client.query('COMMIT');

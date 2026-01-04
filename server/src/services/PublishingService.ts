@@ -207,6 +207,35 @@ export class PublishingService {
        WHERE id = $${paramIndex}`,
       params
     );
+
+    // 如果发布成功，记录配额使用
+    if (status === 'success') {
+      try {
+        // 获取任务信息
+        const taskResult = await pool.query(
+          'SELECT user_id, article_id, platform_id FROM publishing_tasks WHERE id = $1',
+          [taskId]
+        );
+        
+        if (taskResult.rows.length > 0) {
+          const { user_id, article_id, platform_id } = taskResult.rows[0];
+          
+          // 记录发布配额使用
+          const { usageTrackingService } = await import('./UsageTrackingService');
+          await usageTrackingService.recordUsage(
+            user_id,
+            'publish_per_day',
+            'publish',
+            taskId,
+            1,
+            { articleId: article_id, platformId: platform_id }
+          );
+          console.log(`✅ 发布配额已记录 (任务 #${taskId}, 用户 #${user_id})`);
+        }
+      } catch (error: any) {
+        console.error(`记录发布配额失败（不影响发布结果）:`, error.message);
+      }
+    }
   }
 
   /**
