@@ -40,7 +40,7 @@ router.post('/tasks', async (req, res) => {
     // ========== 配额检查 ==========
     // 检查用户是否有足够的发布配额
     const { usageTrackingService } = await import('../services/UsageTrackingService');
-    const quota = await usageTrackingService.checkQuota(userId, 'publish_per_day');
+    const quota = await usageTrackingService.checkQuota(userId, 'publish_per_month');
     
     if (!quota.hasQuota || quota.remaining < 1) {
       return res.status(403).json({ 

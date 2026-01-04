@@ -224,7 +224,7 @@ export class PublishingService {
           const { usageTrackingService } = await import('./UsageTrackingService');
           await usageTrackingService.recordUsage(
             user_id,
-            'publish_per_day',
+            'publish_per_month',
             'publish',
             taskId,
             1,

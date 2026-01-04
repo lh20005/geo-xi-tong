@@ -225,8 +225,9 @@ export class SubscriptionService {
       const remaining = limit === -1 ? -1 : Math.max(0, limit - used);
       const percentage = limit === -1 ? 0 : Math.min(100, (used / limit) * 100);
 
+      // 获取功能定义，如果不存在则使用默认值
       const featureDef = FEATURE_DEFINITIONS[feature.feature_code as FeatureCode];
-      const resetTime = this.getNextResetTime(featureDef.resetPeriod);
+      const resetTime = featureDef ? this.getNextResetTime(featureDef.resetPeriod) : undefined;
 
       stats.push({
         feature_code: feature.feature_code,
@@ -247,31 +248,47 @@ export class SubscriptionService {
    * 为用户开通订阅
    */
   async activateSubscription(userId: number, planId: number, durationMonths: number = 1): Promise<Subscription> {
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + durationMonths);
-
-    const result = await pool.query(
-      `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
-       VALUES ($1, $2, 'active', $3, $4)
-       RETURNING *`,
-      [userId, planId, startDate, endDate]
-    );
-
-    const subscription = result.rows[0];
-
-    // 推送订阅更新通知
+    const client = await pool.connect();
+    
     try {
-      const wsService = getWebSocketService();
-      wsService.broadcast(userId, 'subscription_updated', {
-        action: 'activated',
-        subscription
-      });
-    } catch (error) {
-      console.error('推送订阅更新失败:', error);
-    }
+      await client.query('BEGIN');
+      
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setMonth(endDate.getMonth() + durationMonths);
 
-    return subscription;
+      const result = await client.query(
+        `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
+         VALUES ($1, $2, 'active', $3, $4)
+         RETURNING *`,
+        [userId, planId, startDate, endDate]
+      );
+
+      const subscription = result.rows[0];
+      
+      // 初始化用户配额
+      await this.initializeUserQuotas(client, userId, planId);
+      
+      await client.query('COMMIT');
+
+      // 推送订阅更新通知
+      try {
+        const wsService = getWebSocketService();
+        wsService.broadcast(userId, 'subscription_updated', {
+          action: 'activated',
+          subscription
+        });
+      } catch (error) {
+        console.error('推送订阅更新失败:', error);
+      }
+
+      return subscription;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**
@@ -282,6 +299,70 @@ export class SubscriptionService {
       await redis.del(`plan:${planCode}`);
     } catch (error) {
       console.error('清除缓存失败:', error);
+    }
+  }
+
+  /**
+   * 初始化用户配额
+   * @param client 数据库客户端
+   * @param userId 用户ID
+   * @param planId 套餐ID
+   */
+  private async initializeUserQuotas(client: any, userId: number, planId: number): Promise<void> {
+    try {
+      console.log(`[SubscriptionService] 开始初始化用户 ${userId} 的配额...`);
+      
+      // 获取套餐的所有功能配额
+      const featuresResult = await client.query(
+        `SELECT feature_code, feature_name, feature_value, feature_unit
+         FROM plan_features
+         WHERE plan_id = $1`,
+        [planId]
+      );
+      
+      if (featuresResult.rows.length === 0) {
+        console.log(`[SubscriptionService] 套餐 ${planId} 没有配置功能，跳过配额初始化`);
+        return;
+      }
+      
+      const now = new Date();
+      let initializedCount = 0;
+      
+      for (const feature of featuresResult.rows) {
+        // 确定周期
+        let periodStart: Date;
+        let periodEnd: Date;
+        
+        if (feature.feature_code.includes('_per_day')) {
+          // 每日重置
+          periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        } else if (feature.feature_code.includes('_per_month') || feature.feature_code === 'keyword_distillation') {
+          // 每月重置
+          periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        } else {
+          // 永不重置
+          periodStart = new Date(2000, 0, 1);
+          periodEnd = new Date(2099, 11, 31);
+        }
+        
+        // 插入初始配额记录（如果不存在）
+        await client.query(
+          `INSERT INTO user_usage (
+            user_id, feature_code, usage_count, period_start, period_end, last_reset_at
+          ) VALUES ($1, $2, 0, $3, $4, $5)
+          ON CONFLICT (user_id, feature_code, period_start) DO NOTHING`,
+          [userId, feature.feature_code, periodStart, periodEnd, periodStart]
+        );
+        
+        initializedCount++;
+      }
+      
+      console.log(`[SubscriptionService] ✅ 成功初始化 ${initializedCount} 项配额记录`);
+    } catch (error) {
+      console.error('[SubscriptionService] 初始化配额失败:', error);
+      // 不抛出错误，避免影响订阅流程
     }
   }
 

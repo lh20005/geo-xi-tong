@@ -1667,7 +1667,7 @@ export class ArticleGenerationService {
         const { usageTrackingService } = await import('./UsageTrackingService');
         await usageTrackingService.recordUsage(
           userId,
-          'articles_per_day',
+          'articles_per_month',
           'article',
           articleId,
           1,
@@ -1750,7 +1750,7 @@ export class ArticleGenerationService {
         const { usageTrackingService } = await import('./UsageTrackingService');
         await usageTrackingService.recordUsage(
           userId,
-          'articles_per_day',
+          'articles_per_month',
           'article',
           articleId,
           1,

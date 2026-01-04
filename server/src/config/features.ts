@@ -35,6 +35,14 @@ export const FEATURE_DEFINITIONS = {
     defaultValue: 50,
     description: '每月可蒸馏的关键词数量',
     resetPeriod: 'monthly' as const
+  },
+  storage_space: {
+    code: 'storage_space',
+    name: '存储空间',
+    unit: 'MB',
+    defaultValue: 100,
+    description: '可使用的存储空间大小',
+    resetPeriod: 'never' as const
   }
 } as const;
 

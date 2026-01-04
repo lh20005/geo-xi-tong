@@ -65,7 +65,7 @@ export default function AlbumDetailPage() {
 
       // 检查配额
       const quotaCheck = await apiClient.post('/storage/check-quota', {
-        sizeBytes: totalSize,
+        fileSizeBytes: totalSize,
         resourceType: 'image'
       });
 
@@ -92,7 +92,16 @@ export default function AlbumDetailPage() {
       setFileList([]);
       loadAlbumDetail(parseInt(albumId!));
     } catch (error: any) {
-      message.error(error.response?.data?.error || '上传图片失败');
+      // 处理存储空间不足的错误
+      if (error.response?.status === 403 && error.response?.data?.error) {
+        const errorData = error.response.data;
+        message.error({
+          content: `${errorData.error}。请前往个人中心购买存储空间。`,
+          duration: 5
+        });
+      } else {
+        message.error(error.response?.data?.error || '上传图片失败');
+      }
     } finally {
       setLoading(false);
     }

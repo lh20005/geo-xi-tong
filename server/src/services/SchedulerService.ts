@@ -63,17 +63,17 @@ export class SchedulerService {
 
   /**
    * 每月配额重置任务
-   * 每月1号00:00执行，重置 articles_per_month 和 publish_per_month
+   * 每月1号00:00执行，重置所有每月配额
    */
   private scheduleMonthlyQuotaResetTask() {
     const task = cron.schedule('0 0 1 * *', async () => {
       try {
         console.log('[定时任务] 开始执行每月配额重置任务...');
         
-        // 重置每月配额
+        // 重置所有每月配额
         const result = await pool.query(`
           DELETE FROM user_usage 
-          WHERE feature_code IN ('articles_per_month', 'publish_per_month')
+          WHERE feature_code IN ('articles_per_month', 'publish_per_month', 'keyword_distillation')
           AND period_start < DATE_TRUNC('month', CURRENT_DATE)
         `);
 
@@ -85,32 +85,6 @@ export class SchedulerService {
 
     this.tasks.push(task);
     console.log('✅ 每月配额重置任务已安排（每月1号00:00执行）');
-  }
-
-  /**
-   * 每月配额重置任务
-   * 每月1日00:00执行，重置 keyword_distillation
-   */
-  private scheduleMonthlyQuotaResetTask() {
-    const task = cron.schedule('0 0 1 * *', async () => {
-      try {
-        console.log('[定时任务] 开始执行每月配额重置任务...');
-        
-        // 重置每月配额
-        const result = await pool.query(`
-          DELETE FROM user_usage 
-          WHERE feature_code = 'keyword_distillation'
-          AND period_start < DATE_TRUNC('month', CURRENT_DATE)
-        `);
-
-        console.log(`[定时任务] 已重置 ${result.rowCount} 条每月配额记录`);
-      } catch (error) {
-        console.error('[定时任务] 每月配额重置任务失败:', error);
-      }
-    });
-
-    this.tasks.push(task);
-    console.log('✅ 每月配额重置任务已安排（每月1日00:00执行）');
   }
 
   /**

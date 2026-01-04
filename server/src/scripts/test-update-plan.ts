@@ -40,6 +40,10 @@ async function testUpdatePlan() {
     
     console.log('更新数据:', JSON.stringify(updates, null, 2));
     
+    if (!plan.id) {
+      throw new Error('套餐ID不存在');
+    }
+    
     const updatedPlan = await productManagementService.updatePlan(
       plan.id,
       updates,

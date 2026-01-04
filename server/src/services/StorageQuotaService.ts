@@ -49,14 +49,31 @@ export class StorageQuotaService {
     fileSizeBytes: number
   ): Promise<QuotaCheckResult> {
     try {
-      const usage = await storageService.getUserStorageUsage(userId);
-      const effectiveQuota = usage.storageQuotaBytes + usage.purchasedStorageBytes;
+      // 跳过缓存，直接从数据库读取最新数据
+      const usage = await storageService.getUserStorageUsage(userId, true);
+      
+      // 确保所有值都是数字类型
+      const currentUsage = Number(usage.totalStorageBytes);
+      const quotaBytes = Number(usage.storageQuotaBytes);
+      const purchasedBytes = Number(usage.purchasedStorageBytes);
+      const effectiveQuota = quotaBytes + purchasedBytes;
+
+      console.log('[StorageQuotaService] 配额检查:', {
+        userId,
+        currentUsage,
+        quotaBytes,
+        purchasedBytes,
+        effectiveQuota,
+        fileSizeBytes,
+        currentUsageType: typeof usage.totalStorageBytes,
+        quotaBytesType: typeof usage.storageQuotaBytes
+      });
 
       // 无限配额
       if (effectiveQuota === -1) {
         return {
           allowed: true,
-          currentUsageBytes: usage.totalStorageBytes,
+          currentUsageBytes: currentUsage,
           quotaBytes: -1,
           availableBytes: -1,
           usagePercentage: 0
@@ -64,16 +81,24 @@ export class StorageQuotaService {
       }
 
       // 计算上传后的使用量
-      const afterUploadBytes = usage.totalStorageBytes + fileSizeBytes;
+      const afterUploadBytes = currentUsage + fileSizeBytes;
       const allowed = afterUploadBytes <= effectiveQuota;
+      const availableBytes = Math.max(0, effectiveQuota - currentUsage);
+
+      console.log('[StorageQuotaService] 检查结果:', {
+        afterUploadBytes,
+        allowed,
+        availableBytes,
+        needBytes: fileSizeBytes
+      });
 
       return {
         allowed,
-        currentUsageBytes: usage.totalStorageBytes,
+        currentUsageBytes: currentUsage,
         quotaBytes: effectiveQuota,
-        availableBytes: Math.max(0, effectiveQuota - usage.totalStorageBytes),
+        availableBytes,
         usagePercentage: usage.usagePercentage,
-        reason: allowed ? undefined : `存储配额不足。当前使用: ${this.formatBytes(usage.totalStorageBytes)}, 配额: ${this.formatBytes(effectiveQuota)}, 需要: ${this.formatBytes(fileSizeBytes)}`
+        reason: allowed ? undefined : `存储空间不足，无法上传。当前已使用 ${this.formatBytes(currentUsage)} / ${this.formatBytes(effectiveQuota)}，可用 ${this.formatBytes(availableBytes)}，本次上传需要 ${this.formatBytes(fileSizeBytes)}`
       };
     } catch (error) {
       console.error('[StorageQuotaService] 检查配额失败:', error);

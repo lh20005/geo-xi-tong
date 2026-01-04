@@ -109,7 +109,15 @@ export default function KnowledgeBaseDetailPage() {
       loadKnowledgeBase();
     } catch (error: any) {
       console.error('上传失败:', error);
-      message.error(error.message || '上传文档失败');
+      // 处理存储空间不足的错误
+      if (error.message && (error.message.includes('存储空间') || error.message.includes('配额'))) {
+        message.error({
+          content: `${error.message}。请前往个人中心购买存储空间。`,
+          duration: 5
+        });
+      } else {
+        message.error(error.message || '上传文档失败');
+      }
     } finally {
       setLoading(false);
     }

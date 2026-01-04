@@ -36,7 +36,7 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
 
     // ========== 配额检查 ==========
     // 检查用户是否有足够的文章生成配额
-    const quota = await usageTrackingService.checkQuota(userId, 'articles_per_day');
+    const quota = await usageTrackingService.checkQuota(userId, 'articles_per_month');
     
     if (!quota.hasQuota || quota.remaining < validatedData.articleCount) {
       return res.status(403).json({ 

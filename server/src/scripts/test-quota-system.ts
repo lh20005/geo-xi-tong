@@ -18,7 +18,7 @@ async function testQuotaSystem() {
     console.log('📊 测试 1: 检查用户配额');
     console.log('─'.repeat(50));
     
-    const quota = await usageTrackingService.checkQuota(testUserId, 'articles_per_day');
+    const quota = await usageTrackingService.checkQuota(testUserId, 'articles_per_month');
     console.log('配额信息:');
     console.log(`  - 是否有配额: ${quota.hasQuota ? '✓' : '✗'}`);
     console.log(`  - 当前使用: ${quota.currentUsage}`);
@@ -34,7 +34,7 @@ async function testQuotaSystem() {
     console.log('记录一次文章生成...');
     await usageTrackingService.recordUsage(
       testUserId,
-      'articles_per_day',
+      'articles_per_month',
       'article',
       999,
       1,
@@ -43,7 +43,7 @@ async function testQuotaSystem() {
     console.log('✓ 使用量记录成功');
     
     // 再次检查配额
-    const quotaAfter = await usageTrackingService.checkQuota(testUserId, 'articles_per_day');
+    const quotaAfter = await usageTrackingService.checkQuota(testUserId, 'articles_per_month');
     console.log(`当前使用: ${quotaAfter.currentUsage} (增加了 ${quotaAfter.currentUsage - quota.currentUsage})`);
     console.log('');
     
@@ -81,7 +81,7 @@ async function testQuotaSystem() {
     
     const statistics = await usageTrackingService.getUsageStatistics(
       testUserId,
-      'articles_per_day',
+      'articles_per_month',
       startDate,
       endDate
     );
@@ -125,7 +125,7 @@ async function testQuotaSystem() {
     
     const dbResult = await pool.query(
       `SELECT * FROM check_user_quota($1, $2)`,
-      [testUserId, 'articles_per_day']
+      [testUserId, 'articles_per_month']
     );
     
     console.log('数据库函数返回:');
@@ -142,7 +142,7 @@ async function testQuotaSystem() {
     
     const batchQuotas = await usageTrackingService.batchCheckQuota(
       testUserId,
-      ['articles_per_day', 'publish_per_day', 'keyword_distillation']
+      ['articles_per_month', 'publish_per_month', 'keyword_distillation']
     );
     
     console.log('批量检查结果:');

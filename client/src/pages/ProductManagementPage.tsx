@@ -63,7 +63,8 @@ export default function ProductManagementPage() {
     { code: 'articles_per_month', name: '每月生成文章数', unit: '篇' },
     { code: 'publish_per_month', name: '每月发布文章数', unit: '篇' },
     { code: 'platform_accounts', name: '可管理平台账号数', unit: '个' },
-    { code: 'keyword_distillation', name: '关键词蒸馏数', unit: '个' }
+    { code: 'keyword_distillation', name: '关键词蒸馏数', unit: '个' },
+    { code: 'storage_space', name: '存储空间', unit: 'MB' }
   ];
 
   useEffect(() => {

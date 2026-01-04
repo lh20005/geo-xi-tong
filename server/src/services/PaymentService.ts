@@ -284,11 +284,15 @@ export class PaymentService {
         if (order.order_type === 'upgrade') {
           await subscriptionService.applyUpgrade(order.user_id, order.plan_id);
         } else {
+          // 创建订阅
           await client.query(
             `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
              VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month')`,
             [order.user_id, order.plan_id]
           );
+          
+          // 初始化用户配额
+          await this.initializeUserQuotas(client, order.user_id, order.plan_id);
         }
 
         await client.query('COMMIT');
@@ -358,6 +362,70 @@ export class PaymentService {
         order_no: orderNo,
         status: order.status
       };
+    }
+  }
+
+  /**
+   * 初始化用户配额
+   * @param client 数据库客户端
+   * @param userId 用户ID
+   * @param planId 套餐ID
+   */
+  private async initializeUserQuotas(client: any, userId: number, planId: number): Promise<void> {
+    try {
+      console.log(`[PaymentService] 开始初始化用户 ${userId} 的配额...`);
+      
+      // 获取套餐的所有功能配额
+      const featuresResult = await client.query(
+        `SELECT feature_code, feature_name, feature_value, feature_unit
+         FROM plan_features
+         WHERE plan_id = $1`,
+        [planId]
+      );
+      
+      if (featuresResult.rows.length === 0) {
+        console.log(`[PaymentService] 套餐 ${planId} 没有配置功能，跳过配额初始化`);
+        return;
+      }
+      
+      const now = new Date();
+      let initializedCount = 0;
+      
+      for (const feature of featuresResult.rows) {
+        // 确定周期
+        let periodStart: Date;
+        let periodEnd: Date;
+        
+        if (feature.feature_code.includes('_per_day')) {
+          // 每日重置
+          periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        } else if (feature.feature_code.includes('_per_month') || feature.feature_code === 'keyword_distillation') {
+          // 每月重置
+          periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        } else {
+          // 永不重置
+          periodStart = new Date(2000, 0, 1);
+          periodEnd = new Date(2099, 11, 31);
+        }
+        
+        // 插入初始配额记录（如果不存在）
+        await client.query(
+          `INSERT INTO user_usage (
+            user_id, feature_code, usage_count, period_start, period_end, last_reset_at
+          ) VALUES ($1, $2, 0, $3, $4, $5)
+          ON CONFLICT (user_id, feature_code, period_start) DO NOTHING`,
+          [userId, feature.feature_code, periodStart, periodEnd, periodStart]
+        );
+        
+        initializedCount++;
+      }
+      
+      console.log(`[PaymentService] ✅ 成功初始化 ${initializedCount} 项配额记录`);
+    } catch (error) {
+      console.error('[PaymentService] 初始化配额失败:', error);
+      // 不抛出错误，避免影响支付流程
     }
   }
 }

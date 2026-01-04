@@ -70,14 +70,20 @@ export class StorageService {
   /**
    * 获取用户存储使用情况
    */
-  async getUserStorageUsage(userId: number): Promise<StorageUsage> {
+  async getUserStorageUsage(userId: number, skipCache: boolean = false): Promise<StorageUsage> {
     try {
-      // 尝试从缓存获取
+      // 尝试从缓存获取（除非明确跳过缓存）
       const cacheKey = `storage:user:${userId}`;
-      const cached = await redis.get(cacheKey);
       
-      if (cached) {
-        return JSON.parse(cached);
+      if (!skipCache) {
+        const cached = await redis.get(cacheKey);
+        
+        if (cached) {
+          console.log(`[StorageService] 从缓存读取用户 ${userId} 存储数据`);
+          return JSON.parse(cached);
+        }
+      } else {
+        console.log(`[StorageService] 跳过缓存，直接从数据库读取用户 ${userId} 存储数据`);
       }
 
       // 从数据库获取
@@ -106,15 +112,27 @@ export class StorageService {
 
       const row = result.rows[0];
       
-      // 将所有 BIGINT 字段从字符串转换为数字
-      const imageStorageBytes = parseInt(row.imageStorageBytes);
-      const documentStorageBytes = parseInt(row.documentStorageBytes);
-      const articleStorageBytes = parseInt(row.articleStorageBytes);
-      const totalStorageBytes = parseInt(row.totalStorageBytes);
-      const storageQuotaBytes = parseInt(row.storageQuotaBytes);
-      const purchasedStorageBytes = parseInt(row.purchasedStorageBytes);
+      // 将所有 BIGINT 字段从字符串转换为数字，使用 Number() 更安全
+      const imageStorageBytes = Number(row.imageStorageBytes) || 0;
+      const documentStorageBytes = Number(row.documentStorageBytes) || 0;
+      const articleStorageBytes = Number(row.articleStorageBytes) || 0;
+      const totalStorageBytes = Number(row.totalStorageBytes) || 0;
+      const storageQuotaBytes = Number(row.storageQuotaBytes);
+      const purchasedStorageBytes = Number(row.purchasedStorageBytes) || 0;
       
       const effectiveQuota = storageQuotaBytes + purchasedStorageBytes;
+      
+      console.log('[StorageService] 用户存储使用:', {
+        userId: row.userId,
+        totalStorageBytes,
+        storageQuotaBytes,
+        purchasedStorageBytes,
+        effectiveQuota,
+        rawTotal: row.totalStorageBytes,
+        rawQuota: row.storageQuotaBytes,
+        totalType: typeof row.totalStorageBytes,
+        quotaType: typeof row.storageQuotaBytes
+      });
       
       const usage: StorageUsage = {
         userId: row.userId,
