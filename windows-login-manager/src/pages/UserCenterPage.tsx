@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Divider } from 'antd';
 import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
@@ -413,56 +413,165 @@ const UserCenterPage = () => {
         open={upgradeModalVisible}
         onCancel={() => setUpgradeModalVisible(false)}
         footer={null}
-        width={800}
+        width={900}
       >
         <Row gutter={[16, 16]}>
           {plans.map(plan => {
-            const isCurrentPlan = subscription?.plan_code === plan.plan_code;
-            const currentPlanPrice = plans.find(p => p.plan_code === subscription?.plan_code)?.price || 0;
-            const isUpgrade = plan.price > currentPlanPrice;
+            // 修复：从 subscription.plan.plan_code 获取当前套餐代码
+            const currentPlanCode = subscription?.plan?.plan_code;
+            const isCurrentPlan = currentPlanCode === plan.plan_code;
+            
+            // 定义套餐等级顺序
+            const planLevels: { [key: string]: number } = {
+              'free': 1,        // 体验版
+              'professional': 2, // 专业版
+              'enterprise': 3    // 企业版
+            };
+            
+            const currentLevel = planLevels[currentPlanCode || ''] || 0;
+            const planLevel = planLevels[plan.plan_code] || 0;
+            
+            const isUpgrade = planLevel > currentLevel;
+            const isDowngrade = planLevel < currentLevel;
+            const hasPurchased = subscription !== null; // 用户是否已购买任何套餐
+
+            // 确定卡片样式 - 统一样式
+            let cardStyle: React.CSSProperties = {
+              height: '100%',
+              transition: 'all 0.3s ease',
+              border: '1px solid #d9d9d9'
+            };
+
+            // 只有当前套餐有特殊样式
+            if (isCurrentPlan) {
+              cardStyle.border = '2px solid #1890ff';
+              cardStyle.boxShadow = '0 4px 12px rgba(24, 144, 255, 0.15)';
+            }
+
+            // 确定按钮文本和状态
+            let buttonText = '立即购买';
+            let buttonType: 'primary' | 'default' | 'dashed' = 'primary';
+            let buttonDisabled = false;
+            let buttonIcon = <RocketOutlined />;
+            let tagColor = '';
+            let tagText = '';
+
+            if (isCurrentPlan) {
+              // 当前套餐
+              tagColor = 'blue';
+              tagText = '当前套餐';
+              buttonText = '已购买';
+              buttonType = 'default';
+              buttonDisabled = true;
+            } else if (hasPurchased) {
+              if (isUpgrade) {
+                // 更高价格的套餐 - 可以升级
+                tagColor = 'green';
+                tagText = '推荐升级';
+                buttonText = '立即升级';
+                buttonType = 'primary';
+                buttonIcon = <RocketOutlined />;
+              } else if (isDowngrade) {
+                // 更低价格的套餐 - 已经购买了更高级的套餐，所以这个也算已购买
+                tagColor = 'blue';
+                tagText = '已购买';
+                buttonText = '已购买';
+                buttonType = 'default';
+                buttonDisabled = true;
+              } else {
+                // 边界情况：价格相同（不应该发生，但作为保险）
+                tagColor = 'blue';
+                tagText = '已购买';
+                buttonText = '已购买';
+                buttonType = 'default';
+                buttonDisabled = true;
+              }
+            } else {
+              // 没有购买任何套餐
+              tagColor = 'purple';
+              tagText = '推荐';
+              buttonText = '立即购买';
+              buttonType = 'primary';
+            }
 
             return (
               <Col span={8} key={plan.id}>
                 <Card
-                  hoverable={!isCurrentPlan}
-                  style={{
-                    border: isCurrentPlan ? '2px solid #1890ff' : '1px solid #d9d9d9',
-                    height: '100%'
-                  }}
+                  hoverable={!isCurrentPlan && !buttonDisabled}
+                  style={cardStyle}
                 >
                   <Space direction="vertical" size="middle" style={{ width: '100%' }}>
                     <div style={{ textAlign: 'center' }}>
-                      <h3>{plan.plan_name}</h3>
-                      {isCurrentPlan && <Tag color="blue">当前套餐</Tag>}
-                      <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff', marginTop: 8 }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <h3 style={{ margin: 0, fontSize: 18 }}>{plan.plan_name}</h3>
+                      </div>
+                      {/* 始终显示标签，保持高度一致 */}
+                      <Tag color={tagColor} style={{ marginBottom: 8 }}>
+                        {tagText}
+                      </Tag>
+                      <div style={{ fontSize: 28, fontWeight: 'bold', color: '#1890ff', marginTop: 8 }}>
                         ¥{plan.price.toFixed(2)}
-                        <span style={{ fontSize: 14, color: '#8c8c8c' }}>/月</span>
+                        <span style={{ fontSize: 14, color: '#8c8c8c', fontWeight: 'normal' }}>/月</span>
                       </div>
                     </div>
 
-                    <Descriptions column={1} size="small">
-                      {plan.features.map(f => (
-                        <Descriptions.Item key={f.feature_code} label={f.feature_name}>
-                          {f.feature_value === -1 ? '无限制' : f.feature_value}
-                        </Descriptions.Item>
-                      ))}
-                    </Descriptions>
+                    <Divider style={{ margin: '8px 0' }} />
 
-                    {!isCurrentPlan && isUpgrade && (
-                      <Button
-                        type="primary"
-                        block
-                        onClick={() => handleUpgrade(plan.id)}
-                        icon={<RocketOutlined />}
-                      >
-                        立即升级
-                      </Button>
-                    )}
-                    {!isCurrentPlan && !isUpgrade && (
-                      <Button block disabled>
-                        不支持降级
-                      </Button>
-                    )}
+                    <div style={{ minHeight: 180 }}>
+                      <Descriptions column={1} size="small" bordered>
+                        {plan.features.map(f => (
+                          <Descriptions.Item 
+                            key={f.feature_code} 
+                            label={<span style={{ fontSize: 12 }}>{f.feature_name}</span>}
+                          >
+                            <span style={{ fontWeight: 500 }}>
+                              {f.feature_value === -1 ? '无限制' : f.feature_value}
+                            </span>
+                          </Descriptions.Item>
+                        ))}
+                      </Descriptions>
+                    </div>
+
+                    <Button
+                      type={buttonType}
+                      block
+                      size="large"
+                      onClick={() => !buttonDisabled && handleUpgrade(plan.id)}
+                      icon={buttonIcon}
+                      disabled={buttonDisabled}
+                      style={{
+                        marginTop: 8,
+                        height: 44,
+                        fontSize: 16,
+                        fontWeight: 500
+                      }}
+                    >
+                      {buttonText}
+                    </Button>
+
+                    {/* 固定高度的提示区域，保持卡片对齐 */}
+                    <div style={{ 
+                      textAlign: 'center', 
+                      fontSize: 12,
+                      marginTop: 8,
+                      minHeight: 20
+                    }}>
+                      {isUpgrade && hasPurchased && (
+                        <span style={{ color: '#52c41a' }}>
+                          推荐升级 · 按剩余天数计算差价
+                        </span>
+                      )}
+                      {(isCurrentPlan || (isDowngrade && hasPurchased)) && (
+                        <span style={{ color: '#8c8c8c' }}>
+                          已享受此套餐的所有功能
+                        </span>
+                      )}
+                      {!hasPurchased && (
+                        <span style={{ color: '#8c8c8c' }}>
+                          &nbsp;
+                        </span>
+                      )}
+                    </div>
                   </Space>
                 </Card>
               </Col>
