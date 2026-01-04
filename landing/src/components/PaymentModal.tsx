@@ -199,7 +199,8 @@ export default function PaymentModal({ isOpen, onClose, planId, planName, price 
           refresh_token: refreshToken,
           user_info: userInfo
         });
-        window.location.href = `${config.clientUrl}?${params.toString()}`;
+        // 跳转到主应用的用户中心
+        window.location.href = `${config.clientUrl}/user-center?${params.toString()}`;
       }
     }, 1500);
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { config } from '../config/env';
 
 interface UserMenuProps {
   username: string;
@@ -48,6 +49,22 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
   const handleMenuItemClick = (path: string) => {
     setIsOpen(false);
     navigate(path);
+  };
+
+  const handleProfileClick = () => {
+    setIsOpen(false);
+    const token = localStorage.getItem('auth_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    const userInfo = localStorage.getItem('user_info');
+    
+    if (token && refreshToken && userInfo) {
+      const params = new URLSearchParams({
+        token,
+        refresh_token: refreshToken,
+        user_info: userInfo
+      });
+      window.location.href = `${config.clientUrl}/user-center?${params.toString()}`;
+    }
   };
 
   return (
@@ -108,7 +125,7 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
             <div className="py-2">
               {/* 个人中心 */}
               <button
-                onClick={() => handleMenuItemClick('/profile')}
+                onClick={handleProfileClick}
                 className="w-full px-6 py-3 flex items-center space-x-3 hover:bg-gray-50 transition-all duration-200 group"
               >
                 <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center group-hover:bg-gray-200 transition-colors">

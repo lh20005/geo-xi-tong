@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions } from 'antd';
-import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Divider, Avatar, List } from 'antd';
+import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
+
+const { TabPane } = Tabs;
 
 interface Subscription {
   id: number;
@@ -27,7 +29,7 @@ interface UsageStats {
 interface Order {
   order_no: string;
   plan_name: string;
-  amount: number;
+  amount: string | number; // 可能是字符串或数字
   status: string;
   created_at: string;
   paid_at: string | null;
@@ -37,7 +39,7 @@ interface Plan {
   id: number;
   plan_name: string;
   plan_code: string;
-  price: number;
+  price: string | number; // 后端返回字符串，需要转换
   billing_cycle: string;
   features: {
     feature_code: string;
@@ -46,27 +48,81 @@ interface Plan {
   }[];
 }
 
+interface UserProfile {
+  id: number;
+  username: string;
+  role: string;
+  invitation_code: string;
+  created_at: string;
+  last_login_at: string | null;
+}
+
+interface InvitationStats {
+  total_invites: number;
+  invited_users: {
+    username: string;
+    created_at: string;
+  }[];
+}
+
+interface PasswordFormValues {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
 const UserCenterPage = () => {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usageStats, setUsageStats] = useState<UsageStats[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [invitationStats, setInvitationStats] = useState<InvitationStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordForm] = Form.useForm();
+  const [activeTab, setActiveTab] = useState('subscription');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [invitationCodeCopied, setInvitationCodeCopied] = useState(false);
+
+  // 添加调试日志
+  useEffect(() => {
+    console.log('[UserCenter] 组件已挂载');
+    console.log('[UserCenter] API_BASE_URL:', API_BASE_URL);
+    console.log('[UserCenter] Token存在:', !!localStorage.getItem('auth_token'));
+    return () => {
+      console.log('[UserCenter] 组件已卸载');
+    };
+  }, []);
 
   useEffect(() => {
-    fetchSubscription();
-    fetchUsageStats();
-    fetchOrders();
-    fetchPlans();
+    // 使用 Promise.all 并行加载所有数据，提高加载速度
+    const loadAllData = async () => {
+      try {
+        await Promise.all([
+          fetchSubscription(),
+          fetchUsageStats(),
+          fetchOrders(),
+          fetchPlans(),
+          fetchUserProfile(),
+          fetchInvitationStats()
+        ]);
+      } catch (error) {
+        console.error('[UserCenter] 加载数据失败:', error);
+      }
+    };
 
-    // Setup WebSocket for real-time updates
+    loadAllData();
+
+    // Setup WebSocket for real-time updates (非阻塞)
     const wsService = getUserWebSocketService();
     
-    // Connect to WebSocket
+    // Connect to WebSocket (不等待连接完成)
     wsService.connect().catch((error) => {
-      console.error('WebSocket connection failed:', error);
+      console.warn('[UserCenter] WebSocket 连接失败，将使用轮询模式:', error);
+      // WebSocket 失败不影响页面功能，只是无法实时更新
     });
 
     // Subscribe to quota updates
@@ -106,10 +162,44 @@ const UserCenterPage = () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/subscription/plans`);
       if (response.data.success) {
-        setPlans(response.data.data);
+        const plansData = response.data.data;
+        setPlans(Array.isArray(plansData) ? plansData : []);
+      } else {
+        setPlans([]);
       }
     } catch (error: any) {
       console.error('获取套餐列表失败:', error);
+      setPlans([]); // 确保失败时也设置为空数组
+    }
+  };
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`${API_BASE_URL}/users/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        setUserProfile(response.data.data);
+      }
+    } catch (error: any) {
+      console.error('获取用户资料失败:', error);
+    }
+  };
+
+  const fetchInvitationStats = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`${API_BASE_URL}/invitations/stats`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.data.success) {
+        setInvitationStats(response.data.data);
+      }
+    } catch (error: any) {
+      console.error('获取邀请统计失败:', error);
     }
   };
 
@@ -139,10 +229,14 @@ const UserCenterPage = () => {
       });
 
       if (response.data.success) {
-        setUsageStats(response.data.data.features);
+        const features = response.data.data?.features;
+        setUsageStats(Array.isArray(features) ? features : []);
+      } else {
+        setUsageStats([]);
       }
     } catch (error: any) {
       console.error('获取使用统计失败:', error);
+      setUsageStats([]); // 确保失败时也设置为空数组
     }
   };
 
@@ -155,10 +249,15 @@ const UserCenterPage = () => {
       });
 
       if (response.data.success) {
-        setOrders(response.data.data);
+        // 后端返回的数据结构是 { data: { orders: [...], pagination: {...} } }
+        const ordersData = response.data.data?.orders || response.data.data;
+        setOrders(Array.isArray(ordersData) ? ordersData : []);
+      } else {
+        setOrders([]);
       }
     } catch (error: any) {
       console.error('获取订单列表失败:', error);
+      setOrders([]); // 确保失败时也设置为空数组
     } finally {
       setOrdersLoading(false);
     }
@@ -223,6 +322,12 @@ const UserCenterPage = () => {
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   };
 
+  // 辅助函数：安全地格式化价格
+  const formatPrice = (price: string | number): string => {
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    return numPrice.toFixed(2);
+  };
+
   const orderColumns = [
     {
       title: '订单号',
@@ -238,7 +343,7 @@ const UserCenterPage = () => {
       title: '金额',
       dataIndex: 'amount',
       key: 'amount',
-      render: (amount: number) => `¥${amount.toFixed(2)}`
+      render: (amount: string | number) => `¥${formatPrice(amount)}`
     },
     {
       title: '状态',
@@ -272,132 +377,192 @@ const UserCenterPage = () => {
   const daysUntilExpiry = getDaysUntilExpiry();
   const showExpiryWarning = daysUntilExpiry > 0 && daysUntilExpiry <= 7;
 
+  const handleCopyInvitationCode = () => {
+    if (userProfile?.invitation_code) {
+      navigator.clipboard.writeText(userProfile.invitation_code);
+      setInvitationCodeCopied(true);
+      message.success('邀请码已复制到剪贴板');
+      setTimeout(() => setInvitationCodeCopied(false), 2000);
+    }
+  };
+
+  const handlePasswordChange = async (values: PasswordFormValues) => {
+    if (values.newPassword !== values.confirmPassword) {
+      message.error('两次输入的新密码不一致');
+      return;
+    }
+
+    setPasswordLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.put(
+        `${API_BASE_URL}/users/password`,
+        {
+          currentPassword: values.currentPassword,
+          newPassword: values.newPassword
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        message.success('密码修改成功');
+        setPasswordModalVisible(false);
+        passwordForm.resetFields();
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '密码修改失败');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   return (
     <div style={{ padding: 24 }}>
-      <Row gutter={[16, 16]}>
-        {/* 订阅信息卡片 */}
-        <Col span={24}>
-          <Card
-            title={
-              <Space>
-                <CrownOutlined />
-                我的订阅
-              </Space>
-            }
-            loading={loading}
-            extra={
-              subscription && (
-                <Space>
-                  <Button
-                    type={subscription.auto_renew ? 'default' : 'primary'}
-                    onClick={handleToggleAutoRenew}
-                  >
-                    {subscription.auto_renew ? '关闭自动续费' : '开启自动续费'}
-                  </Button>
-                  <Button type="primary" icon={<RocketOutlined />} onClick={handleShowUpgradeModal}>
-                    升级套餐
-                  </Button>
-                </Space>
-              )
-            }
-          >
-            {subscription ? (
-              <Row gutter={16}>
-                <Col span={6}>
-                  <Statistic
-                    title="当前套餐"
-                    value={subscription.plan_name}
-                    valueStyle={{ color: '#1890ff' }}
-                  />
-                </Col>
-                <Col span={6}>
-                  <Statistic
-                    title="到期时间"
-                    value={new Date(subscription.end_date).toLocaleDateString('zh-CN')}
-                    valueStyle={{ color: showExpiryWarning ? '#ff4d4f' : '#3f8600' }}
-                  />
-                  {showExpiryWarning && (
-                    <Tag color="warning" style={{ marginTop: 8 }}>
-                      还有 {daysUntilExpiry} 天到期
-                    </Tag>
-                  )}
-                </Col>
-                <Col span={6}>
-                  <Statistic
-                    title="订阅状态"
-                    value={subscription.status === 'active' ? '正常' : '已过期'}
-                    valueStyle={{ color: subscription.status === 'active' ? '#3f8600' : '#cf1322' }}
-                  />
-                </Col>
-                <Col span={6}>
-                  <Statistic
-                    title="自动续费"
-                    value={subscription.auto_renew ? '已开启' : '已关闭'}
-                    valueStyle={{ color: subscription.auto_renew ? '#3f8600' : '#8c8c8c' }}
-                  />
-                </Col>
-              </Row>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                <p style={{ fontSize: 16, color: '#8c8c8c', marginBottom: 16 }}>
-                  您还没有订阅任何套餐
-                </p>
-                <Button type="primary" size="large">
-                  立即订阅
-                </Button>
-              </div>
-            )}
-          </Card>
-        </Col>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} size="large">
+        {/* 订阅管理标签页 */}
+        <TabPane
+          tab={
+            <span>
+              <CrownOutlined />
+              订阅管理
+            </span>
+          }
+          key="subscription"
+        >
+          <Row gutter={[16, 16]}>
+            {/* 订阅信息卡片 */}
+            <Col span={24}>
+              <Card
+                title={
+                  <Space>
+                    <CrownOutlined />
+                    我的订阅
+                  </Space>
+                }
+                loading={loading}
+                extra={
+                  subscription && (
+                    <Space>
+                      <Button
+                        type={subscription.auto_renew ? 'default' : 'primary'}
+                        onClick={handleToggleAutoRenew}
+                      >
+                        {subscription.auto_renew ? '关闭自动续费' : '开启自动续费'}
+                      </Button>
+                      <Button type="primary" icon={<RocketOutlined />} onClick={handleShowUpgradeModal}>
+                        升级套餐
+                      </Button>
+                    </Space>
+                  )
+                }
+              >
+                {subscription ? (
+                  <Row gutter={16}>
+                    <Col span={6}>
+                      <Statistic
+                        title="当前套餐"
+                        value={subscription.plan_name}
+                        valueStyle={{ color: '#1890ff' }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="到期时间"
+                        value={new Date(subscription.end_date).toLocaleDateString('zh-CN')}
+                        valueStyle={{ color: showExpiryWarning ? '#ff4d4f' : '#3f8600' }}
+                      />
+                      {showExpiryWarning && (
+                        <Tag color="warning" style={{ marginTop: 8 }}>
+                          还有 {daysUntilExpiry} 天到期
+                        </Tag>
+                      )}
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="订阅状态"
+                        value={subscription.status === 'active' ? '正常' : '已过期'}
+                        valueStyle={{ color: subscription.status === 'active' ? '#3f8600' : '#cf1322' }}
+                      />
+                    </Col>
+                    <Col span={6}>
+                      <Statistic
+                        title="自动续费"
+                        value={subscription.auto_renew ? '已开启' : '已关闭'}
+                        valueStyle={{ color: subscription.auto_renew ? '#3f8600' : '#8c8c8c' }}
+                      />
+                    </Col>
+                  </Row>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <p style={{ fontSize: 16, color: '#8c8c8c', marginBottom: 16 }}>
+                      您还没有订阅任何套餐
+                    </p>
+                    <Button type="primary" size="large" onClick={handleShowUpgradeModal}>
+                      立即订阅
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            </Col>
 
-        {/* 使用统计卡片 */}
-        <Col span={24}>
-          <Card title="使用统计" extra={<Button icon={<ReloadOutlined />} onClick={fetchUsageStats}>刷新</Button>}>
-            <Row gutter={[16, 16]}>
-              {usageStats.map(stat => (
-                <Col span={12} key={stat.feature_code}>
-                  <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
-                    <div style={{ marginBottom: 8 }}>
-                      <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                        <span style={{ fontWeight: 500 }}>{stat.feature_name}</span>
-                        <span style={{ color: '#8c8c8c', fontSize: 12 }}>
-                          {stat.reset_period === 'daily' ? '每日重置' : 
-                           stat.reset_period === 'monthly' ? '每月重置' : '永久'}
-                        </span>
-                      </Space>
-                    </div>
-                    <Progress
-                      percent={stat.percentage}
-                      strokeColor={getProgressColor(stat.percentage)}
-                      format={() => `${stat.used} / ${stat.limit === -1 ? '∞' : stat.limit}`}
-                    />
-                    {stat.percentage >= 90 && (
-                      <div style={{ marginTop: 8 }}>
-                        <Space>
-                          <WarningOutlined style={{ color: '#ff4d4f' }} />
-                          <span style={{ color: '#ff4d4f', fontSize: 12 }}>
-                            配额即将用完
-                          </span>
-                          <Button 
-                            type="link" 
-                            size="small" 
-                            onClick={handleShowUpgradeModal}
-                            style={{ padding: 0, height: 'auto' }}
-                          >
-                            立即升级
-                          </Button>
-                        </Space>
-                      </div>
-                    )}
-                  </Card>
-                </Col>
-              ))}
-            </Row>
-          </Card>
-        </Col>
+            {/* 使用统计卡片 */}
+            <Col span={24}>
+              <Card title="使用统计" extra={<Button icon={<ReloadOutlined />} onClick={fetchUsageStats}>刷新</Button>}>
+                <Row gutter={[16, 16]}>
+                  {usageStats.map(stat => (
+                    <Col span={12} key={stat.feature_code}>
+                      <Card size="small" bordered={false} style={{ background: '#fafafa' }}>
+                        <div style={{ marginBottom: 8 }}>
+                          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+                            <span style={{ fontWeight: 500 }}>{stat.feature_name}</span>
+                            <span style={{ color: '#8c8c8c', fontSize: 12 }}>
+                              {stat.reset_period === 'daily' ? '每日重置' : 
+                               stat.reset_period === 'monthly' ? '每月重置' : '永久'}
+                            </span>
+                          </Space>
+                        </div>
+                        <Progress
+                          percent={stat.percentage}
+                          strokeColor={getProgressColor(stat.percentage)}
+                          format={() => `${stat.used} / ${stat.limit === -1 ? '∞' : stat.limit}`}
+                        />
+                        {stat.percentage >= 90 && (
+                          <div style={{ marginTop: 8 }}>
+                            <Space>
+                              <WarningOutlined style={{ color: '#ff4d4f' }} />
+                              <span style={{ color: '#ff4d4f', fontSize: 12 }}>
+                                配额即将用完
+                              </span>
+                              <Button 
+                                type="link" 
+                                size="small" 
+                                onClick={handleShowUpgradeModal}
+                                style={{ padding: 0, height: 'auto' }}
+                              >
+                                立即升级
+                              </Button>
+                            </Space>
+                          </div>
+                        )}
+                      </Card>
+                    </Col>
+                  ))}
+                </Row>
+              </Card>
+            </Col>
+          </Row>
+        </TabPane>
 
-        {/* 订单记录卡片 */}
-        <Col span={24}>
+        {/* 订单记录标签页 */}
+        <TabPane
+          tab={
+            <span>
+              <HistoryOutlined />
+              订单记录
+            </span>
+          }
+          key="orders"
+        >
           <Card
             title={
               <Space>
@@ -409,14 +574,235 @@ const UserCenterPage = () => {
           >
             <Table
               columns={orderColumns}
-              dataSource={orders}
+              dataSource={Array.isArray(orders) ? orders : []}
               rowKey="order_no"
               loading={ordersLoading}
               pagination={{ pageSize: 10 }}
             />
           </Card>
-        </Col>
-      </Row>
+        </TabPane>
+
+        {/* 个人信息标签页 */}
+        <TabPane
+          tab={
+            <span>
+              <UserOutlined />
+              个人信息
+            </span>
+          }
+          key="profile"
+        >
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Card title="基本信息">
+                {userProfile ? (
+                  <Descriptions column={2} bordered>
+                    <Descriptions.Item label="用户名" span={2}>
+                      <Space>
+                        <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+                        <span style={{ fontSize: 16, fontWeight: 500 }}>{userProfile.username}</span>
+                      </Space>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="角色">
+                      <Tag color={userProfile.role === 'admin' ? 'purple' : 'blue'}>
+                        {userProfile.role === 'admin' ? '管理员' : '普通用户'}
+                      </Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="用户ID">
+                      {userProfile.id}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="注册时间">
+                      {new Date(userProfile.created_at).toLocaleString('zh-CN')}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="最后登录">
+                      {userProfile.last_login_at 
+                        ? new Date(userProfile.last_login_at).toLocaleString('zh-CN')
+                        : '从未登录'}
+                    </Descriptions.Item>
+                  </Descriptions>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <p style={{ color: '#8c8c8c' }}>加载中...</p>
+                  </div>
+                )}
+              </Card>
+            </Col>
+
+            <Col span={24}>
+              <Card 
+                title={
+                  <Space>
+                    <SafetyOutlined />
+                    账户安全
+                  </Space>
+                }
+              >
+                <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                  <div>
+                    <div style={{ marginBottom: 8 }}>
+                      <strong>密码</strong>
+                    </div>
+                    <div style={{ color: '#8c8c8c', marginBottom: 16 }}>
+                      定期修改密码可以提高账户安全性
+                    </div>
+                    <Button 
+                      icon={<KeyOutlined />} 
+                      onClick={() => setPasswordModalVisible(true)}
+                    >
+                      修改密码
+                    </Button>
+                  </div>
+                </Space>
+              </Card>
+            </Col>
+          </Row>
+        </TabPane>
+
+        {/* 邀请系统标签页 */}
+        <TabPane
+          tab={
+            <span>
+              <TeamOutlined />
+              邀请系统
+            </span>
+          }
+          key="invitation"
+        >
+          <Row gutter={[16, 16]}>
+            <Col span={24}>
+              <Card
+                title={
+                  <Space>
+                    <GiftOutlined />
+                    我的邀请码
+                  </Space>
+                }
+                style={{ 
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white'
+                }}
+                headStyle={{ color: 'white', borderBottom: '1px solid rgba(255,255,255,0.2)' }}
+              >
+                {userProfile ? (
+                  <div>
+                    <div style={{ 
+                      background: 'rgba(255,255,255,0.2)', 
+                      borderRadius: 8, 
+                      padding: 24,
+                      marginBottom: 16
+                    }}>
+                      <Row align="middle" justify="space-between">
+                        <Col>
+                          <div style={{ fontSize: 14, marginBottom: 8, opacity: 0.9 }}>邀请码</div>
+                          <div style={{ 
+                            fontSize: 36, 
+                            fontWeight: 'bold', 
+                            letterSpacing: 4,
+                            fontFamily: 'monospace'
+                          }}>
+                            {userProfile.invitation_code}
+                          </div>
+                        </Col>
+                        <Col>
+                          <Button
+                            size="large"
+                            icon={<CopyOutlined />}
+                            onClick={handleCopyInvitationCode}
+                            style={{ 
+                              background: 'white', 
+                              color: '#667eea',
+                              border: 'none',
+                              fontWeight: 500
+                            }}
+                          >
+                            {invitationCodeCopied ? '已复制!' : '复制'}
+                          </Button>
+                        </Col>
+                      </Row>
+                    </div>
+                    <div style={{ fontSize: 14, opacity: 0.9 }}>
+                      分享您的邀请码，邀请好友加入平台
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                    <p>加载中...</p>
+                  </div>
+                )}
+              </Card>
+            </Col>
+
+            <Col span={24}>
+              <Card
+                title={
+                  <Space>
+                    <TeamOutlined />
+                    邀请统计
+                  </Space>
+                }
+                extra={<Button icon={<ReloadOutlined />} onClick={fetchInvitationStats}>刷新</Button>}
+              >
+                {invitationStats ? (
+                  <>
+                    <Row gutter={16} style={{ marginBottom: 24 }}>
+                      <Col span={24}>
+                        <Card 
+                          style={{ 
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            border: 'none'
+                          }}
+                        >
+                          <Statistic
+                            title={<span style={{ color: 'rgba(255,255,255,0.9)' }}>累计邀请</span>}
+                            value={invitationStats.total_invites}
+                            valueStyle={{ color: 'white', fontSize: 48 }}
+                            suffix={<span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 20 }}>人</span>}
+                          />
+                        </Card>
+                      </Col>
+                    </Row>
+
+                    {invitationStats.invited_users && Array.isArray(invitationStats.invited_users) && invitationStats.invited_users.length > 0 ? (
+                      <div>
+                        <Divider orientation="left">受邀用户列表</Divider>
+                        <List
+                          dataSource={Array.isArray(invitationStats.invited_users) ? invitationStats.invited_users : []}
+                          renderItem={(user) => (
+                            <List.Item>
+                              <List.Item.Meta
+                                avatar={
+                                  <Avatar 
+                                    style={{ backgroundColor: '#1890ff' }}
+                                    size="large"
+                                  >
+                                    {user.username.charAt(0).toUpperCase()}
+                                  </Avatar>
+                                }
+                                title={<span style={{ fontSize: 16 }}>{user.username}</span>}
+                                description={`加入时间: ${new Date(user.created_at).toLocaleString('zh-CN')}`}
+                              />
+                            </List.Item>
+                          )}
+                        />
+                      </div>
+                    ) : (
+                      <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                        <TeamOutlined style={{ fontSize: 64, color: '#d9d9d9', marginBottom: 16 }} />
+                        <p style={{ color: '#8c8c8c', fontSize: 16 }}>还没有邀请任何用户</p>
+                        <p style={{ color: '#bfbfbf', fontSize: 14 }}>分享您的邀请码开始邀请好友吧</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <p style={{ color: '#8c8c8c' }}>加载中...</p>
+                  </div>
+                )}
+              </Card>
+            </Col>
+          </Row>
+        </TabPane>
+      </Tabs>
 
       {/* 升级引导对话框 */}
       <Modal
@@ -429,8 +815,9 @@ const UserCenterPage = () => {
         <Row gutter={[16, 16]}>
           {plans.map(plan => {
             const isCurrentPlan = subscription?.plan_code === plan.plan_code;
-            const currentPlanPrice = plans.find(p => p.plan_code === subscription?.plan_code)?.price || 0;
-            const isUpgrade = plan.price > currentPlanPrice;
+            const currentPlanPrice = parseFloat(String(plans.find(p => p.plan_code === subscription?.plan_code)?.price || 0));
+            const planPrice = parseFloat(String(plan.price));
+            const isUpgrade = planPrice > currentPlanPrice;
 
             return (
               <Col span={8} key={plan.id}>
@@ -446,7 +833,7 @@ const UserCenterPage = () => {
                       <h3>{plan.plan_name}</h3>
                       {isCurrentPlan && <Tag color="blue">当前套餐</Tag>}
                       <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1890ff', marginTop: 8 }}>
-                        ¥{plan.price.toFixed(2)}
+                        ¥{formatPrice(plan.price)}
                         <span style={{ fontSize: 14, color: '#8c8c8c' }}>/月</span>
                       </div>
                     </div>
@@ -480,6 +867,82 @@ const UserCenterPage = () => {
             );
           })}
         </Row>
+      </Modal>
+
+      {/* 修改密码对话框 */}
+      <Modal
+        title={
+          <Space>
+            <KeyOutlined />
+            修改密码
+          </Space>
+        }
+        open={passwordModalVisible}
+        onCancel={() => {
+          setPasswordModalVisible(false);
+          passwordForm.resetFields();
+        }}
+        footer={null}
+        width={500}
+      >
+        <Form
+          form={passwordForm}
+          layout="vertical"
+          onFinish={handlePasswordChange}
+        >
+          <Form.Item
+            label="当前密码"
+            name="currentPassword"
+            rules={[
+              { required: true, message: '请输入当前密码' }
+            ]}
+          >
+            <Input.Password size="large" placeholder="请输入当前密码" />
+          </Form.Item>
+
+          <Form.Item
+            label="新密码"
+            name="newPassword"
+            rules={[
+              { required: true, message: '请输入新密码' },
+              { min: 6, message: '密码长度至少为6位' }
+            ]}
+          >
+            <Input.Password size="large" placeholder="请输入新密码（至少6位）" />
+          </Form.Item>
+
+          <Form.Item
+            label="确认新密码"
+            name="confirmPassword"
+            rules={[
+              { required: true, message: '请再次输入新密码' },
+              ({ getFieldValue }) => ({
+                validator(_, value) {
+                  if (!value || getFieldValue('newPassword') === value) {
+                    return Promise.resolve();
+                  }
+                  return Promise.reject(new Error('两次输入的密码不一致'));
+                },
+              }),
+            ]}
+          >
+            <Input.Password size="large" placeholder="请再次输入新密码" />
+          </Form.Item>
+
+          <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button onClick={() => {
+                setPasswordModalVisible(false);
+                passwordForm.resetFields();
+              }}>
+                取消
+              </Button>
+              <Button type="primary" htmlType="submit" loading={passwordLoading}>
+                确认修改
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

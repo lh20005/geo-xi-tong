@@ -63,8 +63,11 @@ function App() {
       localStorage.setItem('refresh_token', refreshToken);
       localStorage.setItem('user_info', userInfo);
       
-      // 清除 URL 参数，跳转到首页
-      navigate('/', { replace: true });
+      // 清除 URL 参数，但保持在当前路径
+      // 如果当前在 /user-center，就留在 /user-center
+      // 如果在其他路径，也保持在该路径
+      const currentPath = location.pathname;
+      navigate(currentPath, { replace: true });
     }
   }, [location, navigate]);
 

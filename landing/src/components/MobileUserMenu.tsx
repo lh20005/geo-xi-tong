@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { config } from '../config/env';
 
 interface MobileUserMenuProps {
   username: string;
@@ -29,6 +30,22 @@ export default function MobileUserMenu({ username, isAdmin, onLogout }: MobileUs
   const handleMenuItemClick = (path: string) => {
     setIsOpen(false);
     navigate(path);
+  };
+
+  const handleProfileClick = () => {
+    setIsOpen(false);
+    const token = localStorage.getItem('auth_token');
+    const refreshToken = localStorage.getItem('refresh_token');
+    const userInfo = localStorage.getItem('user_info');
+    
+    if (token && refreshToken && userInfo) {
+      const params = new URLSearchParams({
+        token,
+        refresh_token: refreshToken,
+        user_info: userInfo
+      });
+      window.location.href = `${config.clientUrl}/user-center?${params.toString()}`;
+    }
   };
 
   return (
@@ -90,7 +107,7 @@ export default function MobileUserMenu({ username, isAdmin, onLogout }: MobileUs
             <div className="py-4 px-4">
               {/* 个人中心 */}
               <button
-                onClick={() => handleMenuItemClick('/profile')}
+                onClick={handleProfileClick}
                 className="w-full mb-3 px-6 py-4 bg-white border-2 border-gray-100 rounded-2xl hover:border-gray-200 hover:shadow-md transition-all duration-200 flex items-center space-x-4"
               >
                 <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center">

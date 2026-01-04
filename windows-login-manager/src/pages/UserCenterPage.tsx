@@ -145,10 +145,13 @@ const UserCenterPage = () => {
       const response = await apiClient.get('/orders');
 
       if (response.data.success) {
-        setOrders(response.data.data);
+        // 后端返回的数据结构是 { data: { orders: [...], pagination: {...} } }
+        const ordersData = response.data.data?.orders || response.data.data;
+        setOrders(Array.isArray(ordersData) ? ordersData : []);
       }
     } catch (error: any) {
       console.error('获取订单列表失败:', error);
+      setOrders([]); // 确保失败时也设置为空数组
     } finally {
       setOrdersLoading(false);
     }

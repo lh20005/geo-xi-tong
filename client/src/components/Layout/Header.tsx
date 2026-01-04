@@ -1,6 +1,7 @@
 import { Layout, Space, Tag, Avatar, Dropdown, Typography, Modal, message } from 'antd';
 import { DatabaseOutlined, UserOutlined, LogoutOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../../api/client';
 import type { MenuProps } from 'antd';
 import { config } from '../../config/env';
@@ -9,6 +10,7 @@ const { Header: AntHeader } = Layout;
 const { Text } = Typography;
 
 export default function Header() {
+  const navigate = useNavigate();
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
   
   // 从localStorage获取用户信息
@@ -68,8 +70,8 @@ export default function Header() {
       icon: <UserOutlined />,
       label: '个人中心',
       onClick: () => {
-        // 跳转到 Landing 网站的个人页面
-        window.location.href = `${config.landingUrl}/profile`;
+        // 使用 React Router 导航到用户中心页面
+        navigate('/user-center');
       }
     },
     {
