@@ -140,15 +140,27 @@ export class SubscriptionService {
       return false;
     }
 
+    // 获取用户的自定义配额（如果有）
+    const customQuotasResult = await pool.query(
+      'SELECT custom_quotas FROM user_subscriptions WHERE id = $1',
+      [subscription.id]
+    );
+    const customQuotas = customQuotasResult.rows[0]?.custom_quotas || {};
+    
+    // 优先使用自定义配额，如果没有则使用套餐默认配额
+    const limit = customQuotas[featureCode] !== undefined 
+      ? customQuotas[featureCode] 
+      : feature.feature_value;
+
     // -1 表示无限制
-    if (feature.feature_value === -1) {
+    if (limit === -1) {
       return true;
     }
 
     // 获取当前使用量
     const usage = await this.getUserUsage(userId, featureCode);
     
-    return usage < feature.feature_value;
+    return usage < limit;
   }
 
   /**
@@ -217,11 +229,21 @@ export class SubscriptionService {
       return [];
     }
 
+    // 获取用户的自定义配额（如果有）
+    const customQuotasResult = await pool.query(
+      'SELECT custom_quotas FROM user_subscriptions WHERE id = $1',
+      [subscription.id]
+    );
+    const customQuotas = customQuotasResult.rows[0]?.custom_quotas || {};
+
     const stats: UsageStats[] = [];
 
     for (const feature of plan.features) {
       let used: number;
-      let limit = feature.feature_value;
+      // 优先使用自定义配额，如果没有则使用套餐默认配额
+      let limit = customQuotas[feature.feature_code] !== undefined 
+        ? customQuotas[feature.feature_code] 
+        : feature.feature_value;
       
       // 存储空间需要特殊处理，从 user_storage_usage 表获取实际使用量
       if (feature.feature_code === 'storage_space') {

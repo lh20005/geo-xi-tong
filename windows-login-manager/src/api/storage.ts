@@ -118,6 +118,24 @@ export const getPendingAlerts = async (): Promise<StorageAlert[]> => {
 };
 
 /**
+ * 格式化存储空间（MB 单位）
+ * @param mb - MB 值
+ * @returns 格式化后的字符串（如：100 MB, 1.5 GB）
+ */
+export const formatStorageMB = (mb: number): string => {
+  if (mb === -1) return '无限';
+  if (mb === 0) return '0 MB';
+  
+  // 如果大于等于 1024 MB，转换为 GB
+  if (mb >= 1024) {
+    const gb = mb / 1024;
+    return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;
+  }
+  
+  return `${mb} MB`;
+};
+
+/**
  * 格式化字节为可读格式
  */
 export const formatBytes = (bytes: number): string => {

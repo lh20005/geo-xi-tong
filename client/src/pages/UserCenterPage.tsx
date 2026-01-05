@@ -6,7 +6,7 @@ import { API_BASE_URL } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import { StorageUsageCard } from '../components/Storage/StorageUsageCard';
 import { StorageBreakdownChart } from '../components/Storage/StorageBreakdownChart';
-import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType, StorageBreakdown as StorageBreakdownType, formatBytes } from '../api/storage';
+import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType, StorageBreakdown as StorageBreakdownType, formatBytes, formatStorageMB } from '../api/storage';
 
 const { TabPane } = Tabs;
 
@@ -614,10 +614,8 @@ const UserCenterPage = () => {
                           format={() => {
                             // 存储空间需要特殊处理，显示为容量格式（MB/GB）
                             if (stat.feature_code === 'storage_space') {
-                              // used 和 limit 已经是 MB 单位，转换为 bytes 以便使用 formatBytes
-                              const usedBytes = stat.used * 1024 * 1024;
-                              const limitBytes = stat.limit * 1024 * 1024;
-                              return `${formatBytes(usedBytes)} / ${stat.limit === -1 ? '无限' : formatBytes(limitBytes)}`;
+                              // used 和 limit 已经是 MB 单位，直接格式化
+                              return `${formatStorageMB(stat.used)} / ${stat.limit === -1 ? '无限' : formatStorageMB(stat.limit)}`;
                             }
                             return `${stat.used} / ${stat.limit === -1 ? '∞' : stat.limit}`;
                           }}
@@ -1056,7 +1054,7 @@ const UserCenterPage = () => {
                             <span style={{ fontWeight: 500 }}>
                               {f.feature_value === -1 ? '无限制' : 
                                 f.feature_code === 'storage_space' 
-                                  ? formatBytes(f.feature_value * 1024 * 1024)
+                                  ? formatStorageMB(f.feature_value)
                                   : f.feature_value}
                             </span>
                           </Descriptions.Item>

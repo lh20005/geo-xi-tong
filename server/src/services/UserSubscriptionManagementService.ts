@@ -319,6 +319,15 @@ class UserSubscriptionManagementService {
         newValue,
       });
 
+      // 如果是存储空间配额调整，额外发送存储配额变更通知
+      if (featureCode === 'storage_space') {
+        getWsService().sendToUser(userId, 'storage_quota_changed', {
+          userId,
+          newQuotaMB: newValue,
+          oldQuotaMB: oldValue,
+        });
+      }
+
       console.log(`[SubscriptionManagement] 用户 ${userId} 配额调整: ${featureCode} ${oldValue} -> ${newValue}`);
     } catch (error) {
       await client.query('ROLLBACK');

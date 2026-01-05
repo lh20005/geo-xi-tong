@@ -90,12 +90,22 @@ export default function AdjustQuotaModal({ visible, userId, features, onClose, o
           <Select
             placeholder="请选择要调整的功能"
             onChange={handleFeatureChange}
-            options={features.map((feature) => ({
-              label: `${feature.feature_name} (当前: ${
-                feature.feature_value === -1 ? '无限制' : feature.feature_value
-              }, 已用: ${feature.current_usage})`,
-              value: feature.feature_code,
-            }))}
+            options={features.map((feature) => {
+              // 格式化显示值，存储空间使用 MB 单位
+              const formatValue = (value: number, featureCode: string) => {
+                if (value === -1) return '无限制';
+                if (featureCode === 'storage_space') {
+                  // 存储空间显示为 MB
+                  return value >= 1024 ? `${(value / 1024).toFixed(1)} GB` : `${value} MB`;
+                }
+                return value.toString();
+              };
+
+              return {
+                label: `${feature.feature_name} (当前: ${formatValue(feature.feature_value, feature.feature_code)}, 已用: ${formatValue(feature.current_usage, feature.feature_code)})`,
+                value: feature.feature_code,
+              };
+            })}
           />
         </Form.Item>
 
@@ -107,9 +117,22 @@ export default function AdjustQuotaModal({ visible, userId, features, onClose, o
                 <p>功能名称：{selectedFeature.feature_name}</p>
                 <p>
                   配额限制：
-                  {selectedFeature.feature_value === -1 ? '无限制' : selectedFeature.feature_value}
+                  {selectedFeature.feature_value === -1 
+                    ? '无限制' 
+                    : selectedFeature.feature_code === 'storage_space'
+                      ? (selectedFeature.feature_value >= 1024 
+                          ? `${(selectedFeature.feature_value / 1024).toFixed(1)} GB` 
+                          : `${selectedFeature.feature_value} MB`)
+                      : selectedFeature.feature_value}
                 </p>
-                <p>当前使用：{selectedFeature.current_usage}</p>
+                <p>
+                  当前使用：
+                  {selectedFeature.feature_code === 'storage_space'
+                    ? (selectedFeature.current_usage >= 1024 
+                        ? `${(selectedFeature.current_usage / 1024).toFixed(1)} GB` 
+                        : `${selectedFeature.current_usage} MB`)
+                    : selectedFeature.current_usage}
+                </p>
                 <p>使用率：{selectedFeature.usage_percentage.toFixed(2)}%</p>
               </div>
             }
@@ -123,17 +146,30 @@ export default function AdjustQuotaModal({ visible, userId, features, onClose, o
           <>
             <Form.Item
               name="newValue"
-              label="新配额值"
+              label={
+                selectedFeature?.feature_code === 'storage_space' 
+                  ? '新配额值 (MB)' 
+                  : '新配额值'
+              }
               rules={[
                 { required: true, message: '请输入新配额值' },
                 { type: 'number', min: -1, message: '配额值必须大于等于 -1' },
               ]}
-              extra="-1 表示无限制"
+              extra={
+                selectedFeature?.feature_code === 'storage_space'
+                  ? '-1 表示无限制，单位为 MB（1024 MB = 1 GB）'
+                  : '-1 表示无限制'
+              }
             >
               <InputNumber
                 style={{ width: '100%' }}
                 min={-1}
-                placeholder="请输入新配额值"
+                placeholder={
+                  selectedFeature?.feature_code === 'storage_space'
+                    ? '请输入新配额值（MB）'
+                    : '请输入新配额值'
+                }
+                addonAfter={selectedFeature?.feature_code === 'storage_space' ? 'MB' : undefined}
               />
             </Form.Item>
 

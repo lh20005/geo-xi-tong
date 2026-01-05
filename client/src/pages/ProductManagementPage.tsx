@@ -134,13 +134,26 @@ export default function ProductManagementPage() {
     
     setCurrentPlan(plan);
     
-    // 确保 features 数据完整
-    const features = (plan.features || []).map(feature => ({
-      featureCode: feature.featureCode,
-      featureName: feature.featureName,
-      featureValue: feature.featureValue,
-      featureUnit: feature.featureUnit
-    }));
+    // 确保 features 数据完整，并统一单位为 MB
+    const features = (plan.features || []).map(feature => {
+      let featureValue = feature.featureValue;
+      let featureUnit = feature.featureUnit;
+      
+      // 如果是存储空间且单位是 bytes，转换为 MB
+      if (feature.featureCode === 'storage_space' && feature.featureUnit === 'bytes') {
+        if (featureValue !== -1) {
+          featureValue = Math.round((featureValue / (1024 * 1024)) * 100) / 100;
+        }
+        featureUnit = 'MB';
+      }
+      
+      return {
+        featureCode: feature.featureCode,
+        featureName: feature.featureName,
+        featureValue: featureValue,
+        featureUnit: featureUnit
+      };
+    });
     
     console.log('[ProductManagement] 设置表单 features:', features);
     
@@ -161,6 +174,19 @@ export default function ProductManagementPage() {
   const handleSave = async () => {
     try {
       const values = await form.validateFields();
+      
+      // 确保存储空间的单位是 MB
+      if (values.features) {
+        values.features = values.features.map((feature: any) => {
+          if (feature.featureCode === 'storage_space' && !feature.featureUnit) {
+            return {
+              ...feature,
+              featureUnit: 'MB'
+            };
+          }
+          return feature;
+        });
+      }
       
       console.log('[ProductManagement] 准备保存的数据:', values);
 
@@ -252,11 +278,18 @@ export default function ProductManagementPage() {
       key: 'features',
       render: (_, record) => (
         <Space direction="vertical" size="small">
-          {record.features?.map((feature, index) => (
-            <Tag key={feature.id || `${feature.featureCode}-${index}`} color="blue">
-              {feature.featureName}: {feature.featureValue === -1 ? '无限制' : `${feature.featureValue} ${feature.featureUnit}`}
-            </Tag>
-          ))}
+          {record.features?.map((feature, index) => {
+            let displayValue = feature.featureValue === -1 ? '无限制' : `${feature.featureValue} ${feature.featureUnit}`;
+            // 存储空间特殊处理：如果是 MB 且值很大，转换为 GB
+            if (feature.featureCode === 'storage_space' && feature.featureValue >= 1024 && feature.featureValue !== -1) {
+              displayValue = `${(feature.featureValue / 1024).toFixed(0)} GB`;
+            }
+            return (
+              <Tag key={feature.id || `${feature.featureCode}-${index}`} color="blue">
+                {feature.featureName}: {displayValue}
+              </Tag>
+            );
+          })}
         </Space>
       ),
     },

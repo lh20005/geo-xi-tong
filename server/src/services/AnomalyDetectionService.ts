@@ -77,9 +77,9 @@ export class AnomalyDetectionService {
       const oneHourAgo = now - 3600000;
       const recentUsage = await redisClient.zCount(key, oneHourAgo, now);
 
-      // 获取用户配额限制
+      // 获取用户配额限制（考虑自定义配额）
       const quotaResult = await pool.query(
-        `SELECT pf.feature_value
+        `SELECT pf.feature_value, us.custom_quotas
          FROM user_subscriptions us
          JOIN plan_features pf ON us.plan_id = pf.plan_id
          WHERE us.user_id = $1 
@@ -89,10 +89,15 @@ export class AnomalyDetectionService {
       );
 
       if (quotaResult.rows.length > 0 && typeof recentUsage === 'number') {
-        const quota = quotaResult.rows[0].feature_value;
+        const row = quotaResult.rows[0];
+        const customQuotas = row.custom_quotas || {};
+        // 优先使用自定义配额，如果没有则使用套餐默认配额
+        const quota = customQuotas[featureCode] !== undefined 
+          ? customQuotas[featureCode] 
+          : row.feature_value;
 
         // 如果1小时内使用量超过配额的80%，触发告警
-        if (recentUsage > quota * 0.8) {
+        if (quota !== -1 && recentUsage > quota * 0.8) {
           await this.triggerAlert({
             type: 'quota_usage_spike',
             userId,

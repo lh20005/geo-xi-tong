@@ -132,7 +132,12 @@ export default function HomePage() {
 
   // 辅助函数：获取功能显示值（包含单位）
   const getFeatureDisplayValue = (value: number, unit: string): string => {
-    return value === -1 ? '不限' : `${value}${unit}`;
+    if (value === -1) return '不限';
+    // 存储空间特殊处理：如果单位是 MB 且值很大，转换为 GB
+    if (unit === 'MB' && value >= 1024) {
+      return `${(value / 1024).toFixed(0)}GB`;
+    }
+    return `${value}${unit}`;
   };
 
   // 辅助函数：根据plan_code获取套餐标签
