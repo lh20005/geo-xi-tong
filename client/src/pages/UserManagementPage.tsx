@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Input, Button, Tag, Modal, Form, Select, message, Space, Card } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined } from '@ant-design/icons';
+import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { config } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import ResizableTable from '../components/ResizableTable';
+import SubscriptionDetailDrawer from '../components/UserSubscription/SubscriptionDetailDrawer';
 
 const { Search } = Input;
 
@@ -31,6 +32,11 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [tempPassword, setTempPassword] = useState('');
   const [form] = Form.useForm();
+
+  // 订阅管理抽屉
+  const [subscriptionDrawerVisible, setSubscriptionDrawerVisible] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUsername, setSelectedUsername] = useState('');
 
   useEffect(() => {
     loadUsers();
@@ -165,6 +171,12 @@ export default function UserManagementPage() {
     });
   };
 
+  const handleManageSubscription = (user: User) => {
+    setSelectedUserId(user.id);
+    setSelectedUsername(user.username);
+    setSubscriptionDrawerVisible(true);
+  };
+
   const copyTempPassword = () => {
     navigator.clipboard.writeText(tempPassword);
     message.success('临时密码已复制到剪贴板');
@@ -226,9 +238,9 @@ export default function UserManagementPage() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 280,
       render: (_: any, record: User) => (
-        <Space size="small">
+        <Space size="small" wrap>
           <Button
             type="link"
             size="small"
@@ -236,6 +248,14 @@ export default function UserManagementPage() {
             onClick={() => handleEdit(record)}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<CrownOutlined />}
+            onClick={() => handleManageSubscription(record)}
+          >
+            订阅管理
           </Button>
           <Button
             type="link"
@@ -368,6 +388,18 @@ export default function UserManagementPage() {
           </p>
         )}
       </Modal>
+
+      {/* 订阅管理抽屉 */}
+      <SubscriptionDetailDrawer
+        visible={subscriptionDrawerVisible}
+        userId={selectedUserId}
+        username={selectedUsername}
+        onClose={() => {
+          setSubscriptionDrawerVisible(false);
+          setSelectedUserId(null);
+          setSelectedUsername('');
+        }}
+      />
     </div>
   );
 }

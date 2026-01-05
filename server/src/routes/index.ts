@@ -30,6 +30,7 @@ import productManagementRouter from './admin/productManagement';
 import storageRouter from './storage';
 import adminStorageRouter from './admin/storage';
 import storageProductsRouter from './storageProducts';
+import userSubscriptionsRouter from './admin/userSubscriptions';
 
 export const apiRouter = Router();
 
@@ -37,6 +38,7 @@ apiRouter.use('/auth', authRouter);
 apiRouter.use('/admin', adminRouter);
 apiRouter.use('/admin/products', productManagementRouter);
 apiRouter.use('/admin/storage', adminStorageRouter);
+apiRouter.use('/admin/user-subscriptions', userSubscriptionsRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/invitations', invitationsRouter);
 apiRouter.use('/confirm', confirmationRouter);

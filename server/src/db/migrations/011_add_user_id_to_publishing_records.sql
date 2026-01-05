@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 为 publishing_records 表添加 user_id 字段以实现用户隔离
 -- 这是一个关键的安全修复
 
@@ -34,3 +35,19 @@ CREATE INDEX IF NOT EXISTS idx_publishing_records_user_id ON publishing_records(
 -- 7. 创建复合索引以优化常见查询
 CREATE INDEX IF NOT EXISTS idx_publishing_records_user_platform ON publishing_records(user_id, platform_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_user_article ON publishing_records(user_id, article_id);
+
+-- ==================== DOWN ====================
+-- 回滚用户隔离修复
+
+-- 1. 删除索引
+DROP INDEX IF EXISTS idx_publishing_records_user_article;
+DROP INDEX IF EXISTS idx_publishing_records_user_platform;
+DROP INDEX IF EXISTS idx_publishing_records_user_id;
+
+-- 2. 删除外键约束
+ALTER TABLE publishing_records 
+DROP CONSTRAINT IF EXISTS fk_publishing_records_user;
+
+-- 3. 删除 user_id 字段
+ALTER TABLE publishing_records 
+DROP COLUMN IF EXISTS user_id;
