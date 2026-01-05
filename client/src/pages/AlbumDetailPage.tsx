@@ -75,7 +75,8 @@ export default function AlbumDetailPage() {
           const errorMsg = quotaCheck.data.data?.reason || '存储空间不足，无法上传图片';
           setLoading(false);
           modal.error({
-            title: '存储空间不足',
+            title: '存储空间不足：请升级套餐',
+            closable: true,
             content: (
               <div>
                 <p>{errorMsg}</p>
@@ -97,7 +98,8 @@ export default function AlbumDetailPage() {
           const errorData = quotaError.response.data;
           setLoading(false);
           modal.error({
-            title: '存储空间不足',
+            title: '存储空间不足：请升级套餐',
+            closable: true,
             content: (
               <div>
                 <p>存储空间不足，无法上传图片。</p>
