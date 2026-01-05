@@ -167,13 +167,19 @@ export class SubscriptionService {
    * 获取用户使用量
    */
   async getUserUsage(userId: number, featureCode: FeatureCode): Promise<number> {
+    // 首先检查用户是否有有效订阅
+    const subscription = await this.getUserActiveSubscription(userId);
+    if (!subscription) {
+      return 0; // 没有有效订阅，使用量为0
+    }
+
     const featureDef = FEATURE_DEFINITIONS[featureCode];
-    const { periodStart, periodEnd } = this.getPeriodDates(featureDef.resetPeriod);
+    const { periodStart, periodEnd } = await this.getPeriodDates(userId, featureDef.resetPeriod);
 
     const result = await pool.query(
       `SELECT usage_count FROM user_usage
-       WHERE user_id = $1 AND feature_code = $2 AND period_start = $3`,
-      [userId, featureCode, periodStart]
+       WHERE user_id = $1 AND feature_code = $2 AND period_start = $3 AND period_end <= $4`,
+      [userId, featureCode, periodStart, subscription.end_date]
     );
 
     return result.rows.length > 0 ? result.rows[0].usage_count : 0;
@@ -183,8 +189,14 @@ export class SubscriptionService {
    * 记录用户使用量
    */
   async recordUsage(userId: number, featureCode: FeatureCode, amount: number = 1): Promise<void> {
+    // 首先检查用户是否有有效订阅
+    const subscription = await this.getUserActiveSubscription(userId);
+    if (!subscription) {
+      throw new Error('用户没有有效订阅');
+    }
+
     const featureDef = FEATURE_DEFINITIONS[featureCode];
-    const { periodStart, periodEnd } = this.getPeriodDates(featureDef.resetPeriod);
+    const { periodStart, periodEnd } = await this.getPeriodDates(userId, featureDef.resetPeriod);
 
     await pool.query(
       `INSERT INTO user_usage (user_id, feature_code, usage_count, period_start, period_end)
@@ -281,7 +293,7 @@ export class SubscriptionService {
 
       // 获取功能定义，如果不存在则使用默认值
       const featureDef = FEATURE_DEFINITIONS[feature.feature_code as FeatureCode];
-      const resetTime = featureDef ? this.getNextResetTime(featureDef.resetPeriod) : undefined;
+      const resetTime = featureDef ? await this.getNextResetTime(userId, featureDef.resetPeriod) : undefined;
 
       stats.push({
         feature_code: feature.feature_code,
@@ -421,46 +433,48 @@ export class SubscriptionService {
   }
 
   /**
-   * 获取周期日期
+   * 获取周期日期（基于用户订阅周期）
    */
-  private getPeriodDates(resetPeriod: 'daily' | 'monthly' | 'never'): { periodStart: Date; periodEnd: Date } {
-    const now = new Date();
-    let periodStart: Date;
-    let periodEnd: Date;
+  private async getPeriodDates(
+    userId: number,
+    resetPeriod: 'daily' | 'monthly' | 'subscription'
+  ): Promise<{ periodStart: Date; periodEnd: Date }> {
+    // 使用数据库函数计算配额周期
+    const result = await pool.query(
+      `SELECT period_start, period_end 
+       FROM get_user_quota_period($1, 'articles_per_month')
+       LIMIT 1`,
+      [userId]
+    );
 
-    if (resetPeriod === 'daily') {
-      periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-    } else if (resetPeriod === 'monthly') {
-      periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-    } else {
-      // never - 使用一个固定的远期日期
-      periodStart = new Date(2000, 0, 1);
-      periodEnd = new Date(2099, 11, 31);
+    if (result.rows.length === 0) {
+      throw new Error('用户没有有效订阅');
     }
 
-    return { periodStart, periodEnd };
+    return {
+      periodStart: new Date(result.rows[0].period_start),
+      periodEnd: new Date(result.rows[0].period_end)
+    };
   }
 
   /**
-   * 获取下次重置时间
+   * 获取下次重置时间（基于用户订阅周期）
    */
-  private getNextResetTime(resetPeriod: 'daily' | 'monthly' | 'never'): string | undefined {
-    if (resetPeriod === 'never') {
+  private async getNextResetTime(
+    userId: number,
+    resetPeriod: 'daily' | 'monthly' | 'subscription'
+  ): Promise<string | undefined> {
+    // 使用数据库函数获取下次重置时间
+    const result = await pool.query(
+      'SELECT get_next_quota_reset_time($1) as next_reset',
+      [userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].next_reset) {
       return undefined;
     }
 
-    const now = new Date();
-    let resetTime: Date;
-
-    if (resetPeriod === 'daily') {
-      resetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
-    } else {
-      resetTime = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0);
-    }
-
-    return resetTime.toISOString();
+    return result.rows[0].next_reset;
   }
 
   /**

@@ -167,6 +167,12 @@ async function startServer() {
     // 启动订阅系统定时任务
     schedulerService.start();
     
+    // 启动订阅到期检查服务
+    console.log('⏰ 启动订阅到期检查服务...');
+    const { subscriptionExpirationService } = await import('./services/SubscriptionExpirationService');
+    subscriptionExpirationService.start();
+    console.log('✅ 订阅到期检查服务已启动');
+    
     // 启动登录尝试清理任务（每小时运行一次）
     setInterval(async () => {
       try {
@@ -244,10 +250,14 @@ async function startServer() {
 }
 
 // 优雅关闭
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
   taskScheduler.stop();
   schedulerService.stop();
+  
+  // 停止订阅到期检查服务
+  const { subscriptionExpirationService } = await import('./services/SubscriptionExpirationService');
+  subscriptionExpirationService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();
   process.exit(0);

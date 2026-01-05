@@ -25,8 +25,8 @@ export const FEATURE_DEFINITIONS = {
     name: '可管理平台账号数',
     unit: '个',
     defaultValue: 1,
-    description: '可同时管理的平台账号数量',
-    resetPeriod: 'never' as const
+    description: '可同时管理的平台账号数量（订阅周期内有效）',
+    resetPeriod: 'subscription' as const
   },
   keyword_distillation: {
     code: 'keyword_distillation',
@@ -41,8 +41,8 @@ export const FEATURE_DEFINITIONS = {
     name: '存储空间',
     unit: 'MB',
     defaultValue: 100,
-    description: '可使用的存储空间大小',
-    resetPeriod: 'never' as const
+    description: '可使用的存储空间大小（订阅周期内有效）',
+    resetPeriod: 'subscription' as const
   }
 } as const;
 
@@ -54,4 +54,4 @@ export const PLAN_CODES = {
 
 export type FeatureCode = keyof typeof FEATURE_DEFINITIONS;
 export type PlanCode = typeof PLAN_CODES[keyof typeof PLAN_CODES];
-export type ResetPeriod = 'daily' | 'monthly' | 'never';
+export type ResetPeriod = 'daily' | 'monthly' | 'subscription';
