@@ -439,22 +439,76 @@ export class SubscriptionService {
     userId: number,
     resetPeriod: 'daily' | 'monthly' | 'subscription'
   ): Promise<{ periodStart: Date; periodEnd: Date }> {
-    // 使用数据库函数计算配额周期
-    const result = await pool.query(
-      `SELECT period_start, period_end 
-       FROM get_user_quota_period($1, 'articles_per_month')
-       LIMIT 1`,
-      [userId]
-    );
+    try {
+      // 尝试使用数据库函数计算配额周期
+      const result = await pool.query(
+        `SELECT period_start, period_end 
+         FROM get_user_quota_period($1, 'articles_per_month')
+         LIMIT 1`,
+        [userId]
+      );
 
-    if (result.rows.length === 0) {
+      if (result.rows.length === 0) {
+        throw new Error('用户没有有效订阅');
+      }
+
+      return {
+        periodStart: new Date(result.rows[0].period_start),
+        periodEnd: new Date(result.rows[0].period_end)
+      };
+    } catch (error: any) {
+      // 如果函数不存在，使用备用逻辑
+      if (error.message?.includes('does not exist')) {
+        console.warn('get_user_quota_period 函数不存在，使用备用逻辑');
+        return this.getPeriodDatesFallback(userId, resetPeriod);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 备用方法：当数据库函数不存在时使用
+   */
+  private async getPeriodDatesFallback(
+    userId: number,
+    resetPeriod: 'daily' | 'monthly' | 'subscription'
+  ): Promise<{ periodStart: Date; periodEnd: Date }> {
+    const subscription = await this.getUserActiveSubscription(userId);
+    if (!subscription) {
       throw new Error('用户没有有效订阅');
     }
 
-    return {
-      periodStart: new Date(result.rows[0].period_start),
-      periodEnd: new Date(result.rows[0].period_end)
-    };
+    const now = new Date();
+    const startDate = new Date(subscription.start_date);
+    
+    if (resetPeriod === 'subscription') {
+      // 订阅周期：从订阅开始到结束
+      return {
+        periodStart: startDate,
+        periodEnd: new Date(subscription.end_date)
+      };
+    } else if (resetPeriod === 'monthly') {
+      // 月度周期：基于订阅开始日期计算当前月度周期
+      const startDay = startDate.getDate();
+      const currentMonth = new Date(now.getFullYear(), now.getMonth(), startDay);
+      
+      // 如果当前日期在本月周期开始日之前，使用上个月的周期
+      const periodStart = now < currentMonth 
+        ? new Date(now.getFullYear(), now.getMonth() - 1, startDay)
+        : currentMonth;
+      
+      const periodEnd = new Date(periodStart);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+      
+      return { periodStart, periodEnd };
+    } else {
+      // 日度周期
+      const periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const periodEnd = new Date(periodStart);
+      periodEnd.setDate(periodEnd.getDate() + 1);
+      
+      return { periodStart, periodEnd };
+    }
   }
 
   /**
@@ -464,17 +518,26 @@ export class SubscriptionService {
     userId: number,
     resetPeriod: 'daily' | 'monthly' | 'subscription'
   ): Promise<string | undefined> {
-    // 使用数据库函数获取下次重置时间
-    const result = await pool.query(
-      'SELECT get_next_quota_reset_time($1) as next_reset',
-      [userId]
-    );
+    try {
+      // 使用数据库函数获取下次重置时间
+      const result = await pool.query(
+        'SELECT get_next_quota_reset_time($1) as next_reset',
+        [userId]
+      );
 
-    if (result.rows.length === 0 || !result.rows[0].next_reset) {
-      return undefined;
+      if (result.rows.length === 0 || !result.rows[0].next_reset) {
+        return undefined;
+      }
+
+      return result.rows[0].next_reset;
+    } catch (error: any) {
+      // 如果函数不存在（迁移未执行），返回 undefined 而不是抛出错误
+      if (error.message?.includes('does not exist')) {
+        console.warn('get_next_quota_reset_time 函数不存在，请执行迁移 031');
+        return undefined;
+      }
+      throw error;
     }
-
-    return result.rows[0].next_reset;
   }
 
   /**
