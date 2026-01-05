@@ -10,13 +10,18 @@ const isProduction = import.meta.env.PROD;
 // 在 Electron 环境中，使用环境变量或默认值
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
+// 构建 WebSocket URL，确保包含 /ws 路径
+let wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || API_BASE_URL.replace('http', 'ws');
+if (!wsBaseUrl.endsWith('/ws')) {
+  wsBaseUrl = wsBaseUrl.replace(/\/$/, '') + '/ws';
+}
+
 export const config = {
   // API基础URL（包含 /api 路径）
   apiUrl: `${API_BASE_URL}/api`,
   
-  // WebSocket URL
-  wsUrl: import.meta.env.VITE_WS_BASE_URL || 
-    API_BASE_URL.replace('http', 'ws') + '/ws',
+  // WebSocket URL（确保包含 /ws 路径）
+  wsUrl: wsBaseUrl,
   
   // Landing页面URL（退出登录时跳转）- Electron 中不需要
   landingUrl: import.meta.env.VITE_LANDING_URL || 'http://localhost:8080',

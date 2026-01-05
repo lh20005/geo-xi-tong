@@ -143,36 +143,6 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
                 </div>
               </button>
 
-              {/* 管理员专属：用户管理 */}
-              {isAdmin && (
-                <>
-                  <div className="my-2 border-t border-gray-100"></div>
-                  <div className="px-6 py-2">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      管理功能
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleMenuItemClick('/admin/users')}
-                    className="w-full px-6 py-3 flex items-center space-x-3 hover:bg-purple-50 transition-all duration-200 group"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center group-hover:bg-purple-200 transition-colors">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 text-left">
-                      <div className="text-sm font-medium text-gray-900">
-                        用户管理
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        管理系统用户和权限
-                      </div>
-                    </div>
-                  </button>
-                </>
-              )}
-
               {/* 分隔线 */}
               <div className="my-2 border-t border-gray-100"></div>
 

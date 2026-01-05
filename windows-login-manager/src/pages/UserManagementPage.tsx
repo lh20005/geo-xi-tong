@@ -1,0 +1,373 @@
+import { useState, useEffect } from 'react';
+import { Input, Button, Tag, Modal, Form, Select, message, Space, Card } from 'antd';
+import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined } from '@ant-design/icons';
+import axios from 'axios';
+import { config } from '../config/env';
+import { getUserWebSocketService } from '../services/UserWebSocketService';
+import ResizableTable from '../components/ResizableTable';
+
+const { Search } = Input;
+
+interface User {
+  id: number;
+  username: string;
+  role: 'admin' | 'user';
+  invitationCode: string;
+  invitedCount: number;
+  createdAt: string;
+  lastLoginAt?: string;
+  isTempPassword?: boolean;
+}
+
+export default function UserManagementPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [tempPassword, setTempPassword] = useState('');
+  const [form] = Form.useForm();
+
+  useEffect(() => {
+    loadUsers();
+  }, [page, search]);
+
+  useEffect(() => {
+    // 连接 WebSocket
+    const wsService = getUserWebSocketService();
+    wsService.connect().catch((error) => {
+      console.error('[UserManagement] WebSocket connection failed:', error);
+    });
+
+    // 订阅用户更新和删除事件
+    const handleUserUpdated = () => {
+      console.log('[UserManagement] User updated, refreshing list');
+      loadUsers();
+    };
+
+    const handleUserDeleted = () => {
+      console.log('[UserManagement] User deleted, refreshing list');
+      loadUsers();
+    };
+
+    wsService.on('user:updated', handleUserUpdated);
+    wsService.on('user:deleted', handleUserDeleted);
+
+    // 清理
+    return () => {
+      wsService.off('user:updated', handleUserUpdated);
+      wsService.off('user:deleted', handleUserDeleted);
+    };
+  }, []);
+
+  const loadUsers = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`${config.apiUrl}/admin/users`, {
+        params: { page, pageSize, search: search || undefined },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.data.success) {
+        setUsers(response.data.data.users);
+        setTotal(response.data.data.total);
+      }
+    } catch (error: any) {
+      console.error('[UserManagement] Load users error:', error);
+      message.error(error.response?.data?.message || '加载用户列表失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (user: User) => {
+    setSelectedUser(user);
+    form.setFieldsValue({
+      username: user.username,
+      role: user.role
+    });
+    setEditModalVisible(true);
+  };
+
+  const handleUpdate = async () => {
+    try {
+      const values = await form.validateFields();
+      const token = localStorage.getItem('auth_token');
+      
+      const response = await axios.put(
+        `${config.apiUrl}/admin/users/${selectedUser?.id}`,
+        values,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        message.success('用户信息更新成功');
+        setEditModalVisible(false);
+        loadUsers();
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '更新用户信息失败');
+    }
+  };
+
+  const handleResetPassword = (user: User) => {
+    setSelectedUser(user);
+    setTempPassword('');
+    setResetPasswordModalVisible(true);
+  };
+
+  const confirmResetPassword = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.post(
+        `${config.apiUrl}/admin/users/${selectedUser?.id}/reset-password`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (response.data.success) {
+        setTempPassword(response.data.data.temporaryPassword);
+        message.success('密码重置成功');
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '重置密码失败');
+    }
+  };
+
+  const handleDelete = (user: User) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除用户 "${user.username}" 吗？此操作不可撤销。`,
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          const token = localStorage.getItem('auth_token');
+          const response = await axios.delete(
+            `${config.apiUrl}/admin/users/${user.id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (response.data.success) {
+            message.success('用户删除成功');
+            loadUsers();
+          }
+        } catch (error: any) {
+          message.error(error.response?.data?.message || '删除用户失败');
+        }
+      }
+    });
+  };
+
+  const copyTempPassword = () => {
+    navigator.clipboard.writeText(tempPassword);
+    message.success('临时密码已复制到剪贴板');
+  };
+
+  const columns = [
+    {
+      title: '用户ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 80,
+    },
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+      render: (text: string, record: User) => (
+        <Space>
+          <UserOutlined />
+          <span>{text}</span>
+          {record.isTempPassword && (
+            <Tag color="warning" style={{ fontSize: 10 }}>临时密码</Tag>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: '角色',
+      dataIndex: 'role',
+      key: 'role',
+      width: 100,
+      render: (role: string) => (
+        <Tag color={role === 'admin' ? 'purple' : 'blue'}>
+          {role === 'admin' ? '管理员' : '普通用户'}
+        </Tag>
+      ),
+    },
+    {
+      title: '邀请码',
+      dataIndex: 'invitationCode',
+      key: 'invitationCode',
+      width: 120,
+      render: (code: string) => <code style={{ fontSize: 12 }}>{code}</code>,
+    },
+    {
+      title: '邀请人数',
+      dataIndex: 'invitedCount',
+      key: 'invitedCount',
+      width: 100,
+      align: 'center' as const,
+    },
+    {
+      title: '注册时间',
+      dataIndex: 'createdAt',
+      key: 'createdAt',
+      width: 180,
+      render: (date: string) => new Date(date).toLocaleString('zh-CN'),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 200,
+      render: (_: any, record: User) => (
+        <Space size="small">
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<KeyOutlined />}
+            onClick={() => handleResetPassword(record)}
+          >
+            重置密码
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => handleDelete(record)}
+          >
+            删除
+          </Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ padding: 24 }}>
+      <Card>
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>用户管理</h2>
+          <p style={{ color: '#666', marginBottom: 16 }}>管理系统中的所有用户</p>
+          
+          <Search
+            placeholder="搜索用户名..."
+            allowClear
+            enterButton={<SearchOutlined />}
+            size="large"
+            onSearch={setSearch}
+            style={{ maxWidth: 400 }}
+          />
+        </div>
+
+        <ResizableTable<User>
+          tableId="user-management"
+          columns={columns}
+          dataSource={users}
+          rowKey="id"
+          loading={loading}
+          scroll={{ x: 1200 }}
+          pagination={{
+            current: page,
+            pageSize,
+            total,
+            onChange: setPage,
+            showSizeChanger: false,
+            showTotal: (total) => `共 ${total} 个用户`,
+          }}
+        />
+      </Card>
+
+      {/* 编辑用户模态框 */}
+      <Modal
+        title="编辑用户信息"
+        open={editModalVisible}
+        onOk={handleUpdate}
+        onCancel={() => setEditModalVisible(false)}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="username"
+            label="用户名"
+            rules={[{ required: true, message: '请输入用户名' }]}
+          >
+            <Input />
+          </Form.Item>
+          <Form.Item
+            name="role"
+            label="角色"
+            rules={[{ required: true, message: '请选择角色' }]}
+          >
+            <Select>
+              <Select.Option value="user">普通用户</Select.Option>
+              <Select.Option value="admin">管理员</Select.Option>
+            </Select>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 重置密码模态框 */}
+      <Modal
+        title="重置密码"
+        open={resetPasswordModalVisible}
+        onCancel={() => setResetPasswordModalVisible(false)}
+        footer={
+          tempPassword ? (
+            <Button type="primary" onClick={() => setResetPasswordModalVisible(false)}>
+              关闭
+            </Button>
+          ) : (
+            <>
+              <Button onClick={() => setResetPasswordModalVisible(false)}>取消</Button>
+              <Button type="primary" onClick={confirmResetPassword}>
+                确认重置
+              </Button>
+            </>
+          )
+        }
+      >
+        {tempPassword ? (
+          <div>
+            <p style={{ marginBottom: 12 }}>临时密码已生成：</p>
+            <Input.Group compact>
+              <Input
+                value={tempPassword}
+                readOnly
+                style={{ width: 'calc(100% - 80px)' }}
+              />
+              <Button type="primary" onClick={copyTempPassword}>
+                复制
+              </Button>
+            </Input.Group>
+            <p style={{ marginTop: 12, fontSize: 12, color: '#666' }}>
+              请将此密码发送给用户，用户下次登录时需要修改密码
+            </p>
+          </div>
+        ) : (
+          <p>
+            确定要重置用户 <strong>{selectedUser?.username}</strong> 的密码吗？
+            系统将生成一个临时密码，用户下次登录时需要修改密码。
+          </p>
+        )}
+      </Modal>
+    </div>
+  );
+}

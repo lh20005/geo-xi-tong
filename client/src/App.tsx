@@ -34,6 +34,7 @@ import PermissionsPage from './pages/PermissionsPage';
 import SecurityConfigPage from './pages/SecurityConfigPage';
 import ProductManagementPage from './pages/ProductManagementPage';
 import OrderManagementPage from './pages/OrderManagementPage';
+import UserManagementPage from './pages/UserManagementPage';
 import UserCenterPage from './pages/UserCenterPage';
 import PaymentPage from './pages/PaymentPage';
 
@@ -214,6 +215,7 @@ function App() {
                     <Route path="/security/config" element={<AdminRoute><SecurityConfigPage /></AdminRoute>} />
                     <Route path="/products" element={<AdminRoute><ProductManagementPage /></AdminRoute>} />
                     <Route path="/admin/orders" element={<AdminRoute><OrderManagementPage /></AdminRoute>} />
+                    <Route path="/admin/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
                     <Route path="/user-center" element={<UserCenterPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>

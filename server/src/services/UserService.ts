@@ -307,13 +307,13 @@ export class UserService {
     const params: any[] = [];
     
     if (search) {
-      whereClause = 'WHERE username ILIKE $1';
+      whereClause = 'WHERE u.username ILIKE $1';
       params.push(`%${search}%`);
     }
     
     // 获取总数
     const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM users ${whereClause}`,
+      `SELECT COUNT(*) as total FROM users u ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].total);

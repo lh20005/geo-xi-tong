@@ -189,6 +189,12 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       icon: <ShoppingOutlined />,
       label: '订单管理',
     }] : []),
+    // 用户管理 - 仅管理员可见
+    ...(userIsAdmin ? [{
+      key: '/admin/users',
+      icon: <TeamOutlined />,
+      label: '用户管理',
+    }] : []),
     {
       key: '/user-manual',
       icon: <BookOutlined />,

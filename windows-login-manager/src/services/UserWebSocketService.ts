@@ -51,8 +51,14 @@ export class UserWebSocketService {
       }
 
       // Build WebSocket URL
-      // Use the configured wsUrl directly
-      const wsUrl = config.wsUrl || 'ws://localhost:3000/ws';
+      // Ensure wsUrl has /ws path
+      let wsUrl = config.wsUrl || 'ws://localhost:3000/ws';
+      
+      // 如果 wsUrl 没有 /ws 路径，添加它
+      if (!wsUrl.endsWith('/ws')) {
+        wsUrl = wsUrl.replace(/\/$/, '') + '/ws';
+      }
+      
       const url = `${wsUrl}?token=${token}`;
 
       console.log('[UserWebSocket] Connecting to:', url);

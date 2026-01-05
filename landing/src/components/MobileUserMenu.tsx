@@ -125,35 +125,6 @@ export default function MobileUserMenu({ username, isAdmin, onLogout }: MobileUs
                 </div>
               </button>
 
-              {/* 管理员专属：用户管理 */}
-              {isAdmin && (
-                <>
-                  <div className="my-4 px-2">
-                    <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                      管理功能
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleMenuItemClick('/admin/users')}
-                    className="w-full mb-3 px-6 py-4 bg-purple-50 border-2 border-purple-100 rounded-2xl hover:border-purple-200 hover:shadow-md transition-all duration-200 flex items-center space-x-4"
-                  >
-                    <div className="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1 text-left">
-                      <div className="text-base font-semibold text-gray-900">
-                        用户管理
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        管理系统用户和权限
-                      </div>
-                    </div>
-                  </button>
-                </>
-              )}
-
               {/* 退出登录 */}
               <button
                 onClick={handleLogoutClick}

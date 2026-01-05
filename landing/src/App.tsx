@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegistrationPage from './pages/RegistrationPage';
-import UserManagementPage from './pages/UserManagementPage';
 import CasesPage from './pages/CasesPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
@@ -43,14 +42,6 @@ function App() {
       <Route path="/terms" element={<TermsPage />} />
       {/* /profile 重定向到主应用用户中心 */}
       <Route path="/profile" element={<Navigate to="/" replace />} />
-      <Route 
-        path="/admin/users" 
-        element={
-          <ProtectedRoute requireAdmin>
-            <UserManagementPage />
-          </ProtectedRoute>
-        } 
-      />
     </Routes>
   );
 }
