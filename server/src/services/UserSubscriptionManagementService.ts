@@ -329,6 +329,10 @@ class UserSubscriptionManagementService {
       }
 
       console.log(`[SubscriptionManagement] 用户 ${userId} 配额调整: ${featureCode} ${oldValue} -> ${newValue}`);
+      
+      // 同步配额到所有系统
+      const { QuotaSyncService } = await import('./QuotaSyncService');
+      await QuotaSyncService.syncUserQuota(userId, `配额调整: ${featureCode}`);
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
