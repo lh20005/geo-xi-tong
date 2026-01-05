@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Modal, Form, Select, InputNumber, message, Spin, Tag, Tooltip } from 'antd';
+import { Modal, Form, Select, InputNumber, Spin, Tag, Tooltip, App } from 'antd';
 import { StarOutlined } from '@ant-design/icons';
 import type { TaskConfig, Album, KnowledgeBase, ArticleSetting, ConversionTarget } from '../types/articleGeneration';
 import {
@@ -17,6 +17,7 @@ interface TaskConfigModalProps {
 }
 
 export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskConfigModalProps) {
+  const { message } = App.useApp();
   const [form] = Form.useForm();
   const [dataLoading, setDataLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
