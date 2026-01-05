@@ -158,6 +158,15 @@ export class AuthService {
       
       console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}`);
       
+      // 为新用户自动开通免费版订阅（在事务外执行，避免影响注册流程）
+      try {
+        const { freeSubscriptionService } = await import('./FreeSubscriptionService');
+        await freeSubscriptionService.activateFreeSubscriptionForNewUser(user.id);
+      } catch (error) {
+        console.error(`[Auth] 为新用户 ${username} 开通免费版失败:`, error);
+        // 不抛出错误，允许注册继续
+      }
+      
       return user;
     } catch (error) {
       await client.query('ROLLBACK');
