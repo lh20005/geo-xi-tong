@@ -112,9 +112,26 @@ export class QuotaAlertService {
   /**
    * 标记预警为已发送
    * @param alertId 预警ID
+   * @param userId 用户ID（用于验证权限）
    */
-  async markAsSent(alertId: number): Promise<void> {
+  async markAsSent(alertId: number, userId?: number): Promise<void> {
     try {
+      // 如果提供了 userId，验证预警是否属于该用户
+      if (userId !== undefined) {
+        const checkResult = await pool.query(
+          `SELECT user_id FROM quota_alerts WHERE id = $1`,
+          [alertId]
+        );
+        
+        if (checkResult.rows.length === 0) {
+          throw new Error('预警不存在');
+        }
+        
+        if (checkResult.rows[0].user_id !== userId) {
+          throw new Error('无权操作此预警');
+        }
+      }
+      
       await pool.query(
         `UPDATE quota_alerts 
          SET is_sent = TRUE, sent_at = CURRENT_TIMESTAMP
@@ -130,9 +147,23 @@ export class QuotaAlertService {
   /**
    * 批量标记预警为已发送
    * @param alertIds 预警ID列表
+   * @param userId 用户ID（用于验证权限）
    */
-  async batchMarkAsSent(alertIds: number[]): Promise<void> {
+  async batchMarkAsSent(alertIds: number[], userId?: number): Promise<void> {
     try {
+      // 如果提供了 userId，验证所有预警是否属于该用户
+      if (userId !== undefined) {
+        const checkResult = await pool.query(
+          `SELECT id FROM quota_alerts 
+           WHERE id = ANY($1) AND user_id = $2`,
+          [alertIds, userId]
+        );
+        
+        if (checkResult.rows.length !== alertIds.length) {
+          throw new Error('部分预警不存在或无权操作');
+        }
+      }
+      
       await pool.query(
         `UPDATE quota_alerts 
          SET is_sent = TRUE, sent_at = CURRENT_TIMESTAMP

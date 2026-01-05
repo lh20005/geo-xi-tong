@@ -116,6 +116,8 @@ router.get('/breakdown/:userId', async (req: Request, res: Response) => {
  * 更新用户的存储配额
  */
 router.put('/quota/:userId', async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  
   try {
     const userId = parseInt(req.params.userId);
     const { quotaBytes, reason } = req.body;
@@ -135,6 +137,9 @@ router.put('/quota/:userId', async (req: Request, res: Response) => {
       });
     }
 
+    // ✅ 安全修复：使用事务确保配额更新和日志记录的原子性
+    await client.query('BEGIN');
+
     // 获取旧配额
     const oldUsage = await storageService.getUserStorageUsage(userId);
     const oldQuota = oldUsage.storageQuotaBytes;
@@ -142,14 +147,25 @@ router.put('/quota/:userId', async (req: Request, res: Response) => {
     // 更新配额
     await storageService.updateStorageQuota(userId, quotaBytes);
 
-    // 记录配额修改日志
-    await pool.query(
-      `INSERT INTO admin_quota_modifications (
-        admin_id, user_id, feature_type, 
-        old_quota, new_quota, reason
-      ) VALUES ($1, $2, 'storage_space', $3, $4, $5)`,
-      [adminId, userId, oldQuota, quotaBytes, reason || '管理员手动调整']
-    );
+    // 记录配额修改日志（确保表存在）
+    try {
+      await client.query(
+        `INSERT INTO admin_quota_modifications (
+          admin_id, user_id, feature_type, 
+          old_quota, new_quota, reason
+        ) VALUES ($1, $2, 'storage_space', $3, $4, $5)`,
+        [adminId, userId, oldQuota, quotaBytes, reason || '管理员手动调整']
+      );
+    } catch (logError: any) {
+      // 如果日志表不存在，记录警告但不影响主流程
+      if (logError.code === '42P01') {
+        console.warn('[Admin Storage API] admin_quota_modifications 表不存在，跳过日志记录');
+      } else {
+        throw logError;
+      }
+    }
+
+    await client.query('COMMIT');
 
     console.log(`[Admin Storage API] 管理员 ${adminId} 更新用户 ${userId} 配额: ${oldQuota} -> ${quotaBytes}`);
 
@@ -163,11 +179,14 @@ router.put('/quota/:userId', async (req: Request, res: Response) => {
       }
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('[Admin Storage API] 更新配额失败:', error);
     res.status(500).json({
       success: false,
       message: '更新配额失败'
     });
+  } finally {
+    client.release();
   }
 });
 

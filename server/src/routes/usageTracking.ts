@@ -181,6 +181,7 @@ router.get('/alerts/unsent', async (req, res) => {
  */
 router.put('/alerts/:id/mark-sent', async (req, res) => {
   try {
+    const userId = (req as any).user.userId;
     const alertId = parseInt(req.params.id);
     
     if (isNaN(alertId)) {
@@ -190,7 +191,8 @@ router.put('/alerts/:id/mark-sent', async (req, res) => {
       });
     }
     
-    await quotaAlertService.markAsSent(alertId);
+    // ✅ 安全修复：验证预警是否属于当前用户
+    await quotaAlertService.markAsSent(alertId, userId);
     
     res.json({
       success: true,
@@ -198,7 +200,11 @@ router.put('/alerts/:id/mark-sent', async (req, res) => {
     });
   } catch (error: any) {
     console.error('标记预警失败:', error);
-    res.status(500).json({
+    
+    // 返回适当的错误状态码
+    const statusCode = error.message === '无权操作此预警' ? 403 : 500;
+    
+    res.status(statusCode).json({
       success: false,
       message: error.message || '标记预警失败'
     });
