@@ -17,6 +17,7 @@ interface User {
   createdAt: string;
   lastLoginAt?: string;
   isTempPassword?: boolean;
+  subscriptionPlanName?: string;
 }
 
 export default function UserManagementPage() {
@@ -189,6 +190,17 @@ export default function UserManagementPage() {
             <Tag color="warning" style={{ fontSize: 10 }}>临时密码</Tag>
           )}
         </Space>
+      ),
+    },
+    {
+      title: '订阅套餐',
+      dataIndex: 'subscriptionPlanName',
+      key: 'subscriptionPlanName',
+      width: 120,
+      render: (planName: string) => (
+        <Tag color={planName === '无订阅' ? 'default' : 'green'}>
+          {planName || '无订阅'}
+        </Tag>
       ),
     },
     {

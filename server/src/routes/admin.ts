@@ -55,7 +55,8 @@ function convertUserFields(user: any) {
     updatedAt: user.updated_at ? (user.updated_at instanceof Date ? user.updated_at.toISOString() : user.updated_at) : null,
     lastLoginAt: user.last_login_at ? (user.last_login_at instanceof Date ? user.last_login_at.toISOString() : user.last_login_at) : null,
     invitedCount: user.invitedCount,
-    invitedUsers: user.invitedUsers
+    invitedUsers: user.invitedUsers,
+    subscriptionPlanName: user.subscriptionPlanName
   };
 }
 
@@ -68,8 +69,9 @@ router.get('/users', async (req, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const pageSize = parseInt(req.query.pageSize as string) || 10;
     const search = req.query.search as string;
+    const subscriptionPlan = req.query.subscriptionPlan as string;
 
-    const result = await userService.getUsers(page, pageSize, search);
+    const result = await userService.getUsers(page, pageSize, search, subscriptionPlan);
 
     // 转换字段名
     const convertedUsers = result.users.map(convertUserFields);

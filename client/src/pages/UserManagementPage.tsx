@@ -18,6 +18,7 @@ interface User {
   createdAt: string;
   lastLoginAt?: string;
   isTempPassword?: boolean;
+  subscriptionPlanName?: string;
 }
 
 export default function UserManagementPage() {
@@ -27,6 +28,7 @@ export default function UserManagementPage() {
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
+  const [subscriptionFilter, setSubscriptionFilter] = useState<string>(''); // 新增：订阅套餐筛选
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -38,9 +40,19 @@ export default function UserManagementPage() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedUsername, setSelectedUsername] = useState('');
 
+  // 获取套餐颜色
+  const getPlanColor = (planName?: string) => {
+    if (!planName || planName === '无订阅') return 'default';
+    if (planName.includes('免费')) return 'blue';
+    if (planName.includes('体验')) return 'cyan';
+    if (planName.includes('专业')) return 'green';
+    if (planName.includes('企业')) return 'gold';
+    return 'purple';
+  };
+
   useEffect(() => {
     loadUsers();
-  }, [page, search]);
+  }, [page, search, subscriptionFilter]); // 添加 subscriptionFilter 依赖
 
   useEffect(() => {
     // 连接 WebSocket
@@ -75,7 +87,12 @@ export default function UserManagementPage() {
     try {
       const token = localStorage.getItem('auth_token');
       const response = await axios.get(`${config.apiUrl}/admin/users`, {
-        params: { page, pageSize, search: search || undefined },
+        params: { 
+          page, 
+          pageSize, 
+          search: search || undefined,
+          subscriptionPlan: subscriptionFilter || undefined // 添加套餐筛选参数
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -204,6 +221,17 @@ export default function UserManagementPage() {
       ),
     },
     {
+      title: '订阅套餐',
+      dataIndex: 'subscriptionPlanName',
+      key: 'subscriptionPlanName',
+      width: 120,
+      render: (planName: string) => (
+        <Tag color={getPlanColor(planName)}>
+          {planName || '无订阅'}
+        </Tag>
+      ),
+    },
+    {
       title: '角色',
       dataIndex: 'role',
       key: 'role',
@@ -286,14 +314,45 @@ export default function UserManagementPage() {
           <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>用户管理</h2>
           <p style={{ color: '#666', marginBottom: 16 }}>管理系统中的所有用户</p>
           
-          <Search
-            placeholder="搜索用户名..."
-            allowClear
-            enterButton={<SearchOutlined />}
-            size="large"
-            onSearch={setSearch}
-            style={{ maxWidth: 400 }}
-          />
+          <Space size="middle" style={{ marginBottom: 16, width: '100%', flexWrap: 'wrap' }}>
+            <Search
+              placeholder="搜索用户名..."
+              allowClear
+              enterButton={<SearchOutlined />}
+              size="large"
+              onSearch={setSearch}
+              style={{ width: 300 }}
+            />
+            
+            <Select
+              placeholder="筛选订阅套餐"
+              allowClear
+              size="large"
+              style={{ width: 200 }}
+              onChange={(value) => {
+                setSubscriptionFilter(value || '');
+                setPage(1); // 重置到第一页
+              }}
+              value={subscriptionFilter || undefined}
+            >
+              <Select.Option value="">全部套餐</Select.Option>
+              <Select.Option value="免费版">
+                <Tag color="blue">免费版</Tag>
+              </Select.Option>
+              <Select.Option value="体验版">
+                <Tag color="cyan">体验版</Tag>
+              </Select.Option>
+              <Select.Option value="专业版">
+                <Tag color="green">专业版</Tag>
+              </Select.Option>
+              <Select.Option value="企业版">
+                <Tag color="gold">企业版</Tag>
+              </Select.Option>
+              <Select.Option value="无订阅">
+                <Tag color="default">无订阅</Tag>
+              </Select.Option>
+            </Select>
+          </Space>
         </div>
 
         <ResizableTable<User>

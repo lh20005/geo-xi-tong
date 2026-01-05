@@ -294,9 +294,10 @@ export class UserService {
   async getUsers(
     page: number = 1,
     pageSize: number = 10,
-    search?: string
+    search?: string,
+    subscriptionPlan?: string
   ): Promise<{
-    users: Array<User & { invitedCount: number }>;
+    users: Array<User & { invitedCount: number; subscriptionPlanName?: string }>;
     total: number;
     page: number;
     pageSize: number;
@@ -318,18 +319,41 @@ export class UserService {
     );
     const total = parseInt(countResult.rows[0].total);
     
-    // 获取用户列表（包括邀请数量）
+    // 获取用户列表（包括邀请数量和订阅套餐名称）
+    // 使用LATERAL子查询获取每个用户最新的有效订阅
+    let havingClause = '';
+    if (subscriptionPlan) {
+      if (subscriptionPlan === '无订阅') {
+        havingClause = 'HAVING latest_sub.plan_name IS NULL';
+      } else {
+        params.push(subscriptionPlan);
+        havingClause = `HAVING latest_sub.plan_name = $${params.length}`;
+      }
+    }
+    
     const usersResult = await pool.query(
       `SELECT 
         u.id, u.username, u.invitation_code, u.invited_by_code, u.role, 
         u.is_temp_password, u.created_at, u.updated_at, u.last_login_at,
-        COUNT(invited.id) as invited_count
+        COUNT(DISTINCT invited.id) as invited_count,
+        latest_sub.plan_name as subscription_plan_name
        FROM users u
        LEFT JOIN users invited ON invited.invited_by_code = u.invitation_code
+       LEFT JOIN LATERAL (
+         SELECT p.plan_name
+         FROM user_subscriptions us
+         JOIN subscription_plans p ON p.id = us.plan_id
+         WHERE us.user_id = u.id 
+           AND us.status = 'active'
+           AND (us.end_date IS NULL OR us.end_date > NOW())
+         ORDER BY us.created_at DESC
+         LIMIT 1
+       ) latest_sub ON true
        ${whereClause}
-       GROUP BY u.id
+       GROUP BY u.id, latest_sub.plan_name
+       ${havingClause}
        ORDER BY u.created_at DESC
-       LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
+       LIMIT $` + (params.length + 1) + ` OFFSET $` + (params.length + 2),
       [...params, pageSize, offset]
     );
     
@@ -343,7 +367,8 @@ export class UserService {
       created_at: row.created_at,
       updated_at: row.updated_at,
       last_login_at: row.last_login_at,
-      invitedCount: parseInt(row.invited_count)
+      invitedCount: parseInt(row.invited_count),
+      subscriptionPlanName: row.subscription_plan_name || '无订阅'
     }));
     
     return {
