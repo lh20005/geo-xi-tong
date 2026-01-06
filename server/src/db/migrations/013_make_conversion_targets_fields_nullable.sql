@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 迁移: 使 conversion_targets 表的某些字段可为空
 -- 日期: 2025-12-27
 -- 描述: 将 industry, company_size, contact_info 字段改为可选
@@ -12,3 +13,11 @@ ALTER TABLE conversion_targets
 COMMENT ON COLUMN conversion_targets.industry IS '行业（可选）';
 COMMENT ON COLUMN conversion_targets.company_size IS '公司规模（可选）';
 COMMENT ON COLUMN conversion_targets.contact_info IS '联系方式（可选）';
+
+-- ==================== DOWN ====================
+-- 回滚: 恢复字段为非空（注意：如果有NULL值会失败）
+
+ALTER TABLE conversion_targets 
+  ALTER COLUMN industry SET NOT NULL,
+  ALTER COLUMN company_size SET NOT NULL,
+  ALTER COLUMN contact_info SET NOT NULL;
