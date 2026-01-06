@@ -173,13 +173,17 @@ export class SubscriptionService {
       return 0; // 没有有效订阅，使用量为0
     }
 
-    const featureDef = FEATURE_DEFINITIONS[featureCode];
-    const { periodStart, periodEnd } = await this.getPeriodDates(userId, featureDef.resetPeriod);
-
+    // 修复：直接查询当前日期所在周期的使用记录
+    // 不依赖 getPeriodDates 计算的周期，而是查找包含当前日期的记录
     const result = await pool.query(
       `SELECT usage_count FROM user_usage
-       WHERE user_id = $1 AND feature_code = $2 AND period_start = $3 AND period_end <= $4`,
-      [userId, featureCode, periodStart, subscription.end_date]
+       WHERE user_id = $1 
+         AND feature_code = $2 
+         AND period_start::date <= CURRENT_DATE
+         AND period_end::date >= CURRENT_DATE
+       ORDER BY period_start DESC
+       LIMIT 1`,
+      [userId, featureCode]
     );
 
     return result.rows.length > 0 ? result.rows[0].usage_count : 0;

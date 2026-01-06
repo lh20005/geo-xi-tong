@@ -164,8 +164,52 @@ export class UsageTrackingService {
    */
   async getUserQuotaOverview(userId: number): Promise<any[]> {
     try {
+      // 直接查询，不使用视图
       const result = await pool.query(
-        `SELECT * FROM v_user_quota_overview WHERE user_id = $1 ORDER BY feature_code`,
+        `WITH latest_subscription AS (
+          SELECT DISTINCT ON (user_id)
+            id, user_id, plan_id, custom_quotas, start_date, end_date
+          FROM user_subscriptions
+          WHERE status = 'active' AND user_id = $1
+          ORDER BY user_id, end_date DESC
+        )
+        SELECT 
+          pf.feature_code,
+          pf.feature_name,
+          COALESCE(
+            (us.custom_quotas->>pf.feature_code)::INTEGER,
+            pf.feature_value
+          ) AS quota_limit,
+          COALESCE(uu.usage_count, 0) AS current_usage,
+          CASE 
+            WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) = -1 THEN -1
+            ELSE GREATEST(0, COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) - COALESCE(uu.usage_count, 0))
+          END AS remaining,
+          CASE 
+            WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) = -1 THEN 0
+            WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) > 0 THEN 
+              ROUND((COALESCE(uu.usage_count, 0)::NUMERIC / COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value)::NUMERIC) * 100, 2)
+            ELSE 0
+          END AS usage_percentage,
+          uu.period_start,
+          uu.period_end,
+          us.end_date AS subscription_end_date,
+          sp.plan_name,
+          sp.plan_code
+        FROM latest_subscription us
+        JOIN subscription_plans sp ON sp.id = us.plan_id
+        JOIN plan_features pf ON pf.plan_id = sp.id
+        LEFT JOIN LATERAL (
+          SELECT usage_count, period_start, period_end
+          FROM user_usage
+          WHERE user_id = $1 
+            AND feature_code = pf.feature_code
+            AND period_start::date <= CURRENT_DATE
+            AND period_end::date >= CURRENT_DATE
+          ORDER BY period_start DESC
+          LIMIT 1
+        ) uu ON true
+        ORDER BY pf.feature_code`,
         [userId]
       );
       
@@ -175,7 +219,7 @@ export class UsageTrackingService {
         quotaLimit: row.quota_limit,
         currentUsage: row.current_usage,
         remaining: row.remaining,
-        usagePercentage: parseFloat(row.usage_percentage),
+        usagePercentage: parseFloat(row.usage_percentage || '0'),
         periodStart: row.period_start,
         periodEnd: row.period_end,
         subscriptionEndDate: row.subscription_end_date,
