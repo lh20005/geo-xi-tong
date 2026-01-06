@@ -131,6 +131,8 @@ export interface GenerationTask {
   updatedAt: string;
   conversionTargetName?: string | null;
   articleSettingName?: string | null;  // 添加文章设置名称
+  albumName?: string | null;  // 企业图库名称
+  knowledgeBaseName?: string | null;  // 企业知识库名称
   keyword: string;
   provider: string;
   distillationResult?: string | null;
@@ -419,6 +421,8 @@ export class ArticleGenerationService {
         gt.user_id,
         gt.selected_distillation_ids,
         gt.conversion_target_name,
+        gt.album_name,
+        gt.knowledge_base_name,
         ast.name as article_setting_name,
         gt.distillation_keyword as keyword,
         d.provider,
@@ -460,6 +464,8 @@ export class ArticleGenerationService {
           updatedAt: row.updated_at,
           userId: row.user_id,
           conversionTargetName: row.conversion_target_name || null,
+          albumName: row.album_name || null,
+          knowledgeBaseName: row.knowledge_base_name || null,
           articleSettingName: row.article_setting_name || null,
           keyword,
           provider: row.provider,
@@ -495,6 +501,8 @@ export class ArticleGenerationService {
         gt.updated_at,
         gt.user_id,
         gt.conversion_target_name,
+        gt.album_name,
+        gt.knowledge_base_name,
         ast.name as article_setting_name,
         gt.distillation_keyword as keyword,
         d.provider,
@@ -532,6 +540,8 @@ export class ArticleGenerationService {
       updatedAt: row.updated_at,
       userId: row.user_id,
       conversionTargetName: row.conversion_target_name || null,
+      albumName: row.album_name || null,
+      knowledgeBaseName: row.knowledge_base_name || null,
       articleSettingName: row.article_setting_name || null,
       keyword: row.keyword,
       provider: row.provider,

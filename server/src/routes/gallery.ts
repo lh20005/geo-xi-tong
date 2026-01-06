@@ -267,20 +267,42 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
     
     const deletedImages = imagesResult.rows.length;
     
+    // 获取被文章引用的图片路径（这些图片文件需要保留）
+    const referencedImagesResult = await pool.query(
+      `SELECT DISTINCT image_url FROM articles 
+       WHERE image_url IS NOT NULL AND user_id = $1`,
+      [userId]
+    );
+    const referencedPaths = new Set(referencedImagesResult.rows.map(r => r.image_url));
+    
     // 删除相册（级联删除图片记录）
     await pool.query('DELETE FROM albums WHERE id = $1 AND user_id = $2', [albumId, userId]);
     
-    // 删除文件系统中的图片文件
+    // 删除文件系统中的图片文件（但保留被文章引用的图片）
+    let preservedCount = 0;
     imagesResult.rows.forEach(row => {
+      const imageUrl = row.filepath;
+      // 检查图片是否被文章引用
+      if (referencedPaths.has(imageUrl)) {
+        console.log(`[图库删除] 保留被文章引用的图片: ${imageUrl}`);
+        preservedCount++;
+        return; // 跳过删除
+      }
+      
       const filePath = path.join(uploadDir, row.filepath);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     });
     
+    if (preservedCount > 0) {
+      console.log(`[图库删除] 相册 ${albumId} 删除完成，保留了 ${preservedCount} 个被文章引用的图片文件`);
+    }
+    
     res.json({
       success: true,
-      deletedImages
+      deletedImages,
+      preservedImages: preservedCount
     });
   } catch (error: any) {
     console.error('删除相册错误:', error);
@@ -479,6 +501,13 @@ galleryRouter.delete('/images/:id', async (req, res) => {
     const filepath = image.filepath;
     const fileSize = image.size;
     
+    // 检查图片是否被文章引用
+    const referencedResult = await pool.query(
+      `SELECT COUNT(*) as count FROM articles WHERE image_url = $1`,
+      [filepath]
+    );
+    const isReferenced = parseInt(referencedResult.rows[0].count) > 0;
+    
     // 使用事务删除记录和更新存储使用
     const client = await pool.connect();
     
@@ -497,12 +526,17 @@ galleryRouter.delete('/images/:id', async (req, res) => {
       await client.query('COMMIT');
       
       // 删除文件系统中的文件（在事务外，失败不影响数据库）
-      const fullPath = path.join(uploadDir, filepath);
-      if (fs.existsSync(fullPath)) {
-        try {
-          fs.unlinkSync(fullPath);
-        } catch (error) {
-          console.error('[Gallery] 删除文件失败:', error);
+      // 但如果图片被文章引用，则保留文件
+      if (isReferenced) {
+        console.log(`[图片删除] 保留被文章引用的图片文件: ${filepath}`);
+      } else {
+        const fullPath = path.join(uploadDir, filepath);
+        if (fs.existsSync(fullPath)) {
+          try {
+            fs.unlinkSync(fullPath);
+          } catch (error) {
+            console.error('[Gallery] 删除文件失败:', error);
+          }
         }
       }
       
@@ -513,7 +547,7 @@ galleryRouter.delete('/images/:id', async (req, res) => {
         console.error('[Gallery] 清除缓存失败:', cacheError);
       }
       
-      res.json({ success: true });
+      res.json({ success: true, filePreserved: isReferenced });
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
