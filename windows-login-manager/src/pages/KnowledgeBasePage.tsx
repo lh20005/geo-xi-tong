@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Button, message, Space, Modal, Input, Empty, Row, Col, Tag } from 'antd';
+import { Card, Button, Space, Modal, Input, Empty, Row, Col, Tag, App } from 'antd';
 import { BookOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { ipcBridge } from '../services/ipc';
@@ -17,9 +17,12 @@ interface KnowledgeBase {
 
 export default function KnowledgeBasePage() {
   const navigate = useNavigate();
+  const { message, modal } = App.useApp();
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [editingKb, setEditingKb] = useState<{ id: number; name: string; description: string } | null>(null);
   const [kbName, setKbName] = useState('');
   const [kbDescription, setKbDescription] = useState('');
 
@@ -69,7 +72,7 @@ export default function KnowledgeBasePage() {
   };
 
   const handleDeleteKnowledgeBase = (id: number, name: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除知识库"${name}"吗？知识库中的所有文档也会被删除，此操作不可恢复。`,
       okText: '确定',
@@ -89,59 +92,34 @@ export default function KnowledgeBasePage() {
   };
 
   const handleEditKnowledgeBase = (id: number, currentName: string, currentDesc: string) => {
-    const formData = {
-      name: currentName,
-      description: currentDesc
-    };
+    setEditingKb({ id, name: currentName, description: currentDesc || '' });
+    setEditModalVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingKb) return;
     
-    Modal.confirm({
-      title: '编辑知识库',
-      width: 520,
-      content: (
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <div>
-            <label>知识库名称</label>
-            <Input
-              defaultValue={currentName}
-              placeholder="请输入知识库名称"
-              onChange={(e) => { formData.name = e.target.value; }}
-              style={{ marginTop: 8 }}
-            />
-          </div>
-          <div>
-            <label>描述（可选）</label>
-            <TextArea
-              defaultValue={currentDesc}
-              placeholder="请输入知识库描述"
-              onChange={(e) => { formData.description = e.target.value; }}
-              rows={3}
-              style={{ marginTop: 8 }}
-            />
-          </div>
-        </Space>
-      ),
-      okText: '保存',
-      cancelText: '取消',
-      onOk: async () => {
-        if (!formData.name || formData.name.trim() === '') {
-          message.error('知识库名称不能为空');
-          return Promise.reject();
-        }
-        
-        try {
-          const res = await ipcBridge.updateKnowledgeBase(id, {
-            name: formData.name.trim(),
-            description: formData.description.trim() || undefined
-          });
-          if (!res.success) throw new Error(res.error || '更新失败');
-          message.success('知识库更新成功');
-          loadKnowledgeBases();
-        } catch (error: any) {
-          message.error(error.message || '更新失败');
-          return Promise.reject();
-        }
-      }
-    });
+    if (!editingKb.name || editingKb.name.trim() === '') {
+      message.error('知识库名称不能为空');
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const res = await ipcBridge.updateKnowledgeBase(editingKb.id, {
+        name: editingKb.name.trim(),
+        description: editingKb.description.trim() || undefined
+      });
+      if (!res.success) throw new Error(res.error || '更新失败');
+      message.success('知识库更新成功');
+      setEditModalVisible(false);
+      setEditingKb(null);
+      loadKnowledgeBases();
+    } catch (error: any) {
+      message.error(error.message || '更新失败');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -281,6 +259,41 @@ export default function KnowledgeBasePage() {
               placeholder="请输入知识库描述"
               value={kbDescription}
               onChange={(e) => setKbDescription(e.target.value)}
+              rows={3}
+              style={{ marginTop: 8 }}
+            />
+          </div>
+        </Space>
+      </Modal>
+
+      <Modal
+        title="编辑知识库"
+        open={editModalVisible}
+        onOk={handleSaveEdit}
+        onCancel={() => {
+          setEditModalVisible(false);
+          setEditingKb(null);
+        }}
+        confirmLoading={loading}
+        okText="保存"
+        cancelText="取消"
+      >
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <div>
+            <label>知识库名称 *</label>
+            <Input
+              placeholder="请输入知识库名称"
+              value={editingKb?.name || ''}
+              onChange={(e) => setEditingKb(prev => prev ? { ...prev, name: e.target.value } : null)}
+              style={{ marginTop: 8 }}
+            />
+          </div>
+          <div>
+            <label>描述（可选）</label>
+            <TextArea
+              placeholder="请输入知识库描述"
+              value={editingKb?.description || ''}
+              onChange={(e) => setEditingKb(prev => prev ? { ...prev, description: e.target.value } : null)}
               rows={3}
               style={{ marginTop: 8 }}
             />
