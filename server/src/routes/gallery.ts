@@ -133,14 +133,43 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
         for (const file of files) {
           const decodedFilename = decodeFilename(file.originalname);
           console.log('[Gallery DB] 保存文件名到数据库:', decodedFilename);
-          await client.query(
-            'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5)',
+          
+          const imageResult = await client.query(
+            'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id',
             [album.id, decodedFilename, file.filename, file.mimetype, file.size]
+          );
+          
+          const imageId = imageResult.rows[0].id;
+          
+          // 记录存储使用
+          await client.query(
+            'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+            [userId, 'image', imageId, 'add', file.size, JSON.stringify({
+              filename: decodedFilename,
+              mimetype: file.mimetype,
+              albumId: album.id
+            })]
           );
         }
       }
       
       await client.query('COMMIT');
+      
+      // 同步用户存储使用统计（在事务外执行）
+      if (files && files.length > 0) {
+        try {
+          await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+        } catch (syncError) {
+          console.error('[Gallery] 同步存储使用失败:', syncError);
+        }
+        
+        // 清除缓存
+        try {
+          await storageService.getUserStorageUsage(userId, true);
+        } catch (cacheError) {
+          console.error('[Gallery] 清除缓存失败:', cacheError);
+        }
+      }
       
       res.json({
         id: album.id,
@@ -246,11 +275,11 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
       return res.status(400).json({ error: '无效的相册ID' });
     }
     
-    // 获取所有图片文件路径（验证所有权）
+    // 获取所有图片信息（验证所有权）
     const imagesResult = await pool.query(
-      `SELECT i.filepath FROM images i
+      `SELECT i.id, i.filepath, i.size FROM images i
        JOIN albums a ON i.album_id = a.id
-       WHERE a.id = $1 AND a.user_id = $2`,
+       WHERE a.id = $1 AND a.user_id = $2 AND i.deleted_at IS NULL`,
       [albumId, userId]
     );
     
@@ -265,45 +294,72 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
       }
     }
     
-    const deletedImages = imagesResult.rows.length;
+    const totalImages = imagesResult.rows.length;
     
-    // 获取被文章引用的图片路径（这些图片文件需要保留）
-    const referencedImagesResult = await pool.query(
-      `SELECT DISTINCT image_url FROM articles 
-       WHERE image_url IS NOT NULL AND user_id = $1`,
-      [userId]
-    );
-    const referencedPaths = new Set(referencedImagesResult.rows.map(r => r.image_url));
-    
-    // 删除相册（级联删除图片记录）
-    await pool.query('DELETE FROM albums WHERE id = $1 AND user_id = $2', [albumId, userId]);
-    
-    // 删除文件系统中的图片文件（但保留被文章引用的图片）
-    let preservedCount = 0;
-    imagesResult.rows.forEach(row => {
-      const imageUrl = row.filepath;
-      // 检查图片是否被文章引用
-      if (referencedPaths.has(imageUrl)) {
-        console.log(`[图库删除] 保留被文章引用的图片: ${imageUrl}`);
-        preservedCount++;
-        return; // 跳过删除
+    // 使用事务处理
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      let preservedCount = 0;
+      let deletedFileCount = 0;
+      
+      for (const img of imagesResult.rows) {
+        // 检查图片是否被文章引用
+        const refResult = await client.query(
+          'SELECT is_image_referenced($1) as is_ref',
+          [img.filepath]
+        );
+        const isReferenced = refResult.rows[0]?.is_ref || false;
+        
+        // 软删除图片记录
+        await client.query(
+          'UPDATE images SET deleted_at = NOW(), is_orphan = $1 WHERE id = $2',
+          [isReferenced, img.id]
+        );
+        
+        if (isReferenced) {
+          // 被文章引用，保留文件
+          preservedCount++;
+          console.log(`[图库删除] 软删除图片 ${img.id}，保留文件（被文章引用）: ${img.filepath}`);
+        } else {
+          // 未被引用，删除文件
+          const filePath = path.join(uploadDir, img.filepath);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            deletedFileCount++;
+          }
+        }
+        
+        // 更新存储使用（减少图片存储）
+        await client.query(
+          'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+          [userId, 'image', img.id, 'remove', img.size, null]
+        );
       }
       
-      const filePath = path.join(uploadDir, row.filepath);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    });
-    
-    if (preservedCount > 0) {
-      console.log(`[图库删除] 相册 ${albumId} 删除完成，保留了 ${preservedCount} 个被文章引用的图片文件`);
+      // 删除相册记录（图片记录保留但已软删除）
+      await client.query('DELETE FROM albums WHERE id = $1 AND user_id = $2', [albumId, userId]);
+      
+      await client.query('COMMIT');
+      
+      // 同步用户存储使用
+      await client.query('SELECT sync_user_storage_usage($1)', [userId]);
+      
+      console.log(`[图库删除] 相册 ${albumId} 删除完成：软删除 ${totalImages} 张图片，保留 ${preservedCount} 个文件，删除 ${deletedFileCount} 个文件`);
+      
+      res.json({
+        success: true,
+        totalImages,
+        preservedFiles: preservedCount,
+        deletedFiles: deletedFileCount
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
     }
-    
-    res.json({
-      success: true,
-      deletedImages,
-      preservedImages: preservedCount
-    });
   } catch (error: any) {
     console.error('删除相册错误:', error);
     res.status(500).json({ error: '删除相册失败', details: error.message });
@@ -413,6 +469,13 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
       
       await client.query('COMMIT');
       
+      // 同步用户存储使用统计（在事务外执行，避免锁冲突）
+      try {
+        await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+      } catch (syncError) {
+        console.error('[Gallery] 同步存储使用失败:', syncError);
+      }
+      
       // 清除缓存并推送更新（在事务外，失败不影响主流程）
       try {
         await storageService.getUserStorageUsage(userId, true); // 跳过缓存，刷新数据
@@ -469,7 +532,7 @@ galleryRouter.get('/images/:id', async (req, res) => {
   }
 });
 
-// 删除图片
+// 删除图片（使用软删除）
 galleryRouter.delete('/images/:id', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
@@ -480,7 +543,7 @@ galleryRouter.delete('/images/:id', async (req, res) => {
     
     // 获取图片信息并验证所有权
     const imageResult = await pool.query(
-      `SELECT i.filepath, i.size, i.album_id, a.user_id 
+      `SELECT i.filepath, i.size, i.album_id, i.deleted_at, a.user_id 
        FROM images i 
        JOIN albums a ON i.album_id = a.id 
        WHERE i.id = $1`,
@@ -498,26 +561,34 @@ galleryRouter.delete('/images/:id', async (req, res) => {
       return res.status(403).json({ error: '无权删除此图片' });
     }
     
+    // 检查是否已软删除
+    if (image.deleted_at) {
+      return res.status(400).json({ error: '图片已删除' });
+    }
+    
     const filepath = image.filepath;
     const fileSize = image.size;
     
     // 检查图片是否被文章引用
     const referencedResult = await pool.query(
-      `SELECT COUNT(*) as count FROM articles WHERE image_url = $1`,
+      'SELECT is_image_referenced($1) as is_ref',
       [filepath]
     );
-    const isReferenced = parseInt(referencedResult.rows[0].count) > 0;
+    const isReferenced = referencedResult.rows[0]?.is_ref || false;
     
-    // 使用事务删除记录和更新存储使用
+    // 使用事务处理软删除
     const client = await pool.connect();
     
     try {
       await client.query('BEGIN');
       
-      // 删除数据库记录
-      await client.query('DELETE FROM images WHERE id = $1', [imageId]);
+      // 软删除图片记录
+      await client.query(
+        'UPDATE images SET deleted_at = NOW(), is_orphan = $1 WHERE id = $2',
+        [isReferenced, imageId]
+      );
       
-      // 记录存储使用减少（在同一事务中）
+      // 记录存储使用减少
       await client.query(
         'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
         [userId, 'image', imageId, 'remove', fileSize, null]
@@ -525,20 +596,23 @@ galleryRouter.delete('/images/:id', async (req, res) => {
       
       await client.query('COMMIT');
       
-      // 删除文件系统中的文件（在事务外，失败不影响数据库）
-      // 但如果图片被文章引用，则保留文件
-      if (isReferenced) {
-        console.log(`[图片删除] 保留被文章引用的图片文件: ${filepath}`);
-      } else {
+      // 如果图片未被文章引用，删除物理文件
+      if (!isReferenced) {
         const fullPath = path.join(uploadDir, filepath);
         if (fs.existsSync(fullPath)) {
           try {
             fs.unlinkSync(fullPath);
+            console.log(`[图片删除] 删除文件: ${filepath}`);
           } catch (error) {
             console.error('[Gallery] 删除文件失败:', error);
           }
         }
+      } else {
+        console.log(`[图片删除] 软删除图片 ${imageId}，保留文件（被文章引用）: ${filepath}`);
       }
+      
+      // 同步用户存储使用
+      await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
       
       // 清除缓存
       try {

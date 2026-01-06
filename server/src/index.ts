@@ -231,6 +231,46 @@ async function startServer() {
     
     scheduleSecurityCheck();
     
+    // 安排孤儿图片清理任务（每天凌晨3点执行）
+    const scheduleOrphanImageCleanup = async () => {
+      const { orphanImageCleanupService } = await import('./services/OrphanImageCleanupService');
+      
+      const now = new Date();
+      const next3AM = new Date(now);
+      next3AM.setHours(3, 0, 0, 0);
+      
+      if (now.getHours() >= 3) {
+        next3AM.setDate(next3AM.getDate() + 1);
+      }
+      
+      const timeUntilNext = next3AM.getTime() - now.getTime();
+      
+      setTimeout(async () => {
+        try {
+          console.log('[OrphanCleanup] 开始每日孤儿图片清理...');
+          const result = await orphanImageCleanupService.cleanupOrphanImages(24);
+          console.log(`[OrphanCleanup] 清理完成: 删除 ${result.deletedCount} 个文件，释放 ${result.freedBytes} 字节`);
+        } catch (error) {
+          console.error('[OrphanCleanup] 孤儿图片清理失败:', error);
+        }
+        
+        // 安排下一次清理（24小时后）
+        setInterval(async () => {
+          try {
+            console.log('[OrphanCleanup] 开始每日孤儿图片清理...');
+            const result = await orphanImageCleanupService.cleanupOrphanImages(24);
+            console.log(`[OrphanCleanup] 清理完成: 删除 ${result.deletedCount} 个文件，释放 ${result.freedBytes} 字节`);
+          } catch (error) {
+            console.error('[OrphanCleanup] 孤儿图片清理失败:', error);
+          }
+        }, 24 * 60 * 60 * 1000);
+      }, timeUntilNext);
+      
+      console.log(`✅ 孤儿图片清理已安排，下次运行时间: ${next3AM.toLocaleString('zh-CN')}`);
+    };
+    
+    scheduleOrphanImageCleanup();
+    
     // 创建HTTP服务器
     const server = createServer(app);
     

@@ -3,8 +3,10 @@ import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { App as AntApp } from 'antd';
 import { AppProvider, useApp } from './context/AppContext';
 import Layout from './components/Layout';
+import StorageWarningBanner from './components/StorageWarningBanner';
 import Login from './pages/Login';
 import { ipcBridge } from './services/ipc';
+import { getUserWebSocketService } from './services/UserWebSocketService';
 import { routes } from './routes';
 import './App.css';
 
@@ -16,6 +18,20 @@ function AppContent() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // WebSocket 连接（用于存储警告等实时通知）- 必须在所有条件返回之前
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const wsService = getUserWebSocketService();
+    wsService.connect().catch((error) => {
+      console.warn('[App] WebSocket connection failed - real-time updates will be unavailable');
+    });
+
+    return () => {
+      wsService.disconnect();
+    };
+  }, [isAuthenticated]);
 
   const checkAuth = async () => {
     try {
@@ -100,6 +116,7 @@ function AppContent() {
   return (
     <Router>
       <Layout onLogout={handleLogout}>
+        <StorageWarningBanner />
         <Routes>
           {routes.map((route, index) => (
             <Route key={index} path={route.path} element={route.element} />

@@ -3,6 +3,7 @@ import { Layout, message, App as AntApp } from 'antd';
 import { useEffect } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
+import StorageWarningBanner from './components/StorageWarningBanner';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AdminRoute } from './components/AdminRoute';
 import { getUserWebSocketService } from './services/UserWebSocketService';
@@ -188,6 +189,7 @@ function App() {
               <Sidebar />
               <Layout style={{ marginLeft: 240 }}>
                 <Header />
+                <StorageWarningBanner />
                 <Content style={{ margin: '24px', background: '#fff', borderRadius: 8 }}>
                   <Routes>
                     <Route path="/" element={<Dashboard />} />

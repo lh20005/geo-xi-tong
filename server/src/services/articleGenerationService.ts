@@ -764,6 +764,7 @@ export class ArticleGenerationService {
           // 从图库均衡选择图片（使用次数最少的优先）
           let imageUrl: string;
           let imageId: number | undefined;
+          let imageSize: number = 0;
           
           try {
             const imageData = await this.selectBalancedImage(task.albumId);
@@ -771,7 +772,8 @@ export class ArticleGenerationService {
             if (imageData) {
               imageUrl = imageData.imageUrl;
               imageId = imageData.imageId;
-              console.log(`[任务 ${taskId}] [文章 ${i + 1}] 选择图片: ID=${imageId}, URL=${imageUrl}`);
+              imageSize = imageData.imageSize;
+              console.log(`[任务 ${taskId}] [文章 ${i + 1}] 选择图片: ID=${imageId}, URL=${imageUrl}, 大小=${imageSize}`);
             } else {
               // 如果图库为空，使用默认占位图片
               imageUrl = '/uploads/gallery/placeholder.png';
@@ -804,7 +806,7 @@ export class ArticleGenerationService {
           if (result.success && result.title && result.content) {
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章生成成功，标题: ${result.title}`);
 
-            // 5. 保存文章并记录使用（包括话题使用记录和图片使用记录）
+            // 5. 保存文章并记录使用（包括话题使用记录、图片使用记录和存储使用记录）
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 开始保存文章并更新usage_count...`);
             const articleId = await this.saveArticleWithTopicTracking(
               taskId,
@@ -816,7 +818,8 @@ export class ArticleGenerationService {
               imageUrl,
               aiConfig.provider,
               task.userId,
-              imageId
+              imageId,
+              imageSize
             );
             console.log(`[任务 ${taskId}] [文章 ${i + 1}] 文章保存成功，ID: ${articleId}，话题ID: ${distillationData.topicId} 的usage_count已更新${imageId ? `，图片ID: ${imageId} 的usage_count已更新` : ''}`);
 
@@ -922,6 +925,7 @@ export class ArticleGenerationService {
         // 从图库均衡选择图片（使用次数最少的优先）
         let imageUrl: string;
         let imageId: number | undefined;
+        let imageSize: number = 0;
         
         try {
           const imageData = await this.selectBalancedImage(task.albumId);
@@ -929,7 +933,8 @@ export class ArticleGenerationService {
           if (imageData) {
             imageUrl = imageData.imageUrl;
             imageId = imageData.imageId;
-            console.log(`[任务 ${taskId}] 选择图片: ID=${imageId}, URL=${imageUrl}`);
+            imageSize = imageData.imageSize;
+            console.log(`[任务 ${taskId}] 选择图片: ID=${imageId}, URL=${imageUrl}, 大小=${imageSize}`);
           } else {
             // 如果图库为空，使用默认占位图片
             imageUrl = '/uploads/gallery/placeholder.png';
@@ -969,7 +974,8 @@ export class ArticleGenerationService {
             imageUrl,
             aiConfig.provider,
             task.userId,
-            imageId
+            imageId,
+            imageSize
           );
           console.log(`[任务 ${taskId}] 文章保存成功，ID: ${articleId}${imageId ? `，图片ID: ${imageId} 的usage_count已更新` : ''}`);
 
@@ -1044,7 +1050,7 @@ export class ArticleGenerationService {
    * 2. 如果有多张图片使用次数相同，按创建时间升序选择
    * 3. 返回图片ID和路径，供后续记录使用
    */
-  async selectBalancedImage(albumId: number): Promise<{ imageId: number; imageUrl: string } | null> {
+  async selectBalancedImage(albumId: number): Promise<{ imageId: number; imageUrl: string; imageSize: number } | null> {
     const imageService = new ImageSelectionService();
     const imageData = await imageService.selectLeastUsedImage(albumId);
     
@@ -1055,7 +1061,8 @@ export class ArticleGenerationService {
     
     return {
       imageId: imageData.imageId,
-      imageUrl: `/uploads/gallery/${imageData.filepath}`
+      imageUrl: `/uploads/gallery/${imageData.filepath}`,
+      imageSize: imageData.size
     };
   }
 
@@ -1606,7 +1613,8 @@ export class ArticleGenerationService {
    * 3. 创建话题使用记录
    * 4. 更新蒸馏usage_count
    * 5. 更新话题usage_count
-   * 6. 如果任何步骤失败，回滚整个事务
+   * 6. 记录存储使用
+   * 7. 如果任何步骤失败，回滚整个事务
    */
   private async saveArticleWithTopicTracking(
     taskId: number,
@@ -1618,26 +1626,31 @@ export class ArticleGenerationService {
     imageUrl: string,
     provider: string,
     userId: number,
-    imageId?: number
+    imageId?: number,
+    imageSize: number = 0
   ): Promise<number> {
     const client = await pool.connect();
     const topicService = new TopicSelectionService();
+    const { StorageService } = await import('./StorageService');
     
     try {
       await client.query('BEGIN');
       console.log(`[保存文章] 事务开始`);
 
-      // 1. 保存文章（包含topic_id和user_id）
+      // 计算文章内容大小
+      const contentSize = StorageService.calculateTextSize(content);
+
+      // 1. 保存文章（包含topic_id、user_id和image_size_bytes）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id, image_size_bytes) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
          RETURNING id`,
-        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId]
+        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId, imageSize]
       );
 
       const articleId = articleResult.rows[0].id;
-      console.log(`[保存文章] 文章已插入，ID: ${articleId}, topic_id: ${topicId}`);
+      console.log(`[保存文章] 文章已插入，ID: ${articleId}, topic_id: ${topicId}, 内容大小: ${contentSize}, 图片大小: ${imageSize}`);
 
       // 2. 创建蒸馏使用记录
       await this.recordDistillationUsage(distillationId, taskId, articleId, client);
@@ -1670,7 +1683,21 @@ export class ArticleGenerationService {
         console.log(`[保存文章] 图片 ${imageId} 的usage_count已更新`);
       }
 
-      // 6. 记录配额使用（文章生成）
+      // 6. 记录存储使用（文章内容 + 图片）
+      const totalStorageSize = contentSize + imageSize;
+      await client.query(
+        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+        [userId, 'article', articleId, 'add', totalStorageSize, JSON.stringify({
+          title,
+          keyword,
+          taskId,
+          contentSize,
+          imageSize
+        })]
+      );
+      console.log(`[保存文章] 存储使用已记录，总大小: ${totalStorageSize} 字节`);
+
+      // 7. 记录配额使用（文章生成）
       try {
         const { usageTrackingService } = await import('./UsageTrackingService');
         await usageTrackingService.recordUsage(
@@ -1688,6 +1715,22 @@ export class ArticleGenerationService {
 
       await client.query('COMMIT');
       console.log(`[保存文章] 事务提交成功`);
+
+      // 同步用户存储使用统计（在事务外执行）
+      try {
+        await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+        console.log(`[保存文章] 用户存储统计已同步`);
+      } catch (syncError: any) {
+        console.error(`[保存文章] 同步存储统计失败（不影响文章保存）:`, syncError.message);
+      }
+
+      // 清除存储缓存（在事务外）
+      try {
+        const storageService = StorageService.getInstance();
+        await storageService.getUserStorageUsage(userId, true);
+      } catch (cacheError: any) {
+        console.error(`[保存文章] 清除存储缓存失败（不影响文章保存）:`, cacheError.message);
+      }
 
       return articleId;
     } catch (error: any) {
@@ -1712,20 +1755,25 @@ export class ArticleGenerationService {
     imageUrl: string,
     provider: string,
     userId: number,
-    imageId?: number
+    imageId?: number,
+    imageSize: number = 0
   ): Promise<number> {
     const client = await pool.connect();
+    const { StorageService } = await import('./StorageService');
     
     try {
       await client.query('BEGIN');
 
-      // 1. 保存文章（包含user_id）
+      // 计算文章内容大小
+      const contentSize = StorageService.calculateTextSize(content);
+
+      // 1. 保存文章（包含user_id和image_size_bytes）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, task_id, content, image_url, provider, user_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+         (title, keyword, distillation_id, task_id, content, image_url, provider, user_id, image_size_bytes) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
          RETURNING id`,
-        [title, keyword, distillationId, taskId, content, imageUrl, provider, userId]
+        [title, keyword, distillationId, taskId, content, imageUrl, provider, userId, imageSize]
       );
 
       const articleId = articleResult.rows[0].id;
@@ -1753,7 +1801,20 @@ export class ArticleGenerationService {
         );
       }
 
-      // 5. 记录配额使用（文章生成）
+      // 5. 记录存储使用（文章内容 + 图片）
+      const totalStorageSize = contentSize + imageSize;
+      await client.query(
+        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+        [userId, 'article', articleId, 'add', totalStorageSize, JSON.stringify({
+          title,
+          keyword,
+          taskId,
+          contentSize,
+          imageSize
+        })]
+      );
+
+      // 6. 记录配额使用（文章生成）
       try {
         const { usageTrackingService } = await import('./UsageTrackingService');
         await usageTrackingService.recordUsage(
@@ -1769,6 +1830,21 @@ export class ArticleGenerationService {
       }
 
       await client.query('COMMIT');
+
+      // 同步用户存储使用统计（在事务外执行）
+      try {
+        await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+      } catch (syncError: any) {
+        console.error(`[保存文章] 同步存储统计失败（不影响文章保存）:`, syncError.message);
+      }
+
+      // 清除存储缓存（在事务外）
+      try {
+        const storageService = StorageService.getInstance();
+        await storageService.getUserStorageUsage(userId, true);
+      } catch (cacheError: any) {
+        console.error(`[保存文章] 清除存储缓存失败（不影响文章保存）:`, cacheError.message);
+      }
 
       return articleId;
     } catch (error: any) {

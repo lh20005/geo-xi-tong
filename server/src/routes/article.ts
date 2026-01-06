@@ -229,16 +229,37 @@ articleRouter.delete('/batch', async (req, res) => {
 
     await client.query('BEGIN');
     
-    // 获取要删除的文章的distillation_id统计（仅当前用户的文章）
-    const distillationResult = await client.query(
-      `SELECT distillation_id, COUNT(*) as count
+    // 获取要删除的文章信息（包括图片URL和大小）
+    const articlesResult = await client.query(
+      `SELECT id, distillation_id, image_url, image_size_bytes, content
        FROM articles
-       WHERE id = ANY($1::integer[]) AND user_id = $2 AND distillation_id IS NOT NULL
-       GROUP BY distillation_id`,
+       WHERE id = ANY($1::integer[]) AND user_id = $2`,
       [ids, userId]
     );
     
-    // 删除文章（级联删除会自动删除distillation_usage记录，仅当前用户的）
+    // 收集图片URL用于后续清理
+    const imageUrls = articlesResult.rows
+      .filter(a => a.image_url)
+      .map(a => a.image_url);
+    
+    // 计算总存储大小
+    let totalStorageSize = 0;
+    for (const article of articlesResult.rows) {
+      const contentSize = StorageService.calculateTextSize(article.content || '');
+      const imageSize = article.image_size_bytes || 0;
+      totalStorageSize += contentSize + imageSize;
+    }
+    
+    // 获取distillation_id统计
+    const distillationCounts = new Map<number, number>();
+    for (const article of articlesResult.rows) {
+      if (article.distillation_id) {
+        const count = distillationCounts.get(article.distillation_id) || 0;
+        distillationCounts.set(article.distillation_id, count + 1);
+      }
+    }
+    
+    // 删除文章
     const deleteResult = await client.query(
       'DELETE FROM articles WHERE id = ANY($1::integer[]) AND user_id = $2 RETURNING id',
       [ids, userId]
@@ -247,14 +268,33 @@ articleRouter.delete('/batch', async (req, res) => {
     const deletedCount = deleteResult.rows.length;
     
     // 更新每个蒸馏结果的usage_count
-    for (const row of distillationResult.rows) {
+    for (const [distillationId, count] of distillationCounts) {
       await client.query(
         'UPDATE distillations SET usage_count = GREATEST(usage_count - $1, 0) WHERE id = $2',
-        [parseInt(row.count), row.distillation_id]
+        [count, distillationId]
       );
     }
     
     await client.query('COMMIT');
+    
+    // 更新存储使用
+    if (totalStorageSize > 0) {
+      await storageService.removeStorageUsage(userId, 'article', 0, totalStorageSize);
+    }
+    
+    // 同步用户存储使用
+    await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+    
+    // 异步清理孤儿图片
+    if (imageUrls.length > 0) {
+      import('../services/OrphanImageCleanupService').then(({ orphanImageCleanupService }) => {
+        imageUrls.forEach(url => {
+          orphanImageCleanupService.cleanupAfterArticleDelete(url).catch(err => {
+            console.error('[批量删除] 清理孤儿图片失败:', err);
+          });
+        });
+      }).catch(() => {});
+    }
     
     res.json({ 
       success: true, 
@@ -279,16 +319,36 @@ articleRouter.delete('/all', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // 获取所有文章的distillation_id统计（仅当前用户）
-    const distillationResult = await client.query(
-      `SELECT distillation_id, COUNT(*) as count
-       FROM articles
-       WHERE user_id = $1 AND distillation_id IS NOT NULL
-       GROUP BY distillation_id`,
+    // 获取所有文章信息（包括图片URL）
+    const articlesResult = await client.query(
+      `SELECT id, distillation_id, image_url, image_size_bytes, content
+       FROM articles WHERE user_id = $1`,
       [userId]
     );
     
-    // 删除所有文章（仅当前用户）
+    // 收集图片URL用于后续清理
+    const imageUrls = articlesResult.rows
+      .filter(a => a.image_url)
+      .map(a => a.image_url);
+    
+    // 计算总存储大小
+    let totalStorageSize = 0;
+    for (const article of articlesResult.rows) {
+      const contentSize = StorageService.calculateTextSize(article.content || '');
+      const imageSize = article.image_size_bytes || 0;
+      totalStorageSize += contentSize + imageSize;
+    }
+    
+    // 获取distillation_id统计
+    const distillationCounts = new Map<number, number>();
+    for (const article of articlesResult.rows) {
+      if (article.distillation_id) {
+        const count = distillationCounts.get(article.distillation_id) || 0;
+        distillationCounts.set(article.distillation_id, count + 1);
+      }
+    }
+    
+    // 删除所有文章
     const deleteResult = await client.query(
       'DELETE FROM articles WHERE user_id = $1 RETURNING id',
       [userId]
@@ -297,14 +357,33 @@ articleRouter.delete('/all', async (req, res) => {
     const deletedCount = deleteResult.rows.length;
     
     // 更新所有蒸馏结果的usage_count
-    for (const row of distillationResult.rows) {
+    for (const [distillationId, count] of distillationCounts) {
       await client.query(
         'UPDATE distillations SET usage_count = GREATEST(usage_count - $1, 0) WHERE id = $2',
-        [parseInt(row.count), row.distillation_id]
+        [count, distillationId]
       );
     }
     
     await client.query('COMMIT');
+    
+    // 更新存储使用
+    if (totalStorageSize > 0) {
+      await storageService.removeStorageUsage(userId, 'article', 0, totalStorageSize);
+    }
+    
+    // 同步用户存储使用
+    await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+    
+    // 异步清理孤儿图片
+    if (imageUrls.length > 0) {
+      import('../services/OrphanImageCleanupService').then(({ orphanImageCleanupService }) => {
+        imageUrls.forEach(url => {
+          orphanImageCleanupService.cleanupAfterArticleDelete(url).catch(err => {
+            console.error('[删除所有] 清理孤儿图片失败:', err);
+          });
+        });
+      }).catch(() => {});
+    }
     
     res.json({ 
       success: true, 
@@ -711,7 +790,7 @@ articleRouter.delete('/:id', async (req, res) => {
     
     // 验证文章所有权并获取信息
     const articleResult = await client.query(
-      'SELECT distillation_id, content FROM articles WHERE id = $1 AND user_id = $2',
+      'SELECT distillation_id, content, image_url, image_size_bytes FROM articles WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     
@@ -722,7 +801,9 @@ articleRouter.delete('/:id', async (req, res) => {
     
     const article = articleResult.rows[0];
     const distillationId = article.distillation_id;
+    const imageUrl = article.image_url;
     const contentSize = StorageService.calculateTextSize(article.content || '');
+    const imageSize = article.image_size_bytes || 0;
     
     // 删除文章（仅当前用户的）
     await client.query('DELETE FROM articles WHERE id = $1 AND user_id = $2', [id, userId]);
@@ -736,8 +817,24 @@ articleRouter.delete('/:id', async (req, res) => {
     
     await client.query('COMMIT');
     
-    // 减少存储使用
-    await storageService.removeStorageUsage(userId, 'article', parseInt(id), contentSize);
+    // 减少存储使用（包括文章图片）
+    const totalSize = contentSize + imageSize;
+    await storageService.removeStorageUsage(userId, 'article', parseInt(id), totalSize);
+    
+    // 同步用户存储使用
+    await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
+    
+    // 异步清理孤儿图片（如果文章有图片）
+    if (imageUrl) {
+      // 动态导入避免循环依赖
+      import('./gallery').then(() => {
+        import('../services/OrphanImageCleanupService').then(({ orphanImageCleanupService }) => {
+          orphanImageCleanupService.cleanupAfterArticleDelete(imageUrl).catch(err => {
+            console.error('[文章删除] 清理孤儿图片失败:', err);
+          });
+        });
+      }).catch(() => {});
+    }
     
     res.json({ success: true, message: '文章删除成功' });
   } catch (error: any) {

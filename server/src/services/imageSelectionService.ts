@@ -15,6 +15,7 @@ export interface ImageSelectionResult {
   imageId: number;
   filepath: string;
   usageCount: number;
+  size: number;  // 图片大小（字节）
 }
 
 export class ImageSelectionService {
@@ -28,9 +29,9 @@ export class ImageSelectionService {
     console.log(`[图片选择] 从相册 ${albumId} 中选择使用次数最少的图片...`);
     
     const result = await pool.query(
-      `SELECT id, filepath, usage_count
+      `SELECT id, filepath, usage_count, size
        FROM images
-       WHERE album_id = $1
+       WHERE album_id = $1 AND deleted_at IS NULL
        ORDER BY usage_count ASC, created_at ASC
        LIMIT 1`,
       [albumId]
@@ -42,12 +43,13 @@ export class ImageSelectionService {
     }
     
     const image = result.rows[0];
-    console.log(`[图片选择] 选中图片 ID=${image.id}, 使用次数=${image.usage_count}, 路径=${image.filepath}`);
+    console.log(`[图片选择] 选中图片 ID=${image.id}, 使用次数=${image.usage_count}, 路径=${image.filepath}, 大小=${image.size}`);
     
     return {
       imageId: image.id,
       filepath: image.filepath,
-      usageCount: image.usage_count || 0
+      usageCount: image.usage_count || 0,
+      size: image.size || 0
     };
   }
   
