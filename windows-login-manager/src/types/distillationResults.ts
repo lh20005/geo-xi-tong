@@ -7,10 +7,10 @@
  */
 export interface TopicWithReference {
   id: number;
-  distillationId: number;
+  distillationId: number | null;
   keyword: string;
   question: string;
-  provider: 'deepseek' | 'gemini' | 'ollama';
+  provider: 'deepseek' | 'gemini' | 'ollama' | null;
   createdAt: string;
   referenceCount: number;
 }

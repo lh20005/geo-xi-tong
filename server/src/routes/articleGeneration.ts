@@ -195,11 +195,18 @@ articleGenerationRouter.get('/tasks/:id', async (req, res) => {
         const selectedIds: number[] = JSON.parse(selectedIdsJson);
         
         if (selectedIds.length > 0) {
-          // 批量查询蒸馏结果信息
+          // 批量查询蒸馏结果信息，优先使用任务表的快照字段
           const distillationsResult = await pool.query(
             'SELECT id, keyword FROM distillations WHERE id = ANY($1)',
             [selectedIds]
           );
+          
+          // 同时查询任务的快照字段
+          const taskSnapshotResult = await pool.query(
+            'SELECT distillation_keyword FROM generation_tasks WHERE id = $1',
+            [taskId]
+          );
+          const snapshotKeyword = taskSnapshotResult.rows[0]?.distillation_keyword;
           
           // 按使用顺序排列（需求 8.2）
           const distillationsMap = new Map(
@@ -208,7 +215,8 @@ articleGenerationRouter.get('/tasks/:id', async (req, res) => {
           
           selectedDistillations = selectedIds.map(id => ({
             id,
-            keyword: distillationsMap.get(id) || '已删除' // 处理已删除的蒸馏结果（需求 8.3）
+            // 优先使用蒸馏表的关键词，如果不存在则使用快照，最后显示"已删除"
+            keyword: distillationsMap.get(id) || snapshotKeyword || '已删除'
           }));
         }
       } catch (error) {

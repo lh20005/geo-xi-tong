@@ -387,6 +387,7 @@ articleRouter.get('/', async (req, res) => {
     const total = parseInt(countResult.rows[0].count);
 
     // 获取文章列表
+    // 优先使用话题表的keyword快照字段，删除蒸馏记录后仍能显示关键词
     queryParams.push(pageSize, offset);
     const result = await pool.query(
       `SELECT 
@@ -394,12 +395,12 @@ articleRouter.get('/', async (req, res) => {
         a.title,
         a.keyword,
         a.distillation_id,
-        d.keyword as distillation_keyword,
+        t.keyword as distillation_keyword,
         a.topic_id,
         t.question as topic_question,
         a.task_id,
         gt.conversion_target_id,
-        COALESCE(gt.conversion_target_name, ct.company_name) as conversion_target_name,
+        gt.conversion_target_name,
         gt.article_setting_id,
         ast.name as article_setting_name,
         a.image_url,
@@ -408,10 +409,8 @@ articleRouter.get('/', async (req, res) => {
         a.created_at,
         a.updated_at
        FROM articles a
-       LEFT JOIN distillations d ON a.distillation_id = d.id
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
-       LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        ${whereClause}
        ORDER BY a.created_at DESC
@@ -455,18 +454,19 @@ articleRouter.get('/:id', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const { id } = req.params;
     
+    // 完全解耦：直接使用快照字段
     const result = await pool.query(
       `SELECT 
         a.id,
         a.title,
         a.keyword,
         a.distillation_id,
-        d.keyword as distillation_keyword,
+        t.keyword as distillation_keyword,
         a.topic_id,
         t.question as topic_question,
         a.task_id,
         gt.conversion_target_id,
-        COALESCE(gt.conversion_target_name, ct.company_name) as conversion_target_name,
+        gt.conversion_target_name,
         gt.article_setting_id,
         ast.name as article_setting_name,
         a.requirements,
@@ -478,10 +478,8 @@ articleRouter.get('/:id', async (req, res) => {
         a.created_at,
         a.updated_at
        FROM articles a
-       LEFT JOIN distillations d ON a.distillation_id = d.id
        LEFT JOIN topics t ON a.topic_id = t.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
-       LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        WHERE a.id = $1 AND a.user_id = $2`,
       [id, userId]

@@ -22,17 +22,16 @@ pool.on('error', (err) => {
 
 /**
  * 获取所有唯一的关键词列表
- * 只返回有话题的关键词，按字母顺序排序
+ * topics 表独立存储 keyword，不依赖 distillations
  * 
  * @returns 关键词数组
  */
 export async function getAllKeywords(): Promise<string[]> {
   const query = `
-    SELECT DISTINCT d.keyword
-    FROM distillations d
-    INNER JOIN topics t ON d.id = t.distillation_id
-    WHERE t.id IS NOT NULL
-    ORDER BY d.keyword ASC
+    SELECT DISTINCT keyword
+    FROM topics
+    WHERE keyword IS NOT NULL
+    ORDER BY keyword ASC
   `;
 
   const result = await pool.query(query);
@@ -44,10 +43,10 @@ export async function getAllKeywords(): Promise<string[]> {
  */
 export interface TopicWithReference {
   id: number;
-  distillation_id: number;
+  distillation_id: number | null;
   keyword: string;
   question: string;
-  provider: string;
+  provider: string | null;
   created_at: string;
   reference_count: number;
 }
@@ -77,17 +76,15 @@ export interface TopicsStatistics {
 export interface TopicsQueryFilters {
   keyword?: string;
   provider?: string;
-  search?: string;  // 新增：搜索话题内容
+  search?: string;
   page?: number;
   pageSize?: number;
-  userId?: number;  // 新增：用户ID用于多租户隔离
+  userId?: number;
 }
 
 /**
  * 获取带引用次数的话题列表
- * 使用LEFT JOIN连接topics、distillations和articles表
- * 通过内容匹配统计每个话题的引用次数
- * 支持search参数进行全局搜索（优先级高于其他筛选条件）
+ * 完全解耦设计：topics 独立存储 keyword 和 user_id，不依赖 distillations
  * 
  * @param filters 筛选参数
  * @returns 包含话题数据、分页信息的结果
@@ -109,26 +106,27 @@ export async function getTopicsWithReferences(
   const params: any[] = [];
   let paramIndex = 1;
 
-  // 添加用户ID过滤（多租户隔离）
+  // 用户ID过滤（多租户隔离）- 直接使用 topics.user_id
   if (userId !== undefined) {
-    conditions.push(`d.user_id = $${paramIndex}`);
+    conditions.push(`t.user_id = $${paramIndex}`);
     params.push(userId);
     paramIndex++;
   }
 
-  // search参数优先级最高，如果提供了search，忽略其他筛选条件
+  // search参数优先级最高
   if (search) {
     conditions.push(`LOWER(t.question) LIKE LOWER($${paramIndex})`);
     params.push(`%${search}%`);
     paramIndex++;
   } else {
-    // 只有在没有search参数时才应用其他筛选条件
+    // 关键词筛选 - 直接使用 topics.keyword
     if (keyword) {
-      conditions.push(`d.keyword = $${paramIndex}`);
+      conditions.push(`t.keyword = $${paramIndex}`);
       params.push(keyword);
       paramIndex++;
     }
 
+    // AI模型筛选 - 仍需要 JOIN distillations
     if (provider) {
       conditions.push(`d.provider = $${paramIndex}`);
       params.push(provider);
@@ -140,7 +138,6 @@ export async function getTopicsWithReferences(
     ? `WHERE ${conditions.join(' AND ')}` 
     : '';
 
-  // 计算偏移量
   const offset = (page - 1) * pageSize;
 
   // 查询总数
@@ -154,15 +151,14 @@ export async function getTopicsWithReferences(
   const countResult = await pool.query(countQuery, params);
   const total = parseInt(countResult.rows[0].total);
 
-  // 查询数据
-  // 注意：由于articles表通过distillation_id关联，我们需要通过内容匹配来判断引用
+  // 查询数据 - 直接使用 t.keyword，不需要 COALESCE
   const dataQuery = `
     SELECT 
       t.id,
       t.distillation_id,
+      t.keyword,
       t.question,
       t.created_at,
-      d.keyword,
       d.provider,
       t.usage_count as reference_count
     FROM topics t
@@ -183,7 +179,7 @@ export async function getTopicsWithReferences(
       question: row.question,
       provider: row.provider,
       created_at: row.created_at,
-      reference_count: parseInt(row.reference_count)
+      reference_count: parseInt(row.reference_count) || 0
     })),
     total,
     page,
@@ -193,7 +189,7 @@ export async function getTopicsWithReferences(
 
 /**
  * 获取话题统计信息
- * 支持search参数进行全局搜索统计
+ * 完全解耦设计：直接使用 topics 表的 keyword 和 user_id
  * 
  * @param filters 筛选参数
  * @returns 统计信息
@@ -203,26 +199,24 @@ export async function getTopicsStatistics(
 ): Promise<TopicsStatistics> {
   const { keyword, provider, search, userId } = filters;
 
-  // 构建WHERE条件
   const conditions: string[] = [];
   const params: any[] = [];
   let paramIndex = 1;
 
-  // 添加用户ID过滤（多租户隔离）
+  // 用户ID过滤 - 直接使用 topics.user_id
   if (userId !== undefined) {
-    conditions.push(`d.user_id = $${paramIndex}`);
+    conditions.push(`t.user_id = $${paramIndex}`);
     params.push(userId);
     paramIndex++;
   }
 
-  // search参数优先级最高
   if (search) {
     conditions.push(`LOWER(t.question) LIKE LOWER($${paramIndex})`);
     params.push(`%${search}%`);
     paramIndex++;
   } else {
     if (keyword) {
-      conditions.push(`d.keyword = $${paramIndex}`);
+      conditions.push(`t.keyword = $${paramIndex}`);
       params.push(keyword);
       paramIndex++;
     }
@@ -238,11 +232,12 @@ export async function getTopicsStatistics(
     ? `WHERE ${conditions.join(' AND ')}` 
     : '';
 
+  // 直接使用 t.keyword 统计
   const query = `
     SELECT 
       COUNT(DISTINCT t.id) as total_topics,
-      COUNT(DISTINCT d.keyword) as total_keywords,
-      SUM(t.usage_count) as total_references
+      COUNT(DISTINCT t.keyword) as total_keywords,
+      COALESCE(SUM(t.usage_count), 0) as total_references
     FROM topics t
     LEFT JOIN distillations d ON t.distillation_id = d.id
     ${whereClause}
@@ -252,15 +247,15 @@ export async function getTopicsStatistics(
   const row = result.rows[0];
 
   return {
-    totalTopics: parseInt(row.total_topics),
-    totalKeywords: parseInt(row.total_keywords),
-    totalReferences: parseInt(row.total_references)
+    totalTopics: parseInt(row.total_topics) || 0,
+    totalKeywords: parseInt(row.total_keywords) || 0,
+    totalReferences: parseInt(row.total_references) || 0
   };
 }
 
 /**
  * 批量删除话题
- * 使用事务确保数据一致性，并清理没有话题的distillation记录
+ * 使用事务确保数据一致性
  * 
  * @param topicIds 要删除的话题ID数组
  * @returns 删除的记录数
@@ -280,7 +275,9 @@ export async function deleteTopicsByIds(topicIds: number[]): Promise<number> {
       'SELECT DISTINCT distillation_id FROM topics WHERE id = ANY($1::int[])',
       [topicIds]
     );
-    const distillationIds = distillationsResult.rows.map(row => row.distillation_id);
+    const distillationIds = distillationsResult.rows
+      .map(row => row.distillation_id)
+      .filter(id => id !== null);
 
     // 删除话题
     const result = await client.query(

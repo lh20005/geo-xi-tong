@@ -421,10 +421,10 @@ export class DistillationService {
   async getResultsWithReferences(filters: TopicsQueryFilters & { userId?: number } = {}): Promise<{
     data: Array<{
       id: number;
-      distillationId: number;
+      distillationId: number | null;
       keyword: string;
       question: string;
-      provider: string;
+      provider: string | null;
       createdAt: string;
       referenceCount: number;
     }>;

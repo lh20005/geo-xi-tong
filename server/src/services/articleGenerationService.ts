@@ -418,9 +418,9 @@ export class ArticleGenerationService {
         gt.updated_at,
         gt.user_id,
         gt.selected_distillation_ids,
-        COALESCE(gt.conversion_target_name, ct.company_name) as conversion_target_name,
+        gt.conversion_target_name,
         ast.name as article_setting_name,
-        d.keyword,
+        gt.distillation_keyword as keyword,
         d.provider,
         (
           SELECT STRING_AGG(t.question, '|||' ORDER BY a.id)
@@ -429,9 +429,8 @@ export class ArticleGenerationService {
           WHERE a.task_id = gt.id
         ) as distillation_result
        FROM generation_tasks gt
-       LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
-       INNER JOIN distillations d ON gt.distillation_id = d.id
+       LEFT JOIN distillations d ON gt.distillation_id = d.id
        ${whereClause}
        ORDER BY gt.created_at DESC
        LIMIT $1 OFFSET $2`,
@@ -495,9 +494,9 @@ export class ArticleGenerationService {
         gt.created_at, 
         gt.updated_at,
         gt.user_id,
-        COALESCE(gt.conversion_target_name, ct.company_name) as conversion_target_name,
+        gt.conversion_target_name,
         ast.name as article_setting_name,
-        d.keyword,
+        gt.distillation_keyword as keyword,
         d.provider,
         (
           SELECT STRING_AGG(DISTINCT t.question, ', ' ORDER BY t.question)
@@ -506,9 +505,8 @@ export class ArticleGenerationService {
           WHERE a.task_id = gt.id
         ) as distillation_result
        FROM generation_tasks gt
-       LEFT JOIN conversion_targets ct ON gt.conversion_target_id = ct.id
        LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
-       INNER JOIN distillations d ON gt.distillation_id = d.id
+       LEFT JOIN distillations d ON gt.distillation_id = d.id
        ${whereClause}`,
       queryParams
     );
