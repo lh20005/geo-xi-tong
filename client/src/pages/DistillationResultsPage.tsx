@@ -38,7 +38,6 @@ export default function DistillationResultsPage() {
   
   // 筛选状态
   const [filterKeyword, setFilterKeyword] = useState<string>('');
-  const [filterProvider, setFilterProvider] = useState<string>('');
   const [searchText, setSearchText] = useState('');
   const [searchInput, setSearchInput] = useState(''); // 用于输入框的即时值
   const [allKeywords, setAllKeywords] = useState<string[]>([]); // 所有关键词
@@ -71,7 +70,6 @@ export default function DistillationResultsPage() {
       if (searchInput.trim()) {
         setSearchText(searchInput);
         setFilterKeyword('');      // 清空关键词筛选
-        setFilterProvider('');     // 清空模型筛选
         setIsSearchMode(true);     // 进入搜索模式
         setCurrentPage(1);         // 重置分页
       } else {
@@ -89,7 +87,6 @@ export default function DistillationResultsPage() {
     try {
       const result = await fetchResultsWithReferences({
         keyword: filterKeyword || undefined,
-        provider: filterProvider || undefined,
         search: searchText || undefined,
         page: currentPage,
         pageSize
@@ -108,7 +105,7 @@ export default function DistillationResultsPage() {
   // 组件挂载时加载数据，以及当筛选条件改变时重新加载
   useEffect(() => {
     loadData();
-  }, [currentPage, pageSize, filterKeyword, filterProvider, searchText]);
+  }, [currentPage, pageSize, filterKeyword, searchText]);
 
   // 添加自动刷新功能，每15秒刷新一次以同步最新的引用计数
   useEffect(() => {
@@ -117,20 +114,11 @@ export default function DistillationResultsPage() {
     }, 15000); // 15秒刷新一次
     
     return () => clearInterval(interval);
-  }, [currentPage, pageSize, filterKeyword, filterProvider, searchText]);
+  }, [currentPage, pageSize, filterKeyword, searchText]);
 
   // 处理关键词筛选改变
   const handleKeywordChange = (value: string) => {
     setFilterKeyword(value);
-    setSearchInput('');      // 清空搜索框
-    setSearchText('');       // 清空搜索文本
-    setIsSearchMode(false);  // 退出搜索模式
-    setCurrentPage(1);       // 重置分页
-  };
-
-  // 处理AI模型筛选改变
-  const handleProviderChange = (value: string) => {
-    setFilterProvider(value);
     setSearchInput('');      // 清空搜索框
     setSearchText('');       // 清空搜索文本
     setIsSearchMode(false);  // 退出搜索模式
@@ -195,7 +183,6 @@ export default function DistillationResultsPage() {
   // 清除筛选 - 使用useCallback优化性能
   const handleClearFilters = useCallback(() => {
     setFilterKeyword('');
-    setFilterProvider('');
     setSearchText('');
     setSearchInput('');
     setIsSearchMode(false);
@@ -203,7 +190,7 @@ export default function DistillationResultsPage() {
   }, []);
 
   // 计算是否有活动的筛选条件
-  const hasActiveFilters = filterKeyword || filterProvider || searchText;
+  const hasActiveFilters = filterKeyword || searchText;
 
   // 打开手动输入对话框
   const handleOpenManualModal = () => {
@@ -391,7 +378,7 @@ export default function DistillationResultsPage() {
         <Card>
           <Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         </Card>
-      ) : data.length === 0 && !filterKeyword && !filterProvider && !searchText ? (
+      ) : data.length === 0 && !filterKeyword && !searchText ? (
         <Card>
           <Empty
             description={
@@ -506,7 +493,7 @@ export default function DistillationResultsPage() {
           {/* 筛选工具栏 */}
           <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
             <Row gutter={16}>
-              <Col span={6}>
+              <Col span={8}>
                 <div style={{ marginBottom: 8 }}>
                   <span style={{ color: '#64748b', fontSize: 14 }}>
                     <FilterOutlined /> 按关键词筛选
@@ -527,26 +514,7 @@ export default function DistillationResultsPage() {
                   ))}
                 </Select>
               </Col>
-              <Col span={6}>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: '#64748b', fontSize: 14 }}>
-                    <FilterOutlined /> 按AI模型筛选
-                  </span>
-                </div>
-                <Select
-                  size="large"
-                  style={{ width: '100%' }}
-                  value={filterProvider}
-                  onChange={handleProviderChange}
-                  placeholder="选择AI模型"
-                  allowClear
-                >
-                  <Option value="deepseek">DeepSeek</Option>
-                  <Option value="gemini">Gemini</Option>
-                  <Option value="ollama">Ollama</Option>
-                </Select>
-              </Col>
-              <Col span={8}>
+              <Col span={12}>
                 <div style={{ marginBottom: 8 }}>
                   <span style={{ color: '#64748b', fontSize: 14 }}>
                     <SearchOutlined /> 搜索问题内容

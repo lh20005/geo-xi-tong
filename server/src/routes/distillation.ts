@@ -201,9 +201,9 @@ distillationRouter.post('/manual', async (req, res) => {
 distillationRouter.get('/keywords', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
-    // 只获取当前用户的关键词
+    // 从 topics 表获取当前用户的关键词（topics 独立存储 keyword 和 user_id）
     const result = await pool.query(
-      'SELECT DISTINCT keyword FROM distillations WHERE user_id = $1 ORDER BY keyword',
+      'SELECT DISTINCT keyword FROM topics WHERE user_id = $1 AND keyword IS NOT NULL ORDER BY keyword',
       [userId]
     );
     const keywords = result.rows.map(row => row.keyword);
