@@ -229,26 +229,18 @@ articleRouter.delete('/batch', async (req, res) => {
 
     await client.query('BEGIN');
     
-    // 获取要删除的文章信息（包括图片URL和大小）
+    // 获取要删除的文章信息（包括image_id用于引用计数）
     const articlesResult = await client.query(
-      `SELECT id, distillation_id, image_url, image_size_bytes, content
+      `SELECT id, distillation_id, image_url, image_id
        FROM articles
        WHERE id = ANY($1::integer[]) AND user_id = $2`,
       [ids, userId]
     );
     
-    // 收集图片URL用于后续清理
-    const imageUrls = articlesResult.rows
-      .filter(a => a.image_url)
-      .map(a => a.image_url);
-    
-    // 计算总存储大小
-    let totalStorageSize = 0;
-    for (const article of articlesResult.rows) {
-      const contentSize = StorageService.calculateTextSize(article.content || '');
-      const imageSize = article.image_size_bytes || 0;
-      totalStorageSize += contentSize + imageSize;
-    }
+    // 收集需要减少引用计数的图片ID
+    const imageIds = articlesResult.rows
+      .filter(a => a.image_id)
+      .map(a => a.image_id);
     
     // 获取distillation_id统计
     const distillationCounts = new Map<number, number>();
@@ -275,25 +267,41 @@ articleRouter.delete('/batch', async (req, res) => {
       );
     }
     
-    await client.query('COMMIT');
-    
-    // 更新存储使用
-    if (totalStorageSize > 0) {
-      await storageService.removeStorageUsage(userId, 'article', 0, totalStorageSize);
+    // 减少图片引用计数，并收集需要删除的文件
+    const filesToDelete: string[] = [];
+    for (const imageId of imageIds) {
+      const result = await client.query(
+        'SELECT * FROM decrement_image_reference($1)',
+        [imageId]
+      );
+      if (result.rows[0]?.should_delete && result.rows[0]?.filepath) {
+        filesToDelete.push(result.rows[0].filepath);
+      }
     }
+    
+    await client.query('COMMIT');
     
     // 同步用户存储使用
     await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
     
-    // 异步清理孤儿图片
-    if (imageUrls.length > 0) {
-      import('../services/OrphanImageCleanupService').then(({ orphanImageCleanupService }) => {
-        imageUrls.forEach(url => {
-          orphanImageCleanupService.cleanupAfterArticleDelete(url).catch(err => {
-            console.error('[批量删除] 清理孤儿图片失败:', err);
-          });
-        });
-      }).catch(() => {});
+    // 清除缓存
+    try {
+      await storageService.getUserStorageUsage(userId, true);
+    } catch (e) {}
+    
+    // 异步删除物理文件（引用计数归零且已软删除的图片）
+    if (filesToDelete.length > 0) {
+      const path = await import('path');
+      const fs = await import('fs');
+      const uploadDir = path.default.join(__dirname, '../../uploads/gallery');
+      
+      for (const filepath of filesToDelete) {
+        const fullPath = path.default.join(uploadDir, filepath);
+        if (fs.default.existsSync(fullPath)) {
+          fs.default.unlinkSync(fullPath);
+          console.log(`[批量删除] 已删除孤儿图片文件: ${filepath}`);
+        }
+      }
     }
     
     res.json({ 
@@ -319,25 +327,17 @@ articleRouter.delete('/all', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // 获取所有文章信息（包括图片URL）
+    // 获取所有文章信息（包括image_id用于引用计数）
     const articlesResult = await client.query(
-      `SELECT id, distillation_id, image_url, image_size_bytes, content
+      `SELECT id, distillation_id, image_url, image_id
        FROM articles WHERE user_id = $1`,
       [userId]
     );
     
-    // 收集图片URL用于后续清理
-    const imageUrls = articlesResult.rows
-      .filter(a => a.image_url)
-      .map(a => a.image_url);
-    
-    // 计算总存储大小
-    let totalStorageSize = 0;
-    for (const article of articlesResult.rows) {
-      const contentSize = StorageService.calculateTextSize(article.content || '');
-      const imageSize = article.image_size_bytes || 0;
-      totalStorageSize += contentSize + imageSize;
-    }
+    // 收集需要减少引用计数的图片ID
+    const imageIds = articlesResult.rows
+      .filter(a => a.image_id)
+      .map(a => a.image_id);
     
     // 获取distillation_id统计
     const distillationCounts = new Map<number, number>();
@@ -364,25 +364,41 @@ articleRouter.delete('/all', async (req, res) => {
       );
     }
     
-    await client.query('COMMIT');
-    
-    // 更新存储使用
-    if (totalStorageSize > 0) {
-      await storageService.removeStorageUsage(userId, 'article', 0, totalStorageSize);
+    // 减少图片引用计数，并收集需要删除的文件
+    const filesToDelete: string[] = [];
+    for (const imageId of imageIds) {
+      const result = await client.query(
+        'SELECT * FROM decrement_image_reference($1)',
+        [imageId]
+      );
+      if (result.rows[0]?.should_delete && result.rows[0]?.filepath) {
+        filesToDelete.push(result.rows[0].filepath);
+      }
     }
+    
+    await client.query('COMMIT');
     
     // 同步用户存储使用
     await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
     
-    // 异步清理孤儿图片
-    if (imageUrls.length > 0) {
-      import('../services/OrphanImageCleanupService').then(({ orphanImageCleanupService }) => {
-        imageUrls.forEach(url => {
-          orphanImageCleanupService.cleanupAfterArticleDelete(url).catch(err => {
-            console.error('[删除所有] 清理孤儿图片失败:', err);
-          });
-        });
-      }).catch(() => {});
+    // 清除缓存
+    try {
+      await storageService.getUserStorageUsage(userId, true);
+    } catch (e) {}
+    
+    // 异步删除物理文件
+    if (filesToDelete.length > 0) {
+      const path = await import('path');
+      const fs = await import('fs');
+      const uploadDir = path.default.join(__dirname, '../../uploads/gallery');
+      
+      for (const filepath of filesToDelete) {
+        const fullPath = path.default.join(uploadDir, filepath);
+        if (fs.default.existsSync(fullPath)) {
+          fs.default.unlinkSync(fullPath);
+          console.log(`[删除所有] 已删除孤儿图片文件: ${filepath}`);
+        }
+      }
     }
     
     res.json({ 
@@ -788,9 +804,9 @@ articleRouter.delete('/:id', async (req, res) => {
     
     await client.query('BEGIN');
     
-    // 验证文章所有权并获取信息
+    // 验证文章所有权并获取信息（包括image_id用于引用计数）
     const articleResult = await client.query(
-      'SELECT distillation_id, content, image_url, image_size_bytes FROM articles WHERE id = $1 AND user_id = $2',
+      'SELECT distillation_id, image_url, image_id FROM articles WHERE id = $1 AND user_id = $2',
       [id, userId]
     );
     
@@ -801,9 +817,7 @@ articleRouter.delete('/:id', async (req, res) => {
     
     const article = articleResult.rows[0];
     const distillationId = article.distillation_id;
-    const imageUrl = article.image_url;
-    const contentSize = StorageService.calculateTextSize(article.content || '');
-    const imageSize = article.image_size_bytes || 0;
+    const imageId = article.image_id;
     
     // 删除文章（仅当前用户的）
     await client.query('DELETE FROM articles WHERE id = $1 AND user_id = $2', [id, userId]);
@@ -815,25 +829,38 @@ articleRouter.delete('/:id', async (req, res) => {
       );
     }
     
-    await client.query('COMMIT');
+    // 减少图片引用计数
+    let fileToDelete: string | null = null;
+    if (imageId) {
+      const result = await client.query(
+        'SELECT * FROM decrement_image_reference($1)',
+        [imageId]
+      );
+      if (result.rows[0]?.should_delete && result.rows[0]?.filepath) {
+        fileToDelete = result.rows[0].filepath;
+      }
+    }
     
-    // 减少存储使用（包括文章图片）
-    const totalSize = contentSize + imageSize;
-    await storageService.removeStorageUsage(userId, 'article', parseInt(id), totalSize);
+    await client.query('COMMIT');
     
     // 同步用户存储使用
     await pool.query('SELECT sync_user_storage_usage($1)', [userId]);
     
-    // 异步清理孤儿图片（如果文章有图片）
-    if (imageUrl) {
-      // 动态导入避免循环依赖
-      import('./gallery').then(() => {
-        import('../services/OrphanImageCleanupService').then(({ orphanImageCleanupService }) => {
-          orphanImageCleanupService.cleanupAfterArticleDelete(imageUrl).catch(err => {
-            console.error('[文章删除] 清理孤儿图片失败:', err);
-          });
-        });
-      }).catch(() => {});
+    // 清除缓存
+    try {
+      await storageService.getUserStorageUsage(userId, true);
+    } catch (e) {}
+    
+    // 删除物理文件（如果需要）
+    if (fileToDelete) {
+      const path = await import('path');
+      const fs = await import('fs');
+      const uploadDir = path.default.join(__dirname, '../../uploads/gallery');
+      const fullPath = path.default.join(uploadDir, fileToDelete);
+      if (fs.default.existsSync(fullPath)) {
+        fs.default.unlinkSync(fullPath);
+        console.log(`[文章删除] 已删除孤儿图片文件: ${fileToDelete}`);
+      }
     }
     
     res.json({ success: true, message: '文章删除成功' });

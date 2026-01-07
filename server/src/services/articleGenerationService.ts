@@ -1631,26 +1631,22 @@ export class ArticleGenerationService {
   ): Promise<number> {
     const client = await pool.connect();
     const topicService = new TopicSelectionService();
-    const { StorageService } = await import('./StorageService');
     
     try {
       await client.query('BEGIN');
       console.log(`[保存文章] 事务开始`);
 
-      // 计算文章内容大小
-      const contentSize = StorageService.calculateTextSize(content);
-
-      // 1. 保存文章（包含topic_id、user_id和image_size_bytes）
+      // 1. 保存文章（包含topic_id、user_id和image_id）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id, image_size_bytes) 
+         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id, image_id) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
          RETURNING id`,
-        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId, imageSize]
+        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId, imageId || null]
       );
 
       const articleId = articleResult.rows[0].id;
-      console.log(`[保存文章] 文章已插入，ID: ${articleId}, topic_id: ${topicId}, 内容大小: ${contentSize}, 图片大小: ${imageSize}`);
+      console.log(`[保存文章] 文章已插入，ID: ${articleId}, topic_id: ${topicId}, image_id: ${imageId || 'null'}`);
 
       // 2. 创建蒸馏使用记录
       await this.recordDistillationUsage(distillationId, taskId, articleId, client);
@@ -1664,15 +1660,12 @@ export class ArticleGenerationService {
       await this.incrementUsageCount(distillationId, client);
       console.log(`[保存文章] 蒸馏usage_count已更新`);
 
-      // 5. 如果提供了imageId，记录图片使用并更新usage_count
+      // 5. 如果提供了imageId，增加引用计数（不重复计算存储）
       if (imageId) {
-        await client.query(
-          `UPDATE images 
-           SET usage_count = COALESCE(usage_count, 0) + 1 
-           WHERE id = $1`,
-          [imageId]
-        );
+        // 增加引用计数
+        await client.query('SELECT increment_image_reference($1)', [imageId]);
         
+        // 记录使用历史（保留用于追踪）
         await client.query(
           `INSERT INTO image_usage (image_id, article_id)
            VALUES ($1, $2)
@@ -1680,24 +1673,10 @@ export class ArticleGenerationService {
           [imageId, articleId]
         );
         
-        console.log(`[保存文章] 图片 ${imageId} 的usage_count已更新`);
+        console.log(`[保存文章] 图片 ${imageId} 的引用计数已增加`);
       }
 
-      // 6. 记录存储使用（文章内容 + 图片）
-      const totalStorageSize = contentSize + imageSize;
-      await client.query(
-        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
-        [userId, 'article', articleId, 'add', totalStorageSize, JSON.stringify({
-          title,
-          keyword,
-          taskId,
-          contentSize,
-          imageSize
-        })]
-      );
-      console.log(`[保存文章] 存储使用已记录，总大小: ${totalStorageSize} 字节`);
-
-      // 7. 记录配额使用（文章生成）
+      // 6. 记录配额使用（文章生成）
       try {
         const { usageTrackingService } = await import('./UsageTrackingService');
         await usageTrackingService.recordUsage(
@@ -1726,6 +1705,7 @@ export class ArticleGenerationService {
 
       // 清除存储缓存（在事务外）
       try {
+        const { StorageService } = await import('./StorageService');
         const storageService = StorageService.getInstance();
         await storageService.getUserStorageUsage(userId, true);
       } catch (cacheError: any) {
@@ -1759,21 +1739,17 @@ export class ArticleGenerationService {
     imageSize: number = 0
   ): Promise<number> {
     const client = await pool.connect();
-    const { StorageService } = await import('./StorageService');
     
     try {
       await client.query('BEGIN');
 
-      // 计算文章内容大小
-      const contentSize = StorageService.calculateTextSize(content);
-
-      // 1. 保存文章（包含user_id和image_size_bytes）
+      // 1. 保存文章（包含user_id和image_id）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, task_id, content, image_url, provider, user_id, image_size_bytes) 
+         (title, keyword, distillation_id, task_id, content, image_url, provider, user_id, image_id) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
          RETURNING id`,
-        [title, keyword, distillationId, taskId, content, imageUrl, provider, userId, imageSize]
+        [title, keyword, distillationId, taskId, content, imageUrl, provider, userId, imageId || null]
       );
 
       const articleId = articleResult.rows[0].id;
@@ -1784,14 +1760,9 @@ export class ArticleGenerationService {
       // 3. 更新usage_count
       await this.incrementUsageCount(distillationId, client);
 
-      // 4. 如果提供了imageId，记录图片使用并更新usage_count
+      // 4. 如果提供了imageId，增加引用计数
       if (imageId) {
-        await client.query(
-          `UPDATE images 
-           SET usage_count = COALESCE(usage_count, 0) + 1 
-           WHERE id = $1`,
-          [imageId]
-        );
+        await client.query('SELECT increment_image_reference($1)', [imageId]);
         
         await client.query(
           `INSERT INTO image_usage (image_id, article_id)
@@ -1801,20 +1772,7 @@ export class ArticleGenerationService {
         );
       }
 
-      // 5. 记录存储使用（文章内容 + 图片）
-      const totalStorageSize = contentSize + imageSize;
-      await client.query(
-        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
-        [userId, 'article', articleId, 'add', totalStorageSize, JSON.stringify({
-          title,
-          keyword,
-          taskId,
-          contentSize,
-          imageSize
-        })]
-      );
-
-      // 6. 记录配额使用（文章生成）
+      // 5. 记录配额使用（文章生成）
       try {
         const { usageTrackingService } = await import('./UsageTrackingService');
         await usageTrackingService.recordUsage(
@@ -1840,6 +1798,7 @@ export class ArticleGenerationService {
 
       // 清除存储缓存（在事务外）
       try {
+        const { StorageService } = await import('./StorageService');
         const storageService = StorageService.getInstance();
         await storageService.getUserStorageUsage(userId, true);
       } catch (cacheError: any) {

@@ -91,8 +91,8 @@ galleryRouter.get('/albums', async (req, res) => {
         a.id, 
         a.name, 
         a.created_at,
-        COUNT(i.id) as image_count,
-        (SELECT filepath FROM images WHERE album_id = a.id ORDER BY created_at ASC LIMIT 1) as cover_image
+        COUNT(i.id) FILTER (WHERE i.deleted_at IS NULL) as image_count,
+        (SELECT filepath FROM images WHERE album_id = a.id AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1) as cover_image
        FROM albums a
        LEFT JOIN images i ON a.id = i.album_id
        WHERE a.user_id = $1
@@ -135,8 +135,8 @@ galleryRouter.post('/albums', upload.array('images', 20), async (req, res) => {
           console.log('[Gallery DB] 保存文件名到数据库:', decodedFilename);
           
           const imageResult = await client.query(
-            'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-            [album.id, decodedFilename, file.filename, file.mimetype, file.size]
+            'INSERT INTO images (album_id, filename, filepath, mime_type, size, user_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+            [album.id, decodedFilename, file.filename, file.mimetype, file.size, userId]
           );
           
           const imageId = imageResult.rows[0].id;
@@ -219,9 +219,9 @@ galleryRouter.get('/albums/:id', async (req, res) => {
       return res.status(404).json({ error: '相册不存在或无权访问' });
     }
     
-    // 获取相册中的所有图片
+    // 获取相册中的所有图片（排除已删除的）
     const imagesResult = await pool.query(
-      'SELECT id, filename, filepath, mime_type, size, created_at FROM images WHERE album_id = $1 ORDER BY created_at ASC',
+      'SELECT id, filename, filepath, mime_type, size, created_at FROM images WHERE album_id = $1 AND deleted_at IS NULL ORDER BY created_at ASC',
       [albumId]
     );
     
@@ -275,9 +275,9 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
       return res.status(400).json({ error: '无效的相册ID' });
     }
     
-    // 获取所有图片信息（验证所有权）
+    // 获取所有图片信息（验证所有权），包括 reference_count
     const imagesResult = await pool.query(
-      `SELECT i.id, i.filepath, i.size FROM images i
+      `SELECT i.id, i.filepath, i.size, i.reference_count FROM images i
        JOIN albums a ON i.album_id = a.id
        WHERE a.id = $1 AND a.user_id = $2 AND i.deleted_at IS NULL`,
       [albumId, userId]
@@ -303,14 +303,11 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
       
       let preservedCount = 0;
       let deletedFileCount = 0;
+      let releasedStorageBytes = 0;
       
       for (const img of imagesResult.rows) {
-        // 检查图片是否被文章引用
-        const refResult = await client.query(
-          'SELECT is_image_referenced($1) as is_ref',
-          [img.filepath]
-        );
-        const isReferenced = refResult.rows[0]?.is_ref || false;
+        // 通过 reference_count 判断图片是否被文章引用
+        const isReferenced = (img.reference_count || 0) > 0;
         
         // 软删除图片记录
         await client.query(
@@ -319,23 +316,24 @@ galleryRouter.delete('/albums/:id', async (req, res) => {
         );
         
         if (isReferenced) {
-          // 被文章引用，保留文件
+          // 被文章引用，保留文件，不释放存储
           preservedCount++;
-          console.log(`[图库删除] 软删除图片 ${img.id}，保留文件（被文章引用）: ${img.filepath}`);
+          console.log(`[图库删除] 软删除图片 ${img.id}，保留文件和存储（被文章引用，reference_count=${img.reference_count}）: ${img.filepath}`);
         } else {
-          // 未被引用，删除文件
+          // 未被引用，删除文件，释放存储
           const filePath = path.join(uploadDir, img.filepath);
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
             deletedFileCount++;
           }
+          
+          // 只有未被引用的图片才减少存储
+          await client.query(
+            'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+            [userId, 'image', img.id, 'remove', img.size, null]
+          );
+          releasedStorageBytes += img.size;
         }
-        
-        // 更新存储使用（减少图片存储）
-        await client.query(
-          'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
-          [userId, 'image', img.id, 'remove', img.size, null]
-        );
       }
       
       // 删除相册记录（图片记录保留但已软删除）
@@ -448,8 +446,8 @@ galleryRouter.post('/albums/:albumId/images', upload.array('images', 20), async 
         
         // 插入图片记录
         const result = await client.query(
-          'INSERT INTO images (album_id, filename, filepath, mime_type, size) VALUES ($1, $2, $3, $4, $5) RETURNING id, filename, created_at',
-          [albumId, decodedFilename, file.filename, file.mimetype, file.size]
+          'INSERT INTO images (album_id, filename, filepath, mime_type, size, user_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, filename, created_at',
+          [albumId, decodedFilename, file.filename, file.mimetype, file.size, userId]
         );
         
         const imageId = result.rows[0].id;
@@ -543,7 +541,7 @@ galleryRouter.delete('/images/:id', async (req, res) => {
     
     // 获取图片信息并验证所有权
     const imageResult = await pool.query(
-      `SELECT i.filepath, i.size, i.album_id, i.deleted_at, a.user_id 
+      `SELECT i.filepath, i.size, i.album_id, i.deleted_at, i.reference_count, a.user_id 
        FROM images i 
        JOIN albums a ON i.album_id = a.id 
        WHERE i.id = $1`,
@@ -568,13 +566,10 @@ galleryRouter.delete('/images/:id', async (req, res) => {
     
     const filepath = image.filepath;
     const fileSize = image.size;
+    const referenceCount = image.reference_count || 0;
     
-    // 检查图片是否被文章引用
-    const referencedResult = await pool.query(
-      'SELECT is_image_referenced($1) as is_ref',
-      [filepath]
-    );
-    const isReferenced = referencedResult.rows[0]?.is_ref || false;
+    // 检查图片是否被文章引用（通过 reference_count 判断）
+    const isReferenced = referenceCount > 0;
     
     // 使用事务处理软删除
     const client = await pool.connect();
@@ -588,11 +583,14 @@ galleryRouter.delete('/images/:id', async (req, res) => {
         [isReferenced, imageId]
       );
       
-      // 记录存储使用减少
-      await client.query(
-        'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
-        [userId, 'image', imageId, 'remove', fileSize, null]
-      );
+      // 只有图片未被引用时才减少存储
+      // 如果图片被引用，存储会在所有引用的文章删除后通过 decrement_image_reference 释放
+      if (!isReferenced) {
+        await client.query(
+          'SELECT record_storage_usage($1, $2, $3, $4, $5, $6)',
+          [userId, 'image', imageId, 'remove', fileSize, null]
+        );
+      }
       
       await client.query('COMMIT');
       

@@ -54,16 +54,16 @@ export class OrphanImageCleanupService {
 
       for (const orphan of orphansResult.rows) {
         try {
-          const filePath = path.join(UPLOAD_DIR, orphan.filepath);
+          const filePath = path.join(UPLOAD_DIR, 'gallery', orphan.filepath);
           
-          // 再次检查是否被文章引用（双重确认）
+          // 再次检查 reference_count（双重确认）
           const refCheck = await pool.query(
-            'SELECT is_image_referenced($1) as is_ref',
-            [orphan.filepath]
+            'SELECT reference_count FROM images WHERE id = $1',
+            [orphan.id]
           );
           
-          if (refCheck.rows[0]?.is_ref) {
-            console.log(`[孤儿清理] 跳过图片 ${orphan.id}（仍被文章引用）`);
+          if (refCheck.rows[0]?.reference_count > 0) {
+            console.log(`[孤儿清理] 跳过图片 ${orphan.id}（仍被文章引用，reference_count=${refCheck.rows[0].reference_count}）`);
             continue;
           }
 
@@ -77,6 +77,11 @@ export class OrphanImageCleanupService {
           // 硬删除数据库记录
           await pool.query('DELETE FROM images WHERE id = $1', [orphan.id]);
           result.deletedCount++;
+          
+          // 同步用户存储使用
+          if (orphan.user_id) {
+            await pool.query('SELECT sync_user_storage_usage($1)', [orphan.user_id]);
+          }
 
         } catch (err: any) {
           const errorMsg = `图片 ${orphan.id} 清理失败: ${err.message}`;
@@ -103,29 +108,21 @@ export class OrphanImageCleanupService {
     if (!imageUrl) return false;
 
     try {
-      // 检查图片是否还被其他文章引用
-      const refCheck = await pool.query(
-        'SELECT is_image_referenced($1) as is_ref',
-        [imageUrl]
-      );
-
-      if (refCheck.rows[0]?.is_ref) {
-        // 仍被其他文章引用，不清理
-        return false;
-      }
-
-      // 检查图片是否已软删除（is_orphan = true）
+      // 从 URL 中提取 filepath
+      const filepath = imageUrl.replace('/uploads/gallery/', '');
+      
+      // 检查图片记录
       const imageResult = await pool.query(
-        'SELECT id, size, deleted_at, is_orphan FROM images WHERE filepath = $1',
-        [imageUrl]
+        'SELECT id, size, deleted_at, is_orphan, reference_count, user_id FROM images WHERE filepath = $1',
+        [filepath]
       );
 
       if (imageResult.rows.length === 0) {
         // 图片记录不存在，尝试直接删除文件
-        const filePath = path.join(UPLOAD_DIR, imageUrl);
+        const filePath = path.join(UPLOAD_DIR, 'gallery', filepath);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
-          console.log(`[孤儿清理] 删除无记录的孤儿文件: ${imageUrl}`);
+          console.log(`[孤儿清理] 删除无记录的孤儿文件: ${filepath}`);
           return true;
         }
         return false;
@@ -133,9 +130,9 @@ export class OrphanImageCleanupService {
 
       const image = imageResult.rows[0];
 
-      // 只清理已软删除的孤儿图片
-      if (image.deleted_at && image.is_orphan) {
-        const filePath = path.join(UPLOAD_DIR, imageUrl);
+      // 只清理已软删除且引用计数为0的图片
+      if (image.deleted_at && image.reference_count === 0) {
+        const filePath = path.join(UPLOAD_DIR, 'gallery', filepath);
         
         // 删除物理文件
         if (fs.existsSync(filePath)) {
@@ -145,7 +142,12 @@ export class OrphanImageCleanupService {
         // 硬删除数据库记录
         await pool.query('DELETE FROM images WHERE id = $1', [image.id]);
         
-        console.log(`[孤儿清理] 文章删除后清理孤儿图片: ${imageUrl}`);
+        // 同步用户存储使用
+        if (image.user_id) {
+          await pool.query('SELECT sync_user_storage_usage($1)', [image.user_id]);
+        }
+        
+        console.log(`[孤儿清理] 文章删除后清理孤儿图片: ${filepath}`);
         return true;
       }
 
@@ -172,7 +174,7 @@ export class OrphanImageCleanupService {
           COALESCE(SUM(size), 0) as total_size,
           MIN(deleted_at) as oldest
         FROM images
-        WHERE deleted_at IS NOT NULL AND is_orphan = TRUE
+        WHERE deleted_at IS NOT NULL AND reference_count > 0
       `);
 
       const row = result.rows[0];
