@@ -1,8 +1,7 @@
--- ========================================
+-- ==================== UP ====================
 -- 迁移 014: 完善使用量追踪和配额预警系统
 -- 创建时间: 2026-01-04
 -- 描述: 添加使用记录明细表和配额预警表，完善订阅系统
--- ========================================
 
 -- 1. 创建使用记录明细表
 CREATE TABLE IF NOT EXISTS usage_records (
@@ -385,3 +384,26 @@ BEGIN
     RAISE EXCEPTION '❌ 迁移 014 失败';
   END IF;
 END $$;
+
+-- ==================== DOWN ====================
+-- 回滚迁移 014
+
+-- 删除视图
+DROP VIEW IF EXISTS v_user_quota_overview;
+
+-- 删除触发器
+DROP TRIGGER IF EXISTS quota_alert_trigger ON user_usage;
+
+-- 删除函数
+DROP FUNCTION IF EXISTS trigger_quota_alert();
+DROP FUNCTION IF EXISTS record_feature_usage(INTEGER, VARCHAR, VARCHAR, INTEGER, INTEGER, JSONB);
+DROP FUNCTION IF EXISTS check_user_quota(INTEGER, VARCHAR);
+
+-- 删除表
+DROP TABLE IF EXISTS quota_alerts;
+DROP TABLE IF EXISTS usage_records;
+
+-- 删除添加的列
+ALTER TABLE user_usage DROP COLUMN IF EXISTS last_reset_at;
+ALTER TABLE subscription_plans DROP COLUMN IF EXISTS billing_cycle;
+ALTER TABLE subscription_plans DROP COLUMN IF EXISTS display_order;

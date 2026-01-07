@@ -77,7 +77,7 @@ router.get('/records', async (req, res) => {
         pc.platform_name,
         pt.status as task_status,
         pa.credentials,
-        ast.name as article_setting_name
+        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
@@ -160,7 +160,7 @@ router.get('/records/:id', async (req, res) => {
         pt.status as task_status,
         pt.error_message as task_error,
         pa.credentials,
-        ast.name as article_setting_name
+        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
@@ -245,7 +245,7 @@ router.get('/articles/:articleId/records', async (req, res) => {
         pc.platform_name,
         pt.status as task_status,
         pa.credentials,
-        ast.name as article_setting_name
+        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id

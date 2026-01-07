@@ -423,7 +423,7 @@ export class ArticleGenerationService {
         gt.conversion_target_name,
         gt.album_name,
         gt.knowledge_base_name,
-        ast.name as article_setting_name,
+        COALESCE(gt.article_setting_name, ast.name) as article_setting_name,
         gt.distillation_keyword as keyword,
         d.provider,
         (
@@ -503,7 +503,7 @@ export class ArticleGenerationService {
         gt.conversion_target_name,
         gt.album_name,
         gt.knowledge_base_name,
-        ast.name as article_setting_name,
+        COALESCE(gt.article_setting_name, ast.name) as article_setting_name,
         gt.distillation_keyword as keyword,
         d.provider,
         (
