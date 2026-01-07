@@ -33,26 +33,6 @@ export interface StorageBreakdown {
   };
 }
 
-export interface QuotaCheckResult {
-  allowed: boolean;
-  currentUsageBytes: number;
-  quotaBytes: number;
-  availableBytes: number;
-  usagePercentage: number;
-  reason?: string;
-}
-
-export interface StorageAlert {
-  id: number;
-  userId: number;
-  alertType: 'warning' | 'critical' | 'depleted';
-  thresholdPercentage: number;
-  currentUsageBytes: number;
-  quotaBytes: number;
-  isSent: boolean;
-  createdAt: string;
-}
-
 /**
  * 获取当前存储使用情况
  */
@@ -70,63 +50,12 @@ export const getStorageBreakdown = async (): Promise<StorageBreakdown> => {
 };
 
 /**
- * 检查文件上传配额
- */
-export const checkQuota = async (
-  fileSizeBytes: number,
-  resourceType: 'image' | 'document' | 'article'
-): Promise<QuotaCheckResult> => {
-  const response = await apiClient.post('/storage/check-quota', {
-    fileSizeBytes,
-    resourceType,
-  });
-  return response.data.data;
-};
-
-/**
- * 获取存储使用历史
- */
-export const getStorageHistory = async (
-  startDate: string,
-  endDate: string
-): Promise<any[]> => {
-  const response = await apiClient.get('/storage/history', {
-    params: { startDate, endDate },
-  });
-  return response.data.data;
-};
-
-/**
- * 获取存储事务日志
- */
-export const getStorageTransactions = async (
-  page: number = 1,
-  pageSize: number = 20
-): Promise<any> => {
-  const response = await apiClient.get('/storage/transactions', {
-    params: { page, pageSize },
-  });
-  return response.data.data;
-};
-
-/**
- * 获取待处理的警报
- */
-export const getPendingAlerts = async (): Promise<StorageAlert[]> => {
-  const response = await apiClient.get('/storage/alerts');
-  return response.data.data;
-};
-
-/**
  * 格式化存储空间（MB 单位）
- * @param mb - MB 值
- * @returns 格式化后的字符串（如：100 MB, 1.5 GB）
  */
 export const formatStorageMB = (mb: number): string => {
   if (mb === -1) return '无限';
   if (mb === 0) return '0 MB';
   
-  // 如果大于等于 1024 MB，转换为 GB
   if (mb >= 1024) {
     const gb = mb / 1024;
     return `${gb.toFixed(gb >= 10 ? 0 : 1)} GB`;

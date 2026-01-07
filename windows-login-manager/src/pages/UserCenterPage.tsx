@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Divider, Avatar, List } from 'antd';
-import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined } from '@ant-design/icons';
+import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
+import { StorageUsageCard } from '../components/Storage/StorageUsageCard';
+import { StorageBreakdownChart } from '../components/Storage/StorageBreakdownChart';
+import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType, StorageBreakdown as StorageBreakdownType, formatStorageMB } from '../api/storage';
 
 const { TabPane } = Tabs;
 
@@ -88,6 +91,11 @@ const UserCenterPage = () => {
   const [activeTab, setActiveTab] = useState('subscription');
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [invitationCodeCopied, setInvitationCodeCopied] = useState(false);
+  
+  // 存储相关状态
+  const [storageUsage, setStorageUsage] = useState<StorageUsageType | null>(null);
+  const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdownType | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
 
   useEffect(() => {
     const loadAllData = async () => {
@@ -98,7 +106,8 @@ const UserCenterPage = () => {
           fetchOrders(),
           fetchPlans(),
           fetchUserProfile(),
-          fetchInvitationStats()
+          fetchInvitationStats(),
+          fetchStorageData()
         ]);
       } catch (error) {
         console.error('[UserCenter] 加载数据失败:', error);
@@ -131,16 +140,64 @@ const UserCenterPage = () => {
       fetchOrders();
     };
 
+    // 存储相关事件
+    const handleStorageUpdate = (data: any) => {
+      console.log('[UserCenter] 存储更新:', data);
+      if (data.usage) setStorageUsage(data.usage);
+      if (data.breakdown) setStorageBreakdown(data.breakdown);
+    };
+
+    const handleStorageAlert = (data: any) => {
+      console.log('[UserCenter] 存储警报:', data);
+      if (data.message) {
+        if (data.alert?.alertType === 'depleted') {
+          message.error(data.message, 10);
+        } else if (data.alert?.alertType === 'critical') {
+          message.warning(data.message, 8);
+        } else {
+          message.info(data.message, 5);
+        }
+      }
+    };
+
+    const handleStorageQuotaChange = (data: any) => {
+      console.log('[UserCenter] 配额变更:', data);
+      message.success('存储配额已更新');
+      fetchStorageData();
+    };
+
     wsService.on('quota_updated', handleQuotaUpdate);
     wsService.on('subscription_updated', handleSubscriptionUpdate);
     wsService.on('order_status_changed', handleOrderStatusChange);
+    wsService.on('storage_updated', handleStorageUpdate);
+    wsService.on('storage_alert', handleStorageAlert);
+    wsService.on('storage_quota_changed', handleStorageQuotaChange);
 
     return () => {
       wsService.off('quota_updated', handleQuotaUpdate);
       wsService.off('subscription_updated', handleSubscriptionUpdate);
       wsService.off('order_status_changed', handleOrderStatusChange);
+      wsService.off('storage_updated', handleStorageUpdate);
+      wsService.off('storage_alert', handleStorageAlert);
+      wsService.off('storage_quota_changed', handleStorageQuotaChange);
     };
   }, []);
+
+  const fetchStorageData = async () => {
+    setStorageLoading(true);
+    try {
+      const [usage, breakdown] = await Promise.all([
+        getStorageUsage(),
+        getStorageBreakdown()
+      ]);
+      setStorageUsage(usage);
+      setStorageBreakdown(breakdown);
+    } catch (error: any) {
+      console.error('[UserCenter] 加载存储数据失败:', error);
+    } finally {
+      setStorageLoading(false);
+    }
+  };
 
   const fetchPlans = async () => {
     try {
@@ -486,7 +543,13 @@ const UserCenterPage = () => {
                         <Progress
                           percent={stat.percentage}
                           strokeColor={getProgressColor(stat.percentage)}
-                          format={() => `${stat.used} / ${stat.limit === -1 ? '∞' : stat.limit}`}
+                          format={() => {
+                            // 存储空间需要特殊处理，显示为容量格式（MB/GB）
+                            if (stat.feature_code === 'storage_space') {
+                              return `${formatStorageMB(stat.used)} / ${stat.limit === -1 ? '无限' : formatStorageMB(stat.limit)}`;
+                            }
+                            return `${stat.used} / ${stat.limit === -1 ? '∞' : stat.limit}`;
+                          }}
                         />
                         {stat.percentage >= 90 && (
                           <div style={{ marginTop: 8 }}>
@@ -764,6 +827,41 @@ const UserCenterPage = () => {
             </Col>
           </Row>
         </TabPane>
+        {/* 存储空间标签页 */}
+        <TabPane
+          tab={
+            <span>
+              <DatabaseOutlined />
+              存储空间
+            </span>
+          }
+          key="storage"
+        >
+          {storageLoading ? (
+            <Card loading={true} />
+          ) : storageUsage && storageBreakdown ? (
+            <Row gutter={[16, 16]}>
+              <Col span={24}>
+                <StorageUsageCard 
+                  usage={storageUsage} 
+                  onUpgrade={() => {
+                    setActiveTab('subscription');
+                    setUpgradeModalVisible(true);
+                  }}
+                />
+              </Col>
+              <Col span={24}>
+                <StorageBreakdownChart breakdown={storageBreakdown} />
+              </Col>
+            </Row>
+          ) : (
+            <Card>
+              <div style={{ textAlign: 'center', color: '#999', padding: '32px 0' }}>
+                无法加载存储数据
+              </div>
+            </Card>
+          )}
+        </TabPane>
       </Tabs>
 
       {/* 升级引导对话框 */}
@@ -873,7 +971,10 @@ const UserCenterPage = () => {
                             label={<span style={{ fontSize: 12 }}>{f.feature_name}</span>}
                           >
                             <span style={{ fontWeight: 500 }}>
-                              {f.feature_value === -1 ? '无限制' : f.feature_value}
+                              {f.feature_value === -1 ? '无限制' : 
+                                f.feature_code === 'storage_space' 
+                                  ? formatStorageMB(f.feature_value)
+                                  : f.feature_value}
                             </span>
                           </Descriptions.Item>
                         ))}
