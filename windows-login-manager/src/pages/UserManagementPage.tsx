@@ -321,9 +321,6 @@ export default function UserManagementPage() {
               value={subscriptionFilter || undefined}
             >
               <Select.Option value="">全部套餐</Select.Option>
-              <Select.Option value="免费版">
-                <Tag color="blue">免费版</Tag>
-              </Select.Option>
               <Select.Option value="体验版">
                 <Tag color="cyan">体验版</Tag>
               </Select.Option>

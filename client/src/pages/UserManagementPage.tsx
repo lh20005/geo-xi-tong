@@ -45,7 +45,6 @@ export default function UserManagementPage() {
   // 获取套餐颜色
   const getPlanColor = (planName?: string) => {
     if (!planName || planName === '无订阅') return 'default';
-    if (planName.includes('免费')) return 'blue';
     if (planName.includes('体验')) return 'cyan';
     if (planName.includes('专业')) return 'green';
     if (planName.includes('企业')) return 'gold';
@@ -351,9 +350,6 @@ export default function UserManagementPage() {
               value={subscriptionFilter || undefined}
             >
               <Select.Option value="">全部套餐</Select.Option>
-              <Select.Option value="免费版">
-                <Tag color="blue">免费版</Tag>
-              </Select.Option>
               <Select.Option value="体验版">
                 <Tag color="cyan">体验版</Tag>
               </Select.Option>

@@ -14,10 +14,10 @@ interface Props {
 
 interface Plan {
   id: number;
-  plan_code: string;
-  plan_name: string;
+  planCode: string;
+  planName: string;
   price: number;
-  duration_days: number;
+  durationDays: number;
 }
 
 export default function GiftSubscriptionModal({
@@ -110,7 +110,7 @@ export default function GiftSubscriptionModal({
             placeholder="请选择要赠送的套餐"
             onChange={handlePlanChange}
             options={plans.map((plan) => ({
-              label: `${plan.plan_name} - ¥${plan.price}`,
+              label: `${plan.planName} - ¥${plan.price}`,
               value: plan.id,
             }))}
           />
@@ -138,7 +138,7 @@ export default function GiftSubscriptionModal({
             message="赠送预览"
             description={
               <div>
-                <p>套餐名称：{selectedPlan.plan_name}</p>
+                <p>套餐名称：{selectedPlan.planName}</p>
                 <p>套餐价值：¥{selectedPlan.price}</p>
                 <p>赠送时长：{durationDays}天</p>
                 <p style={{ fontWeight: 'bold', color: '#52c41a' }}>

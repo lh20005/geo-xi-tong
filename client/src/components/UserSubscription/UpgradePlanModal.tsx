@@ -14,10 +14,10 @@ interface Props {
 
 interface Plan {
   id: number;
-  plan_code: string;
-  plan_name: string;
+  planCode: string;
+  planName: string;
   price: number;
-  duration_days: number;
+  durationDays: number;
 }
 
 export default function UpgradePlanModal({ visible, userId, currentPlanId, onClose, onSuccess }: Props) {
@@ -40,12 +40,17 @@ export default function UpgradePlanModal({ visible, userId, currentPlanId, onClo
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      // 只显示比当前套餐更高级的套餐
+      console.log('[UpgradePlanModal] 获取到的套餐列表:', response.data.data);
+
+      // 显示所有套餐（除了当前套餐），让管理员可以选择任意套餐
       const availablePlans = response.data.data.filter(
         (plan: Plan) => plan.id !== currentPlanId
       );
+      
+      console.log('[UpgradePlanModal] 可选套餐:', availablePlans);
       setPlans(availablePlans);
     } catch (error: any) {
+      console.error('[UpgradePlanModal] 加载套餐列表失败:', error);
       message.error('加载套餐列表失败');
     }
   };
@@ -102,7 +107,7 @@ export default function UpgradePlanModal({ visible, userId, currentPlanId, onClo
             placeholder="请选择套餐"
             onChange={handlePlanChange}
             options={plans.map((plan) => ({
-              label: `${plan.plan_name} - ¥${plan.price} / ${plan.duration_days}天`,
+              label: `${plan.planName} - ¥${plan.price} / ${plan.durationDays}天`,
               value: plan.id,
             }))}
           />
@@ -113,9 +118,9 @@ export default function UpgradePlanModal({ visible, userId, currentPlanId, onClo
             message="套餐信息"
             description={
               <div>
-                <p>套餐名称：{selectedPlan.plan_name}</p>
+                <p>套餐名称：{selectedPlan.planName}</p>
                 <p>套餐价格：¥{selectedPlan.price}</p>
-                <p>套餐时长：{selectedPlan.duration_days}天</p>
+                <p>套餐时长：{selectedPlan.durationDays}天</p>
               </div>
             }
             type="success"

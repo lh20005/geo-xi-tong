@@ -144,6 +144,9 @@ class UserSubscriptionManagementService {
         [subscription.id]
       );
 
+      // 更新存储空间配额为新套餐的配额
+      await this.updateStorageQuota(client, userId, newPlanId);
+
       // 记录调整历史
       await client.query(
         `INSERT INTO subscription_adjustments 
@@ -516,6 +519,7 @@ class UserSubscriptionManagementService {
 
   /**
    * 取消订阅
+   * 取消后自动为用户开通免费版订阅，配额按免费版实时配置重置
    */
   async cancelSubscription(
     userId: number,
@@ -532,7 +536,7 @@ class UserSubscriptionManagementService {
 
       // 获取当前订阅
       const currentSub = await client.query(
-        'SELECT id, end_date FROM user_subscriptions WHERE user_id = $1 AND status = $2 ORDER BY end_date DESC LIMIT 1',
+        'SELECT id, plan_id, end_date FROM user_subscriptions WHERE user_id = $1 AND status = $2 ORDER BY end_date DESC LIMIT 1',
         [userId, 'active']
       );
 
@@ -542,29 +546,70 @@ class UserSubscriptionManagementService {
 
       const subscription = currentSub.rows[0];
       const oldEndDate = subscription.end_date;
+      const oldPlanId = subscription.plan_id;
+
+      // 获取免费版套餐
+      const freePlanResult = await client.query(
+        `SELECT id, plan_code, plan_name FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
+      );
+
+      if (freePlanResult.rows.length === 0) {
+        throw new Error('免费版套餐不存在或未激活');
+      }
+
+      const freePlan = freePlanResult.rows[0];
+
+      // 检查当前是否已经是免费版
+      if (subscription.plan_id === freePlan.id) {
+        throw new Error('当前已是免费版，无法取消');
+      }
 
       if (immediate) {
-        // 立即取消
+        // 立即取消：将当前订阅标记为已取消
         await client.query(
           'UPDATE user_subscriptions SET status = $1, end_date = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
           ['cancelled', subscription.id]
         );
-      } else {
-        // 到期后取消（标记为不续费）
+
+        // 创建新的免费版订阅
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setFullYear(endDate.getFullYear() + 1); // 免费版1年有效期
+
         await client.query(
-          'UPDATE user_subscriptions SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          ['cancelled', subscription.id]
+          `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, is_gift, gift_reason)
+           VALUES ($1, $2, 'active', $3, $4, true, $5)`,
+          [userId, freePlan.id, startDate, endDate, `管理员取消订阅后自动回退: ${reason}`]
+        );
+
+        // 清除旧的配额使用记录
+        await client.query('DELETE FROM user_usage WHERE user_id = $1', [userId]);
+
+        // 重新初始化免费版配额（从数据库实时读取配置）
+        await this.initializeFreeQuotas(client, userId, freePlan.id);
+
+        // 更新存储空间配额
+        await this.updateStorageQuota(client, userId, freePlan.id);
+
+        console.log(`[SubscriptionManagement] 用户 ${userId} 已回退到免费版`);
+      } else {
+        // 到期后取消（标记为不续费，到期后系统会自动处理）
+        await client.query(
+          'UPDATE user_subscriptions SET auto_renew = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+          [subscription.id]
         );
       }
 
       // 记录调整历史
       await client.query(
         `INSERT INTO subscription_adjustments 
-         (user_id, subscription_id, adjustment_type, old_end_date, new_end_date, reason, admin_id, ip_address, user_agent)
-         VALUES ($1, $2, 'cancel', $3, $4, $5, $6, $7, $8)`,
+         (user_id, subscription_id, adjustment_type, old_plan_id, new_plan_id, old_end_date, new_end_date, reason, admin_id, ip_address, user_agent)
+         VALUES ($1, $2, 'cancel', $3, $4, $5, $6, $7, $8, $9, $10)`,
         [
           userId,
           subscription.id,
+          oldPlanId,
+          immediate ? freePlan.id : null,
           oldEndDate,
           immediate ? new Date() : oldEndDate,
           reason,
@@ -577,7 +622,10 @@ class UserSubscriptionManagementService {
       await client.query('COMMIT');
 
       // 发送 WebSocket 通知
-      getWsService().sendToUser(userId, 'subscription:cancelled', { immediate });
+      getWsService().sendToUser(userId, 'subscription:cancelled', { 
+        immediate,
+        newPlanName: immediate ? freePlan.plan_name : null
+      });
 
       console.log(`[SubscriptionManagement] 用户 ${userId} 订阅已取消 (立即: ${immediate})`);
     } catch (error) {
@@ -586,6 +634,97 @@ class UserSubscriptionManagementService {
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * 初始化免费版配额（从数据库实时读取配置）
+   */
+  private async initializeFreeQuotas(client: any, userId: number, planId: number): Promise<void> {
+    console.log(`[SubscriptionManagement] 初始化用户 ${userId} 的免费版配额...`);
+    
+    // 获取套餐的所有功能配额
+    const featuresResult = await client.query(
+      `SELECT feature_code, feature_name, feature_value, feature_unit
+       FROM plan_features
+       WHERE plan_id = $1`,
+      [planId]
+    );
+    
+    if (featuresResult.rows.length === 0) {
+      console.log(`[SubscriptionManagement] ⚠️ 套餐 ${planId} 没有配置功能，跳过配额初始化`);
+      return;
+    }
+    
+    const now = new Date();
+    let initializedCount = 0;
+    
+    for (const feature of featuresResult.rows) {
+      // 确定周期
+      let periodStart: Date;
+      let periodEnd: Date;
+      
+      if (feature.feature_code.includes('_per_month') || feature.feature_code === 'keyword_distillation') {
+        // 每月重置
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      } else {
+        // 永不重置（如平台账号数）
+        periodStart = new Date(2000, 0, 1);
+        periodEnd = new Date(2099, 11, 31);
+      }
+      
+      // 插入初始配额记录（使用量重置为0）
+      await client.query(
+        `INSERT INTO user_usage (
+          user_id, feature_code, usage_count, period_start, period_end, last_reset_at
+        ) VALUES ($1, $2, 0, $3, $4, $5)
+        ON CONFLICT (user_id, feature_code, period_start) 
+        DO UPDATE SET 
+          usage_count = 0,
+          last_reset_at = $5,
+          updated_at = CURRENT_TIMESTAMP`,
+        [userId, feature.feature_code, periodStart, periodEnd, periodStart]
+      );
+      
+      initializedCount++;
+    }
+    
+    console.log(`[SubscriptionManagement] ✅ 成功初始化 ${initializedCount} 项配额记录`);
+  }
+
+  /**
+   * 更新存储空间配额
+   */
+  private async updateStorageQuota(client: any, userId: number, planId: number): Promise<void> {
+    console.log(`[SubscriptionManagement] 更新用户 ${userId} 的存储空间配额...`);
+    
+    // 从数据库获取存储空间配额
+    const storageFeatureResult = await client.query(
+      `SELECT feature_value FROM plan_features 
+       WHERE plan_id = $1 AND feature_code = 'storage_space'`,
+      [planId]
+    );
+    
+    let storageQuotaBytes: number;
+    
+    if (storageFeatureResult.rows.length > 0) {
+      // 配额单位是 MB，需要转换为字节
+      const storageMB = storageFeatureResult.rows[0].feature_value;
+      storageQuotaBytes = storageMB * 1024 * 1024;
+    } else {
+      // 如果没有配置，使用默认值 10MB
+      storageQuotaBytes = 10 * 1024 * 1024;
+    }
+    
+    // 更新存储配额
+    await client.query(
+      `UPDATE user_storage_usage 
+       SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
+       WHERE user_id = $2`,
+      [storageQuotaBytes, userId]
+    );
+    
+    console.log(`[SubscriptionManagement] ✅ 存储配额已更新为 ${storageQuotaBytes / (1024 * 1024)} MB`);
   }
 
   /**
@@ -615,6 +754,14 @@ class UserSubscriptionManagementService {
         throw new Error('套餐不存在');
       }
 
+      // 将用户现有的 active 订阅标记为已替换
+      await client.query(
+        `UPDATE user_subscriptions 
+         SET status = 'replaced', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+
       const startDate = new Date();
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + durationDays);
@@ -629,6 +776,9 @@ class UserSubscriptionManagementService {
       );
 
       const subscriptionId = result.rows[0].id;
+
+      // 更新存储空间配额为新套餐的配额
+      await this.updateStorageQuota(client, userId, planId);
 
       // 记录调整历史
       await client.query(

@@ -326,6 +326,14 @@ export class SubscriptionService {
     try {
       await client.query('BEGIN');
       
+      // 将用户现有的 active 订阅标记为已替换
+      await client.query(
+        `UPDATE user_subscriptions 
+         SET status = 'replaced', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+      
       const startDate = new Date();
       const endDate = new Date();
       endDate.setMonth(endDate.getMonth() + durationMonths);
@@ -341,6 +349,25 @@ export class SubscriptionService {
       
       // 初始化用户配额
       await this.initializeUserQuotas(client, userId, planId);
+      
+      // 更新存储空间配额
+      const storageFeatureResult = await client.query(
+        `SELECT feature_value FROM plan_features 
+         WHERE plan_id = $1 AND feature_code = 'storage_space'`,
+        [planId]
+      );
+      
+      if (storageFeatureResult.rows.length > 0) {
+        const storageMB = storageFeatureResult.rows[0].feature_value;
+        const storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
+        
+        await client.query(
+          `UPDATE user_storage_usage 
+           SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
+           WHERE user_id = $2`,
+          [storageQuotaBytes, userId]
+        );
+      }
       
       await client.query('COMMIT');
 
@@ -642,6 +669,30 @@ export class SubscriptionService {
         [userId]
       );
 
+      // 更新存储空间配额为新套餐的配额
+      const storageFeatureResult = await client.query(
+        `SELECT feature_value FROM plan_features 
+         WHERE plan_id = $1 AND feature_code = 'storage_space'`,
+        [newPlanId]
+      );
+      
+      let storageQuotaBytes: number;
+      if (storageFeatureResult.rows.length > 0) {
+        const storageMB = storageFeatureResult.rows[0].feature_value;
+        storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
+      } else {
+        storageQuotaBytes = 10 * 1024 * 1024; // 默认 10MB
+      }
+      
+      await client.query(
+        `UPDATE user_storage_usage 
+         SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $2`,
+        [storageQuotaBytes, userId]
+      );
+      
+      console.log(`[SubscriptionService] ✅ 用户 ${userId} 存储配额已更新为 ${storageQuotaBytes === -1 ? '无限制' : (storageQuotaBytes / (1024 * 1024)) + ' MB'}`);
+
       await client.query('COMMIT');
 
       // 清除缓存
@@ -660,6 +711,13 @@ export class SubscriptionService {
         wsService.broadcast(userId, 'subscription_updated', {
           action: 'upgraded',
           subscription: updatedSub
+        });
+        
+        // 推送存储配额变更通知
+        wsService.broadcast(userId, 'storage_quota_changed', {
+          userId,
+          newQuotaBytes: storageQuotaBytes,
+          reason: '套餐升级'
         });
       } catch (error) {
         console.error('推送订阅更新失败:', error);

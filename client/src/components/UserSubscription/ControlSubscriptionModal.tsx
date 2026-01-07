@@ -49,7 +49,7 @@ export default function ControlSubscriptionModal({
         return {
           title: '取消订阅',
           icon: <StopOutlined style={{ color: '#ff4d4f' }} />,
-          description: '取消订阅后用户将失去所有订阅权益。此操作不可撤销！',
+          description: '取消订阅后，用户将自动回退到免费版（体验版），配额将按免费版配置重置。',
           okText: '确认取消',
           danger: true,
         };
@@ -124,8 +124,8 @@ export default function ControlSubscriptionModal({
             />
             <div style={{ marginTop: 8, fontSize: 12, color: '#666' }}>
               {immediate
-                ? '立即取消：用户将立即失去所有订阅权益'
-                : '到期后取消：用户可以使用到当前订阅到期'}
+                ? '立即取消：用户将立即回退到免费版（体验版），配额按免费版配置重置'
+                : '到期后取消：用户可以使用到当前订阅到期，之后自动回退到免费版'}
             </div>
           </Form.Item>
         )}

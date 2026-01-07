@@ -284,6 +284,14 @@ export class PaymentService {
         if (order.order_type === 'upgrade') {
           await subscriptionService.applyUpgrade(order.user_id, order.plan_id);
         } else {
+          // 将用户现有的 active 订阅标记为已替换
+          await client.query(
+            `UPDATE user_subscriptions 
+             SET status = 'replaced', updated_at = CURRENT_TIMESTAMP
+             WHERE user_id = $1 AND status = 'active'`,
+            [order.user_id]
+          );
+          
           // 创建订阅
           await client.query(
             `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
@@ -293,6 +301,25 @@ export class PaymentService {
           
           // 初始化用户配额
           await this.initializeUserQuotas(client, order.user_id, order.plan_id);
+          
+          // 更新存储空间配额
+          const storageFeatureResult = await client.query(
+            `SELECT feature_value FROM plan_features 
+             WHERE plan_id = $1 AND feature_code = 'storage_space'`,
+            [order.plan_id]
+          );
+          
+          if (storageFeatureResult.rows.length > 0) {
+            const storageMB = storageFeatureResult.rows[0].feature_value;
+            const storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
+            
+            await client.query(
+              `UPDATE user_storage_usage 
+               SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
+               WHERE user_id = $2`,
+              [storageQuotaBytes, order.user_id]
+            );
+          }
         }
 
         await client.query('COMMIT');
