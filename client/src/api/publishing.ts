@@ -256,7 +256,7 @@ export async function loginWithBrowser(platformId: string): Promise<{ success: b
 
 export interface PublishingRecord {
   id: number;
-  article_id: number;
+  article_id: number | null;
   task_id: number;
   platform_id: string;
   platform_name?: string;
@@ -267,9 +267,14 @@ export interface PublishingRecord {
   platform_url?: string;
   published_at: string;
   created_at: string;
+  // 快照字段
   article_title?: string;
   article_keyword?: string;
+  article_content?: string;
+  article_image_url?: string;
   topic_question?: string;
+  article_setting_name?: string;
+  distillation_keyword?: string;
   task_status?: string;
 }
 
@@ -305,6 +310,21 @@ export async function getPublishingRecords(
 export async function getPublishingRecordById(recordId: number): Promise<PublishingRecord> {
   const response = await apiClient.get(`/publishing/records/${recordId}`);
   return response.data.data;
+}
+
+/**
+ * 删除发布记录
+ */
+export async function deletePublishingRecord(recordId: number): Promise<void> {
+  await apiClient.delete(`/publishing/records/${recordId}`);
+}
+
+/**
+ * 批量删除发布记录
+ */
+export async function batchDeletePublishingRecords(ids: number[]): Promise<{ deletedCount: number }> {
+  const response = await apiClient.delete('/publishing/records', { data: { ids } });
+  return response.data;
 }
 
 /**

@@ -13,7 +13,7 @@ import { normalizeCookies } from '../utils/cookieNormalizer';
 
 export class PublishingExecutor {
   /**
-   * 创建发布记录并更新文章状态
+   * 创建发布记录（保存文章快照）并删除原文章
    */
   private async createPublishingRecord(
     taskId: number,
@@ -25,34 +25,81 @@ export class PublishingExecutor {
     try {
       await client.query('BEGIN');
       
-      // 创建发布记录（添加 user_id）
+      // 1. 获取文章完整信息（包括关联数据）用于快照
+      const articleResult = await client.query(
+        `SELECT 
+          a.id, a.title, a.content, a.keyword, a.image_url, a.image_id,
+          a.distillation_id, a.topic_id, a.task_id,
+          t.question as topic_question,
+          d.keyword as distillation_keyword,
+          COALESCE(gt.article_setting_name, ast.name) as article_setting_name
+         FROM articles a
+         LEFT JOIN topics t ON a.topic_id = t.id
+         LEFT JOIN distillations d ON a.distillation_id = d.id
+         LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+         LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
+         WHERE a.id = $1`,
+        [task.article_id]
+      );
+      
+      if (articleResult.rows.length === 0) {
+        throw new Error('文章不存在');
+      }
+      
+      const article = articleResult.rows[0];
+      
+      // 2. 创建发布记录（包含文章快照）
       await client.query(
         `INSERT INTO publishing_records 
-         (article_id, task_id, platform_id, account_id, account_name, user_id, published_at)
-         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)`,
+         (article_id, task_id, platform_id, account_id, account_name, user_id, published_at,
+          article_title, article_content, article_keyword, article_image_url,
+          topic_question, article_setting_name, distillation_keyword)
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP,
+                 $7, $8, $9, $10, $11, $12, $13)`,
         [
           task.article_id,
           taskId,
           task.platform_id,
           task.account_id,
           account.account_name,
-          task.user_id
+          task.user_id,
+          article.title,
+          article.content,
+          article.keyword,
+          article.image_url,
+          article.topic_question,
+          article.article_setting_name,
+          article.distillation_keyword
         ]
       );
       
-      // 更新文章发布状态（只在第一次发布时更新）
+      // 3. 更新蒸馏结果的 usage_count（减少引用计数）
+      if (article.distillation_id) {
+        await client.query(
+          'UPDATE distillations SET usage_count = GREATEST(usage_count - 1, 0) WHERE id = $1',
+          [article.distillation_id]
+        );
+      }
+      
+      // 4. 处理图片引用计数
+      if (article.image_id) {
+        const imageResult = await client.query(
+          'SELECT * FROM decrement_image_reference($1)',
+          [article.image_id]
+        );
+        // 注意：这里不删除图片文件，因为发布记录中保存了 image_url
+        // 图片文件会在用户手动删除发布记录时处理
+      }
+      
+      // 5. 删除原文章（发布记录已保存快照）
       await client.query(
-        `UPDATE articles 
-         SET is_published = true,
-             published_at = COALESCE(published_at, CURRENT_TIMESTAMP),
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
+        'DELETE FROM articles WHERE id = $1',
         [task.article_id]
       );
       
       await client.query('COMMIT');
       
-      console.log(`✅ 文章 #${task.article_id} 发布记录已创建`);
+      console.log(`✅ 文章 #${task.article_id} 已发布并移至发布记录`);
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('创建发布记录失败:', error);

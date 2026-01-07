@@ -12,7 +12,7 @@ router.use(setTenantContext);
 router.use(requireTenantContext);
 
 /**
- * 获取发布记录列表
+ * 获取发布记录列表（优先使用快照数据）
  */
 router.get('/records', async (req, res) => {
   try {
@@ -57,7 +57,7 @@ router.get('/records', async (req, res) => {
     );
     const total = parseInt(countResult.rows[0].total);
 
-    // 获取数据
+    // 获取数据（优先使用快照字段，兼容旧数据）
     const offset = (parseInt(page as string) - 1) * parseInt(pageSize as string);
     const dataResult = await pool.query(
       `SELECT 
@@ -71,16 +71,20 @@ router.get('/records', async (req, res) => {
         pr.platform_url,
         pr.published_at,
         pr.created_at,
-        a.title as article_title,
-        a.keyword as article_keyword,
-        t.question as topic_question,
+        COALESCE(pr.article_title, a.title) as article_title,
+        COALESCE(pr.article_keyword, a.keyword) as article_keyword,
+        COALESCE(pr.article_content, a.content) as article_content,
+        COALESCE(pr.article_image_url, a.image_url) as article_image_url,
+        COALESCE(pr.topic_question, t.question) as topic_question,
+        COALESCE(pr.article_setting_name, gt.article_setting_name, ast.name) as article_setting_name,
+        COALESCE(pr.distillation_keyword, d.keyword) as distillation_keyword,
         pc.platform_name,
         pt.status as task_status,
-        pa.credentials,
-        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
+        pa.credentials
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
+       LEFT JOIN distillations d ON a.distillation_id = d.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
        LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
@@ -133,7 +137,7 @@ router.get('/records', async (req, res) => {
 });
 
 /**
- * 获取发布记录详情
+ * 获取发布记录详情（优先使用快照数据）
  */
 router.get('/records/:id', async (req, res) => {
   try {
@@ -152,18 +156,21 @@ router.get('/records/:id', async (req, res) => {
         pr.platform_url,
         pr.published_at,
         pr.created_at,
-        a.title as article_title,
-        a.keyword as article_keyword,
-        a.content as article_content,
-        t.question as topic_question,
+        COALESCE(pr.article_title, a.title) as article_title,
+        COALESCE(pr.article_keyword, a.keyword) as article_keyword,
+        COALESCE(pr.article_content, a.content) as article_content,
+        COALESCE(pr.article_image_url, a.image_url) as article_image_url,
+        COALESCE(pr.topic_question, t.question) as topic_question,
+        COALESCE(pr.article_setting_name, gt.article_setting_name, ast.name) as article_setting_name,
+        COALESCE(pr.distillation_keyword, d.keyword) as distillation_keyword,
         pc.platform_name,
         pt.status as task_status,
         pt.error_message as task_error,
-        pa.credentials,
-        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
+        pa.credentials
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
+       LEFT JOIN distillations d ON a.distillation_id = d.id
        LEFT JOIN generation_tasks gt ON a.task_id = gt.id
        LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
@@ -211,86 +218,72 @@ router.get('/records/:id', async (req, res) => {
   }
 });
 
+
 /**
- * 获取某篇文章的所有发布记录
+ * 删除发布记录
  */
-router.get('/articles/:articleId/records', async (req, res) => {
+router.delete('/records/:id', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
-    const articleId = parseInt(req.params.articleId);
+    const recordId = parseInt(req.params.id);
 
-    // 先验证文章所有权
-    const articleCheck = await pool.query(
-      'SELECT id FROM articles WHERE id = $1 AND user_id = $2',
-      [articleId, userId]
+    // 验证记录所有权并删除
+    const result = await pool.query(
+      'DELETE FROM publishing_records WHERE id = $1 AND user_id = $2 RETURNING id',
+      [recordId, userId]
     );
-    
-    if (articleCheck.rows.length === 0) {
+
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
-        message: '文章不存在或无权访问'
+        message: '发布记录不存在或无权删除'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: '发布记录已删除'
+    });
+  } catch (error: any) {
+    console.error('删除发布记录失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '删除发布记录失败',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * 批量删除发布记录
+ */
+router.delete('/records', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ids参数必须是非空数组'
       });
     }
 
     const result = await pool.query(
-      `SELECT 
-        pr.id,
-        pr.task_id,
-        pr.platform_id,
-        pr.account_id,
-        pr.account_name,
-        pr.platform_article_id,
-        pr.platform_url,
-        pr.published_at,
-        pc.platform_name,
-        pt.status as task_status,
-        pa.credentials,
-        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
-       FROM publishing_records pr
-       LEFT JOIN articles a ON pr.article_id = a.id
-       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
-       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
-       LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
-       LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
-       LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
-       WHERE pr.article_id = $1 AND pr.user_id = $2
-       ORDER BY pr.published_at DESC`,
-      [articleId, userId]
+      'DELETE FROM publishing_records WHERE id = ANY($1::integer[]) AND user_id = $2 RETURNING id',
+      [ids, userId]
     );
-
-    // 解密并提取真实用户名
-    const records = result.rows.map(row => {
-      const record: any = { ...row };
-      delete record.credentials; // 不返回加密的凭证
-      
-      if (row.credentials) {
-        try {
-          const decryptedCredentials = encryptionService.decryptObject(row.credentials);
-          if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
-            record.real_username = decryptedCredentials.userInfo.username;
-          } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
-            record.real_username = decryptedCredentials.username;
-          }
-        } catch (error) {
-          console.error('解密账号凭证失败:', error);
-        }
-      }
-      
-      return record;
-    });
 
     res.json({
       success: true,
-      data: {
-        records,
-        total: records.length
-      }
+      message: `已删除 ${result.rows.length} 条发布记录`,
+      deletedCount: result.rows.length
     });
   } catch (error: any) {
-    console.error('获取文章发布记录失败:', error);
+    console.error('批量删除发布记录失败:', error);
     res.status(500).json({
       success: false,
-      message: '获取文章发布记录失败',
+      message: '批量删除发布记录失败',
       error: error.message
     });
   }
