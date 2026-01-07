@@ -309,6 +309,7 @@ export class SubscriptionService {
         remaining,
         percentage,
         unit: feature.feature_unit,
+        reset_period: featureDef?.resetPeriod || 'subscription',
         reset_time: resetTime
       });
     }

@@ -30,6 +30,7 @@ interface UsageStats {
   limit: number;
   percentage: number;
   reset_period: string;
+  reset_time?: string; // 下次重置时间（基于订阅周期）
 }
 
 interface Order {
@@ -605,7 +606,11 @@ const UserCenterPage = () => {
                             <span style={{ fontWeight: 500 }}>{stat.feature_name}</span>
                             <span style={{ color: '#8c8c8c', fontSize: 12 }}>
                               {stat.reset_period === 'daily' ? '每日重置' : 
-                               stat.reset_period === 'monthly' ? '每月重置' : '永久'}
+                               stat.reset_period === 'monthly' ? (
+                                 stat.reset_time 
+                                   ? `${new Date(stat.reset_time).toLocaleDateString('zh-CN')} 重置`
+                                   : '每月重置'
+                               ) : '永久'}
                             </span>
                           </Space>
                         </div>

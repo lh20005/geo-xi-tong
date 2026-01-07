@@ -73,6 +73,7 @@ export interface UsageStats {
   remaining: number;
   percentage: number;
   unit: string;
+  reset_period: 'daily' | 'monthly' | 'subscription';
   reset_time?: string;
 }
 

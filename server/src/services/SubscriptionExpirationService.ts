@@ -125,13 +125,14 @@ export class SubscriptionExpirationService {
       const freePlanId = freePlanResult.rows[0].id;
 
       // 3. 创建免费版订阅（永久有效）
-      await client.query(
-        `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
-         VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '100 years')`,
+      const newSubResult = await client.query(
+        `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, quota_reset_anchor, quota_cycle_type)
+         VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '100 years', CURRENT_TIMESTAMP, 'monthly')
+         RETURNING id`,
         [user_id, freePlanId]
       );
 
-      console.log(`   - 已创建免费版订阅`);
+      console.log(`   - 已创建免费版订阅 (ID: ${newSubResult.rows[0].id})`);
 
       // 4. 清除该用户的所有配额使用记录（重置为免费版配额）
       const deletedUsageResult = await client.query(
@@ -141,26 +142,48 @@ export class SubscriptionExpirationService {
       
       console.log(`   - 清除了 ${deletedUsageResult.rows.length} 条配额使用记录`);
 
-      // 5. 更新存储配额为免费版配额
+      // 5. 为免费版初始化新的配额周期
+      const freePlanFeaturesResult = await client.query(
+        `SELECT feature_code FROM plan_features WHERE plan_id = $1`,
+        [freePlanId]
+      );
+
+      const now = new Date();
+      const periodStart = now;
+      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
+
+      for (const feature of freePlanFeaturesResult.rows) {
+        await client.query(
+          `INSERT INTO user_usage (user_id, feature_code, usage_count, period_start, period_end, last_reset_at)
+           VALUES ($1, $2, 0, $3, $4, CURRENT_TIMESTAMP)
+           ON CONFLICT (user_id, feature_code, period_start) DO NOTHING`,
+          [user_id, feature.feature_code, periodStart, periodEnd]
+        );
+      }
+
+      console.log(`   - 已初始化免费版配额周期`);
+
+      // 6. 更新存储配额为免费版配额
       const freeStorageQuotaResult = await client.query(
         `SELECT feature_value FROM plan_features 
          WHERE plan_id = $1 AND feature_code = 'storage_space'`,
         [freePlanId]
       );
 
-      const freeStorageQuota = freeStorageQuotaResult.rows[0]?.feature_value || 104857600; // 默认100MB
+      const freeStorageQuotaMB = freeStorageQuotaResult.rows[0]?.feature_value || 10; // 默认10MB
+      const freeStorageQuotaBytes = freeStorageQuotaMB * 1024 * 1024;
 
       await client.query(
         `UPDATE user_storage_usage
          SET storage_quota_bytes = $1,
              last_updated_at = CURRENT_TIMESTAMP
          WHERE user_id = $2`,
-        [freeStorageQuota, user_id]
+        [freeStorageQuotaBytes, user_id]
       );
       
-      console.log(`   - 存储配额已更新为免费版配额: ${Math.round(freeStorageQuota / 1024 / 1024)}MB`);
+      console.log(`   - 存储配额已更新为免费版配额: ${freeStorageQuotaMB}MB`);
 
-      // 6. 记录到期事件
+      // 7. 记录到期事件
       await client.query(
         `INSERT INTO subscription_adjustments 
          (user_id, subscription_id, adjustment_type, reason, admin_id)
@@ -170,7 +193,7 @@ export class SubscriptionExpirationService {
 
       await client.query('COMMIT');
 
-      // 7. 发送 WebSocket 通知
+      // 8. 发送 WebSocket 通知
       try {
         const wsService = getWebSocketService();
         wsService.sendToUser(user_id, 'subscription:expired', {
