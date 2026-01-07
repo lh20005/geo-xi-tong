@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Divider, Avatar, List } from 'antd';
+import { useState, useEffect } from 'react';
+import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar, List } from 'antd';
 import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
@@ -41,19 +41,6 @@ interface Order {
   paid_at: string | null;
 }
 
-interface Plan {
-  id: number;
-  plan_name: string;
-  plan_code: string;
-  price: string | number;
-  billing_cycle: string;
-  features: {
-    feature_code: string;
-    feature_name: string;
-    feature_value: number;
-  }[];
-}
-
 interface UserProfile {
   id: number;
   username: string;
@@ -82,12 +69,10 @@ const UserCenterPage = () => {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usageStats, setUsageStats] = useState<UsageStats[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [invitationStats, setInvitationStats] = useState<InvitationStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
-  const [upgradeModalVisible, setUpgradeModalVisible] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [passwordForm] = Form.useForm();
   const [activeTab, setActiveTab] = useState('subscription');
@@ -106,7 +91,6 @@ const UserCenterPage = () => {
           fetchSubscription(),
           fetchUsageStats(),
           fetchOrders(),
-          fetchPlans(),
           fetchUserProfile(),
           fetchInvitationStats(),
           fetchStorageData()
@@ -201,21 +185,6 @@ const UserCenterPage = () => {
     }
   };
 
-  const fetchPlans = async () => {
-    try {
-      const response = await apiClient.get('/subscription/plans');
-      if (response.data.success) {
-        const plansData = response.data.data;
-        setPlans(Array.isArray(plansData) ? plansData : []);
-      } else {
-        setPlans([]);
-      }
-    } catch (error: any) {
-      console.error('获取套餐列表失败:', error);
-      setPlans([]);
-    }
-  };
-
   const fetchUserProfile = async () => {
     try {
       const response = await apiClient.get('/users/profile');
@@ -302,23 +271,10 @@ const UserCenterPage = () => {
     }
   };
 
-  const handleShowUpgradeModal = () => {
-    setUpgradeModalVisible(true);
-  };
-
-  const handleUpgrade = async (planId: number) => {
-    try {
-      const response = await apiClient.post('/orders', { plan_id: planId });
-
-      if (response.data.success) {
-        message.success('订单创建成功，正在跳转支付页面...');
-        setUpgradeModalVisible(false);
-        const orderNo = response.data.data.order_no;
-        window.location.href = `/payment/${orderNo}`;
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '创建订单失败');
-    }
+  // 跳转到落地页套餐购买页面
+  const handleNavigateToPricing = () => {
+    const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+    window.open(`${landingUrl}/#pricing`, '_blank');
   };
 
   const getProgressColor = (percentage: number) => {
@@ -455,12 +411,12 @@ const UserCenterPage = () => {
                       >
                         {subscription.auto_renew ? '关闭自动续费' : '开启自动续费'}
                       </Button>
-                      <Button type="primary" icon={<RocketOutlined />} onClick={handleShowUpgradeModal}>
+                      <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
                         升级套餐
                       </Button>
                     </Space>
                   ) : (
-                    <Button type="primary" icon={<RocketOutlined />} onClick={handleShowUpgradeModal}>
+                    <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
                       查看套餐
                     </Button>
                   )
@@ -515,10 +471,10 @@ const UserCenterPage = () => {
                       订阅套餐后即可使用完整功能，包括关键词蒸馏、AI内容生成、多平台发布等
                     </p>
                     <Space size="large">
-                      <Button type="primary" size="large" icon={<RocketOutlined />} onClick={handleShowUpgradeModal}>
+                      <Button type="primary" size="large" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
                         立即订阅
                       </Button>
-                      <Button size="large" onClick={handleShowUpgradeModal}>
+                      <Button size="large" onClick={handleNavigateToPricing}>
                         查看套餐详情
                       </Button>
                     </Space>
@@ -567,7 +523,7 @@ const UserCenterPage = () => {
                               <Button 
                                 type="link" 
                                 size="small" 
-                                onClick={handleShowUpgradeModal}
+                                onClick={handleNavigateToPricing}
                                 style={{ padding: 0, height: 'auto' }}
                               >
                                 立即升级
@@ -839,10 +795,7 @@ const UserCenterPage = () => {
               <Col span={24}>
                 <StorageUsageCard 
                   usage={storageUsage} 
-                  onUpgrade={() => {
-                    setActiveTab('subscription');
-                    setUpgradeModalVisible(true);
-                  }}
+                  onUpgrade={handleNavigateToPricing}
                 />
               </Col>
               <Col span={24}>
@@ -858,170 +811,6 @@ const UserCenterPage = () => {
           )}
         </TabPane>
       </Tabs>
-
-      {/* 升级引导对话框 */}
-      <Modal
-        title="选择套餐"
-        open={upgradeModalVisible}
-        onCancel={() => setUpgradeModalVisible(false)}
-        footer={null}
-        width={900}
-      >
-        <Row gutter={[16, 16]}>
-          {plans.map(plan => {
-            const currentPlanCode = subscription?.plan?.plan_code;
-            const isCurrentPlan = currentPlanCode === plan.plan_code;
-            
-            const planLevels: { [key: string]: number } = {
-              'free': 1,
-              'professional': 2,
-              'enterprise': 3
-            };
-            
-            const currentLevel = planLevels[currentPlanCode || ''] || 0;
-            const planLevel = planLevels[plan.plan_code] || 0;
-            
-            const isUpgrade = planLevel > currentLevel;
-            const isDowngrade = planLevel < currentLevel;
-            const hasPurchased = subscription !== null;
-
-            let cardStyle: React.CSSProperties = {
-              height: '100%',
-              transition: 'all 0.3s ease',
-              border: '1px solid #d9d9d9'
-            };
-
-            if (isCurrentPlan) {
-              cardStyle.border = '2px solid #1890ff';
-              cardStyle.boxShadow = '0 4px 12px rgba(24, 144, 255, 0.15)';
-            }
-
-            let buttonText = '立即购买';
-            let buttonType: 'primary' | 'default' | 'dashed' = 'primary';
-            let buttonDisabled = false;
-            let buttonIcon = <RocketOutlined />;
-            let tagColor = '';
-            let tagText = '';
-
-            if (isCurrentPlan) {
-              tagColor = 'blue';
-              tagText = '当前套餐';
-              buttonText = '已购买';
-              buttonType = 'default';
-              buttonDisabled = true;
-            } else if (hasPurchased) {
-              if (isUpgrade) {
-                tagColor = 'green';
-                tagText = '推荐升级';
-                buttonText = '立即升级';
-                buttonType = 'primary';
-                buttonIcon = <RocketOutlined />;
-              } else if (isDowngrade) {
-                tagColor = 'blue';
-                tagText = '已购买';
-                buttonText = '已购买';
-                buttonType = 'default';
-                buttonDisabled = true;
-              } else {
-                tagColor = 'blue';
-                tagText = '已购买';
-                buttonText = '已购买';
-                buttonType = 'default';
-                buttonDisabled = true;
-              }
-            } else {
-              tagColor = 'purple';
-              tagText = '推荐';
-              buttonText = '立即购买';
-              buttonType = 'primary';
-            }
-
-            return (
-              <Col span={8} key={plan.id}>
-                <Card
-                  hoverable={!isCurrentPlan && !buttonDisabled}
-                  style={cardStyle}
-                >
-                  <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                    <div style={{ textAlign: 'center' }}>
-                      <div style={{ marginBottom: 8 }}>
-                        <h3 style={{ margin: 0, fontSize: 18 }}>{plan.plan_name}</h3>
-                      </div>
-                      <Tag color={tagColor} style={{ marginBottom: 8 }}>
-                        {tagText}
-                      </Tag>
-                      <div style={{ fontSize: 28, fontWeight: 'bold', color: '#1890ff', marginTop: 8 }}>
-                        ¥{formatPrice(plan.price)}
-                        <span style={{ fontSize: 14, color: '#8c8c8c', fontWeight: 'normal' }}>/月</span>
-                      </div>
-                    </div>
-
-                    <Divider style={{ margin: '8px 0' }} />
-
-                    <div style={{ minHeight: 180 }}>
-                      <Descriptions column={1} size="small" bordered>
-                        {plan.features.map(f => (
-                          <Descriptions.Item 
-                            key={f.feature_code} 
-                            label={<span style={{ fontSize: 12 }}>{f.feature_name}</span>}
-                          >
-                            <span style={{ fontWeight: 500 }}>
-                              {f.feature_value === -1 ? '无限制' : 
-                                f.feature_code === 'storage_space' 
-                                  ? formatStorageMB(f.feature_value)
-                                  : f.feature_value}
-                            </span>
-                          </Descriptions.Item>
-                        ))}
-                      </Descriptions>
-                    </div>
-
-                    <Button
-                      type={buttonType}
-                      block
-                      size="large"
-                      onClick={() => !buttonDisabled && handleUpgrade(plan.id)}
-                      icon={buttonIcon}
-                      disabled={buttonDisabled}
-                      style={{
-                        marginTop: 8,
-                        height: 44,
-                        fontSize: 16,
-                        fontWeight: 500
-                      }}
-                    >
-                      {buttonText}
-                    </Button>
-
-                    <div style={{ 
-                      textAlign: 'center', 
-                      fontSize: 12,
-                      marginTop: 8,
-                      minHeight: 20
-                    }}>
-                      {isUpgrade && hasPurchased && (
-                        <span style={{ color: '#52c41a' }}>
-                          推荐升级 · 按剩余天数计算差价
-                        </span>
-                      )}
-                      {(isCurrentPlan || (isDowngrade && hasPurchased)) && (
-                        <span style={{ color: '#8c8c8c' }}>
-                          已享受此套餐的所有功能
-                        </span>
-                      )}
-                      {!hasPurchased && (
-                        <span style={{ color: '#8c8c8c' }}>
-                          &nbsp;
-                        </span>
-                      )}
-                    </div>
-                  </Space>
-                </Card>
-              </Col>
-            );
-          })}
-        </Row>
-      </Modal>
 
       {/* 修改密码对话框 */}
       <Modal
