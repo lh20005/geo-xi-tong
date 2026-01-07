@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- Migration: 015_add_duration_days_to_plans
 -- Description: 添加 duration_days 字段到 subscription_plans 表
 -- Date: 2026-01-04
@@ -19,3 +20,9 @@ WHERE billing_cycle = 'yearly' AND duration_days = 30;
 
 -- 添加注释
 COMMENT ON COLUMN subscription_plans.duration_days IS '套餐有效期（天数）';
+
+-- ==================== DOWN ====================
+-- 回滚：删除 duration_days 字段
+
+ALTER TABLE subscription_plans 
+DROP COLUMN IF EXISTS duration_days;

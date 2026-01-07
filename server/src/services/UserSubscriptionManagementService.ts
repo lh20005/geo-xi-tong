@@ -110,9 +110,9 @@ class UserSubscriptionManagementService {
       const oldPlanId = subscription.plan_id;
       const oldEndDate = subscription.end_date;
 
-      // 获取新套餐信息
+      // 获取新套餐信息（包含 billing_cycle）
       const newPlan = await client.query(
-        'SELECT plan_code, plan_name, duration_days FROM subscription_plans WHERE id = $1',
+        'SELECT plan_code, plan_name, duration_days, billing_cycle FROM subscription_plans WHERE id = $1',
         [newPlanId]
       );
 
@@ -120,15 +120,29 @@ class UserSubscriptionManagementService {
         throw new Error('新套餐不存在');
       }
 
-      // 计算新的结束日期（保持原有剩余时间 + 新套餐时长）
-      const daysRemaining = Math.ceil(
-        (new Date(oldEndDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-      );
-      const newDurationDays = newPlan.rows[0].duration_days || 30;
-      const totalDays = daysRemaining + newDurationDays;
+      // 根据 billing_cycle 计算天数，优先使用 duration_days，否则按计费周期计算
+      let newDurationDays = newPlan.rows[0].duration_days;
+      if (!newDurationDays || newDurationDays <= 0) {
+        // 如果没有设置 duration_days，根据 billing_cycle 计算
+        const billingCycle = newPlan.rows[0].billing_cycle;
+        switch (billingCycle) {
+          case 'yearly':
+            newDurationDays = 365;
+            break;
+          case 'quarterly':
+            newDurationDays = 90;
+            break;
+          case 'monthly':
+          default:
+            newDurationDays = 30;
+            break;
+        }
+      }
 
+      // 设置结束日期为 N 天后的 23:59:59，确保完整天数
       const newEndDate = new Date();
-      newEndDate.setDate(newEndDate.getDate() + totalDays);
+      newEndDate.setDate(newEndDate.getDate() + newDurationDays);
+      newEndDate.setHours(23, 59, 59, 999);
 
       // 更新订阅
       await client.query(
