@@ -6,6 +6,7 @@ import { getWebSocketService } from './WebSocketService';
 import { pool } from '../db/database';
 import { AnomalyDetectionService } from './AnomalyDetectionService';
 import { SecurityService } from './SecurityService';
+import { QuotaInitializationService } from './QuotaInitializationService';
 
 export class PaymentService {
   private wechatpay: any;
@@ -284,6 +285,34 @@ export class PaymentService {
         if (order.order_type === 'upgrade') {
           await subscriptionService.applyUpgrade(order.user_id, order.plan_id);
         } else {
+          // 获取套餐的 billing_cycle 和 duration_days 来计算订阅时长
+          const planResult = await client.query(
+            `SELECT billing_cycle, duration_days FROM subscription_plans WHERE id = $1`,
+            [order.plan_id]
+          );
+          
+          let durationDays = 30; // 默认 30 天
+          if (planResult.rows.length > 0) {
+            const { billing_cycle, duration_days } = planResult.rows[0];
+            if (duration_days && duration_days > 0) {
+              durationDays = duration_days;
+            } else {
+              // 根据 billing_cycle 计算
+              switch (billing_cycle) {
+                case 'yearly':
+                  durationDays = 365;
+                  break;
+                case 'quarterly':
+                  durationDays = 90;
+                  break;
+                case 'monthly':
+                default:
+                  durationDays = 30;
+                  break;
+              }
+            }
+          }
+          
           // 将用户现有的 active 订阅标记为已替换
           await client.query(
             `UPDATE user_subscriptions 
@@ -292,34 +321,19 @@ export class PaymentService {
             [order.user_id]
           );
           
-          // 创建订阅
+          // 创建订阅（根据套餐计费周期设置时长）
           await client.query(
             `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
-             VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 month')`,
-            [order.user_id, order.plan_id]
+             VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, (CURRENT_TIMESTAMP + INTERVAL '1 day' * $3)::timestamp + TIME '23:59:59')`,
+            [order.user_id, order.plan_id, durationDays]
           );
           
-          // 初始化用户配额
-          await this.initializeUserQuotas(client, order.user_id, order.plan_id);
-          
-          // 更新存储空间配额
-          const storageFeatureResult = await client.query(
-            `SELECT feature_value FROM plan_features 
-             WHERE plan_id = $1 AND feature_code = 'storage_space'`,
-            [order.plan_id]
-          );
-          
-          if (storageFeatureResult.rows.length > 0) {
-            const storageMB = storageFeatureResult.rows[0].feature_value;
-            const storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
-            
-            await client.query(
-              `UPDATE user_storage_usage 
-               SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
-               WHERE user_id = $2`,
-              [storageQuotaBytes, order.user_id]
-            );
-          }
+          // 使用统一的配额初始化服务
+          await QuotaInitializationService.initializeUserQuotas(order.user_id, order.plan_id, {
+            resetUsage: true,
+            client
+          });
+          await QuotaInitializationService.updateStorageQuota(order.user_id, order.plan_id, client);
         }
 
         await client.query('COMMIT');
@@ -389,70 +403,6 @@ export class PaymentService {
         order_no: orderNo,
         status: order.status
       };
-    }
-  }
-
-  /**
-   * 初始化用户配额
-   * @param client 数据库客户端
-   * @param userId 用户ID
-   * @param planId 套餐ID
-   */
-  private async initializeUserQuotas(client: any, userId: number, planId: number): Promise<void> {
-    try {
-      console.log(`[PaymentService] 开始初始化用户 ${userId} 的配额...`);
-      
-      // 获取套餐的所有功能配额
-      const featuresResult = await client.query(
-        `SELECT feature_code, feature_name, feature_value, feature_unit
-         FROM plan_features
-         WHERE plan_id = $1`,
-        [planId]
-      );
-      
-      if (featuresResult.rows.length === 0) {
-        console.log(`[PaymentService] 套餐 ${planId} 没有配置功能，跳过配额初始化`);
-        return;
-      }
-      
-      const now = new Date();
-      let initializedCount = 0;
-      
-      for (const feature of featuresResult.rows) {
-        // 确定周期
-        let periodStart: Date;
-        let periodEnd: Date;
-        
-        if (feature.feature_code.includes('_per_day')) {
-          // 每日重置
-          periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-        } else if (feature.feature_code.includes('_per_month') || feature.feature_code === 'keyword_distillation') {
-          // 每月重置
-          periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        } else {
-          // 永不重置
-          periodStart = new Date(2000, 0, 1);
-          periodEnd = new Date(2099, 11, 31);
-        }
-        
-        // 插入初始配额记录（如果不存在）
-        await client.query(
-          `INSERT INTO user_usage (
-            user_id, feature_code, usage_count, period_start, period_end, last_reset_at
-          ) VALUES ($1, $2, 0, $3, $4, $5)
-          ON CONFLICT (user_id, feature_code, period_start) DO NOTHING`,
-          [userId, feature.feature_code, periodStart, periodEnd, periodStart]
-        );
-        
-        initializedCount++;
-      }
-      
-      console.log(`[PaymentService] ✅ 成功初始化 ${initializedCount} 项配额记录`);
-    } catch (error) {
-      console.error('[PaymentService] 初始化配额失败:', error);
-      // 不抛出错误，避免影响支付流程
     }
   }
 }

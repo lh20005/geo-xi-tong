@@ -3,6 +3,7 @@ import { Plan, Subscription, UsageStats, UsageRecord } from '../types/subscripti
 import { FEATURE_DEFINITIONS, FeatureCode } from '../config/features';
 import Redis from 'ioredis';
 import { getWebSocketService } from './WebSocketService';
+import { QuotaInitializationService } from './QuotaInitializationService';
 
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
@@ -319,12 +320,46 @@ export class SubscriptionService {
 
   /**
    * 为用户开通订阅
+   * @param userId 用户ID
+   * @param planId 套餐ID
+   * @param durationDays 可选的自定义天数，如果不传则根据套餐的 billing_cycle 自动计算
    */
-  async activateSubscription(userId: number, planId: number, durationMonths: number = 1): Promise<Subscription> {
+  async activateSubscription(userId: number, planId: number, durationDays?: number): Promise<Subscription> {
     const client = await pool.connect();
     
     try {
       await client.query('BEGIN');
+      
+      // 如果没有指定天数，从套餐配置获取
+      if (!durationDays) {
+        const planResult = await client.query(
+          `SELECT billing_cycle, duration_days FROM subscription_plans WHERE id = $1`,
+          [planId]
+        );
+        
+        if (planResult.rows.length > 0) {
+          const { billing_cycle, duration_days: planDurationDays } = planResult.rows[0];
+          if (planDurationDays && planDurationDays > 0) {
+            durationDays = planDurationDays;
+          } else {
+            // 根据 billing_cycle 计算
+            switch (billing_cycle) {
+              case 'yearly':
+                durationDays = 365;
+                break;
+              case 'quarterly':
+                durationDays = 90;
+                break;
+              case 'monthly':
+              default:
+                durationDays = 30;
+                break;
+            }
+          }
+        } else {
+          durationDays = 30; // 默认 30 天
+        }
+      }
       
       // 将用户现有的 active 订阅标记为已替换
       await client.query(
@@ -336,7 +371,8 @@ export class SubscriptionService {
       
       const startDate = new Date();
       const endDate = new Date();
-      endDate.setMonth(endDate.getMonth() + durationMonths);
+      endDate.setDate(endDate.getDate() + durationDays);
+      endDate.setHours(23, 59, 59, 999); // 设置为当天结束时间
 
       const result = await client.query(
         `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
@@ -347,27 +383,12 @@ export class SubscriptionService {
 
       const subscription = result.rows[0];
       
-      // 初始化用户配额
-      await this.initializeUserQuotas(client, userId, planId);
-      
-      // 更新存储空间配额
-      const storageFeatureResult = await client.query(
-        `SELECT feature_value FROM plan_features 
-         WHERE plan_id = $1 AND feature_code = 'storage_space'`,
-        [planId]
-      );
-      
-      if (storageFeatureResult.rows.length > 0) {
-        const storageMB = storageFeatureResult.rows[0].feature_value;
-        const storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
-        
-        await client.query(
-          `UPDATE user_storage_usage 
-           SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
-           WHERE user_id = $2`,
-          [storageQuotaBytes, userId]
-        );
-      }
+      // 使用统一的配额初始化服务
+      await QuotaInitializationService.initializeUserQuotas(userId, planId, { 
+        resetUsage: true, 
+        client 
+      });
+      await QuotaInitializationService.updateStorageQuota(userId, planId, client);
       
       await client.query('COMMIT');
 
@@ -399,70 +420,6 @@ export class SubscriptionService {
       await redis.del(`plan:${planCode}`);
     } catch (error) {
       console.error('清除缓存失败:', error);
-    }
-  }
-
-  /**
-   * 初始化用户配额
-   * @param client 数据库客户端
-   * @param userId 用户ID
-   * @param planId 套餐ID
-   */
-  private async initializeUserQuotas(client: any, userId: number, planId: number): Promise<void> {
-    try {
-      console.log(`[SubscriptionService] 开始初始化用户 ${userId} 的配额...`);
-      
-      // 获取套餐的所有功能配额
-      const featuresResult = await client.query(
-        `SELECT feature_code, feature_name, feature_value, feature_unit
-         FROM plan_features
-         WHERE plan_id = $1`,
-        [planId]
-      );
-      
-      if (featuresResult.rows.length === 0) {
-        console.log(`[SubscriptionService] 套餐 ${planId} 没有配置功能，跳过配额初始化`);
-        return;
-      }
-      
-      const now = new Date();
-      let initializedCount = 0;
-      
-      for (const feature of featuresResult.rows) {
-        // 确定周期
-        let periodStart: Date;
-        let periodEnd: Date;
-        
-        if (feature.feature_code.includes('_per_day')) {
-          // 每日重置
-          periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-        } else if (feature.feature_code.includes('_per_month') || feature.feature_code === 'keyword_distillation') {
-          // 每月重置
-          periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-          periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-        } else {
-          // 永不重置
-          periodStart = new Date(2000, 0, 1);
-          periodEnd = new Date(2099, 11, 31);
-        }
-        
-        // 插入初始配额记录（如果不存在）
-        await client.query(
-          `INSERT INTO user_usage (
-            user_id, feature_code, usage_count, period_start, period_end, last_reset_at
-          ) VALUES ($1, $2, 0, $3, $4, $5)
-          ON CONFLICT (user_id, feature_code, period_start) DO NOTHING`,
-          [userId, feature.feature_code, periodStart, periodEnd, periodStart]
-        );
-        
-        initializedCount++;
-      }
-      
-      console.log(`[SubscriptionService] ✅ 成功初始化 ${initializedCount} 项配额记录`);
-    } catch (error) {
-      console.error('[SubscriptionService] 初始化配额失败:', error);
-      // 不抛出错误，避免影响订阅流程
     }
   }
 

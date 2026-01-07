@@ -1,5 +1,6 @@
 import { pool } from '../db/database';
 import { subscriptionService } from './SubscriptionService';
+import { QuotaInitializationService } from './QuotaInitializationService';
 
 /**
  * 免费版订阅服务
@@ -58,11 +59,14 @@ export class FreeSubscriptionService {
       const subscriptionId = subscriptionResult.rows[0].id;
       console.log(`[FreeSubscription] ✅ 订阅创建成功 (ID: ${subscriptionId})`);
       
-      // 4. 初始化用户配额
-      await this.initializeFreeQuotas(client, userId, freePlan.id);
+      // 4. 使用统一的配额初始化服务
+      await QuotaInitializationService.initializeUserQuotas(userId, freePlan.id, {
+        resetUsage: true,
+        client
+      });
       
       // 5. 初始化存储空间
-      await this.initializeStorage(client, userId, freePlan.id);
+      await QuotaInitializationService.updateStorageQuota(userId, freePlan.id, client);
       
       await client.query('COMMIT');
       
@@ -143,14 +147,8 @@ export class FreeSubscriptionService {
           
           const subscriptionId = subscriptionResult.rows[0].id;
           
-          // 清除旧的配额记录
-          await client.query('DELETE FROM user_usage WHERE user_id = $1', [user.id]);
-          
-          // 初始化配额
-          await this.initializeFreeQuotas(client, user.id, freePlan.id);
-          
-          // 初始化存储空间
-          await this.initializeStorage(client, user.id, freePlan.id);
+          // 使用统一的配额初始化服务（套餐变更，重置配额）
+          await QuotaInitializationService.handlePlanChange(user.id, freePlan.id, client);
           
           await client.query('COMMIT');
           
@@ -175,124 +173,6 @@ export class FreeSubscriptionService {
       throw error;
     } finally {
       client.release();
-    }
-  }
-  
-  /**
-   * 初始化免费版配额
-   */
-  private async initializeFreeQuotas(client: any, userId: number, planId: number): Promise<void> {
-    console.log(`[FreeSubscription] 初始化用户 ${userId} 的配额...`);
-    
-    // 获取套餐的所有功能配额
-    const featuresResult = await client.query(
-      `SELECT feature_code, feature_name, feature_value, feature_unit
-       FROM plan_features
-       WHERE plan_id = $1`,
-      [planId]
-    );
-    
-    if (featuresResult.rows.length === 0) {
-      console.log(`[FreeSubscription] ⚠️ 套餐 ${planId} 没有配置功能，跳过配额初始化`);
-      return;
-    }
-    
-    const now = new Date();
-    let initializedCount = 0;
-    
-    for (const feature of featuresResult.rows) {
-      // 确定周期
-      let periodStart: Date;
-      let periodEnd: Date;
-      
-      if (feature.feature_code.includes('_per_month')) {
-        // 每月重置
-        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      } else if (feature.feature_code === 'keyword_distillation') {
-        // 每月重置
-        periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-        periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
-      } else {
-        // 永不重置（如平台账号数）
-        periodStart = new Date(2000, 0, 1);
-        periodEnd = new Date(2099, 11, 31);
-      }
-      
-      // 插入初始配额记录
-      await client.query(
-        `INSERT INTO user_usage (
-          user_id, feature_code, usage_count, period_start, period_end, last_reset_at
-        ) VALUES ($1, $2, 0, $3, $4, $5)
-        ON CONFLICT (user_id, feature_code, period_start) 
-        DO UPDATE SET 
-          usage_count = 0,
-          last_reset_at = $5,
-          updated_at = CURRENT_TIMESTAMP`,
-        [userId, feature.feature_code, periodStart, periodEnd, periodStart]
-      );
-      
-      initializedCount++;
-    }
-    
-    console.log(`[FreeSubscription] ✅ 成功初始化 ${initializedCount} 项配额记录`);
-  }
-  
-  /**
-   * 初始化存储空间
-   */
-  private async initializeStorage(client: any, userId: number, planId: number): Promise<void> {
-    console.log(`[FreeSubscription] 初始化用户 ${userId} 的存储空间...`);
-    
-    // 从数据库获取存储空间配额（而不是硬编码）
-    const storageFeatureResult = await client.query(
-      `SELECT feature_value FROM plan_features 
-       WHERE plan_id = $1 AND feature_code = 'storage_space'`,
-      [planId]
-    );
-    
-    let storageQuotaBytes: number;
-    
-    if (storageFeatureResult.rows.length > 0) {
-      // 配额单位是 MB，需要转换为字节
-      const storageMB = storageFeatureResult.rows[0].feature_value;
-      storageQuotaBytes = storageMB * 1024 * 1024;
-      console.log(`[FreeSubscription] 从数据库读取存储配额: ${storageMB} MB (${storageQuotaBytes} bytes)`);
-    } else {
-      // 如果没有配置，使用默认值 10MB
-      storageQuotaBytes = 10 * 1024 * 1024;
-      console.log(`[FreeSubscription] ⚠️ 未找到存储配额配置，使用默认值: 10 MB`);
-    }
-    
-    // 检查是否已有存储记录
-    const existingStorageResult = await client.query(
-      `SELECT id FROM user_storage_usage WHERE user_id = $1`,
-      [userId]
-    );
-    
-    if (existingStorageResult.rows.length > 0) {
-      // 更新存储配额（使用 last_updated_at 而不是 updated_at）
-      await client.query(
-        `UPDATE user_storage_usage 
-         SET storage_quota_bytes = $1, last_updated_at = CURRENT_TIMESTAMP
-         WHERE user_id = $2`,
-        [storageQuotaBytes, userId]
-      );
-      console.log(`[FreeSubscription] ✅ 更新存储配额为 ${storageQuotaBytes} bytes`);
-    } else {
-      // 创建存储记录
-      await client.query(
-        `INSERT INTO user_storage_usage (
-          user_id, 
-          image_storage_bytes,
-          document_storage_bytes,
-          article_storage_bytes,
-          storage_quota_bytes,
-          purchased_storage_bytes
-        ) VALUES ($1, 0, 0, 0, $2, 0)`,
-        [userId, storageQuotaBytes]
-      );
-      console.log(`[FreeSubscription] ✅ 创建存储记录，配额 ${storageQuotaBytes} bytes (${storageQuotaBytes / (1024 * 1024)} MB)`);
     }
   }
 }
