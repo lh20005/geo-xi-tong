@@ -57,16 +57,17 @@ interface UserProfile {
   id: number;
   username: string;
   role: string;
-  invitation_code: string;
-  created_at: string;
-  last_login_at: string | null;
+  invitationCode: string;
+  createdAt: string;
+  lastLoginAt: string | null;
 }
 
 interface InvitationStats {
-  total_invites: number;
-  invited_users: {
+  invitationCode: string;
+  totalInvites: number;
+  invitedUsers: {
     username: string;
-    created_at: string;
+    createdAt: string;
   }[];
 }
 
@@ -388,8 +389,8 @@ const UserCenterPage = () => {
   const showExpiryWarning = daysUntilExpiry > 0 && daysUntilExpiry <= 7;
 
   const handleCopyInvitationCode = () => {
-    if (userProfile?.invitation_code) {
-      navigator.clipboard.writeText(userProfile.invitation_code);
+    if (userProfile?.invitationCode) {
+      navigator.clipboard.writeText(userProfile.invitationCode);
       setInvitationCodeCopied(true);
       message.success('邀请码已复制到剪贴板');
       setTimeout(() => setInvitationCodeCopied(false), 2000);
@@ -637,11 +638,11 @@ const UserCenterPage = () => {
                       {userProfile.id}
                     </Descriptions.Item>
                     <Descriptions.Item label="注册时间">
-                      {new Date(userProfile.created_at).toLocaleString('zh-CN')}
+                      {new Date(userProfile.createdAt).toLocaleString('zh-CN')}
                     </Descriptions.Item>
                     <Descriptions.Item label="最后登录">
-                      {userProfile.last_login_at 
-                        ? new Date(userProfile.last_login_at).toLocaleString('zh-CN')
+                      {userProfile.lastLoginAt 
+                        ? new Date(userProfile.lastLoginAt).toLocaleString('zh-CN')
                         : '从未登录'}
                     </Descriptions.Item>
                   </Descriptions>
@@ -694,7 +695,8 @@ const UserCenterPage = () => {
           key="invitation"
         >
           <Row gutter={[16, 16]}>
-            <Col span={24}>
+            {/* 邀请码卡片 */}
+            <Col xs={24} lg={12}>
               <Card
                 title={
                   <Space>
@@ -702,62 +704,49 @@ const UserCenterPage = () => {
                     我的邀请码
                   </Space>
                 }
-                style={{ 
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white'
-                }}
-                styles={{ header: { color: 'white', borderBottom: '1px solid rgba(255,255,255,0.2)' } }}
               >
                 {userProfile ? (
-                  <div>
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
                     <div style={{ 
-                      background: 'rgba(255,255,255,0.2)', 
-                      borderRadius: 8, 
-                      padding: 24,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      borderRadius: 12, 
+                      padding: '32px 24px',
                       marginBottom: 16
                     }}>
-                      <Row align="middle" justify="space-between">
-                        <Col>
-                          <div style={{ fontSize: 14, marginBottom: 8, opacity: 0.9 }}>邀请码</div>
-                          <div style={{ 
-                            fontSize: 36, 
-                            fontWeight: 'bold', 
-                            letterSpacing: 4,
-                            fontFamily: 'monospace'
-                          }}>
-                            {userProfile.invitation_code}
-                          </div>
-                        </Col>
-                        <Col>
-                          <Button
-                            size="large"
-                            icon={<CopyOutlined />}
-                            onClick={handleCopyInvitationCode}
-                            style={{ 
-                              background: 'white', 
-                              color: '#667eea',
-                              border: 'none',
-                              fontWeight: 500
-                            }}
-                          >
-                            {invitationCodeCopied ? '已复制!' : '复制'}
-                          </Button>
-                        </Col>
-                      </Row>
+                      <div style={{ 
+                        fontSize: 42, 
+                        fontWeight: 'bold', 
+                        letterSpacing: 8,
+                        fontFamily: 'monospace',
+                        color: 'white',
+                        textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                      }}>
+                        {userProfile.invitationCode || '------'}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 14, opacity: 0.9 }}>
-                      分享您的邀请码，邀请好友加入平台
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={<CopyOutlined />}
+                      onClick={handleCopyInvitationCode}
+                      style={{ minWidth: 160 }}
+                    >
+                      {invitationCodeCopied ? '已复制!' : '复制邀请码'}
+                    </Button>
+                    <div style={{ marginTop: 16, color: '#8c8c8c', fontSize: 14 }}>
+                      分享邀请码给好友，邀请他们加入平台
                     </div>
                   </div>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                    <p>加载中...</p>
+                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                    <p style={{ color: '#8c8c8c' }}>加载中...</p>
                   </div>
                 )}
               </Card>
             </Col>
 
-            <Col span={24}>
+            {/* 邀请统计卡片 */}
+            <Col xs={24} lg={12}>
               <Card
                 title={
                   <Space>
@@ -768,59 +757,60 @@ const UserCenterPage = () => {
                 extra={<Button icon={<ReloadOutlined />} onClick={fetchInvitationStats}>刷新</Button>}
               >
                 {invitationStats ? (
-                  <>
-                    <Row gutter={16} style={{ marginBottom: 24 }}>
-                      <Col span={24}>
-                        <Card 
-                          style={{ 
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            border: 'none'
-                          }}
-                        >
-                          <Statistic
-                            title={<span style={{ color: 'rgba(255,255,255,0.9)' }}>累计邀请</span>}
-                            value={invitationStats.total_invites}
-                            valueStyle={{ color: 'white', fontSize: 48 }}
-                            suffix={<span style={{ color: 'rgba(255,255,255,0.9)', fontSize: 20 }}>人</span>}
-                          />
-                        </Card>
-                      </Col>
-                    </Row>
-
-                    {invitationStats.invited_users && Array.isArray(invitationStats.invited_users) && invitationStats.invited_users.length > 0 ? (
-                      <div>
-                        <Divider orientation="left">受邀用户列表</Divider>
-                        <List
-                          dataSource={Array.isArray(invitationStats.invited_users) ? invitationStats.invited_users : []}
-                          renderItem={(user) => (
-                            <List.Item>
-                              <List.Item.Meta
-                                avatar={
-                                  <Avatar 
-                                    style={{ backgroundColor: '#1890ff' }}
-                                    size="large"
-                                  >
-                                    {user.username.charAt(0).toUpperCase()}
-                                  </Avatar>
-                                }
-                                title={<span style={{ fontSize: 16 }}>{user.username}</span>}
-                                description={`加入时间: ${new Date(user.created_at).toLocaleString('zh-CN')}`}
-                              />
-                            </List.Item>
-                          )}
-                        />
-                      </div>
-                    ) : (
-                      <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                        <TeamOutlined style={{ fontSize: 64, color: '#d9d9d9', marginBottom: 16 }} />
-                        <p style={{ color: '#8c8c8c', fontSize: 16 }}>还没有邀请任何用户</p>
-                        <p style={{ color: '#bfbfbf', fontSize: 14 }}>分享您的邀请码开始邀请好友吧</p>
-                      </div>
-                    )}
-                  </>
+                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <Statistic
+                      title="累计邀请人数"
+                      value={invitationStats.totalInvites}
+                      valueStyle={{ fontSize: 48, color: '#1890ff' }}
+                      suffix="人"
+                    />
+                    <div style={{ marginTop: 16, color: '#8c8c8c', fontSize: 14 }}>
+                      感谢您的推广支持
+                    </div>
+                  </div>
                 ) : (
                   <div style={{ textAlign: 'center', padding: '40px 0' }}>
                     <p style={{ color: '#8c8c8c' }}>加载中...</p>
+                  </div>
+                )}
+              </Card>
+            </Col>
+
+            {/* 受邀用户列表 */}
+            <Col span={24}>
+              <Card
+                title={
+                  <Space>
+                    <UserOutlined />
+                    受邀用户列表
+                  </Space>
+                }
+              >
+                {invitationStats && invitationStats.invitedUsers && invitationStats.invitedUsers.length > 0 ? (
+                  <List
+                    dataSource={invitationStats.invitedUsers}
+                    renderItem={(user) => (
+                      <List.Item>
+                        <List.Item.Meta
+                          avatar={
+                            <Avatar 
+                              style={{ backgroundColor: '#1890ff' }}
+                              size="large"
+                            >
+                              {user.username.charAt(0).toUpperCase()}
+                            </Avatar>
+                          }
+                          title={<span style={{ fontSize: 16 }}>{user.username}</span>}
+                          description={`加入时间: ${new Date(user.createdAt).toLocaleString('zh-CN')}`}
+                        />
+                      </List.Item>
+                    )}
+                  />
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                    <TeamOutlined style={{ fontSize: 64, color: '#d9d9d9', marginBottom: 16 }} />
+                    <p style={{ color: '#8c8c8c', fontSize: 16, marginBottom: 8 }}>还没有邀请任何用户</p>
+                    <p style={{ color: '#bfbfbf', fontSize: 14 }}>分享您的邀请码开始邀请好友吧</p>
                   </div>
                 )}
               </Card>

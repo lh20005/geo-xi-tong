@@ -92,21 +92,10 @@ export const StorageBreakdownChart: React.FC<StorageBreakdownChartProps> = ({ br
 
   const totalSize = breakdown.images.sizeBytes + breakdown.documents.sizeBytes + breakdown.articles.sizeBytes;
 
-  if (totalSize === 0) {
-    return (
-      <Card title={<><PieChartOutlined /> 存储分布</>}>
-        <div style={{ textAlign: 'center', color: '#999', padding: '32px 0' }}>
-          暂无存储数据
-        </div>
-      </Card>
-    );
-  }
-
   return (
     <Card title={<><PieChartOutlined /> 存储分布</>}>
-      <div ref={chartRef} style={{ width: '100%', height: '300px' }} />
-      
-      <div style={{ marginTop: 16 }}>
+      {/* 详细信息 */}
+      <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 8, background: '#e6f7ff', borderRadius: 4, marginBottom: 8 }}>
           <span style={{ color: '#1890ff' }}>📷 图片</span>
           <span style={{ fontWeight: 600 }}>{formatBytes(breakdown.images.sizeBytes)} ({breakdown.images.count} 个)</span>
@@ -120,6 +109,11 @@ export const StorageBreakdownChart: React.FC<StorageBreakdownChartProps> = ({ br
           <span style={{ fontWeight: 600 }}>{formatBytes(breakdown.articles.sizeBytes)} ({breakdown.articles.count} 个)</span>
         </div>
       </div>
+      
+      {/* 饼图 - 仅在有数据时显示 */}
+      {totalSize > 0 && (
+        <div ref={chartRef} style={{ width: '100%', height: '200px', marginTop: 16 }} />
+      )}
     </Card>
   );
 };
