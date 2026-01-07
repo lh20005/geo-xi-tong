@@ -260,6 +260,21 @@ export class WebSocketService {
   }
 
   /**
+   * 检查用户是否在线
+   */
+  isUserOnline(userId: number): boolean {
+    const userConnections = this.connections.get(userId);
+    return userConnections !== undefined && userConnections.size > 0;
+  }
+
+  /**
+   * 获取所有在线用户ID列表
+   */
+  getOnlineUserIds(): number[] {
+    return Array.from(this.connections.keys());
+  }
+
+  /**
    * 关闭服务器
    */
   close(): void {

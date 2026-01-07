@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Input, Button, Tag, Modal, Form, Select, message, Space, Card } from 'antd';
+import { Input, Button, Tag, Modal, Form, Select, message, Space, Card, Badge } from 'antd';
 import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { config } from '../config/env';
@@ -19,6 +19,7 @@ interface User {
   lastLoginAt?: string;
   isTempPassword?: boolean;
   subscriptionPlanName?: string;
+  isOnline?: boolean;
 }
 
 export default function UserManagementPage() {
@@ -29,6 +30,7 @@ export default function UserManagementPage() {
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [subscriptionFilter, setSubscriptionFilter] = useState<string>(''); // 新增：订阅套餐筛选
+  const [onlineFilter, setOnlineFilter] = useState<string>(''); // 新增：在线状态筛选
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -52,7 +54,7 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     loadUsers();
-  }, [page, search, subscriptionFilter]); // 添加 subscriptionFilter 依赖
+  }, [page, search, subscriptionFilter, onlineFilter]); // 添加 onlineFilter 依赖
 
   useEffect(() => {
     // 连接 WebSocket
@@ -91,7 +93,8 @@ export default function UserManagementPage() {
           page, 
           pageSize, 
           search: search || undefined,
-          subscriptionPlan: subscriptionFilter || undefined // 添加套餐筛选参数
+          subscriptionPlan: subscriptionFilter || undefined, // 添加套餐筛选参数
+          onlineStatus: onlineFilter || undefined // 添加在线状态筛选参数
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -232,6 +235,18 @@ export default function UserManagementPage() {
       ),
     },
     {
+      title: '在线状态',
+      dataIndex: 'isOnline',
+      key: 'isOnline',
+      width: 100,
+      render: (isOnline: boolean) => (
+        <Badge 
+          status={isOnline ? 'success' : 'default'} 
+          text={isOnline ? '在线' : '离线'} 
+        />
+      ),
+    },
+    {
       title: '角色',
       dataIndex: 'role',
       key: 'role',
@@ -350,6 +365,26 @@ export default function UserManagementPage() {
               </Select.Option>
               <Select.Option value="无订阅">
                 <Tag color="default">无订阅</Tag>
+              </Select.Option>
+            </Select>
+
+            <Select
+              placeholder="筛选在线状态"
+              allowClear
+              size="large"
+              style={{ width: 160 }}
+              onChange={(value) => {
+                setOnlineFilter(value || '');
+                setPage(1); // 重置到第一页
+              }}
+              value={onlineFilter || undefined}
+            >
+              <Select.Option value="">全部状态</Select.Option>
+              <Select.Option value="online">
+                <Badge status="success" text="在线" />
+              </Select.Option>
+              <Select.Option value="offline">
+                <Badge status="default" text="离线" />
               </Select.Option>
             </Select>
           </Space>

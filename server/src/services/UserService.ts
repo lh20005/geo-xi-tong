@@ -295,7 +295,9 @@ export class UserService {
     page: number = 1,
     pageSize: number = 10,
     search?: string,
-    subscriptionPlan?: string
+    subscriptionPlan?: string,
+    onlineUserIds?: number[],
+    onlineStatus?: 'online' | 'offline'
   ): Promise<{
     users: Array<User & { invitedCount: number; subscriptionPlanName?: string }>;
     total: number;
@@ -304,13 +306,33 @@ export class UserService {
   }> {
     const offset = (page - 1) * pageSize;
     
-    let whereClause = '';
+    const whereConditions: string[] = [];
     const params: any[] = [];
+    let paramIndex = 1;
     
     if (search) {
-      whereClause = 'WHERE u.username ILIKE $1';
+      whereConditions.push(`u.username ILIKE $${paramIndex++}`);
       params.push(`%${search}%`);
     }
+
+    // 在线状态筛选
+    if (onlineStatus && onlineUserIds !== undefined) {
+      if (onlineStatus === 'online') {
+        if (onlineUserIds.length > 0) {
+          whereConditions.push(`u.id = ANY($${paramIndex++})`);
+          params.push(onlineUserIds);
+        } else {
+          whereConditions.push('FALSE');
+        }
+      } else if (onlineStatus === 'offline') {
+        if (onlineUserIds.length > 0) {
+          whereConditions.push(`NOT (u.id = ANY($${paramIndex++}))`);
+          params.push(onlineUserIds);
+        }
+      }
+    }
+    
+    const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
     
     // 获取总数
     const countResult = await pool.query(
@@ -320,16 +342,18 @@ export class UserService {
     const total = parseInt(countResult.rows[0].total);
     
     // 获取用户列表（包括邀请数量和订阅套餐名称）
-    // 使用LATERAL子查询获取每个用户最新的有效订阅
     let havingClause = '';
     if (subscriptionPlan) {
       if (subscriptionPlan === '无订阅') {
         havingClause = 'HAVING latest_sub.plan_name IS NULL';
       } else {
         params.push(subscriptionPlan);
-        havingClause = `HAVING latest_sub.plan_name = $${params.length}`;
+        havingClause = `HAVING latest_sub.plan_name = $${paramIndex++}`;
       }
     }
+    
+    const limitParamIndex = paramIndex++;
+    const offsetParamIndex = paramIndex++;
     
     const usersResult = await pool.query(
       `SELECT 
@@ -353,7 +377,7 @@ export class UserService {
        GROUP BY u.id, latest_sub.plan_name
        ${havingClause}
        ORDER BY u.created_at DESC
-       LIMIT $` + (params.length + 1) + ` OFFSET $` + (params.length + 2),
+       LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
       [...params, pageSize, offset]
     );
     

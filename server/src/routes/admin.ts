@@ -43,7 +43,7 @@ const userManagementRateLimit = createRateLimitMiddleware(
 /**
  * 转换数据库字段名（蛇形）为前端字段名（驼峰）
  */
-function convertUserFields(user: any) {
+function convertUserFields(user: any, isOnline?: boolean) {
   return {
     id: user.id,
     username: user.username,
@@ -56,7 +56,8 @@ function convertUserFields(user: any) {
     lastLoginAt: user.last_login_at ? (user.last_login_at instanceof Date ? user.last_login_at.toISOString() : user.last_login_at) : null,
     invitedCount: user.invitedCount,
     invitedUsers: user.invitedUsers,
-    subscriptionPlanName: user.subscriptionPlanName
+    subscriptionPlanName: user.subscriptionPlanName,
+    isOnline: isOnline ?? false
   };
 }
 
@@ -70,11 +71,31 @@ router.get('/users', async (req, res) => {
     const pageSize = parseInt(req.query.pageSize as string) || 10;
     const search = req.query.search as string;
     const subscriptionPlan = req.query.subscriptionPlan as string;
+    const onlineStatus = req.query.onlineStatus as 'online' | 'offline' | undefined;
 
-    const result = await userService.getUsers(page, pageSize, search, subscriptionPlan);
+    // 获取在线用户ID列表
+    let onlineUserIds: number[] = [];
+    try {
+      const wsService = getWebSocketService();
+      onlineUserIds = wsService.getOnlineUserIds();
+    } catch (error) {
+      console.error('[Admin] 获取在线用户列表失败:', error);
+    }
 
-    // 转换字段名
-    const convertedUsers = result.users.map(convertUserFields);
+    // 传递在线状态筛选参数给 UserService
+    const result = await userService.getUsers(
+      page, 
+      pageSize, 
+      search, 
+      subscriptionPlan,
+      onlineUserIds,
+      onlineStatus
+    );
+
+    // 转换字段名并添加在线状态
+    const convertedUsers = result.users.map(user => 
+      convertUserFields(user, onlineUserIds.includes(user.id))
+    );
 
     res.json({
       success: true,
@@ -82,7 +103,8 @@ router.get('/users', async (req, res) => {
         users: convertedUsers,
         total: result.total,
         page: result.page,
-        pageSize: result.pageSize
+        pageSize: result.pageSize,
+        onlineCount: onlineUserIds.length
       }
     });
   } catch (error: any) {
