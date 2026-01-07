@@ -95,6 +95,8 @@ export class SubscriptionService {
   async getUserActiveSubscription(userId: number): Promise<Subscription | null> {
     const result = await pool.query(
       `SELECT s.*, 
+        p.plan_name,
+        p.plan_code,
         json_build_object(
           'id', p.id,
           'plan_code', p.plan_code,
