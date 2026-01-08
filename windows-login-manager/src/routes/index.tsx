@@ -39,6 +39,7 @@ const ProductManagementPage = lazy(() => import('../pages/ProductManagementPage'
 const TokenDebugPage = lazy(() => import('../pages/TokenDebugPage'));
 const OrderManagementPage = lazy(() => import('../pages/OrderManagementPage'));
 const UserManagementPage = lazy(() => import('../pages/UserManagementPage'));
+const AgentManagementPage = lazy(() => import('../pages/AgentManagementPage'));
 const PaymentPage = lazy(() => import('../pages/PaymentPage'));
 
 // 登录管理器原有页面
@@ -291,6 +292,14 @@ export const routes = [
     element: (
       <Suspense fallback={<LoadingFallback />}>
         <UserManagementPage />
+      </Suspense>
+    )
+  },
+  {
+    path: '/admin/agents',
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <AgentManagementPage />
       </Suspense>
     )
   },
