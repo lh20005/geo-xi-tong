@@ -152,35 +152,38 @@ export default function Sidebar() {
         },
       ],
     }] : []),
-    // 系统配置 - 仅管理员可见
+    // 系统管理 - 仅管理员可见
     ...(userIsAdmin ? [{
-      key: '/config',
+      key: 'system',
       icon: <SettingOutlined />,
-      label: '系统配置',
-    }] : []),
-    // 商品管理 - 仅管理员可见
-    ...(userIsAdmin ? [{
-      key: '/products',
-      icon: <ShoppingOutlined />,
-      label: '商品管理',
-    }] : []),
-    // 订单管理 - 仅管理员可见
-    ...(userIsAdmin ? [{
-      key: '/admin/orders',
-      icon: <ShoppingOutlined />,
-      label: '订单管理',
-    }] : []),
-    // 用户管理 - 仅管理员可见
-    ...(userIsAdmin ? [{
-      key: '/admin/users',
-      icon: <TeamOutlined />,
-      label: '用户管理',
-    }] : []),
-    // 代理商管理 - 仅管理员可见
-    ...(userIsAdmin ? [{
-      key: '/admin/agents',
-      icon: <DollarOutlined />,
-      label: '代理商管理',
+      label: '系统管理',
+      children: [
+        {
+          key: '/config',
+          icon: <SettingOutlined />,
+          label: '系统配置',
+        },
+        {
+          key: '/products',
+          icon: <ShoppingOutlined />,
+          label: '商品管理',
+        },
+        {
+          key: '/admin/orders',
+          icon: <ShoppingOutlined />,
+          label: '订单管理',
+        },
+        {
+          key: '/admin/users',
+          icon: <TeamOutlined />,
+          label: '用户管理',
+        },
+        {
+          key: '/admin/agents',
+          icon: <DollarOutlined />,
+          label: '代理商管理',
+        },
+      ],
     }] : []),
     {
       key: '/user-manual',
