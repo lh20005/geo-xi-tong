@@ -1,6 +1,7 @@
 /**
  * 微信授权服务
  * 使用小程序方式获取用户 OpenID
+ * 支持小程序码扫码绑定
  */
 
 import crypto from 'crypto';
@@ -17,6 +18,10 @@ export class WechatAuthService {
   // 待确认的绑定（小程序已获取openid，等待确认）
   // key: bindCode, value: { agentId, openid, createdAt }
   private pendingBinds: Map<string, { agentId: number; openid: string; nickname?: string; createdAt: number }> = new Map();
+  
+  // access_token 缓存
+  private accessToken: string | null = null;
+  private accessTokenExpiry: number = 0;
   
   private readonly CODE_EXPIRY = 5 * 60 * 1000; // 5分钟过期
 
@@ -50,6 +55,39 @@ export class WechatAuthService {
   }
 
   /**
+   * 获取小程序 access_token
+   */
+  private async getAccessToken(): Promise<string> {
+    // 检查缓存是否有效
+    if (this.accessToken && Date.now() < this.accessTokenExpiry) {
+      return this.accessToken;
+    }
+
+    const { appId, appSecret } = this.getConfig();
+
+    try {
+      const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${appId}&secret=${appSecret}`;
+      const response = await axios.get(url);
+      const data = response.data;
+
+      if (data.errcode) {
+        console.error('[WechatAuthService] 获取 access_token 失败:', data);
+        throw new Error(`获取 access_token 失败: ${data.errmsg}`);
+      }
+
+      this.accessToken = data.access_token;
+      // 提前5分钟过期，避免边界问题
+      this.accessTokenExpiry = Date.now() + (data.expires_in - 300) * 1000;
+
+      console.log('[WechatAuthService] 获取 access_token 成功');
+      return this.accessToken!;
+    } catch (error: any) {
+      console.error('[WechatAuthService] 获取 access_token 失败:', error);
+      throw new Error('获取微信 access_token 失败');
+    }
+  }
+
+  /**
    * 生成绑定码（用于小程序扫码绑定）
    * 返回一个6位数字码，用户在小程序中输入
    */
@@ -69,6 +107,97 @@ export class WechatAuthService {
       bindCode, 
       expiresIn: this.CODE_EXPIRY / 1000 // 返回秒数
     };
+  }
+
+  /**
+   * 生成小程序码（用于扫码绑定）
+   * 返回小程序码的 base64 图片数据
+   * @param agentId 代理商ID
+   * @param envVersion 小程序版本：release(正式版), trial(体验版), develop(开发版)
+   */
+  async generateMiniProgramQRCode(agentId: number, envVersion: 'release' | 'trial' | 'develop' = 'release'): Promise<{ 
+    bindCode: string; 
+    qrCodeBase64: string; 
+    expiresIn: number 
+  }> {
+    // 先生成绑定码
+    const { bindCode, expiresIn } = this.generateBindCode(agentId);
+
+    try {
+      const accessToken = await this.getAccessToken();
+      
+      // 调用微信接口生成小程序码
+      // 使用 getUnlimited 接口，支持无限数量的小程序码
+      const url = `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${accessToken}`;
+      
+      // 开发环境默认使用开发版小程序码
+      const isDev = process.env.NODE_ENV === 'development';
+      const actualEnvVersion = isDev ? 'develop' : envVersion;
+      
+      // 注意：page 参数只有在小程序发布后才能使用
+      // 如果小程序未发布，不传 page 参数，扫码后进入首页
+      // 首页需要检测 scene 参数并跳转到绑定页面
+      const requestBody: any = {
+        scene: bindCode,  // 绑定码作为场景值（最多32个字符）
+        width: 280,
+        auto_color: false,
+        line_color: { r: 7, g: 193, b: 96 },  // 微信绿色
+        is_hyaline: false,
+        env_version: actualEnvVersion  // 支持开发版/体验版/正式版
+      };
+      
+      // 只有正式版才传 page 参数（因为开发版可能页面还未发布）
+      if (actualEnvVersion === 'release') {
+        requestBody.page = 'pages/bindAgent/bindAgent';
+      }
+      
+      const response = await axios.post(url, requestBody, {
+        responseType: 'arraybuffer'
+      });
+
+      // 检查是否返回错误（错误时返回 JSON）
+      const contentType = response.headers['content-type'];
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = JSON.parse(Buffer.from(response.data).toString());
+        console.error('[WechatAuthService] 生成小程序码失败:', errorData);
+        
+        // 如果是页面无效错误，尝试不带 page 参数重新生成
+        if (errorData.errcode === 41030) {
+          console.log('[WechatAuthService] 页面无效，尝试不带 page 参数生成...');
+          delete requestBody.page;
+          const retryResponse = await axios.post(url, requestBody, {
+            responseType: 'arraybuffer'
+          });
+          
+          const retryContentType = retryResponse.headers['content-type'];
+          if (retryContentType && retryContentType.includes('application/json')) {
+            const retryErrorData = JSON.parse(Buffer.from(retryResponse.data).toString());
+            throw new Error(`生成小程序码失败: ${retryErrorData.errmsg}`);
+          }
+          
+          const qrCodeBase64 = `data:image/png;base64,${Buffer.from(retryResponse.data).toString('base64')}`;
+          console.log(`[WechatAuthService] 生成小程序码成功(无page): agentId=${agentId}, bindCode=${bindCode}`);
+          return { bindCode, qrCodeBase64, expiresIn };
+        }
+        
+        throw new Error(`生成小程序码失败: ${errorData.errmsg}`);
+      }
+
+      // 转换为 base64
+      const qrCodeBase64 = `data:image/png;base64,${Buffer.from(response.data).toString('base64')}`;
+
+      console.log(`[WechatAuthService] 生成小程序码成功: agentId=${agentId}, bindCode=${bindCode}, envVersion=${actualEnvVersion}`);
+
+      return {
+        bindCode,
+        qrCodeBase64,
+        expiresIn
+      };
+    } catch (error: any) {
+      console.error('[WechatAuthService] 生成小程序码失败:', error);
+      // 如果生成小程序码失败，仍然返回绑定码（降级方案）
+      throw new Error(error.message || '生成小程序码失败');
+    }
   }
 
   /**

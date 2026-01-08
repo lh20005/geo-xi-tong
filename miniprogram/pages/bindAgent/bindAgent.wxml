@@ -1,46 +1,139 @@
-<!--bindAgent.wxml-->
+<!--bindAgent.wxml - GEO 风格设计-->
 <view class="container">
-  <view class="header">
-    <view class="icon">
-      <text class="icon-text">🔗</text>
+  <!-- 顶部装饰背景 -->
+  <view class="header-bg"></view>
+
+  <!-- 扫码进入时显示自动绑定中 -->
+  <block wx:if="{{isFromScan && loading && !resultType}}">
+    <view class="header">
+      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <view class="title">正在绑定...</view>
+      <view class="subtitle">请稍候，正在完成微信账户绑定</view>
     </view>
-    <view class="title">绑定代理商账户</view>
-    <view class="subtitle">输入网页端显示的6位绑定码</view>
-  </view>
-
-  <view class="code-input-container">
-    <input 
-      class="code-input" 
-      type="number" 
-      maxlength="6"
-      placeholder="请输入绑定码"
-      bindinput="onCodeInput"
-      value="{{bindCode}}"
-      focus="{{true}}"
-    />
-  </view>
-
-  <button 
-    class="submit-btn {{bindCode.length === 6 ? '' : 'disabled'}}" 
-    bindtap="submitBind"
-    disabled="{{bindCode.length !== 6 || loading}}"
-    loading="{{loading}}"
-  >
-    {{loading ? '绑定中...' : '确认绑定'}}
-  </button>
-
-  <view class="result" wx:if="{{resultType}}">
-    <view class="result-icon {{resultType}}">
-      <text>{{resultType === 'success' ? '✓' : '✗'}}</text>
+    
+    <view class="card loading-card">
+      <view class="loading-spinner"></view>
+      <view class="loading-text">正在验证绑定码并获取授权</view>
     </view>
-    <view class="result-text">{{resultMessage}}</view>
-  </view>
+  </block>
 
-  <view class="tips">
-    <view class="tips-title">使用说明</view>
-    <view class="tip-item">1. 在电脑端登录 GEO 系统</view>
-    <view class="tip-item">2. 进入"个人中心" → "代理商中心"</view>
-    <view class="tip-item">3. 点击"绑定微信"获取绑定码</view>
-    <view class="tip-item">4. 在此输入绑定码完成绑定</view>
+  <!-- 绑定成功 -->
+  <block wx:elif="{{resultType === 'success'}}">
+    <view class="header">
+      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <view class="title">绑定成功</view>
+      <view class="subtitle">您的微信账户已成功绑定</view>
+    </view>
+    
+    <view class="card success-card">
+      <view class="result-icon success">
+        <text class="icon-text">✓</text>
+      </view>
+      <view class="result-title">恭喜！绑定成功</view>
+      <view class="result-desc">{{resultMessage}}</view>
+      <view class="result-hint">页面将自动关闭...</view>
+    </view>
+  </block>
+
+  <!-- 绑定失败 -->
+  <block wx:elif="{{resultType === 'error'}}">
+    <view class="header">
+      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <view class="title">绑定失败</view>
+      <view class="subtitle">请检查绑定码后重试</view>
+    </view>
+    
+    <view class="card error-card">
+      <view class="result-icon error">
+        <text class="icon-text">✗</text>
+      </view>
+      <view class="result-title">绑定失败</view>
+      <view class="result-desc">{{resultMessage}}</view>
+      
+      <!-- 重新输入 -->
+      <view class="input-section">
+        <input 
+          class="code-input" 
+          type="number" 
+          maxlength="6"
+          placeholder="请输入6位绑定码"
+          bindinput="onCodeInput"
+          value="{{bindCode}}"
+        />
+        <button 
+          class="submit-btn {{bindCode.length === 6 ? '' : 'disabled'}}" 
+          bindtap="submitBind"
+          disabled="{{bindCode.length !== 6 || loading}}"
+          loading="{{loading}}"
+        >
+          重新绑定
+        </button>
+      </view>
+    </view>
+  </block>
+
+  <!-- 正常输入绑定码 -->
+  <block wx:else>
+    <view class="header">
+      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <view class="title">绑定代理商账户</view>
+      <view class="subtitle">输入网页端显示的6位绑定码</view>
+    </view>
+    
+    <view class="card">
+      <view class="card-icon">
+        <text class="icon-text">🔗</text>
+      </view>
+      
+      <view class="input-section">
+        <input 
+          class="code-input" 
+          type="number" 
+          maxlength="6"
+          placeholder="请输入6位绑定码"
+          bindinput="onCodeInput"
+          value="{{bindCode}}"
+          focus="{{!isFromScan}}"
+          disabled="{{loading}}"
+        />
+        
+        <button 
+          class="submit-btn {{bindCode.length === 6 ? '' : 'disabled'}}" 
+          bindtap="submitBind"
+          disabled="{{bindCode.length !== 6 || loading}}"
+          loading="{{loading}}"
+        >
+          {{loading ? '绑定中...' : '确认绑定'}}
+        </button>
+      </view>
+    </view>
+    
+    <!-- 说明区域 -->
+    <view class="info-section">
+      <view class="info-title">如何获取绑定码？</view>
+      <view class="info-list">
+        <view class="info-item">
+          <view class="step-num">1</view>
+          <view class="step-text">在电脑端登录 GEO 系统</view>
+        </view>
+        <view class="info-item">
+          <view class="step-num">2</view>
+          <view class="step-text">进入"个人中心" → "代理商中心"</view>
+        </view>
+        <view class="info-item">
+          <view class="step-num">3</view>
+          <view class="step-text">点击"扫码绑定微信"</view>
+        </view>
+        <view class="info-item">
+          <view class="step-num">4</view>
+          <view class="step-text">扫描小程序码或输入绑定码</view>
+        </view>
+      </view>
+    </view>
+  </block>
+  
+  <!-- 底部版权 -->
+  <view class="footer">
+    <text class="footer-text">GEO 优化系统</text>
   </view>
 </view>

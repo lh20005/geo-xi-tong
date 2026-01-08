@@ -47,7 +47,7 @@
     "disableSWC": true
   },
   "compileType": "miniprogram",
-  "libVersion": "2.19.4",
+  "libVersion": "3.10.0",
   "appid": "wx76c24846b57dfaa9",
   "projectname": "geo-agent-bindding",
   "condition": {},

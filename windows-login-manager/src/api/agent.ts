@@ -2,8 +2,7 @@
  * 代理商 API 客户端
  */
 
-import axios from 'axios';
-import { API_BASE_URL } from '../config/env';
+import { apiClient } from './client';
 
 // 代理商状态
 export type AgentStatus = 'active' | 'suspended';
@@ -65,21 +64,11 @@ export interface PaginatedResult<T> {
   pageSize: number;
 }
 
-// 获取认证头
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('auth_token');
-  return { Authorization: `Bearer ${token}` };
-};
-
 /**
  * 申请成为代理商
  */
 export async function applyAgent(): Promise<Agent> {
-  const response = await axios.post(
-    `${API_BASE_URL}/agent/apply`,
-    {},
-    { headers: getAuthHeaders() }
-  );
+  const response = await apiClient.post('/agent/apply', {});
   return response.data.data;
 }
 
@@ -87,10 +76,7 @@ export async function applyAgent(): Promise<Agent> {
  * 获取代理商状态
  */
 export async function getAgentStatus(): Promise<{ isAgent: boolean; agent: Agent | null }> {
-  const response = await axios.get(
-    `${API_BASE_URL}/agent/status`,
-    { headers: getAuthHeaders() }
-  );
+  const response = await apiClient.get('/agent/status');
   return response.data.data;
 }
 
@@ -98,10 +84,7 @@ export async function getAgentStatus(): Promise<{ isAgent: boolean; agent: Agent
  * 获取代理商统计数据
  */
 export async function getAgentStats(): Promise<AgentStats> {
-  const response = await axios.get(
-    `${API_BASE_URL}/agent/stats`,
-    { headers: getAuthHeaders() }
-  );
+  const response = await apiClient.get('/agent/stats');
   return response.data.data;
 }
 
@@ -115,10 +98,7 @@ export async function getCommissions(params: {
   page?: number;
   pageSize?: number;
 }): Promise<PaginatedResult<Commission>> {
-  const response = await axios.get(
-    `${API_BASE_URL}/agent/commissions`,
-    { headers: getAuthHeaders(), params }
-  );
+  const response = await apiClient.get('/agent/commissions', { params });
   return response.data.data;
 }
 
@@ -129,10 +109,7 @@ export async function getBindCode(): Promise<{
   bindCode: string;
   expiresIn: number;
 }> {
-  const response = await axios.get(
-    `${API_BASE_URL}/agent/bindWechat/code`,
-    { headers: getAuthHeaders() }
-  );
+  const response = await apiClient.get('/agent/bindWechat/code');
   return response.data.data;
 }
 
@@ -144,10 +121,7 @@ export async function getBindQRCode(): Promise<{
   qrCodeBase64: string | null;
   expiresIn: number;
 }> {
-  const response = await axios.get(
-    `${API_BASE_URL}/agent/bindWechat/qrcode`,
-    { headers: getAuthHeaders() }
-  );
+  const response = await apiClient.get('/agent/bindWechat/qrcode');
   return response.data.data;
 }
 
@@ -159,10 +133,7 @@ export async function checkBindStatus(bindCode: string): Promise<{
   openid?: string;
   nickname?: string;
 }> {
-  const response = await axios.get(
-    `${API_BASE_URL}/agent/bindWechat/status`,
-    { headers: getAuthHeaders(), params: { bindCode } }
-  );
+  const response = await apiClient.get('/agent/bindWechat/status', { params: { bindCode } });
   return response.data.data;
 }
 
@@ -170,9 +141,5 @@ export async function checkBindStatus(bindCode: string): Promise<{
  * 解绑微信账户
  */
 export async function unbindWechat(): Promise<void> {
-  await axios.post(
-    `${API_BASE_URL}/agent/bindWechat/unbind`,
-    {},
-    { headers: getAuthHeaders() }
-  );
+  await apiClient.post('/agent/bindWechat/unbind', {});
 }

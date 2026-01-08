@@ -1,19 +1,52 @@
 <!--index.wxml-->
 <view class="container">
-  <view class="logo">
-    <text class="logo-icon">💰</text>
+  <!-- 顶部装饰背景 -->
+  <view class="header-bg"></view>
+  
+  <!-- Logo 和标题 -->
+  <view class="header">
+    <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+    <view class="title">GEO 代理商中心</view>
+    <view class="subtitle">绑定微信账户，自动接收佣金分成</view>
   </view>
   
-  <view class="title">GEO 代理商中心</view>
-  <view class="subtitle">绑定微信账户，接收佣金分成</view>
+  <!-- 功能卡片 -->
+  <view class="card">
+    <view class="card-icon">
+      <text class="icon-text">🔗</text>
+    </view>
+    <view class="card-title">绑定微信账户</view>
+    <view class="card-desc">扫码或输入绑定码，完成账户关联</view>
+    <button class="bind-btn" bindtap="goToBind">
+      立即绑定
+    </button>
+  </view>
   
-  <button class="bind-btn" bindtap="goToBind">
-    绑定代理商账户
-  </button>
+  <!-- 说明区域 -->
+  <view class="info-section">
+    <view class="info-title">使用说明</view>
+    <view class="info-list">
+      <view class="info-item">
+        <view class="step-num">1</view>
+        <view class="step-text">登录 GEO 系统，进入代理商中心</view>
+      </view>
+      <view class="info-item">
+        <view class="step-num">2</view>
+        <view class="step-text">点击"扫码绑定微信"生成小程序码</view>
+      </view>
+      <view class="info-item">
+        <view class="step-num">3</view>
+        <view class="step-text">使用微信扫码，自动完成绑定</view>
+      </view>
+      <view class="info-item">
+        <view class="step-num">4</view>
+        <view class="step-text">绑定成功后，佣金自动结算到微信</view>
+      </view>
+    </view>
+  </view>
   
-  <view class="tips">
-    <view class="tip-item">1. 在网页端获取6位绑定码</view>
-    <view class="tip-item">2. 点击上方按钮输入绑定码</view>
-    <view class="tip-item">3. 绑定成功后佣金自动到账</view>
+  <!-- 底部版权 -->
+  <view class="footer">
+    <text class="footer-text">GEO 优化系统 · 让品牌在AI时代被主动推荐</text>
   </view>
 </view>

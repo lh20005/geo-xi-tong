@@ -166,6 +166,61 @@ router.get('/bindWechat/code', authenticate, async (req, res) => {
 });
 
 /**
+ * 获取小程序码（用于扫码绑定）
+ * GET /api/agent/bindWechat/qrcode
+ * 可选参数 env: release(正式版) | trial(体验版) | develop(开发版)
+ */
+router.get('/bindWechat/qrcode', authenticate, async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const envVersion = (req.query.env as 'release' | 'trial' | 'develop') || 'release';
+
+    const agent = await agentService.getAgentByUserId(userId);
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: '您还不是代理商'
+      });
+    }
+
+    const { bindCode, qrCodeBase64, expiresIn } = await wechatAuthService.generateMiniProgramQRCode(agent.id, envVersion);
+
+    res.json({
+      success: true,
+      data: {
+        bindCode,
+        qrCodeBase64,
+        expiresIn
+      }
+    });
+  } catch (error: any) {
+    console.error('[Agent] 生成小程序码失败:', error);
+    // 降级：返回绑定码
+    try {
+      const agent = await agentService.getAgentByUserId((req as any).user.userId);
+      if (agent) {
+        const { bindCode, expiresIn } = wechatAuthService.generateBindCode(agent.id);
+        return res.json({
+          success: true,
+          data: {
+            bindCode,
+            qrCodeBase64: null,  // 没有二维码，前端显示绑定码
+            expiresIn
+          },
+          message: '小程序码生成失败，请使用绑定码'
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+    res.status(500).json({
+      success: false,
+      message: error.message || '生成小程序码失败'
+    });
+  }
+});
+
+/**
  * 检查绑定状态（前端轮询）
  * GET /api/agent/bindWechat/status
  */

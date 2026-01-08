@@ -1,12 +1,12 @@
 /**
  * 微信绑定卡片组件
- * 使用小程序绑定码方式
+ * 使用小程序码扫码绑定方式
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { Card, Button, Space, Typography, Modal, message, Tag, Popconfirm, Spin, Alert } from 'antd';
-import { WechatOutlined, CheckCircleOutlined, DisconnectOutlined, ReloadOutlined } from '@ant-design/icons';
-import { Agent, getBindCode, checkBindStatus, unbindWechat, getAgentStatus } from '../../api/agent';
+import { Card, Button, Space, Typography, Modal, message, Tag, Popconfirm, Spin, Alert, Image } from 'antd';
+import { WechatOutlined, CheckCircleOutlined, DisconnectOutlined, ReloadOutlined, QrcodeOutlined } from '@ant-design/icons';
+import { Agent, getBindQRCode, checkBindStatus, unbindWechat, getAgentStatus } from '../../api/agent';
 
 const { Text, Paragraph } = Typography;
 
@@ -18,6 +18,7 @@ interface WechatBindCardProps {
 export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUpdate }) => {
   const [bindModalVisible, setBindModalVisible] = useState(false);
   const [bindCode, setBindCode] = useState('');
+  const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [codeLoading, setCodeLoading] = useState(false);
   const [unbindLoading, setUnbindLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -36,12 +37,13 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
     };
   }, []);
 
-  // 生成绑定码
-  const handleGenerateCode = async () => {
+  // 生成小程序码
+  const handleGenerateQRCode = async () => {
     setCodeLoading(true);
     try {
-      const data = await getBindCode();
+      const data = await getBindQRCode();
       setBindCode(data.bindCode);
+      setQrCodeBase64(data.qrCodeBase64);
       setCountdown(data.expiresIn);
       setBindStatus('pending');
       setBindModalVisible(true);
@@ -52,7 +54,7 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
       // 开始轮询检查绑定状态
       startPolling(data.bindCode);
     } catch (error: any) {
-      message.error(error.response?.data?.message || '生成绑定码失败');
+      message.error(error.response?.data?.message || '生成小程序码失败');
     } finally {
       setCodeLoading(false);
     }
@@ -190,7 +192,7 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
             <div style={{ marginTop: 24 }}>
               <Space>
                 <Button 
-                  onClick={handleGenerateCode}
+                  onClick={handleGenerateQRCode}
                   loading={codeLoading}
                 >
                   更换绑定
@@ -236,7 +238,8 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
 
             <Button 
               type="primary"
-              onClick={handleGenerateCode}
+              icon={<QrcodeOutlined />}
+              onClick={handleGenerateQRCode}
               loading={codeLoading}
               style={{ 
                 background: '#07c160', 
@@ -244,7 +247,7 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
                 marginTop: 16
               }}
             >
-              绑定微信
+              扫码绑定微信
             </Button>
           </div>
         )}
@@ -277,7 +280,7 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
               <Button 
                 type="primary"
                 icon={<ReloadOutlined />}
-                onClick={handleGenerateCode}
+                onClick={handleGenerateQRCode}
                 loading={codeLoading}
               >
                 重新生成
@@ -304,25 +307,54 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
           ) : (
             <>
               <Paragraph style={{ marginBottom: 24 }}>
-                请打开微信小程序，输入以下绑定码完成绑定
+                请使用微信扫描下方小程序码完成绑定
               </Paragraph>
               
-              <div style={{ 
-                background: '#f5f5f5', 
-                padding: '24px 32px', 
-                borderRadius: 12,
-                marginBottom: 24
-              }}>
+              {qrCodeBase64 ? (
+                // 显示小程序码
                 <div style={{ 
-                  fontSize: 36, 
-                  fontWeight: 700, 
-                  letterSpacing: 8,
-                  fontFamily: 'monospace',
-                  color: '#1890ff'
+                  background: '#f5f5f5', 
+                  padding: '24px', 
+                  borderRadius: 12,
+                  marginBottom: 24,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center'
                 }}>
-                  {bindCode}
+                  <Image
+                    src={qrCodeBase64}
+                    alt="小程序码"
+                    width={200}
+                    height={200}
+                    preview={false}
+                    style={{ borderRadius: 8 }}
+                  />
+                  <Text type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
+                    微信扫一扫，自动完成绑定
+                  </Text>
                 </div>
-              </div>
+              ) : (
+                // 降级显示绑定码
+                <div style={{ 
+                  background: '#f5f5f5', 
+                  padding: '24px 32px', 
+                  borderRadius: 12,
+                  marginBottom: 24
+                }}>
+                  <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                    请在小程序中输入绑定码：
+                  </Text>
+                  <div style={{ 
+                    fontSize: 36, 
+                    fontWeight: 700, 
+                    letterSpacing: 8,
+                    fontFamily: 'monospace',
+                    color: '#1890ff'
+                  }}>
+                    {bindCode}
+                  </div>
+                </div>
+              )}
               
               <Space direction="vertical" size={8}>
                 <Text type="secondary">
@@ -333,23 +365,25 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
                 
                 <Space>
                   <Spin size="small" />
-                  <Text type="secondary">等待小程序绑定...</Text>
+                  <Text type="secondary">等待扫码绑定...</Text>
                 </Space>
               </Space>
               
-              <Alert
-                message="操作步骤"
-                description={
-                  <ol style={{ margin: 0, paddingLeft: 20, textAlign: 'left' }}>
-                    <li>打开微信，搜索并进入小程序</li>
-                    <li>在小程序中找到"绑定代理商"功能</li>
-                    <li>输入上方6位绑定码</li>
-                    <li>确认绑定即可</li>
-                  </ol>
-                }
-                type="info"
-                style={{ marginTop: 24, textAlign: 'left' }}
-              />
+              {!qrCodeBase64 && (
+                <Alert
+                  message="操作步骤"
+                  description={
+                    <ol style={{ margin: 0, paddingLeft: 20, textAlign: 'left' }}>
+                      <li>打开微信，搜索并进入小程序</li>
+                      <li>在小程序中找到"绑定代理商"功能</li>
+                      <li>输入上方6位绑定码</li>
+                      <li>确认绑定即可</li>
+                    </ol>
+                  }
+                  type="info"
+                  style={{ marginTop: 24, textAlign: 'left' }}
+                />
+              )}
             </>
           )}
         </div>

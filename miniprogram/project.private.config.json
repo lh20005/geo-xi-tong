@@ -1,6 +1,6 @@
 {
   "libVersion": "3.10.0",
-  "projectname": "geo",
+  "projectname": "miniprogram",
   "condition": {},
   "setting": {
     "urlCheck": false,

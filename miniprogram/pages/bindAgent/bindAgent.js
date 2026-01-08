@@ -6,7 +6,28 @@ Page({
     bindCode: '',
     loading: false,
     resultType: '', // 'success' | 'error' | ''
-    resultMessage: ''
+    resultMessage: '',
+    isFromScan: false  // 是否从扫码进入
+  },
+
+  onLoad(options) {
+    // 检查是否从扫码进入（scene 参数包含绑定码）
+    // 可能直接从扫码进入，也可能从首页跳转过来
+    const scene = options.scene
+    if (scene) {
+      const bindCode = decodeURIComponent(scene)
+      console.log('扫码进入绑定页，绑定码:', bindCode)
+      
+      // 验证绑定码格式（6位数字）
+      if (/^\d{6}$/.test(bindCode)) {
+        this.setData({ 
+          bindCode: bindCode,
+          isFromScan: true
+        })
+        // 自动触发绑定
+        this.submitBind()
+      }
+    }
   },
 
   onCodeInput(e) {
@@ -60,17 +81,31 @@ Page({
             }
           },
           fail: (err) => {
-            reject(new Error('网络请求失败'))
+            reject(new Error('网络请求失败，请检查网络连接'))
           }
         })
       })
 
       // 绑定成功
-      this.showResult('success', '绑定成功！佣金将自动结算到您的微信零钱')
+      this.showResult('success', '佣金将自动结算到您的微信零钱')
       
-      // 3秒后返回上一页
+      // 3秒后关闭小程序或返回
       setTimeout(() => {
-        wx.navigateBack()
+        if (this.data.isFromScan) {
+          // 扫码进入的，直接关闭小程序
+          wx.exitMiniProgram({
+            fail: () => {
+              // 如果无法退出，返回首页
+              wx.reLaunch({ url: '/pages/index/index' })
+            }
+          })
+        } else {
+          wx.navigateBack({
+            fail: () => {
+              wx.reLaunch({ url: '/pages/index/index' })
+            }
+          })
+        }
       }, 3000)
 
     } catch (error) {

@@ -354,7 +354,7 @@ export const AgentCenterPage: React.FC<AgentCenterPageProps> = ({
 
       {/* 邀请统计 */}
       <Col xs={24} lg={12}>
-        <Card title={<Space><TeamOutlined />邀请统计</Space>} loading={statsLoading}>
+        <Card title={<Space><TeamOutlined />邀请统计</Space>} loading={statsLoading} style={{ height: '100%' }}>
           <Row gutter={16}>
             <Col span={12}>
               <Statistic title="邀请用户" value={stats?.totalInvites || 0} suffix="人" />
@@ -376,6 +376,7 @@ export const AgentCenterPage: React.FC<AgentCenterPageProps> = ({
         <Card 
           title={<Space><GiftOutlined />我的邀请码</Space>}
           extra={<Button icon={<ReloadOutlined />} size="small" onClick={onRefreshInvitation}>刷新</Button>}
+          style={{ height: '100%' }}
         >
           <div style={{ textAlign: 'center', padding: '8px 0' }}>
             <div style={{ 
