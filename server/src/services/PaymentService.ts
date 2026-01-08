@@ -5,10 +5,10 @@ import { subscriptionService } from './SubscriptionService';
 import { getWebSocketService } from './WebSocketService';
 import { pool } from '../db/database';
 import { AnomalyDetectionService } from './AnomalyDetectionService';
-import { SecurityService } from './SecurityService';
 import { QuotaInitializationService } from './QuotaInitializationService';
 import { agentService } from './AgentService';
 import { commissionService } from './CommissionService';
+import { discountService } from './DiscountService';
 
 export class PaymentService {
   private wechatpay: any;
@@ -133,6 +133,7 @@ export class PaymentService {
   /**
    * 创建微信支付订单
    * 如果用户是被代理商邀请的，订单会标记为分账订单
+   * 如果用户符合代理商折扣条件，自动应用折扣
    */
   async createWeChatPayOrder(
     userId: number, 
@@ -143,6 +144,9 @@ export class PaymentService {
     amount: number;
     plan_name: string;
     qr_code_url: string;
+    original_price?: number;
+    discount_rate?: number;
+    is_agent_discount?: boolean;
   }> {
     if (process.env.NODE_ENV !== 'production') {
       console.log('[PaymentService] 开始创建订单...');
@@ -154,15 +158,58 @@ export class PaymentService {
       throw new Error('微信支付未配置，无法创建订单。请先配置微信支付参数，详见 WECHAT_PAY_SETUP_GUIDE.md');
     }
 
-    // 创建订单
-    const order = await orderService.createOrder(userId, planId, orderType);
-    
     // 获取套餐信息
     const planResult = await pool.query(
-      'SELECT plan_name FROM subscription_plans WHERE id = $1',
+      'SELECT plan_name, price, COALESCE(agent_discount_rate, 100) as agent_discount_rate FROM subscription_plans WHERE id = $1',
       [planId]
     );
+    
+    if (planResult.rows.length === 0) {
+      throw new Error('套餐不存在');
+    }
+    
     const planName = planResult.rows[0]?.plan_name || '未知套餐';
+    const planPrice = parseFloat(planResult.rows[0].price);
+    const planDiscountRate = parseInt(planResult.rows[0].agent_discount_rate);
+
+    // 检查用户折扣资格（仅购买订单）
+    let discountInfo: {
+      applyDiscount: boolean;
+      originalPrice: number;
+      discountRate: number;
+      isAgentDiscount: boolean;
+    } = {
+      applyDiscount: false,
+      originalPrice: planPrice,
+      discountRate: 100,
+      isAgentDiscount: false
+    };
+
+    if (orderType === 'purchase') {
+      try {
+        const eligibility = await discountService.checkDiscountEligibility(userId);
+        if (eligibility.eligible && planDiscountRate < 100) {
+          discountInfo = {
+            applyDiscount: true,
+            originalPrice: planPrice,
+            discountRate: planDiscountRate,
+            isAgentDiscount: true
+          };
+          console.log(`[PaymentService] 用户 ${userId} 符合代理商折扣条件，折扣比例: ${planDiscountRate}%`);
+        }
+      } catch (error) {
+        console.error('[PaymentService] 检查折扣资格失败:', error);
+        // 折扣检查失败不影响订单创建，按原价处理
+      }
+    }
+
+    // 创建订单（带折扣信息）
+    const order = await orderService.createOrder(userId, planId, orderType, discountInfo.applyDiscount ? {
+      applyDiscount: true,
+      originalPrice: discountInfo.originalPrice,
+      discountRate: discountInfo.discountRate,
+      isAgentDiscount: discountInfo.isAgentDiscount
+    } : undefined);
 
     // 检查用户是否被代理商邀请，如果是则标记为分账订单
     let agentId: number | null = null;
@@ -202,10 +249,16 @@ export class PaymentService {
 
     try {
       // 构建支付请求参数
+      let description = `${orderType === 'upgrade' ? '升级' : '购买'}${planName}`;
+      if (discountInfo.isAgentDiscount) {
+        description += '（代理商专属优惠）';
+      }
+      description += ` - 订单号: ${order.order_no}`;
+
       const paymentParams: any = {
         appid: process.env.WECHAT_PAY_APP_ID,
         mchid: process.env.WECHAT_PAY_MCH_ID,
-        description: `${orderType === 'upgrade' ? '升级' : '购买'}${planName} - 订单号: ${order.order_no}`,
+        description,
         out_trade_no: order.order_no,
         notify_url: process.env.WECHAT_PAY_NOTIFY_URL,
         amount: {
@@ -234,12 +287,21 @@ export class PaymentService {
         throw new Error('未获取到支付二维码');
       }
 
-      return {
+      const result: any = {
         order_no: order.order_no,
         amount: order.amount,
         plan_name: planName,
         qr_code_url: qrCodeUrl
       };
+
+      // 如果有折扣，返回折扣信息
+      if (discountInfo.isAgentDiscount) {
+        result.original_price = discountInfo.originalPrice;
+        result.discount_rate = discountInfo.discountRate;
+        result.is_agent_discount = true;
+      }
+
+      return result;
     } catch (error: any) {
       await orderService.updateOrderStatus(order.order_no, 'failed');
       AnomalyDetectionService.recordPaymentFailure(userId, order.order_no).catch(() => {});
@@ -386,6 +448,17 @@ export class PaymentService {
         }
 
         await client.query('COMMIT');
+
+        // 如果是代理商折扣订单，标记用户已使用首次购买折扣
+        if (order.is_agent_discount) {
+          try {
+            await discountService.markFirstPurchaseDiscountUsed(order.user_id);
+            console.log(`[PaymentService] 用户 ${order.user_id} 已标记使用首次购买折扣`);
+          } catch (discountError) {
+            console.error('[PaymentService] 标记首次购买折扣失败:', discountError);
+            // 标记失败不影响订单状态
+          }
+        }
 
         // 如果是分账订单，创建佣金记录
         if (order.profit_sharing && order.agent_id) {

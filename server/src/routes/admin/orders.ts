@@ -1,5 +1,6 @@
 import express from 'express';
 import { orderService } from '../../services/OrderService';
+import { discountService } from '../../services/DiscountService';
 import { authenticate, requireAdmin } from '../../middleware/adminAuth';
 
 const router = express.Router();
@@ -15,8 +16,9 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
     const status = req.query.status as string | undefined;
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
+    const isAgentDiscount = req.query.isAgentDiscount as string | undefined;
 
-    const result = await orderService.getAllOrders(page, limit, status, startDate, endDate);
+    const result = await orderService.getAllOrders(page, limit, status, startDate, endDate, isAgentDiscount);
 
     res.json({
       success: true,
@@ -110,10 +112,22 @@ router.put('/:orderNo', authenticate, requireAdmin, async (req, res) => {
 router.get('/stats/summary', authenticate, requireAdmin, async (req, res) => {
   try {
     const stats = await orderService.getOrderStats();
+    
+    // 获取折扣统计
+    let discountStats = { totalDiscountOrders: 0, totalDiscountAmount: 0, totalSavedAmount: 0 };
+    try {
+      discountStats = await discountService.getDiscountStatistics();
+    } catch (e) {
+      console.error('获取折扣统计失败:', e);
+    }
 
     res.json({
       success: true,
-      data: stats,
+      data: {
+        ...stats,
+        discountOrders: discountStats.totalDiscountOrders,
+        discountSavedAmount: discountStats.totalSavedAmount,
+      },
     });
   } catch (error: any) {
     console.error('获取订单统计失败:', error);

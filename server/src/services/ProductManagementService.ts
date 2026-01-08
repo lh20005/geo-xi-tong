@@ -27,6 +27,7 @@ export interface SubscriptionPlan {
   isActive: boolean;
   description?: string;
   displayOrder: number;
+  agentDiscountRate?: number; // 代理商折扣比例（1-100，默认100表示无折扣）
   features?: PlanFeature[];
   createdAt?: Date;
   updatedAt?: Date;
@@ -65,6 +66,7 @@ export class ProductManagementService {
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
+          COALESCE(sp.agent_discount_rate, 100) as "agentDiscountRate",
           sp.created_at as "createdAt",
           sp.updated_at as "updatedAt",
           json_agg(
@@ -113,6 +115,7 @@ export class ProductManagementService {
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
+          COALESCE(sp.agent_discount_rate, 100) as "agentDiscountRate",
           sp.created_at as "createdAt",
           sp.updated_at as "updatedAt",
           json_agg(
@@ -249,6 +252,7 @@ export class ProductManagementService {
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
+          COALESCE(sp.agent_discount_rate, 100) as "agentDiscountRate",
           sp.created_at as "createdAt",
           sp.updated_at as "updatedAt",
           json_agg(
@@ -343,6 +347,26 @@ export class ProductManagementService {
         );
       }
       
+
+      // 代理商折扣比例更新
+      if (updates.agentDiscountRate !== undefined) {
+        // 验证折扣比例
+        if (!Number.isInteger(updates.agentDiscountRate) || 
+            updates.agentDiscountRate < 1 || 
+            updates.agentDiscountRate > 100) {
+          throw new Error('代理商折扣比例必须是 1-100 之间的整数');
+        }
+        updateFields.push(`agent_discount_rate = $${paramIndex++}`);
+        updateValues.push(updates.agentDiscountRate);
+        await this.recordConfigChange(
+          client,
+          planId,
+          adminId,
+          'agent_discount_rate',
+          (oldPlan.agentDiscountRate || 100).toString(),
+          updates.agentDiscountRate.toString()
+        );
+      }
       if (updateFields.length > 0) {
         updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
         updateValues.push(planId);

@@ -4,6 +4,7 @@ import axios from 'axios';
 import Header from '../components/Header';
 import PaymentModal from '../components/PaymentModal';
 import { config } from '../config/env';
+import { useDiscountEligibility } from '../hooks/useDiscountEligibility';
 
 interface Plan {
   id: number;
@@ -29,9 +30,14 @@ export default function HomePage() {
     id: number;
     name: string;
     price: number;
+    originalPrice?: number;
+    isAgentDiscount?: boolean;
   } | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [plansLoading, setPlansLoading] = useState(true);
+  
+  // 折扣资格检查
+  const { eligibility, getDiscountedPrice } = useDiscountEligibility();
 
   // 轮播图片列表
   const carouselImages = [
@@ -151,7 +157,7 @@ export default function HomePage() {
   };
 
   // 处理购买按钮点击
-  const handlePurchase = (planId: number, planName: string, price: number) => {
+  const handlePurchase = (planId: number, planName: string, price: number, originalPrice?: number, isAgentDiscount?: boolean) => {
     if (!isLoggedIn) {
       // 未登录，跳转到登录页
       window.location.href = '/login';
@@ -159,7 +165,7 @@ export default function HomePage() {
     }
     
     // 已登录，打开支付弹窗
-    setSelectedPlan({ id: planId, name: planName, price });
+    setSelectedPlan({ id: planId, name: planName, price, originalPrice, isAgentDiscount });
     setPaymentModalOpen(true);
   };
 
@@ -404,21 +410,46 @@ export default function HomePage() {
                 const badge = getPlanBadge(plan.plan_code);
                 const price = typeof plan.price === 'string' ? parseFloat(plan.price) : plan.price;
                 const isFree = plan.plan_code === 'free';
+                
+                // 获取折扣价格信息
+                const discountInfo = getDiscountedPrice(plan.id);
+                const hasDiscount = discountInfo?.hasDiscount && !isFree;
+                const displayPrice = hasDiscount ? discountInfo.discountedPrice : price;
+                const originalPrice = hasDiscount ? discountInfo.originalPrice : price;
 
                 return (
                   <div 
                     key={plan.id}
                     className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative flex flex-col"
                   >
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
-                      {badge.text}
-                    </div>
+                    {/* 折扣标签 */}
+                    {hasDiscount ? (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap animate-pulse">
+                        🎁 代理商专属优惠
+                      </div>
+                    ) : (
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                        {badge.text}
+                      </div>
+                    )}
                     <div className="text-center mb-6 flex-grow">
                       <h3 className="text-xl font-bold text-white mb-2 mt-2">{plan.plan_name}</h3>
                       <p className="text-blue-100 text-sm mb-4 line-clamp-2">{plan.description || '适合个人用户'}</p>
                       <div className="mb-4">
-                        <span className="text-4xl font-bold text-white">¥{formatPrice(price)}</span>
-                        <span className="text-blue-100 text-sm">/月</span>
+                        {hasDiscount ? (
+                          <>
+                            <div className="text-blue-200 text-sm line-through mb-1">
+                              原价 ¥{formatPrice(originalPrice)}
+                            </div>
+                            <span className="text-4xl font-bold text-yellow-300">¥{formatPrice(displayPrice)}</span>
+                            <span className="text-blue-100 text-sm">/月</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-4xl font-bold text-white">¥{formatPrice(price)}</span>
+                            <span className="text-blue-100 text-sm">/月</span>
+                          </>
+                        )}
                       </div>
                       {isFree ? (
                         <Link
@@ -429,10 +460,14 @@ export default function HomePage() {
                         </Link>
                       ) : (
                         <button
-                          onClick={() => handlePurchase(plan.id, plan.plan_name, price)}
-                          className="block w-full py-2.5 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                          onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
+                          className={`block w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
+                            hasDiscount 
+                              ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-300' 
+                              : 'bg-white text-blue-600 hover:bg-gray-50'
+                          }`}
                         >
-                          立即购买
+                          {hasDiscount ? '立即抢购' : '立即购买'}
                         </button>
                       )}
                     </div>
@@ -1074,6 +1109,8 @@ export default function HomePage() {
           planId={selectedPlan.id}
           planName={selectedPlan.name}
           price={selectedPlan.price}
+          originalPrice={selectedPlan.originalPrice}
+          isAgentDiscount={selectedPlan.isAgentDiscount}
         />
       )}
     </div>

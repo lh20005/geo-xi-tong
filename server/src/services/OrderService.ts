@@ -2,6 +2,17 @@ import { pool } from '../db/database';
 import { Order } from '../types/subscription';
 import { AuditLogService } from './AuditLogService';
 import { AnomalyDetectionService } from './AnomalyDetectionService';
+import { discountService } from './DiscountService';
+
+/**
+ * 订单折扣信息
+ */
+export interface OrderDiscountOptions {
+  applyDiscount?: boolean;  // 是否应用折扣
+  originalPrice?: number;   // 原价
+  discountRate?: number;    // 折扣比例
+  isAgentDiscount?: boolean; // 是否代理商折扣
+}
 
 export class OrderService {
   /**
@@ -22,16 +33,24 @@ export class OrderService {
 
   /**
    * 创建订单（支持购买和升级）
+   * @param userId 用户ID
+   * @param planId 套餐ID
+   * @param orderType 订单类型
+   * @param discountOptions 折扣选项（可选）
    */
   async createOrder(
     userId: number, 
     planId: number, 
-    orderType: 'purchase' | 'upgrade' = 'purchase'
+    orderType: 'purchase' | 'upgrade' = 'purchase',
+    discountOptions?: OrderDiscountOptions
   ): Promise<Order> {
     // 检测订单创建异常
     await AnomalyDetectionService.checkOrderCreationSpike(userId);
     
     let amount: number;
+    let originalPrice: number | null = null;
+    let discountRate: number | null = null;
+    let isAgentDiscount: boolean = false;
     
     if (orderType === 'upgrade') {
       // 升级订单：计算差价
@@ -77,7 +96,17 @@ export class OrderService {
         throw new Error('套餐不存在');
       }
 
-      amount = planResult.rows[0].price;
+      const planPrice = parseFloat(planResult.rows[0].price);
+      
+      // 检查是否应用折扣
+      if (discountOptions?.applyDiscount) {
+        originalPrice = discountOptions.originalPrice || planPrice;
+        discountRate = discountOptions.discountRate || 100;
+        isAgentDiscount = discountOptions.isAgentDiscount || false;
+        amount = discountService.calculateDiscountedPrice(originalPrice, discountRate);
+      } else {
+        amount = planPrice;
+      }
     }
 
     const orderNo = this.generateOrderNo();
@@ -86,11 +115,34 @@ export class OrderService {
     const expiredAt = new Date();
     expiredAt.setMinutes(expiredAt.getMinutes() + 30);
 
+    // 构建插入语句
+    const insertFields = ['order_no', 'user_id', 'plan_id', 'amount', 'status', 'payment_method', 'order_type', 'expired_at'];
+    const insertValues: any[] = [orderNo, userId, planId, amount, 'pending', 'wechat', orderType, expiredAt];
+    const placeholders = ['$1', '$2', '$3', '$4', '$5', '$6', '$7', '$8'];
+    let paramIndex = 9;
+
+    // 如果有折扣信息，添加到插入语句
+    if (originalPrice !== null) {
+      insertFields.push('original_price');
+      insertValues.push(originalPrice);
+      placeholders.push(`$${paramIndex++}`);
+    }
+    if (discountRate !== null) {
+      insertFields.push('discount_rate');
+      insertValues.push(discountRate);
+      placeholders.push(`$${paramIndex++}`);
+    }
+    if (isAgentDiscount) {
+      insertFields.push('is_agent_discount');
+      insertValues.push(isAgentDiscount);
+      placeholders.push(`$${paramIndex++}`);
+    }
+
     const result = await pool.query(
-      `INSERT INTO orders (order_no, user_id, plan_id, amount, status, payment_method, order_type, expired_at)
-       VALUES ($1, $2, $3, $4, 'pending', 'wechat', $5, $6)
+      `INSERT INTO orders (${insertFields.join(', ')})
+       VALUES (${placeholders.join(', ')})
        RETURNING *`,
-      [orderNo, userId, planId, amount, orderType, expiredAt]
+      insertValues
     );
 
     return result.rows[0];
@@ -227,7 +279,8 @@ export class OrderService {
     limit: number = 10,
     status?: string,
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    isAgentDiscount?: string
   ): Promise<{ orders: Order[]; total: number }> {
     const offset = (page - 1) * limit;
     const conditions: string[] = [];
@@ -249,6 +302,12 @@ export class OrderService {
     if (endDate) {
       conditions.push(`o.created_at <= $${paramIndex}`);
       params.push(endDate);
+      paramIndex++;
+    }
+
+    if (isAgentDiscount !== undefined) {
+      conditions.push(`o.is_agent_discount = $${paramIndex}`);
+      params.push(isAgentDiscount === 'true');
       paramIndex++;
     }
 

@@ -31,6 +31,7 @@ interface Plan {
   isActive: boolean;
   description?: string;
   displayOrder: number;
+  agentDiscountRate?: number; // 代理商折扣比例（1-100）
   features?: PlanFeature[];
   createdAt?: string;
   updatedAt?: string;
@@ -122,6 +123,7 @@ export default function ProductManagementPage() {
       description: '',
       displayOrder: plans.length + 1,
       isActive: true,
+      agentDiscountRate: 100,
       features: []
     });
     setEditModalVisible(true);
@@ -164,6 +166,7 @@ export default function ProductManagementPage() {
       description: plan.description,
       displayOrder: plan.displayOrder,
       isActive: plan.isActive,
+      agentDiscountRate: plan.agentDiscountRate || 100,
       features: features
     });
     
@@ -186,6 +189,11 @@ export default function ProductManagementPage() {
           }
           return feature;
         });
+      }
+      
+      // 确保 agentDiscountRate 是整数
+      if (values.agentDiscountRate !== undefined) {
+        values.agentDiscountRate = Math.round(values.agentDiscountRate);
       }
       
       console.log('[ProductManagement] 准备保存的数据:', values);
@@ -272,6 +280,25 @@ export default function ProductManagementPage() {
           ¥{price} / {record.billingCycle === 'monthly' ? '月' : '年'}
         </span>
       ),
+    },
+    {
+      title: '代理商折扣',
+      dataIndex: 'agentDiscountRate',
+      key: 'agentDiscountRate',
+      width: 120,
+      render: (rate) => {
+        const discountRate = rate || 100;
+        if (discountRate >= 100) {
+          return <Tag>无折扣</Tag>;
+        }
+        // 80 表示 8 折，即支付原价的 80%
+        const discountDisplay = discountRate / 10;
+        return (
+          <Tag color="orange">
+            {discountDisplay}折
+          </Tag>
+        );
+      },
     },
     {
       title: '功能配额',
@@ -464,6 +491,31 @@ export default function ProductManagementPage() {
           >
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
+
+          <Form.Item
+            label="代理商折扣"
+            name="agentDiscountRate"
+            tooltip="被代理商邀请的新用户首次购买时享受的折扣。100表示无折扣，80表示8折（支付原价的80%）"
+            rules={[
+              { type: 'number', min: 1, max: 100, message: '折扣比例必须在1-100之间' }
+            ]}
+          >
+            <InputNumber 
+              min={1} 
+              max={100}
+              precision={0}
+              style={{ width: '100%' }}
+              placeholder="100表示无折扣，80表示8折"
+              addonAfter="%"
+              parser={(value) => {
+                const parsed = parseInt(value || '100', 10);
+                return isNaN(parsed) ? 100 : parsed;
+              }}
+            />
+          </Form.Item>
+          <div className="text-xs text-gray-500 -mt-4 mb-4 ml-1">
+            示例：80 表示 8 折，用户支付原价的 80%
+          </div>
 
           <Form.Item
             label="启用状态"

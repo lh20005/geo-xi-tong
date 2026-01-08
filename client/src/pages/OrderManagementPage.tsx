@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Table, Tag, Button, Modal, Form, Input, Select, DatePicker, Statistic, Row, Col, message, Space } from 'antd';
-import { DollarOutlined, ShoppingOutlined, ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { DollarOutlined, ShoppingOutlined, ClockCircleOutlined, ReloadOutlined, GiftOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 import dayjs from 'dayjs';
@@ -15,6 +15,9 @@ interface Order {
   username: string;
   plan_name: string;
   amount: number;
+  original_price: number | null;
+  discount_rate: number | null;
+  is_agent_discount: boolean;
   status: string;
   payment_method: string;
   transaction_id: string | null;
@@ -28,6 +31,8 @@ interface OrderStats {
   todayOrders: number;
   monthOrders: number;
   pendingOrders: number;
+  discountOrders?: number;
+  discountSavedAmount?: number;
 }
 
 const OrderManagementPage = () => {
@@ -35,7 +40,7 @@ const OrderManagementPage = () => {
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
-  const [filters, setFilters] = useState<{ status?: string; dateRange?: [string, string] }>({});
+  const [filters, setFilters] = useState<{ status?: string; dateRange?: [string, string]; isAgentDiscount?: boolean }>({});
   const [handleModalVisible, setHandleModalVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [form] = Form.useForm();
@@ -61,6 +66,10 @@ const OrderManagementPage = () => {
       if (filters.dateRange) {
         params.startDate = filters.dateRange[0];
         params.endDate = filters.dateRange[1];
+      }
+
+      if (filters.isAgentDiscount !== undefined) {
+        params.isAgentDiscount = filters.isAgentDiscount;
       }
 
       const response = await axios.get(`${API_BASE_URL}/admin/orders`, {
@@ -112,6 +121,14 @@ const OrderManagementPage = () => {
     } else {
       setFilters((prev) => ({ ...prev, dateRange: undefined }));
     }
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  };
+
+  const handleDiscountFilterChange = (value: string) => {
+    setFilters((prev) => ({ 
+      ...prev, 
+      isAgentDiscount: value === 'discount' ? true : value === 'normal' ? false : undefined 
+    }));
     setPagination((prev) => ({ ...prev, current: 1 }));
   };
 
@@ -177,8 +194,40 @@ const OrderManagementPage = () => {
       title: '金额',
       dataIndex: 'amount',
       key: 'amount',
+      width: 150,
+      render: (amount: number, record: Order) => {
+        if (record.is_agent_discount && record.original_price) {
+          return (
+            <Space direction="vertical" size={0}>
+              <span style={{ textDecoration: 'line-through', color: '#999', fontSize: '12px' }}>
+                ¥{record.original_price}
+              </span>
+              <span style={{ color: '#f5222d', fontWeight: 'bold' }}>¥{amount}</span>
+              <Tag color="orange" style={{ fontSize: '10px' }}>
+                {record.discount_rate}折
+              </Tag>
+            </Space>
+          );
+        }
+        return `¥${amount}`;
+      },
+    },
+    {
+      title: '折扣',
+      dataIndex: 'is_agent_discount',
+      key: 'is_agent_discount',
       width: 100,
-      render: (amount: number) => `¥${amount}`,
+      render: (isDiscount: boolean, record: Order) => {
+        if (isDiscount) {
+          const saved = record.original_price ? (record.original_price - record.amount).toFixed(2) : '0';
+          return (
+            <Tag color="green" icon={<GiftOutlined />}>
+              省¥{saved}
+            </Tag>
+          );
+        }
+        return <Tag>无折扣</Tag>;
+      },
     },
     {
       title: '状态',
@@ -284,6 +333,16 @@ const OrderManagementPage = () => {
           </Select>
 
           <RangePicker onChange={handleDateRangeChange} />
+
+          <Select
+            placeholder="折扣类型"
+            style={{ width: 150 }}
+            allowClear
+            onChange={handleDiscountFilterChange}
+          >
+            <Option value="discount">代理商折扣</Option>
+            <Option value="normal">无折扣</Option>
+          </Select>
 
           <Button icon={<ReloadOutlined />} onClick={fetchOrders}>
             刷新

@@ -608,13 +608,15 @@ export default function AgentManagementPage() {
             ]}
             extra="微信支付分账最高支持 30%"
           >
-            <InputNumber
-              min={1}
-              max={30}
-              precision={0}
-              addonAfter="%"
-              style={{ width: '100%' }}
-            />
+            <Space.Compact style={{ width: '100%' }}>
+              <InputNumber
+                min={1}
+                max={30}
+                precision={0}
+                style={{ width: '100%' }}
+              />
+              <Button disabled style={{ pointerEvents: 'none' }}>%</Button>
+            </Space.Compact>
           </Form.Item>
         </Form>
       </Modal>

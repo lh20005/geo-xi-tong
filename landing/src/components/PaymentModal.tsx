@@ -8,9 +8,11 @@ interface PaymentModalProps {
   planId: number;
   planName: string;
   price: number;
+  originalPrice?: number;  // 原价（有折扣时）
+  isAgentDiscount?: boolean;  // 是否代理商折扣
 }
 
-export default function PaymentModal({ isOpen, onClose, planId, planName, price }: PaymentModalProps) {
+export default function PaymentModal({ isOpen, onClose, planId, planName, price, originalPrice, isAgentDiscount }: PaymentModalProps) {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
   const [orderNo, setOrderNo] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -353,6 +355,21 @@ export default function PaymentModal({ isOpen, onClose, planId, planName, price 
                 <span className="text-gray-600">套餐：</span>
                 <span className="font-semibold text-gray-900">{planName}</span>
               </div>
+              {isAgentDiscount && originalPrice && originalPrice > price && (
+                <>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">原价：</span>
+                    <span className="text-gray-400 line-through">¥{originalPrice}</span>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <span className="text-gray-600">优惠：</span>
+                    <span className="text-green-600 font-semibold">-¥{(originalPrice - price).toFixed(2)}</span>
+                  </div>
+                  <div className="bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
+                    <span className="text-red-600 text-xs font-medium">🎁 代理商专属优惠</span>
+                  </div>
+                </>
+              )}
               <div className="flex justify-between mb-2">
                 <span className="text-gray-600">支付金额：</span>
                 <span className="text-2xl font-bold text-red-600">¥{price}</span>

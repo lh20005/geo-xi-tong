@@ -161,16 +161,20 @@ export default function AdjustQuotaModal({ visible, userId, features, onClose, o
                   : '-1 表示无限制'
               }
             >
-              <InputNumber
-                style={{ width: '100%' }}
-                min={-1}
-                placeholder={
-                  selectedFeature?.feature_code === 'storage_space'
-                    ? '请输入新配额值（MB）'
-                    : '请输入新配额值'
-                }
-                addonAfter={selectedFeature?.feature_code === 'storage_space' ? 'MB' : undefined}
-              />
+              <Space.Compact style={{ width: '100%' }}>
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={-1}
+                  placeholder={
+                    selectedFeature?.feature_code === 'storage_space'
+                      ? '请输入新配额值（MB）'
+                      : '请输入新配额值'
+                  }
+                />
+                {selectedFeature?.feature_code === 'storage_space' && (
+                  <Button disabled style={{ pointerEvents: 'none' }}>MB</Button>
+                )}
+              </Space.Compact>
             </Form.Item>
 
             <Form.Item name="isPermanent" label="是否永久生效" valuePropName="checked">

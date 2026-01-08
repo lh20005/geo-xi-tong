@@ -56,6 +56,10 @@ export interface Order {
   agent_id?: number;
   profit_sharing?: boolean;
   expected_commission?: number;
+  // 折扣相关字段
+  original_price?: number;
+  discount_rate?: number;
+  is_agent_discount?: boolean;
 }
 
 export interface UsageRecord {

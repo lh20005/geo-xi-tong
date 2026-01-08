@@ -1,5 +1,6 @@
 import express from 'express';
 import { subscriptionService } from '../services/SubscriptionService';
+import { discountService } from '../services/DiscountService';
 import { authenticate } from '../middleware/adminAuth';
 
 const router = express.Router();
@@ -21,6 +22,41 @@ router.get('/plans', async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message || '获取套餐列表失败'
+    });
+  }
+});
+
+/**
+ * 检查用户折扣资格
+ * GET /api/subscription/discount-check
+ * 返回用户是否有资格享受代理商折扣，以及所有套餐的折扣价格
+ */
+router.get('/discount-check', authenticate, async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    
+    // 检查用户折扣资格
+    const eligibility = await discountService.checkDiscountEligibility(userId);
+    
+    // 获取所有套餐的折扣价格信息
+    const plans = await discountService.getUserDiscountPrices(userId);
+    
+    res.json({
+      success: true,
+      data: {
+        eligible: eligibility.eligible,
+        reason: eligibility.reason,
+        invitedByAgent: eligibility.invitedByAgent,
+        isFirstPurchase: eligibility.isFirstPurchase,
+        discountUsed: eligibility.discountUsed,
+        plans
+      }
+    });
+  } catch (error: any) {
+    console.error('检查折扣资格失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '检查折扣资格失败'
     });
   }
 });
