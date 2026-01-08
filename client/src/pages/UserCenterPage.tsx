@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar, List } from 'antd';
-import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar } from 'antd';
+import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import { StorageUsageCard } from '../components/Storage/StorageUsageCard';
 import { StorageBreakdownChart } from '../components/Storage/StorageBreakdownChart';
 import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType, StorageBreakdown as StorageBreakdownType, formatStorageMB } from '../api/storage';
-import { AgentApplyCard, AgentDashboard, CommissionList } from '../components/Agent';
+import { AgentCenterPage } from '../components/Agent';
 import { Agent, getAgentStatus } from '../api/agent';
 
 const { TabPane } = Tabs;
@@ -80,7 +80,6 @@ const UserCenterPage = () => {
   const [passwordForm] = Form.useForm();
   const [activeTab, setActiveTab] = useState('subscription');
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [invitationCodeCopied, setInvitationCodeCopied] = useState(false);
   
   // 存储相关状态
   const [storageUsage, setStorageUsage] = useState<StorageUsageType | null>(null);
@@ -426,15 +425,6 @@ const UserCenterPage = () => {
   const daysUntilExpiry = getDaysUntilExpiry();
   const showExpiryWarning = daysUntilExpiry > 0 && daysUntilExpiry <= 7;
 
-  const handleCopyInvitationCode = () => {
-    if (userProfile?.invitationCode) {
-      navigator.clipboard.writeText(userProfile.invitationCode);
-      setInvitationCodeCopied(true);
-      message.success('邀请码已复制到剪贴板');
-      setTimeout(() => setInvitationCodeCopied(false), 2000);
-    }
-  };
-
   const handlePasswordChange = async (values: PasswordFormValues) => {
     if (values.newPassword !== values.confirmPassword) {
       message.error('两次输入的新密码不一致');
@@ -738,141 +728,7 @@ const UserCenterPage = () => {
           </Row>
         </TabPane>
 
-        {/* 邀请系统标签页 */}
-        <TabPane
-          tab={
-            <span>
-              <TeamOutlined />
-              邀请系统
-            </span>
-          }
-          key="invitation"
-        >
-          <Row gutter={[16, 16]}>
-            {/* 邀请码卡片 */}
-            <Col xs={24} lg={12}>
-              <Card
-                title={
-                  <Space>
-                    <GiftOutlined />
-                    我的邀请码
-                  </Space>
-                }
-              >
-                {userProfile ? (
-                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                    <div style={{ 
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      borderRadius: 12, 
-                      padding: '32px 24px',
-                      marginBottom: 16
-                    }}>
-                      <div style={{ 
-                        fontSize: 42, 
-                        fontWeight: 'bold', 
-                        letterSpacing: 8,
-                        fontFamily: 'monospace',
-                        color: 'white',
-                        textShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                      }}>
-                        {userProfile.invitationCode || '------'}
-                      </div>
-                    </div>
-                    <Button
-                      type="primary"
-                      size="large"
-                      icon={<CopyOutlined />}
-                      onClick={handleCopyInvitationCode}
-                      style={{ minWidth: 160 }}
-                    >
-                      {invitationCodeCopied ? '已复制!' : '复制邀请码'}
-                    </Button>
-                    <div style={{ marginTop: 16, color: '#8c8c8c', fontSize: 14 }}>
-                      分享邀请码给好友，邀请他们加入平台
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <p style={{ color: '#8c8c8c' }}>加载中...</p>
-                  </div>
-                )}
-              </Card>
-            </Col>
-
-            {/* 邀请统计卡片 */}
-            <Col xs={24} lg={12}>
-              <Card
-                title={
-                  <Space>
-                    <TeamOutlined />
-                    邀请统计
-                  </Space>
-                }
-                extra={<Button icon={<ReloadOutlined />} onClick={fetchInvitationStats}>刷新</Button>}
-              >
-                {invitationStats ? (
-                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                    <Statistic
-                      title="累计邀请人数"
-                      value={invitationStats.totalInvites}
-                      valueStyle={{ fontSize: 48, color: '#1890ff' }}
-                      suffix="人"
-                    />
-                    <div style={{ marginTop: 16, color: '#8c8c8c', fontSize: 14 }}>
-                      感谢您的推广支持
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                    <p style={{ color: '#8c8c8c' }}>加载中...</p>
-                  </div>
-                )}
-              </Card>
-            </Col>
-
-            {/* 受邀用户列表 */}
-            <Col span={24}>
-              <Card
-                title={
-                  <Space>
-                    <UserOutlined />
-                    受邀用户列表
-                  </Space>
-                }
-              >
-                {invitationStats && invitationStats.invitedUsers && invitationStats.invitedUsers.length > 0 ? (
-                  <List
-                    dataSource={invitationStats.invitedUsers}
-                    renderItem={(user) => (
-                      <List.Item>
-                        <List.Item.Meta
-                          avatar={
-                            <Avatar 
-                              style={{ backgroundColor: '#1890ff' }}
-                              size="large"
-                            >
-                              {user.username.charAt(0).toUpperCase()}
-                            </Avatar>
-                          }
-                          title={<span style={{ fontSize: 16 }}>{user.username}</span>}
-                          description={`加入时间: ${new Date(user.createdAt).toLocaleString('zh-CN')}`}
-                        />
-                      </List.Item>
-                    )}
-                  />
-                ) : (
-                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
-                    <TeamOutlined style={{ fontSize: 64, color: '#d9d9d9', marginBottom: 16 }} />
-                    <p style={{ color: '#8c8c8c', fontSize: 16, marginBottom: 8 }}>还没有邀请任何用户</p>
-                    <p style={{ color: '#bfbfbf', fontSize: 14 }}>分享您的邀请码开始邀请好友吧</p>
-                  </div>
-                )}
-              </Card>
-            </Col>
-          </Row>
-        </TabPane>
-
-        {/* 代理商中心标签页 */}
+        {/* 代理商中心标签页 - 整合邀请系统 */}
         <TabPane
           tab={
             <span>
@@ -884,13 +740,17 @@ const UserCenterPage = () => {
         >
           {agentLoading ? (
             <Card loading={true} />
-          ) : isAgent && agent ? (
-            <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <AgentDashboard agent={agent} onAgentUpdate={handleAgentUpdate} />
-              <CommissionList />
-            </Space>
           ) : (
-            <AgentApplyCard onApplySuccess={handleAgentApplySuccess} />
+            <AgentCenterPage
+              isAgent={isAgent}
+              agent={agent}
+              invitationStats={invitationStats}
+              userProfile={userProfile}
+              subscription={subscription}
+              onAgentApplySuccess={handleAgentApplySuccess}
+              onAgentUpdate={handleAgentUpdate}
+              onRefreshInvitation={fetchInvitationStats}
+            />
           )}
         </TabPane>
 
