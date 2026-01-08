@@ -33,8 +33,8 @@ router.get('/stats', async (req, res) => {
     // 获取佣金统计
     const commissionResult = await pool.query(`
       SELECT 
-        COALESCE(SUM(amount), 0) as total,
-        COALESCE(SUM(amount) FILTER (WHERE status = 'pending'), 0) as pending
+        COALESCE(SUM(commission_amount), 0) as total,
+        COALESCE(SUM(commission_amount) FILTER (WHERE status = 'pending'), 0) as pending
       FROM commission_records
     `);
     
@@ -43,8 +43,8 @@ router.get('/stats', async (req, res) => {
       data: {
         totalAgents: parseInt(agentCountResult.rows[0].total),
         activeAgents: parseInt(agentCountResult.rows[0].active),
-        totalCommissions: parseInt(commissionResult.rows[0].total),
-        pendingCommissions: parseInt(commissionResult.rows[0].pending)
+        totalCommissions: parseFloat(commissionResult.rows[0].total),
+        pendingCommissions: parseFloat(commissionResult.rows[0].pending)
       }
     });
   } catch (error: any) {

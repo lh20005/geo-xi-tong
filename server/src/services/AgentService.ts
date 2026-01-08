@@ -11,7 +11,7 @@ import {
   AgentStats,
   AgentFilters,
   AgentDetail,
-  PaginatedResult
+  AgentListResult
 } from '../types/agent';
 
 export class AgentService {
@@ -57,58 +57,31 @@ export class AgentService {
       throw new Error('您已经是代理商');
     }
 
-    // 生成唯一邀请码
-    const invitationCode = await this.generateInvitationCode();
+    // 获取用户的邀请码（代理商使用用户注册时的邀请码）
+    const userResult = await pool.query(
+      'SELECT invitation_code FROM users WHERE id = $1',
+      [userId]
+    );
+    const userInvitationCode = userResult.rows[0]?.invitation_code;
 
     // 创建代理商记录，默认状态为 active，佣金比例 30%
+    // 不再使用专用邀请码，使用用户的邀请码
     const result = await pool.query<AgentRow>(
-      `INSERT INTO agents (user_id, invitation_code, status, commission_rate)
-       VALUES ($1, $2, 'active', 0.30)
+      `INSERT INTO agents (user_id, status, commission_rate)
+       VALUES ($1, 'active', 0.30)
        RETURNING *`,
-      [userId, invitationCode]
+      [userId]
     );
 
     // 记录审计日志
     await this.logAudit(result.rows[0].id, 'apply', userId, null, {
       status: 'active',
       commissionRate: 0.30,
-      invitationCode
+      invitationCode: userInvitationCode
     });
 
-    console.log(`[AgentService] 用户 ${userId} 成功申请成为代理商，邀请码: ${invitationCode}`);
+    console.log(`[AgentService] 用户 ${userId} 成功申请成为代理商，使用邀请码: ${userInvitationCode}`);
     return this.rowToAgent(result.rows[0]);
-  }
-
-  /**
-   * 生成唯一邀请码
-   */
-  private async generateInvitationCode(): Promise<string> {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 排除容易混淆的字符
-    let code: string;
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    do {
-      code = 'AG';
-      for (let i = 0; i < 6; i++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      
-      // 检查是否已存在
-      const existing = await pool.query(
-        'SELECT id FROM agents WHERE invitation_code = $1',
-        [code]
-      );
-      
-      if (existing.rows.length === 0) {
-        return code;
-      }
-      
-      attempts++;
-    } while (attempts < maxAttempts);
-
-    // 如果多次尝试都失败，使用时间戳
-    return 'AG' + Date.now().toString(36).toUpperCase().slice(-6);
   }
 
   /**
@@ -270,14 +243,14 @@ export class AgentService {
       throw new Error('代理商不存在');
     }
 
-    // 获取用户的邀请码
+    // 获取用户的邀请码（代理商使用用户注册时的邀请码）
     const userResult = await pool.query(
       'SELECT invitation_code FROM users WHERE id = $1',
       [agent.userId]
     );
     const invitationCode = userResult.rows[0]?.invitation_code;
 
-    // 统计邀请用户数
+    // 统计邀请用户数（使用用户的邀请码）
     const inviteResult = await pool.query(
       `SELECT 
         COUNT(*) as total_invites,
@@ -307,7 +280,7 @@ export class AgentService {
   /**
    * 获取代理商列表（管理员）
    */
-  async listAgents(filters: AgentFilters): Promise<PaginatedResult<AgentDetail>> {
+  async listAgents(filters: AgentFilters): Promise<AgentListResult> {
     const { status, search, page = 1, pageSize = 10 } = filters;
     const offset = (page - 1) * pageSize;
     const conditions: string[] = [];
@@ -338,7 +311,7 @@ export class AgentService {
     );
     const total = parseInt(countResult.rows[0].total);
 
-    // 获取列表
+    // 获取列表（使用用户的邀请码，不是代理商专用邀请码）
     params.push(pageSize, offset);
     const result = await pool.query(
       `SELECT 
@@ -361,12 +334,12 @@ export class AgentService {
       ...this.rowToAgent(row),
       username: row.username,
       invitationCode: row.invitation_code,
-      invitedUsersCount: parseInt(row.invited_users_count) || 0,
-      paidUsersCount: parseInt(row.paid_users_count) || 0
+      invitedUsers: parseInt(row.invited_users_count) || 0,
+      paidUsers: parseInt(row.paid_users_count) || 0
     }));
 
     return {
-      data: agents,
+      agents,
       total,
       page,
       pageSize
@@ -443,7 +416,7 @@ export class AgentService {
   }
 
   /**
-   * 根据邀请码获取代理商
+   * 根据邀请码获取代理商（使用用户的邀请码）
    */
   async getAgentByInvitationCode(invitationCode: string): Promise<Agent | null> {
     const result = await pool.query<AgentRow>(
@@ -488,8 +461,8 @@ export class AgentService {
       ...this.rowToAgent(row),
       username: row.username,
       invitationCode: row.invitation_code,
-      invitedUsersCount: parseInt(row.invited_users_count) || 0,
-      paidUsersCount: parseInt(row.paid_users_count) || 0
+      invitedUsers: parseInt(row.invited_users_count) || 0,
+      paidUsers: parseInt(row.paid_users_count) || 0
     };
   }
 

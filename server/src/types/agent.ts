@@ -133,6 +133,14 @@ export interface PaginatedResult<T> {
   pageSize: number;
 }
 
+// 代理商列表分页结果
+export interface AgentListResult {
+  agents: AgentDetail[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 // 微信分账请求参数
 export interface ProfitSharingRequest {
   transactionId: string;  // 微信支付订单号
@@ -173,8 +181,8 @@ export interface AgentApplyResult {
 export interface AgentDetail extends Agent {
   username: string;
   invitationCode: string;
-  invitedUsersCount: number;
-  paidUsersCount: number;
+  invitedUsers: number;
+  paidUsers: number;
 }
 
 // 代理商审计日志

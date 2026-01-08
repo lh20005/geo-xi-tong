@@ -36,12 +36,12 @@ interface CommissionRecord {
   id: number;
   orderId: number;
   orderNo: string;
-  amount: number;
+  commissionAmount: number;
   status: 'pending' | 'processing' | 'settled' | 'failed' | 'cancelled';
-  settlementDate?: string;
+  settledAt?: string;
   createdAt: string;
-  buyerUsername?: string;
-  productName?: string;
+  username?: string;
+  planName?: string;
 }
 
 export default function AgentManagementPage() {
@@ -284,7 +284,7 @@ export default function AgentManagementPage() {
       width: 100,
       render: (amount: number) => (
         <span style={{ color: '#52c41a', fontWeight: 500 }}>
-          ¥{(amount / 100).toFixed(2)}
+          ¥{(amount || 0).toFixed(2)}
         </span>
       ),
     },
@@ -295,7 +295,7 @@ export default function AgentManagementPage() {
       width: 100,
       render: (amount: number) => (
         <span style={{ color: '#faad14' }}>
-          ¥{(amount / 100).toFixed(2)}
+          ¥{(amount || 0).toFixed(2)}
         </span>
       ),
     },
@@ -363,25 +363,25 @@ export default function AgentManagementPage() {
     },
     {
       title: '购买用户',
-      dataIndex: 'buyerUsername',
-      key: 'buyerUsername',
+      dataIndex: 'username',
+      key: 'username',
       width: 100,
     },
     {
       title: '商品',
-      dataIndex: 'productName',
-      key: 'productName',
+      dataIndex: 'planName',
+      key: 'planName',
       width: 120,
       ellipsis: true,
     },
     {
       title: '佣金金额',
-      dataIndex: 'amount',
-      key: 'amount',
+      dataIndex: 'commissionAmount',
+      key: 'commissionAmount',
       width: 100,
       render: (amount: number) => (
         <span style={{ color: '#52c41a', fontWeight: 500 }}>
-          ¥{(amount / 100).toFixed(2)}
+          ¥{(amount || 0).toFixed(2)}
         </span>
       ),
     },
@@ -439,7 +439,7 @@ export default function AgentManagementPage() {
             <Card>
               <Statistic
                 title="累计佣金"
-                value={(stats.totalCommissions / 100).toFixed(2)}
+                value={(stats.totalCommissions || 0).toFixed(2)}
                 prefix={<WalletOutlined />}
                 suffix="元"
                 valueStyle={{ color: '#1890ff' }}
@@ -450,7 +450,7 @@ export default function AgentManagementPage() {
             <Card>
               <Statistic
                 title="待结算佣金"
-                value={(stats.pendingCommissions / 100).toFixed(2)}
+                value={(stats.pendingCommissions || 0).toFixed(2)}
                 prefix={<DollarOutlined />}
                 suffix="元"
                 valueStyle={{ color: '#faad14' }}
@@ -529,7 +529,7 @@ export default function AgentManagementPage() {
               <Col span={8}>
                 <Statistic
                   title="累计收益"
-                  value={(selectedAgent.totalEarnings / 100).toFixed(2)}
+                  value={(selectedAgent.totalEarnings || 0).toFixed(2)}
                   prefix="¥"
                   valueStyle={{ color: '#52c41a' }}
                 />
@@ -537,7 +537,7 @@ export default function AgentManagementPage() {
               <Col span={8}>
                 <Statistic
                   title="已结算"
-                  value={(selectedAgent.settledEarnings / 100).toFixed(2)}
+                  value={(selectedAgent.settledEarnings || 0).toFixed(2)}
                   prefix="¥"
                   valueStyle={{ color: '#1890ff' }}
                 />
@@ -545,7 +545,7 @@ export default function AgentManagementPage() {
               <Col span={8}>
                 <Statistic
                   title="待结算"
-                  value={(selectedAgent.pendingEarnings / 100).toFixed(2)}
+                  value={(selectedAgent.pendingEarnings || 0).toFixed(2)}
                   prefix="¥"
                   valueStyle={{ color: '#faad14' }}
                 />

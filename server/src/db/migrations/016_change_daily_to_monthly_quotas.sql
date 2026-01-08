@@ -2,6 +2,8 @@
 -- Description: 将每日配额改为每月配额
 -- Date: 2026-01-04
 
+-- ==================== UP ====================
+
 -- 1. 更新 plan_features 表中的功能代码和名称
 UPDATE plan_features 
 SET 
@@ -39,3 +41,37 @@ WHERE feature_code = 'publish_per_day';
 COMMENT ON COLUMN plan_features.feature_code IS '功能代码：articles_per_month, publish_per_month, platform_accounts, keyword_distillation';
 COMMENT ON COLUMN user_usage.feature_code IS '功能代码：articles_per_month, publish_per_month, platform_accounts, keyword_distillation';
 COMMENT ON COLUMN quota_alerts.feature_code IS '功能代码：articles_per_month, publish_per_month, platform_accounts, keyword_distillation';
+
+
+-- ==================== DOWN ====================
+
+-- 回滚：将每月配额改回每日配额
+UPDATE plan_features 
+SET 
+  feature_code = 'articles_per_day',
+  feature_name = '每日生成文章数',
+  feature_value = feature_value / 30
+WHERE feature_code = 'articles_per_month';
+
+UPDATE plan_features 
+SET 
+  feature_code = 'publish_per_day',
+  feature_name = '每日发布文章数',
+  feature_value = feature_value / 30
+WHERE feature_code = 'publish_per_month';
+
+UPDATE user_usage 
+SET feature_code = 'articles_per_day'
+WHERE feature_code = 'articles_per_month';
+
+UPDATE user_usage 
+SET feature_code = 'publish_per_day'
+WHERE feature_code = 'publish_per_month';
+
+UPDATE quota_alerts 
+SET feature_code = 'articles_per_day'
+WHERE feature_code = 'articles_per_month';
+
+UPDATE quota_alerts 
+SET feature_code = 'publish_per_day'
+WHERE feature_code = 'publish_per_month';
