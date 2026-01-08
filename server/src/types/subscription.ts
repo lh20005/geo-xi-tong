@@ -52,6 +52,10 @@ export interface Order {
   expired_at: Date;
   created_at: Date;
   updated_at: Date;
+  // 分账相关字段
+  agent_id?: number;
+  profit_sharing?: boolean;
+  expected_commission?: number;
 }
 
 export interface UsageRecord {

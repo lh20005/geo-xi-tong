@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar, List } from 'antd';
-import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, GiftOutlined, CopyOutlined, TeamOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import { StorageUsageCard } from '../components/Storage/StorageUsageCard';
 import { StorageBreakdownChart } from '../components/Storage/StorageBreakdownChart';
 import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType, StorageBreakdown as StorageBreakdownType, formatStorageMB } from '../api/storage';
+import { AgentApplyCard, AgentDashboard, CommissionList } from '../components/Agent';
+import { Agent, getAgentStatus } from '../api/agent';
 
 const { TabPane } = Tabs;
 
@@ -85,6 +87,11 @@ const UserCenterPage = () => {
   const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdownType | null>(null);
   const [storageLoading, setStorageLoading] = useState(false);
 
+  // 代理商相关状态
+  const [isAgent, setIsAgent] = useState(false);
+  const [agent, setAgent] = useState<Agent | null>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
+
   // 添加调试日志
   useEffect(() => {
     console.log('[UserCenter] 组件已挂载');
@@ -105,7 +112,8 @@ const UserCenterPage = () => {
           fetchOrders(),
           fetchUserProfile(),
           fetchInvitationStats(),
-          fetchStorageData()
+          fetchStorageData(),
+          fetchAgentStatus()
         ]);
       } catch (error) {
         console.error('[UserCenter] 加载数据失败:', error);
@@ -239,6 +247,28 @@ const UserCenterPage = () => {
     } finally {
       setStorageLoading(false);
     }
+  };
+
+  const fetchAgentStatus = async () => {
+    setAgentLoading(true);
+    try {
+      const data = await getAgentStatus();
+      setIsAgent(data.isAgent);
+      setAgent(data.agent);
+    } catch (error: any) {
+      console.error('[UserCenter] 获取代理商状态失败:', error);
+    } finally {
+      setAgentLoading(false);
+    }
+  };
+
+  const handleAgentApplySuccess = (newAgent: Agent) => {
+    setIsAgent(true);
+    setAgent(newAgent);
+  };
+
+  const handleAgentUpdate = (updatedAgent: Agent) => {
+    setAgent(updatedAgent);
   };
 
   const fetchSubscription = async () => {
@@ -840,6 +870,28 @@ const UserCenterPage = () => {
               </Card>
             </Col>
           </Row>
+        </TabPane>
+
+        {/* 代理商中心标签页 */}
+        <TabPane
+          tab={
+            <span>
+              <DollarOutlined />
+              代理商中心
+            </span>
+          }
+          key="agent"
+        >
+          {agentLoading ? (
+            <Card loading={true} />
+          ) : isAgent && agent ? (
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+              <AgentDashboard agent={agent} onAgentUpdate={handleAgentUpdate} />
+              <CommissionList />
+            </Space>
+          ) : (
+            <AgentApplyCard onApplySuccess={handleAgentApplySuccess} />
+          )}
         </TabPane>
 
         {/* 存储空间标签页 */}

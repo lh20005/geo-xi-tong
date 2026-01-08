@@ -1,0 +1,19 @@
+<!--index.wxml-->
+<view class="container">
+  <view class="logo">
+    <text class="logo-icon">💰</text>
+  </view>
+  
+  <view class="title">GEO 代理商中心</view>
+  <view class="subtitle">绑定微信账户，接收佣金分成</view>
+  
+  <button class="bind-btn" bindtap="goToBind">
+    绑定代理商账户
+  </button>
+  
+  <view class="tips">
+    <view class="tip-item">1. 在网页端获取6位绑定码</view>
+    <view class="tip-item">2. 点击上方按钮输入绑定码</view>
+    <view class="tip-item">3. 绑定成功后佣金自动到账</view>
+  </view>
+</view>

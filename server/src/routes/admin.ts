@@ -8,6 +8,7 @@ import productsRouter from './admin/products';
 import ordersRouter from './admin/orders';
 import auditLogsRouter from './admin/audit-logs';
 import plansRouter from './admin/plans';
+import agentsRouter from './admin/agents';
 
 const router = express.Router();
 
@@ -26,6 +27,9 @@ router.use('/audit-logs', auditLogsRouter);
 
 // 套餐管理路由
 router.use('/plans', plansRouter);
+
+// 代理商管理路由
+router.use('/agents', agentsRouter);
 
 // 用户管理操作限流: 每小时10次
 const userManagementRateLimit = createRateLimitMiddleware(

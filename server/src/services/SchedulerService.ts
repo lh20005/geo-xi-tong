@@ -2,6 +2,9 @@ import * as cron from 'node-cron';
 import { orderService } from './OrderService';
 import { subscriptionService } from './SubscriptionService';
 import { pool } from '../db/database';
+import { commissionService } from './CommissionService';
+import { profitSharingService } from './ProfitSharingService';
+import { agentService } from './AgentService';
 
 /**
  * 定时任务调度服务
@@ -23,6 +26,15 @@ export class SchedulerService {
 
     // 3. 订阅到期检查任务（每天执行）
     this.scheduleSubscriptionExpiryCheckTask();
+
+    // 4. 佣金结算任务（每天凌晨2点执行 T+1 结算）
+    this.scheduleCommissionSettlementTask();
+
+    // 5. 分账结果查询任务（每小时执行）
+    this.scheduleProfitSharingQueryTask();
+
+    // 6. 代理商异常检测任务（每6小时执行）
+    this.scheduleAgentAnomalyDetectionTask();
 
     console.log('✅ 定时任务调度器已启动');
   }
@@ -218,6 +230,189 @@ export class SchedulerService {
 
     this.tasks.push(task);
     console.log('✅ 订阅到期检查任务已安排（每天09:00执行）');
+  }
+
+  /**
+   * 佣金结算任务（T+1）
+   * 每天凌晨2点执行，处理前一天的待结算佣金
+   */
+  private scheduleCommissionSettlementTask() {
+    const task = cron.schedule('0 2 * * *', async () => {
+      try {
+        console.log('[定时任务] 开始执行佣金结算任务...');
+        
+        // 获取待结算的佣金（结算日期 <= 今天）
+        const pendingCommissions = await commissionService.getPendingCommissions();
+        
+        if (pendingCommissions.length === 0) {
+          console.log('[定时任务] 没有待结算的佣金');
+          return;
+        }
+
+        console.log(`[定时任务] 发现 ${pendingCommissions.length} 笔待结算佣金`);
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const commission of pendingCommissions) {
+          try {
+            // 获取代理商信息
+            const agent = await agentService.getAgentById(commission.agentId);
+            if (!agent || !agent.wechatOpenid || !agent.receiverAdded) {
+              console.log(`[定时任务] 佣金 ${commission.id} 跳过：代理商未绑定微信或未添加为接收方`);
+              continue;
+            }
+
+            if (agent.status !== 'active') {
+              console.log(`[定时任务] 佣金 ${commission.id} 跳过：代理商已暂停`);
+              continue;
+            }
+
+            // 获取订单的微信支付交易号
+            const orderResult = await pool.query(
+              'SELECT transaction_id, amount FROM orders WHERE id = $1',
+              [commission.orderId]
+            );
+            
+            const transactionId = orderResult.rows[0]?.transaction_id;
+            const orderAmount = orderResult.rows[0]?.amount;
+            if (!transactionId) {
+              console.log(`[定时任务] 佣金 ${commission.id} 跳过：订单无交易号`);
+              await commissionService.updateCommissionStatus(commission.id, 'cancelled', '订单无微信交易号');
+              failCount++;
+              continue;
+            }
+
+            // 检查分账限额
+            const amountInFen = Math.round(commission.commissionAmount * 100);
+            const limitCheck = await profitSharingService.checkProfitSharingLimits(amountInFen, orderAmount);
+            if (!limitCheck.allowed) {
+              console.log(`[定时任务] 佣金 ${commission.id} 跳过：${limitCheck.reason}`);
+              // 不取消，等待下次结算
+              continue;
+            }
+
+            // 执行分账
+            const result = await profitSharingService.requestProfitSharing(
+              transactionId,
+              agent.wechatOpenid,
+              amountInFen,
+              '代理商佣金',
+              commission.id
+            );
+
+            if (result.success) {
+              // 分账请求成功，等待查询结果
+              console.log(`[定时任务] 佣金 ${commission.id} 分账请求成功: ${result.outOrderNo}`);
+              successCount++;
+            } else {
+              // 分账请求失败
+              await commissionService.updateCommissionStatus(commission.id, 'cancelled', result.message);
+              console.log(`[定时任务] 佣金 ${commission.id} 分账请求失败: ${result.message}`);
+              failCount++;
+            }
+          } catch (error: any) {
+            console.error(`[定时任务] 处理佣金 ${commission.id} 失败:`, error);
+            await commissionService.updateCommissionStatus(commission.id, 'cancelled', error.message);
+            failCount++;
+          }
+        }
+
+        console.log(`[定时任务] 佣金结算完成: 成功 ${successCount}, 失败 ${failCount}`);
+      } catch (error) {
+        console.error('[定时任务] 佣金结算任务失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 佣金结算任务已安排（每天02:00执行）');
+  }
+
+  /**
+   * 分账结果查询任务
+   * 每小时执行，查询处理中的分账单状态
+   */
+  private scheduleProfitSharingQueryTask() {
+    const task = cron.schedule('30 * * * *', async () => {
+      try {
+        console.log('[定时任务] 开始查询分账结果...');
+        
+        // 获取处理中的分账记录
+        const pendingRecords = await profitSharingService.getPendingProfitSharingRecords();
+        
+        if (pendingRecords.length === 0) {
+          console.log('[定时任务] 没有待查询的分账记录');
+          return;
+        }
+
+        console.log(`[定时任务] 发现 ${pendingRecords.length} 条待查询分账记录`);
+
+        for (const record of pendingRecords) {
+          try {
+            const result = await profitSharingService.queryProfitSharing(
+              record.outOrderNo,
+              record.transactionId
+            );
+
+            if (result.status === 'success') {
+              // 分账成功，更新佣金状态
+              await profitSharingService.updateProfitSharingRecord(
+                record.outOrderNo,
+                'success',
+                result.wechatOrderId
+              );
+              await commissionService.updateCommissionStatus(record.commissionId, 'settled');
+              console.log(`[定时任务] 分账 ${record.outOrderNo} 成功`);
+            } else if (result.status === 'failed') {
+              // 分账失败
+              await profitSharingService.updateProfitSharingRecord(
+                record.outOrderNo,
+                'failed',
+                undefined,
+                result.failReason
+              );
+              await commissionService.updateCommissionStatus(record.commissionId, 'cancelled', result.failReason);
+              console.log(`[定时任务] 分账 ${record.outOrderNo} 失败: ${result.failReason}`);
+            }
+            // processing 状态继续等待
+          } catch (error: any) {
+            console.error(`[定时任务] 查询分账 ${record.outOrderNo} 失败:`, error);
+          }
+        }
+
+        console.log('[定时任务] 分账结果查询完成');
+      } catch (error) {
+        console.error('[定时任务] 分账结果查询任务失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 分账结果查询任务已安排（每小时30分执行）');
+  }
+
+  /**
+   * 代理商异常检测任务
+   * 每6小时执行，检测异常分账行为并自动暂停
+   */
+  private scheduleAgentAnomalyDetectionTask() {
+    const task = cron.schedule('0 */6 * * *', async () => {
+      try {
+        console.log('[定时任务] 开始执行代理商异常检测...');
+        
+        const suspendedCount = await agentService.suspendAnomalousAgents();
+        
+        if (suspendedCount > 0) {
+          console.log(`[定时任务] 已自动暂停 ${suspendedCount} 个异常代理商`);
+        } else {
+          console.log('[定时任务] 未发现异常代理商');
+        }
+      } catch (error) {
+        console.error('[定时任务] 代理商异常检测任务失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 代理商异常检测任务已安排（每6小时执行）');
   }
 }
 

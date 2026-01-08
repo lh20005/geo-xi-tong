@@ -7,6 +7,8 @@ import { pool } from '../db/database';
 import { AnomalyDetectionService } from './AnomalyDetectionService';
 import { SecurityService } from './SecurityService';
 import { QuotaInitializationService } from './QuotaInitializationService';
+import { agentService } from './AgentService';
+import { commissionService } from './CommissionService';
 
 export class PaymentService {
   private wechatpay: any;
@@ -130,6 +132,7 @@ export class PaymentService {
 
   /**
    * 创建微信支付订单
+   * 如果用户是被代理商邀请的，订单会标记为分账订单
    */
   async createWeChatPayOrder(
     userId: number, 
@@ -161,9 +164,45 @@ export class PaymentService {
     );
     const planName = planResult.rows[0]?.plan_name || '未知套餐';
 
+    // 检查用户是否被代理商邀请，如果是则标记为分账订单
+    let agentId: number | null = null;
+    let expectedCommission: number | null = null;
+    let profitSharing = false;
+
     try {
-      // 调用微信支付 API 创建预支付订单
-      const response = await this.wechatpay.v3.pay.transactions.native.post({
+      // 获取用户的邀请码来源
+      const userResult = await pool.query(
+        'SELECT invited_by_code FROM users WHERE id = $1',
+        [userId]
+      );
+      const invitedByCode = userResult.rows[0]?.invited_by_code;
+
+      if (invitedByCode) {
+        // 检查邀请者是否是已激活的代理商
+        const agent = await agentService.getAgentByInvitationCode(invitedByCode);
+        if (agent && agent.status === 'active' && agent.wechatOpenid && agent.receiverAdded) {
+          agentId = agent.id;
+          expectedCommission = commissionService.calculateCommission(order.amount, agent.commissionRate);
+          profitSharing = true;
+          console.log(`[PaymentService] 订单 ${order.order_no} 标记为分账订单，代理商: ${agentId}, 预计佣金: ${expectedCommission}`);
+        }
+      }
+    } catch (error) {
+      console.error('[PaymentService] 检查代理商关联失败:', error);
+      // 不影响订单创建
+    }
+
+    // 更新订单的分账信息
+    if (profitSharing) {
+      await pool.query(
+        `UPDATE orders SET agent_id = $1, profit_sharing = $2, expected_commission = $3 WHERE order_no = $4`,
+        [agentId, profitSharing, expectedCommission, order.order_no]
+      );
+    }
+
+    try {
+      // 构建支付请求参数
+      const paymentParams: any = {
         appid: process.env.WECHAT_PAY_APP_ID,
         mchid: process.env.WECHAT_PAY_MCH_ID,
         description: `${orderType === 'upgrade' ? '升级' : '购买'}${planName} - 订单号: ${order.order_no}`,
@@ -173,7 +212,17 @@ export class PaymentService {
           total: Math.round(order.amount * 100),
           currency: 'CNY'
         }
-      });
+      };
+
+      // 如果是分账订单，添加分账标记
+      if (profitSharing) {
+        paymentParams.settle_info = {
+          profit_sharing: true
+        };
+      }
+
+      // 调用微信支付 API 创建预支付订单
+      const response = await this.wechatpay.v3.pay.transactions.native.post(paymentParams);
 
       const responseData = typeof response.data === 'string' 
         ? JSON.parse(response.data) 
@@ -337,6 +386,22 @@ export class PaymentService {
         }
 
         await client.query('COMMIT');
+
+        // 如果是分账订单，创建佣金记录
+        if (order.profit_sharing && order.agent_id) {
+          try {
+            await commissionService.createCommission(
+              order.id,
+              order.agent_id,
+              order.user_id,
+              order.amount
+            );
+            console.log(`[PaymentService] 订单 ${orderNo} 佣金记录已创建`);
+          } catch (commissionError) {
+            console.error('[PaymentService] 创建佣金记录失败:', commissionError);
+            // 佣金记录创建失败不影响订单状态
+          }
+        }
 
         try {
           const wsService = getWebSocketService();

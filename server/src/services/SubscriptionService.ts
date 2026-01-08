@@ -371,7 +371,7 @@ export class SubscriptionService {
       
       const startDate = new Date();
       const endDate = new Date();
-      endDate.setDate(endDate.getDate() + durationDays);
+      endDate.setDate(endDate.getDate() + (durationDays || 30));
       endDate.setHours(23, 59, 59, 999); // 设置为当天结束时间
 
       const result = await client.query(

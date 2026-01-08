@@ -31,6 +31,7 @@ import storageRouter from './storage';
 import adminStorageRouter from './admin/storage';
 import storageProductsRouter from './storageProducts';
 import userSubscriptionsRouter from './admin/userSubscriptions';
+import agentRouter from './agent';
 
 export const apiRouter = Router();
 
@@ -51,6 +52,7 @@ apiRouter.use('/quota', quotaRouter);  // 配额管理API
 apiRouter.use('/usage', usageTrackingRouter);  // 使用量追踪API
 apiRouter.use('/storage', storageRouter);  // 存储管理API
 apiRouter.use('/storage-products', storageProductsRouter);  // 存储产品购买API
+apiRouter.use('/agent', agentRouter);  // 代理商API
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);

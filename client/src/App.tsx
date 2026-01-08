@@ -38,6 +38,7 @@ import OrderManagementPage from './pages/OrderManagementPage';
 import UserManagementPage from './pages/UserManagementPage';
 import UserCenterPage from './pages/UserCenterPage';
 import PaymentPage from './pages/PaymentPage';
+import AgentManagementPage from './pages/AgentManagementPage';
 
 const { Content } = Layout;
 
@@ -218,6 +219,7 @@ function App() {
                     <Route path="/products" element={<AdminRoute><ProductManagementPage /></AdminRoute>} />
                     <Route path="/admin/orders" element={<AdminRoute><OrderManagementPage /></AdminRoute>} />
                     <Route path="/admin/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
+                    <Route path="/admin/agents" element={<AdminRoute><AgentManagementPage /></AdminRoute>} />
                     <Route path="/user-center" element={<UserCenterPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>

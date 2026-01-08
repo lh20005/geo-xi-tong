@@ -21,6 +21,7 @@ import {
   ShoppingOutlined,
   UserOutlined,
   LogoutOutlined,
+  DollarOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 import { config } from '../../config/env';
@@ -174,6 +175,12 @@ export default function Sidebar() {
       key: '/admin/users',
       icon: <TeamOutlined />,
       label: '用户管理',
+    }] : []),
+    // 代理商管理 - 仅管理员可见
+    ...(userIsAdmin ? [{
+      key: '/admin/agents',
+      icon: <DollarOutlined />,
+      label: '代理商管理',
     }] : []),
     {
       key: '/user-manual',

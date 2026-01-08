@@ -1,0 +1,46 @@
+<!--bindAgent.wxml-->
+<view class="container">
+  <view class="header">
+    <view class="icon">
+      <text class="icon-text">🔗</text>
+    </view>
+    <view class="title">绑定代理商账户</view>
+    <view class="subtitle">输入网页端显示的6位绑定码</view>
+  </view>
+
+  <view class="code-input-container">
+    <input 
+      class="code-input" 
+      type="number" 
+      maxlength="6"
+      placeholder="请输入绑定码"
+      bindinput="onCodeInput"
+      value="{{bindCode}}"
+      focus="{{true}}"
+    />
+  </view>
+
+  <button 
+    class="submit-btn {{bindCode.length === 6 ? '' : 'disabled'}}" 
+    bindtap="submitBind"
+    disabled="{{bindCode.length !== 6 || loading}}"
+    loading="{{loading}}"
+  >
+    {{loading ? '绑定中...' : '确认绑定'}}
+  </button>
+
+  <view class="result" wx:if="{{resultType}}">
+    <view class="result-icon {{resultType}}">
+      <text>{{resultType === 'success' ? '✓' : '✗'}}</text>
+    </view>
+    <view class="result-text">{{resultMessage}}</view>
+  </view>
+
+  <view class="tips">
+    <view class="tips-title">使用说明</view>
+    <view class="tip-item">1. 在电脑端登录 GEO 系统</view>
+    <view class="tip-item">2. 进入"个人中心" → "代理商中心"</view>
+    <view class="tip-item">3. 点击"绑定微信"获取绑定码</view>
+    <view class="tip-item">4. 在此输入绑定码完成绑定</view>
+  </view>
+</view>
