@@ -265,20 +265,21 @@ export default function RegistrationPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  邀请码（可选）
+                  邀请码
+                  <span className="ml-2 text-xs font-normal text-orange-500">🎁 填写邀请码，首单立享8折优惠</span>
                 </label>
                 <input
                   type="text"
                   value={formData.invitationCode}
                   onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value.toLowerCase() })}
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  placeholder="6位字母数字"
+                  placeholder="抖音搜索“精准GEO优化”索取邀请码"
                   maxLength={6}
                   autoComplete="off"
                 />
                 {invitationValid === true && (
                   <p className="mt-1 text-sm text-green-600">
-                    ✓ 有效邀请码 {inviterUsername && `(来自 ${inviterUsername})`}
+                    🎉 邀请码有效！首次购买可享8折优惠 {inviterUsername && `(来自 ${inviterUsername})`}
                   </p>
                 )}
                 {invitationValid === false && formData.invitationCode.length === 6 && (
