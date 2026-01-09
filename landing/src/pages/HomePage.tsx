@@ -428,14 +428,24 @@ export default function HomePage() {
                   >
                     {/* 折扣标签 */}
                     {hasDiscount ? (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap animate-pulse">
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap animate-pulse z-10">
                         🎁 代理商专属优惠
                       </div>
                     ) : (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap">
+                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap z-10">
                         {badge.text}
                       </div>
                     )}
+                    
+                    {/* 邀请码优惠绶带 - 仅对非免费套餐且未登录用户显示 */}
+                    {!isFree && !isLoggedIn && (
+                      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                        <div className="absolute -right-8 top-5 rotate-45 bg-yellow-400 text-gray-900 text-xs font-bold py-1 px-10 shadow-md">
+                          邀请码享8折
+                        </div>
+                      </div>
+                    )}
+                    
                     <div className="text-center mb-6 flex-grow">
                       <h3 className="text-xl font-bold text-white mb-2 mt-2">{plan.plan_name}</h3>
                       <p className="text-blue-100 text-sm mb-4 line-clamp-2">{plan.description || '适合个人用户'}</p>
