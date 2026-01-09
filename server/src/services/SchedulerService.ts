@@ -179,13 +179,14 @@ export class SchedulerService {
       try {
         console.log('[定时任务] 开始执行订阅到期检查任务...');
         
-        // 查找7天内到期的订阅
+        // 查找7天内到期的订阅（排除永久有效的订阅，即 duration_days >= 36500）
         const expiringSubscriptions = await pool.query(`
           SELECT 
             us.id,
             us.user_id,
             us.end_date,
             sp.plan_name,
+            sp.duration_days,
             u.username,
             u.email
           FROM user_subscriptions us
@@ -194,6 +195,7 @@ export class SchedulerService {
           WHERE us.status = 'active'
           AND us.end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
           AND us.auto_renew = false
+          AND sp.duration_days < 36500
         `);
 
         console.log(`[定时任务] 发现 ${expiringSubscriptions.rows.length} 个即将到期的订阅`);
@@ -211,13 +213,16 @@ export class SchedulerService {
           // TODO: WebSocket 推送通知
         }
 
-        // 自动降级已到期的订阅
+        // 自动降级已到期的订阅（排除永久有效的订阅）
         const expiredResult = await pool.query(`
-          UPDATE user_subscriptions 
+          UPDATE user_subscriptions us
           SET status = 'expired', updated_at = CURRENT_TIMESTAMP
-          WHERE status = 'active'
-          AND end_date < CURRENT_DATE
-          RETURNING id, user_id
+          FROM subscription_plans sp
+          WHERE us.plan_id = sp.id
+          AND us.status = 'active'
+          AND us.end_date < CURRENT_DATE
+          AND sp.duration_days < 36500
+          RETURNING us.id, us.user_id
         `);
 
         if (expiredResult.rowCount && expiredResult.rowCount > 0) {

@@ -169,7 +169,12 @@ export default function SubscriptionDetailDrawer({ visible, userId, username, on
               <Col span={12}>
                 <div style={{ fontSize: 12, color: '#666' }}>到期日期</div>
                 <div style={{ fontSize: 14, marginTop: 4 }}>
-                  {new Date(detail.end_date).toLocaleDateString('zh-CN')}
+                  {(() => {
+                    const endDate = new Date(detail.end_date);
+                    const now = new Date();
+                    const daysUntil = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return daysUntil > 36000 ? '永久有效' : endDate.toLocaleDateString('zh-CN');
+                  })()}
                 </div>
               </Col>
             </Row>

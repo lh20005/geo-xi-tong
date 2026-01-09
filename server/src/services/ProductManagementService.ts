@@ -22,8 +22,10 @@ export interface SubscriptionPlan {
   planCode: string;
   planName: string;
   price: number;
-  billingCycle: 'monthly' | 'yearly';
-  durationDays: number;
+  billingCycle: 'monthly' | 'yearly';        // 计费周期（用于前端价格显示）
+  quotaCycleType: 'monthly' | 'yearly';      // 配额重置周期
+  durationDays: number;                       // 套餐有效期（天数）
+  validityPeriod: 'monthly' | 'yearly' | 'permanent';  // 套餐有效期类型（用于前端显示和自动计算天数）
   isActive: boolean;
   description?: string;
   displayOrder: number;
@@ -62,7 +64,13 @@ export class ProductManagementService {
           sp.plan_name as "planName",
           sp.price,
           sp.billing_cycle as "billingCycle",
+          COALESCE(sp.quota_cycle_type, sp.billing_cycle, 'monthly') as "quotaCycleType",
           sp.duration_days as "durationDays",
+          CASE 
+            WHEN sp.duration_days >= 36500 THEN 'permanent'
+            WHEN sp.duration_days >= 365 THEN 'yearly'
+            ELSE 'monthly'
+          END as "validityPeriod",
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
@@ -111,7 +119,13 @@ export class ProductManagementService {
           sp.plan_name as "planName",
           sp.price,
           sp.billing_cycle as "billingCycle",
+          COALESCE(sp.quota_cycle_type, sp.billing_cycle, 'monthly') as "quotaCycleType",
           sp.duration_days as "durationDays",
+          CASE 
+            WHEN sp.duration_days >= 36500 THEN 'permanent'
+            WHEN sp.duration_days >= 365 THEN 'yearly'
+            ELSE 'monthly'
+          END as "validityPeriod",
           sp.is_active as "isActive",
           sp.description,
           sp.display_order as "displayOrder",
@@ -154,19 +168,30 @@ export class ProductManagementService {
     try {
       await client.query('BEGIN');
       
+      // 根据 validityPeriod 计算 durationDays
+      let durationDays = plan.durationDays;
+      if (plan.validityPeriod === 'permanent') {
+        durationDays = 36500; // 100年，表示永久
+      } else if (plan.validityPeriod === 'yearly') {
+        durationDays = 365;
+      } else if (plan.validityPeriod === 'monthly') {
+        durationDays = 30;
+      }
+      
       // 插入套餐
       const planResult = await client.query(
         `INSERT INTO subscription_plans (
-          plan_code, plan_name, price, billing_cycle, duration_days,
+          plan_code, plan_name, price, billing_cycle, quota_cycle_type, duration_days,
           is_active, description, display_order
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *`,
         [
           plan.planCode,
           plan.planName,
           plan.price,
           plan.billingCycle,
-          plan.durationDays,
+          plan.quotaCycleType || plan.billingCycle || 'monthly',
+          durationDays,
           plan.isActive,
           plan.description || null,
           plan.displayOrder
@@ -248,6 +273,7 @@ export class ProductManagementService {
           sp.plan_name as "planName",
           sp.price,
           sp.billing_cycle as "billingCycle",
+          COALESCE(sp.quota_cycle_type, sp.billing_cycle, 'monthly') as "quotaCycleType",
           sp.duration_days as "durationDays",
           sp.is_active as "isActive",
           sp.description,
@@ -322,6 +348,57 @@ export class ProductManagementService {
           oldPlan.billingCycle,
           updates.billingCycle
         );
+      }
+      
+      // 配额重置周期更新
+      if (updates.quotaCycleType !== undefined) {
+        updateFields.push(`quota_cycle_type = $${paramIndex++}`);
+        updateValues.push(updates.quotaCycleType);
+        await this.recordConfigChange(
+          client,
+          planId,
+          adminId,
+          'quota_cycle_type',
+          oldPlan.quotaCycleType || 'monthly',
+          updates.quotaCycleType
+        );
+      }
+      
+      // 套餐有效期更新（根据 validityPeriod 计算 durationDays）
+      if (updates.validityPeriod !== undefined) {
+        let newDurationDays: number;
+        if (updates.validityPeriod === 'permanent') {
+          newDurationDays = 36500; // 100年，表示永久
+        } else if (updates.validityPeriod === 'yearly') {
+          newDurationDays = 365;
+        } else {
+          newDurationDays = 30;
+        }
+        updateFields.push(`duration_days = $${paramIndex++}`);
+        updateValues.push(newDurationDays);
+        
+        // 计算旧的有效期类型
+        let oldValidityPeriod: string;
+        if (oldPlan.durationDays >= 36500) {
+          oldValidityPeriod = 'permanent';
+        } else if (oldPlan.durationDays >= 365) {
+          oldValidityPeriod = 'yearly';
+        } else {
+          oldValidityPeriod = 'monthly';
+        }
+        
+        await this.recordConfigChange(
+          client,
+          planId,
+          adminId,
+          'validity_period',
+          oldValidityPeriod,
+          updates.validityPeriod
+        );
+      } else if (updates.durationDays !== undefined) {
+        // 直接更新天数（兼容旧逻辑）
+        updateFields.push(`duration_days = $${paramIndex++}`);
+        updateValues.push(updates.durationDays);
       }
       
       if (updates.description !== undefined) {
@@ -424,6 +501,18 @@ export class ProductManagementService {
           JSON.stringify(oldPlan.features),
           JSON.stringify(updates.features)
         );
+      }
+      
+      // 如果更新了配额重置周期，同步到所有使用该套餐的活跃订阅
+      if (updates.quotaCycleType !== undefined) {
+        const syncResult = await client.query(
+          `SELECT sync_subscription_quota_cycle($1) as updated_count`,
+          [planId]
+        );
+        const updatedCount = syncResult.rows[0]?.updated_count || 0;
+        if (updatedCount > 0) {
+          console.log(`[ProductManagementService] 已同步 ${updatedCount} 个用户订阅的配额周期`);
+        }
       }
       
       await client.query('COMMIT');

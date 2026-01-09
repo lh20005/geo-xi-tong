@@ -442,12 +442,12 @@ export default function HomePage() {
                               原价 ¥{formatPrice(originalPrice)}
                             </div>
                             <span className="text-4xl font-bold text-yellow-300">¥{formatPrice(displayPrice)}</span>
-                            <span className="text-blue-100 text-sm">/月</span>
+                            <span className="text-blue-100 text-sm">/{plan.billing_cycle === 'yearly' ? '年' : '月'}</span>
                           </>
                         ) : (
                           <>
                             <span className="text-4xl font-bold text-white">¥{formatPrice(price)}</span>
-                            <span className="text-blue-100 text-sm">/月</span>
+                            <span className="text-blue-100 text-sm">/{plan.billing_cycle === 'yearly' ? '年' : '月'}</span>
                           </>
                         )}
                       </div>
