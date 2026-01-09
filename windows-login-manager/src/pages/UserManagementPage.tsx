@@ -19,6 +19,7 @@ interface User {
   isTempPassword?: boolean;
   subscriptionPlanName?: string;
   isOnline?: boolean;
+  isAgent?: boolean;
 }
 
 export default function UserManagementPage() {
@@ -30,6 +31,7 @@ export default function UserManagementPage() {
   const [search, setSearch] = useState('');
   const [subscriptionFilter, setSubscriptionFilter] = useState<string>('');
   const [onlineFilter, setOnlineFilter] = useState<string>('');
+  const [roleFilter, setRoleFilter] = useState<string>(''); // 新增：角色筛选
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
@@ -38,7 +40,7 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     loadUsers();
-  }, [page, search, subscriptionFilter, onlineFilter]);
+  }, [page, search, subscriptionFilter, onlineFilter, roleFilter]);
 
   useEffect(() => {
     // 连接 WebSocket
@@ -78,7 +80,8 @@ export default function UserManagementPage() {
           pageSize, 
           search: search || undefined,
           subscriptionPlan: subscriptionFilter || undefined,
-          onlineStatus: onlineFilter || undefined
+          onlineStatus: onlineFilter || undefined,
+          roleFilter: roleFilter || undefined
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -229,11 +232,18 @@ export default function UserManagementPage() {
       dataIndex: 'role',
       key: 'role',
       width: 100,
-      render: (role: string) => (
-        <Tag color={role === 'admin' ? 'purple' : 'blue'}>
-          {role === 'admin' ? '管理员' : '普通用户'}
-        </Tag>
-      ),
+      render: (_: string, record: User) => {
+        // 系统管理员优先显示
+        if (record.role === 'admin') {
+          return <Tag color="purple">管理员</Tag>;
+        }
+        // 代理商显示
+        if (record.isAgent) {
+          return <Tag color="orange">代理商</Tag>;
+        }
+        // 普通用户
+        return <Tag color="blue">普通用户</Tag>;
+      },
     },
     {
       title: '邀请码',
@@ -352,6 +362,29 @@ export default function UserManagementPage() {
               </Select.Option>
               <Select.Option value="offline">
                 <Badge status="default" text="离线" />
+              </Select.Option>
+            </Select>
+
+            <Select
+              placeholder="筛选角色"
+              allowClear
+              size="large"
+              style={{ width: 150 }}
+              onChange={(value) => {
+                setRoleFilter(value || '');
+                setPage(1);
+              }}
+              value={roleFilter || undefined}
+            >
+              <Select.Option value="">全部角色</Select.Option>
+              <Select.Option value="admin">
+                <Tag color="purple">管理员</Tag>
+              </Select.Option>
+              <Select.Option value="agent">
+                <Tag color="orange">代理商</Tag>
+              </Select.Option>
+              <Select.Option value="user">
+                <Tag color="blue">普通用户</Tag>
               </Select.Option>
             </Select>
           </Space>

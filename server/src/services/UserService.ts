@@ -297,9 +297,10 @@ export class UserService {
     search?: string,
     subscriptionPlan?: string,
     onlineUserIds?: number[],
-    onlineStatus?: 'online' | 'offline'
+    onlineStatus?: 'online' | 'offline',
+    roleFilter?: 'admin' | 'agent' | 'user'
   ): Promise<{
-    users: Array<User & { invitedCount: number; subscriptionPlanName?: string }>;
+    users: Array<User & { invitedCount: number; subscriptionPlanName?: string; isAgent?: boolean }>;
     total: number;
     page: number;
     pageSize: number;
@@ -331,17 +332,31 @@ export class UserService {
         }
       }
     }
+
+    // 角色筛选
+    if (roleFilter) {
+      if (roleFilter === 'admin') {
+        whereConditions.push(`u.role = 'admin'`);
+      } else if (roleFilter === 'agent') {
+        whereConditions.push(`a.id IS NOT NULL AND u.role != 'admin'`);
+      } else if (roleFilter === 'user') {
+        whereConditions.push(`a.id IS NULL AND u.role != 'admin'`);
+      }
+    }
     
     const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
     
-    // 获取总数
+    // 获取总数（需要 JOIN agents 表）
     const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM users u ${whereClause}`,
+      `SELECT COUNT(DISTINCT u.id) as total 
+       FROM users u 
+       LEFT JOIN agents a ON a.user_id = u.id AND a.status = 'active'
+       ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0].total);
     
-    // 获取用户列表（包括邀请数量和订阅套餐名称）
+    // 获取用户列表（包括邀请数量、订阅套餐名称和代理商状态）
     let havingClause = '';
     if (subscriptionPlan) {
       if (subscriptionPlan === '无订阅') {
@@ -360,9 +375,11 @@ export class UserService {
         u.id, u.username, u.invitation_code, u.invited_by_code, u.role, 
         u.is_temp_password, u.created_at, u.updated_at, u.last_login_at,
         COUNT(DISTINCT invited.id) as invited_count,
-        latest_sub.plan_name as subscription_plan_name
+        latest_sub.plan_name as subscription_plan_name,
+        CASE WHEN a.id IS NOT NULL THEN true ELSE false END as is_agent
        FROM users u
        LEFT JOIN users invited ON invited.invited_by_code = u.invitation_code
+       LEFT JOIN agents a ON a.user_id = u.id AND a.status = 'active'
        LEFT JOIN LATERAL (
          SELECT p.plan_name
          FROM user_subscriptions us
@@ -374,7 +391,7 @@ export class UserService {
          LIMIT 1
        ) latest_sub ON true
        ${whereClause}
-       GROUP BY u.id, latest_sub.plan_name
+       GROUP BY u.id, latest_sub.plan_name, a.id
        ${havingClause}
        ORDER BY u.created_at DESC
        LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`,
@@ -392,7 +409,8 @@ export class UserService {
       updated_at: row.updated_at,
       last_login_at: row.last_login_at,
       invitedCount: parseInt(row.invited_count),
-      subscriptionPlanName: row.subscription_plan_name || '无订阅'
+      subscriptionPlanName: row.subscription_plan_name || '无订阅',
+      isAgent: row.is_agent
     }));
     
     return {

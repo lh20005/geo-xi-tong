@@ -61,7 +61,8 @@ function convertUserFields(user: any, isOnline?: boolean) {
     invitedCount: user.invitedCount,
     invitedUsers: user.invitedUsers,
     subscriptionPlanName: user.subscriptionPlanName,
-    isOnline: isOnline ?? false
+    isOnline: isOnline ?? false,
+    isAgent: user.isAgent ?? false
   };
 }
 
@@ -76,6 +77,7 @@ router.get('/users', async (req, res) => {
     const search = req.query.search as string;
     const subscriptionPlan = req.query.subscriptionPlan as string;
     const onlineStatus = req.query.onlineStatus as 'online' | 'offline' | undefined;
+    const roleFilter = req.query.roleFilter as 'admin' | 'agent' | 'user' | undefined;
 
     // 获取在线用户ID列表
     let onlineUserIds: number[] = [];
@@ -93,7 +95,8 @@ router.get('/users', async (req, res) => {
       search, 
       subscriptionPlan,
       onlineUserIds,
-      onlineStatus
+      onlineStatus,
+      roleFilter
     );
 
     // 转换字段名并添加在线状态
