@@ -108,16 +108,23 @@ export class AccountService {
     // 使用 real_username 作为唯一标识（如果提供），否则使用 account_name
     const uniqueIdentifier = realUsername || input.account_name;
     
-    console.log('[AccountService] 检查是否存在重复账号, uniqueIdentifier:', uniqueIdentifier);
+    console.log('[AccountService] 检查是否存在重复账号');
+    console.log('[AccountService] uniqueIdentifier:', uniqueIdentifier);
+    console.log('[AccountService] 查询参数: platform_id=%s, userId=%s, uniqueIdentifier=%s', input.platform_id, userId, uniqueIdentifier);
     
     const existingResult = await pool.query(
-      `SELECT * FROM platform_accounts 
+      `SELECT id, platform_id, account_name, real_username, user_id FROM platform_accounts 
        WHERE platform_id = $1 
        AND user_id = $2
        AND (real_username = $3 OR (real_username IS NULL AND account_name = $3))
        LIMIT 1`,
       [input.platform_id, userId, uniqueIdentifier]
     );
+    
+    console.log('[AccountService] 查询结果: 找到 %d 条记录', existingResult.rows.length);
+    if (existingResult.rows.length > 0) {
+      console.log('[AccountService] 已存在的账号:', JSON.stringify(existingResult.rows[0]));
+    }
     
     if (existingResult.rows.length > 0) {
       // 账号已存在，更新凭证和时间
