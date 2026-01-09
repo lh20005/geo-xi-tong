@@ -1,394 +1,589 @@
 import { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Form, InputNumber, Switch, message, Tag, Space, Tooltip } from 'antd';
-import { EditOutlined, HistoryOutlined, RollbackOutlined } from '@ant-design/icons';
+import { 
+  Table, Button, Modal, Form, Input, InputNumber, Switch, 
+  message, Card, Tag, Space, Timeline, Descriptions,
+  Popconfirm, Select, Spin, Tooltip
+} from 'antd';
+import { 
+  PlusOutlined, EditOutlined, DeleteOutlined, 
+  HistoryOutlined, SettingOutlined 
+} from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import { ensureTokensSync } from '../utils/tokenSync';
+import type { ColumnsType } from 'antd/es/table';
+
+const { TextArea } = Input;
+
+interface PlanFeature {
+  id?: number;
+  featureCode: string;
+  featureName: string;
+  featureValue: number;
+  featureUnit: string;
+}
 
 interface Plan {
   id: number;
-  plan_code: string;
-  plan_name: string;
+  planCode: string;
+  planName: string;
   price: number;
-  billing_cycle: string;
-  is_active: boolean;
-  display_order: number;
-  features: {
-    feature_code: string;
-    feature_name: string;
-    feature_value: number;
-    reset_period: string;
-  }[];
+  billingCycle: 'monthly' | 'yearly';
+  durationDays: number;
+  isActive: boolean;
+  description?: string;
+  displayOrder: number;
+  agentDiscountRate?: number;
+  features?: PlanFeature[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface ConfigHistory {
   id: number;
-  change_type: string;
-  field_name: string;
-  old_value: string;
-  new_value: string;
-  changed_by_name: string;
-  created_at: string;
-  ip_address: string;
+  planId: number;
+  planName: string;
+  changedBy: number;
+  changedByUsername: string;
+  changeType: string;
+  oldValue: string;
+  newValue: string;
+  createdAt: string;
 }
+
+// 功能配额选项
+const featureOptions = [
+  { code: 'articles_per_month', name: '每月生成文章数', unit: '篇' },
+  { code: 'publish_per_month', name: '每月发布文章数', unit: '篇' },
+  { code: 'platform_accounts', name: '可管理平台账号数', unit: '个' },
+  { code: 'keyword_distillation', name: '关键词蒸馏数', unit: '个' },
+  { code: 'storage_space', name: '存储空间', unit: 'MB' }
+];
 
 const ProductManagementPage = () => {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
-  const [confirmModalVisible, setConfirmModalVisible] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
-  const [configHistory, setConfigHistory] = useState<ConfigHistory[]>([]);
-  const [pendingUpdate, setPendingUpdate] = useState<any>(null);
+  const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
+  const [history, setHistory] = useState<ConfigHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [form] = Form.useForm();
 
   useEffect(() => {
-    // 确保 token 同步后再获取数据
     const initPage = async () => {
       await ensureTokensSync();
-      fetchPlans();
+      loadPlans();
     };
     initPage();
   }, []);
 
-  const fetchPlans = async () => {
+  // 加载套餐列表
+  const loadPlans = async () => {
     setLoading(true);
     try {
       console.log('[ProductManagement] 开始获取套餐列表');
-      console.log('[ProductManagement] API Base URL:', import.meta.env.VITE_API_BASE_URL);
-      
-      const response = await apiClient.get('/admin/products');
+      const response = await apiClient.get('/admin/products/plans?include_inactive=true');
       
       console.log('[ProductManagement] API 响应:', response.data);
-      
-      if (response.data.success) {
-        console.log('[ProductManagement] 成功获取套餐:', response.data.data.length);
-        setPlans(response.data.data);
-      } else {
-        console.error('[ProductManagement] API 返回失败:', response.data);
-        message.error(response.data.message || '获取套餐列表失败');
-      }
+      setPlans(response.data.data || []);
     } catch (error: any) {
-      console.error('[ProductManagement] 获取套餐失败:', error);
-      console.error('[ProductManagement] 错误详情:', {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status
-      });
-      message.error(error.message || error.response?.data?.message || '获取套餐列表失败');
+      console.error('[ProductManagement] 加载套餐失败:', error);
+      message.error(error.response?.data?.message || '加载套餐失败');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleEdit = (plan: Plan) => {
-    setSelectedPlan(plan);
+  // 加载配置历史
+  const loadHistory = async (planId?: number) => {
+    setHistoryLoading(true);
+    try {
+      const url = planId 
+        ? `/admin/products/history?plan_id=${planId}`
+        : '/admin/products/history';
+      const response = await apiClient.get(url);
+      setHistory(response.data.data?.history || []);
+    } catch (error: any) {
+      message.error('加载历史记录失败');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // 打开新增模态框
+  const handleCreate = () => {
+    setCurrentPlan(null);
+    form.resetFields();
     form.setFieldsValue({
-      price: plan.price,
-      is_active: plan.is_active,
-      ...plan.features.reduce((acc, f) => ({
-        ...acc,
-        [f.feature_code]: f.feature_value
-      }), {})
+      planName: '',
+      planCode: '',
+      price: 0,
+      billingCycle: 'monthly',
+      durationDays: 30,
+      description: '',
+      displayOrder: plans.length + 1,
+      isActive: true,
+      agentDiscountRate: 100,
+      features: []
     });
     setEditModalVisible(true);
   };
 
-  const handleUpdate = async (values: any) => {
-    if (!selectedPlan) return;
-
-    const updateData = {
-      price: values.price,
-      is_active: values.is_active,
-      features: selectedPlan.features.map(f => ({
-        feature_code: f.feature_code,
-        feature_value: values[f.feature_code]
-      }))
-    };
-
-    try {
-      const response = await apiClient.put(
-        `/admin/products/${selectedPlan.id}`,
-        updateData
-      );
-
-      if (response.data.requiresConfirmation) {
-        // 需要二次确认
-        setPendingUpdate(updateData);
-        setConfirmModalVisible(true);
-        message.warning(response.data.message);
-      } else if (response.data.success) {
-        message.success('套餐配置已更新');
-        setEditModalVisible(false);
-        fetchPlans();
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '更新失败');
-    }
-  };
-
-  const handleConfirmUpdate = async () => {
-    if (!selectedPlan || !pendingUpdate) return;
-
-    try {
-      const response = await apiClient.put(
-        `/admin/products/${selectedPlan.id}`,
-        { ...pendingUpdate, confirmationToken: 'confirmed' }
-      );
-
-      if (response.data.success) {
-        message.success('套餐配置已更新');
-        setEditModalVisible(false);
-        setConfirmModalVisible(false);
-        setPendingUpdate(null);
-        fetchPlans();
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '更新失败');
-    }
-  };
-
-  const handleViewHistory = async (plan: Plan) => {
-    setSelectedPlan(plan);
-    setLoading(true);
-    try {
-      const response = await apiClient.get(
-        `/admin/products/${plan.id}/history`
-      );
-
-      if (response.data.success) {
-        setConfigHistory(response.data.data);
-        setHistoryModalVisible(true);
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '获取历史记录失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRollback = async (historyId: number) => {
-    Modal.confirm({
-      title: '确认回滚',
-      content: '确定要回滚到此配置吗？',
-      onOk: async () => {
-        try {
-          const response = await apiClient.post(
-            `/admin/products/${selectedPlan?.id}/rollback`,
-            { historyId, confirmationToken: 'confirmed' }
-          );
-
-          if (response.data.success) {
-            message.success('配置已回滚');
-            setHistoryModalVisible(false);
-            fetchPlans();
-          }
-        } catch (error: any) {
-          message.error(error.response?.data?.message || '回滚失败');
+  // 打开编辑模态框
+  const handleEdit = (plan: Plan) => {
+    console.log('[ProductManagement] 编辑套餐:', plan);
+    setCurrentPlan(plan);
+    
+    // 确保 features 数据完整，并统一单位为 MB
+    const features = (plan.features || []).map(feature => {
+      let featureValue = feature.featureValue;
+      let featureUnit = feature.featureUnit;
+      
+      if (feature.featureCode === 'storage_space' && feature.featureUnit === 'bytes') {
+        if (featureValue !== -1) {
+          featureValue = Math.round((featureValue / (1024 * 1024)) * 100) / 100;
         }
+        featureUnit = 'MB';
       }
+      
+      return {
+        featureCode: feature.featureCode,
+        featureName: feature.featureName,
+        featureValue: featureValue,
+        featureUnit: featureUnit
+      };
     });
+    
+    form.setFieldsValue({
+      planName: plan.planName,
+      price: plan.price,
+      billingCycle: plan.billingCycle,
+      description: plan.description,
+      displayOrder: plan.displayOrder,
+      isActive: plan.isActive,
+      agentDiscountRate: plan.agentDiscountRate || 100,
+      features: features
+    });
+    
+    setEditModalVisible(true);
   };
 
-  const columns = [
+  // 保存修改或新增
+  const handleSave = async () => {
+    try {
+      const values = await form.validateFields();
+      
+      // 确保存储空间的单位是 MB
+      if (values.features) {
+        values.features = values.features.map((feature: any) => {
+          if (feature.featureCode === 'storage_space' && !feature.featureUnit) {
+            return { ...feature, featureUnit: 'MB' };
+          }
+          return feature;
+        });
+      }
+      
+      // 确保 agentDiscountRate 是整数
+      if (values.agentDiscountRate !== undefined) {
+        values.agentDiscountRate = Math.round(values.agentDiscountRate);
+      }
+      
+      console.log('[ProductManagement] 准备保存的数据:', values);
+      
+      if (currentPlan) {
+        const response = await apiClient.put(`/admin/products/plans/${currentPlan.id}`, values);
+        console.log('[ProductManagement] 更新成功:', response.data);
+        message.success('套餐更新成功');
+      } else {
+        const response = await apiClient.post('/admin/products/plans', values);
+        console.log('[ProductManagement] 新增成功:', response.data);
+        message.success('套餐新增成功');
+      }
+      
+      setEditModalVisible(false);
+      loadPlans();
+    } catch (error: any) {
+      console.error('[ProductManagement] 保存失败:', error);
+      if (error.response) {
+        message.error(error.response.data.message || (currentPlan ? '更新失败' : '新增失败'));
+      } else if (error.errorFields) {
+        // 表单验证错误
+        return;
+      } else {
+        message.error('网络错误，请稍后重试');
+      }
+    }
+  };
+
+  // 删除套餐
+  const handleDelete = async (planId: number) => {
+    try {
+      await apiClient.delete(`/admin/products/plans/${planId}`);
+      message.success('套餐删除成功');
+      loadPlans();
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '删除失败');
+    }
+  };
+
+  // 查看历史
+  const handleViewHistory = (plan?: Plan) => {
+    setCurrentPlan(plan || null);
+    setHistoryModalVisible(true);
+    loadHistory(plan?.id);
+  };
+
+  // 表格列定义
+  const columns: ColumnsType<Plan> = [
+    {
+      title: '排序',
+      dataIndex: 'displayOrder',
+      key: 'displayOrder',
+      width: 80,
+      sorter: (a, b) => a.displayOrder - b.displayOrder,
+    },
     {
       title: '套餐名称',
-      dataIndex: 'plan_name',
-      key: 'plan_name',
-      width: 150,
-      fixed: 'left' as const,
-      render: (text: string, record: Plan) => (
+      dataIndex: 'planName',
+      key: 'planName',
+      render: (text, record) => (
         <Space>
-          {text}
-          {!record.is_active && <Tag color="red">已停用</Tag>}
+          <span style={{ fontWeight: 600 }}>{text}</span>
+          <Tag color={record.planCode === 'free' ? 'default' : record.planCode === 'professional' ? 'blue' : 'gold'}>
+            {record.planCode}
+          </Tag>
         </Space>
-      )
+      ),
     },
     {
       title: '价格',
       dataIndex: 'price',
       key: 'price',
-      width: 100,
-      render: (price: number | string) => `¥${parseFloat(String(price)).toFixed(2)}`
+      render: (price, record) => (
+        <span style={{ fontSize: 16, fontWeight: 'bold', color: '#cf1322' }}>
+          ¥{price} / {record.billingCycle === 'monthly' ? '月' : '年'}
+        </span>
+      ),
     },
     {
-      title: '计费周期',
-      dataIndex: 'billing_cycle',
-      key: 'billing_cycle',
-      width: 100,
-      render: (cycle: string) => cycle === 'monthly' ? '月付' : cycle === 'yearly' ? '年付' : '一次性'
+      title: '代理商折扣',
+      dataIndex: 'agentDiscountRate',
+      key: 'agentDiscountRate',
+      width: 120,
+      render: (rate) => {
+        const discountRate = rate || 100;
+        if (discountRate >= 100) {
+          return <Tag>无折扣</Tag>;
+        }
+        const discountDisplay = discountRate / 10;
+        return <Tag color="orange">{discountDisplay}折</Tag>;
+      },
     },
     {
       title: '功能配额',
       key: 'features',
-      width: 400,
-      render: (_: any, record: Plan) => (
+      render: (_, record) => (
         <Space direction="vertical" size="small">
-          {record.features.map(f => (
-            <div key={f.feature_code}>
-              {f.feature_name}: {f.feature_value === -1 ? '无限制' : f.feature_value}
-            </div>
-          ))}
+          {record.features?.map((feature, index) => {
+            let displayValue = feature.featureValue === -1 ? '无限制' : `${feature.featureValue} ${feature.featureUnit}`;
+            if (feature.featureCode === 'storage_space' && feature.featureValue >= 1024 && feature.featureValue !== -1) {
+              displayValue = `${(feature.featureValue / 1024).toFixed(0)} GB`;
+            }
+            return (
+              <Tag key={feature.id || `${feature.featureCode}-${index}`} color="blue">
+                {feature.featureName}: {displayValue}
+              </Tag>
+            );
+          })}
         </Space>
-      )
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'isActive',
+      key: 'isActive',
+      render: (isActive) => (
+        <Tag color={isActive ? 'success' : 'default'}>
+          {isActive ? '启用' : '停用'}
+        </Tag>
+      ),
     },
     {
       title: '操作',
-      key: 'actions',
-      width: 180,
-      fixed: 'right' as const,
-      render: (_: any, record: Plan) => (
+      key: 'action',
+      width: 200,
+      render: (_, record) => (
         <Space>
-          <Tooltip title="编辑配置">
-            <Button
-              type="link"
-              icon={<EditOutlined />}
-              onClick={() => handleEdit(record)}
-            >
+          <Tooltip title="编辑">
+            <Button type="link" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
               编辑
             </Button>
           </Tooltip>
-          <Tooltip title="查看历史">
-            <Button
-              type="link"
-              icon={<HistoryOutlined />}
-              onClick={() => handleViewHistory(record)}
-            >
+          <Tooltip title="历史">
+            <Button type="link" icon={<HistoryOutlined />} onClick={() => handleViewHistory(record)}>
               历史
             </Button>
           </Tooltip>
+          <Popconfirm
+            title="确定要删除这个套餐吗？"
+            description="删除后无法恢复，且正在使用的用户将无法访问。"
+            onConfirm={() => handleDelete(record.id)}
+            okText="确定"
+            cancelText="取消"
+          >
+            <Button type="link" danger icon={<DeleteOutlined />}>
+              删除
+            </Button>
+          </Popconfirm>
         </Space>
-      )
-    }
-  ];
-
-  const historyColumns = [
-    {
-      title: '时间',
-      dataIndex: 'created_at',
-      key: 'created_at',
-      render: (date: string) => new Date(date).toLocaleString('zh-CN')
+      ),
     },
-    {
-      title: '变更类型',
-      dataIndex: 'change_type',
-      key: 'change_type',
-      render: (type: string) => {
-        const typeMap: any = {
-          price: '价格',
-          feature: '功能配额',
-          status: '状态',
-          rollback: '回滚'
-        };
-        return typeMap[type] || type;
-      }
-    },
-    {
-      title: '字段',
-      dataIndex: 'field_name',
-      key: 'field_name'
-    },
-    {
-      title: '旧值',
-      dataIndex: 'old_value',
-      key: 'old_value'
-    },
-    {
-      title: '新值',
-      dataIndex: 'new_value',
-      key: 'new_value'
-    },
-    {
-      title: '操作人',
-      dataIndex: 'changed_by_name',
-      key: 'changed_by_name'
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      render: (_: any, record: ConfigHistory) => (
-        <Button
-          type="link"
-          icon={<RollbackOutlined />}
-          onClick={() => handleRollback(record.id)}
-        >
-          回滚
-        </Button>
-      )
-    }
   ];
 
   return (
     <div style={{ padding: 24 }}>
-      <Card title="商品管理" variant="borderless">
+      <Card 
+        title={
+          <Space>
+            <SettingOutlined />
+            <span style={{ fontSize: 18, fontWeight: 'bold' }}>商品管理</span>
+          </Space>
+        }
+        extra={
+          <Space>
+            <Button icon={<HistoryOutlined />} onClick={() => handleViewHistory()}>
+              查看所有历史
+            </Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
+              新增套餐
+            </Button>
+          </Space>
+        }
+      >
         <Table
           columns={columns}
           dataSource={plans}
           rowKey="id"
           loading={loading}
           pagination={false}
-          scroll={{ x: 1200 }}
         />
       </Card>
 
-      {/* 编辑对话框 */}
+      {/* 编辑/新增模态框 */}
       <Modal
-        title={`编辑套餐 - ${selectedPlan?.plan_name}`}
+        title={currentPlan ? `编辑套餐 - ${currentPlan.planName}` : '新增套餐'}
         open={editModalVisible}
+        onOk={handleSave}
         onCancel={() => setEditModalVisible(false)}
-        onOk={() => form.submit()}
-        width={600}
+        width={800}
+        okText="保存"
+        cancelText="取消"
       >
-        <Form form={form} onFinish={handleUpdate} layout="vertical">
+        <Form form={form} layout="vertical">
+          {!currentPlan && (
+            <Form.Item
+              label="套餐代码"
+              name="planCode"
+              rules={[
+                { required: true, message: '请输入套餐代码' },
+                { pattern: /^[a-z_]+$/, message: '只能使用小写字母和下划线' }
+              ]}
+              tooltip="套餐的唯一标识，如：free, professional, enterprise"
+            >
+              <Input placeholder="例如：professional" />
+            </Form.Item>
+          )}
+
+          <Form.Item
+            label="套餐名称"
+            name="planName"
+            rules={[{ required: true, message: '请输入套餐名称' }]}
+          >
+            <Input placeholder="例如：专业版" />
+          </Form.Item>
+
           <Form.Item
             label="价格（元）"
             name="price"
             rules={[{ required: true, message: '请输入价格' }]}
           >
-            <InputNumber min={0} precision={2} style={{ width: '100%' }} />
+            <InputNumber min={0} precision={2} style={{ width: '100%' }} placeholder="例如：99.00" />
           </Form.Item>
 
-          <Form.Item label="启用状态" name="is_active" valuePropName="checked">
+          <Form.Item
+            label="计费周期"
+            name="billingCycle"
+            rules={[{ required: true, message: '请选择计费周期' }]}
+          >
+            <Select>
+              <Select.Option value="monthly">月付</Select.Option>
+              <Select.Option value="yearly">年付</Select.Option>
+            </Select>
+          </Form.Item>
+
+          {!currentPlan && (
+            <Form.Item
+              label="有效天数"
+              name="durationDays"
+              rules={[{ required: true, message: '请输入有效天数' }]}
+              tooltip="套餐购买后的有效期，单位：天"
+            >
+              <InputNumber min={1} style={{ width: '100%' }} placeholder="例如：30" />
+            </Form.Item>
+          )}
+
+          <Form.Item label="描述" name="description">
+            <TextArea rows={3} placeholder="套餐描述" />
+          </Form.Item>
+
+          <Form.Item label="显示顺序" name="displayOrder" tooltip="数字越小越靠前">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            label="代理商折扣"
+            name="agentDiscountRate"
+            tooltip="被代理商邀请的新用户首次购买时享受的折扣。100表示无折扣，80表示8折（支付原价的80%）"
+            rules={[{ type: 'number', min: 1, max: 100, message: '折扣比例必须在1-100之间' }]}
+          >
+            <InputNumber 
+              min={1} 
+              max={100}
+              precision={0}
+              style={{ width: '100%' }}
+              placeholder="100表示无折扣，80表示8折"
+              addonAfter="%"
+              parser={(value) => {
+                const parsed = parseInt(value || '100', 10);
+                return isNaN(parsed) ? 100 : parsed;
+              }}
+            />
+          </Form.Item>
+          <div style={{ fontSize: 12, color: '#999', marginTop: -16, marginBottom: 16, marginLeft: 4 }}>
+            示例：80 表示 8 折，用户支付原价的 80%
+          </div>
+
+          <Form.Item label="启用状态" name="isActive" valuePropName="checked">
             <Switch checkedChildren="启用" unCheckedChildren="停用" />
           </Form.Item>
 
-          {selectedPlan?.features.map(feature => (
-            <Form.Item
-              key={feature.feature_code}
-              label={`${feature.feature_name}（-1表示无限制）`}
-              name={feature.feature_code}
-              rules={[{ required: true, message: '请输入配额' }]}
-            >
-              <InputNumber min={-1} style={{ width: '100%' }} />
-            </Form.Item>
-          ))}
+          <Form.Item label="功能配额">
+            <Form.List name="features">
+              {(fields, { add, remove }) => (
+                <>
+                  {fields.map(({ key, name, ...restField }) => (
+                    <Card key={key} size="small" style={{ marginBottom: 8 }}>
+                      <Space align="baseline" style={{ width: '100%' }}>
+                        <Form.Item {...restField} name={[name, 'featureCode']} style={{ marginBottom: 0, width: 200 }}>
+                          <Select 
+                            placeholder="选择功能"
+                            onChange={(value) => {
+                              const option = featureOptions.find(opt => opt.code === value);
+                              if (option) {
+                                const features = form.getFieldValue('features');
+                                features[name] = {
+                                  ...features[name],
+                                  featureCode: value,
+                                  featureName: option.name,
+                                  featureUnit: option.unit
+                                };
+                                form.setFieldsValue({ features });
+                              }
+                            }}
+                          >
+                            {featureOptions.map(opt => (
+                              <Select.Option key={opt.code} value={opt.code}>
+                                {opt.name}
+                              </Select.Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+
+                        <Space.Compact style={{ width: 150 }}>
+                          <Form.Item {...restField} name={[name, 'featureValue']} style={{ marginBottom: 0, flex: 1 }}>
+                            <InputNumber placeholder="配额值" min={-1} style={{ width: '100%' }} />
+                          </Form.Item>
+                          <Form.Item {...restField} name={[name, 'featureUnit']} style={{ marginBottom: 0 }} hidden>
+                            <Input />
+                          </Form.Item>
+                          <Form.Item {...restField} name={[name, 'featureName']} style={{ marginBottom: 0 }} hidden>
+                            <Input />
+                          </Form.Item>
+                          <span style={{ 
+                            display: 'inline-block', 
+                            width: 60, 
+                            textAlign: 'center', 
+                            backgroundColor: '#f5f5f5',
+                            border: '1px solid #d9d9d9',
+                            borderLeft: 'none',
+                            borderRadius: '0 6px 6px 0',
+                            lineHeight: '30px'
+                          }}>
+                            {form.getFieldValue(['features', name, 'featureUnit']) || '单位'}
+                          </span>
+                        </Space.Compact>
+
+                        <Button type="link" danger onClick={() => remove(name)}>
+                          删除
+                        </Button>
+                      </Space>
+                      <div style={{ fontSize: 12, color: '#999', marginTop: 4 }}>
+                        提示：-1 表示无限制
+                      </div>
+                    </Card>
+                  ))}
+                  <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                    添加功能配额
+                  </Button>
+                </>
+              )}
+            </Form.List>
+          </Form.Item>
         </Form>
       </Modal>
 
-      {/* 二次确认对话框 */}
+      {/* 历史记录模态框 */}
       <Modal
-        title="确认价格变更"
-        open={confirmModalVisible}
-        onCancel={() => setConfirmModalVisible(false)}
-        onOk={handleConfirmUpdate}
-      >
-        <p>价格变动超过20%，请确认是否继续？</p>
-      </Modal>
-
-      {/* 历史记录对话框 */}
-      <Modal
-        title={`配置历史 - ${selectedPlan?.plan_name}`}
+        title={currentPlan ? `配置变更历史 - ${currentPlan.planName}` : '所有配置变更历史'}
         open={historyModalVisible}
         onCancel={() => setHistoryModalVisible(false)}
         footer={null}
-        width={1000}
+        width={900}
       >
-        <Table
-          columns={historyColumns}
-          dataSource={configHistory}
-          rowKey="id"
-          pagination={{ pageSize: 10 }}
-        />
+        <Spin spinning={historyLoading}>
+          <Timeline
+            items={history.map(item => ({
+              children: (
+                <Card size="small" style={{ marginBottom: 8 }}>
+                  <Descriptions column={2} size="small">
+                    <Descriptions.Item label="套餐">{item.planName}</Descriptions.Item>
+                    <Descriptions.Item label="操作人">{item.changedByUsername}</Descriptions.Item>
+                    <Descriptions.Item label="变更类型">
+                      <Tag color="blue">{item.changeType}</Tag>
+                    </Descriptions.Item>
+                    <Descriptions.Item label="时间">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </Descriptions.Item>
+                    {item.oldValue && (
+                      <Descriptions.Item label="旧值" span={2}>
+                        <code style={{ fontSize: 12, backgroundColor: '#f5f5f5', padding: 4, borderRadius: 4 }}>
+                          {item.oldValue.length > 100 ? item.oldValue.substring(0, 100) + '...' : item.oldValue}
+                        </code>
+                      </Descriptions.Item>
+                    )}
+                    {item.newValue && (
+                      <Descriptions.Item label="新值" span={2}>
+                        <code style={{ fontSize: 12, backgroundColor: '#f5f5f5', padding: 4, borderRadius: 4 }}>
+                          {item.newValue.length > 100 ? item.newValue.substring(0, 100) + '...' : item.newValue}
+                        </code>
+                      </Descriptions.Item>
+                    )}
+                  </Descriptions>
+                </Card>
+              ),
+            }))}
+          />
+        </Spin>
       </Modal>
     </div>
   );
