@@ -116,9 +116,8 @@ export default function PlatformManagementPage() {
 
   const initializeWebSocketConnection = () => {
     try {
-      // Get WebSocket URL from config
-      const wsUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3000';
-      const wsFullUrl = `${wsUrl}/ws`;
+      // Get WebSocket URL from config (VITE_WS_BASE_URL should already include /ws path)
+      const wsFullUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3000/ws';
       
       // Get auth token from localStorage
       const token = localStorage.getItem('auth_token');
@@ -514,19 +513,12 @@ export default function PlatformManagementPage() {
           </Space>
         }
         extra={
-          <Space>
-            {wsConnected ? (
-              <Tag icon={<WifiOutlined />} color="success">已连接</Tag>
-            ) : (
-              <Tag icon={<WifiOutlined />} color="default">未连接</Tag>
-            )}
-            <Button 
-              icon={<ReloadOutlined />} 
-              onClick={loadData}
-            >
-              刷新
-            </Button>
-          </Space>
+          <Button 
+            icon={<ReloadOutlined />} 
+            onClick={loadData}
+          >
+            刷新
+          </Button>
         }
         variant="borderless"
         style={{ marginBottom: 24 }}
