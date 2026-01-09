@@ -460,20 +460,46 @@ export class PaymentService {
           }
         }
 
-        // 如果是分账订单，创建佣金记录
-        if (order.profit_sharing && order.agent_id) {
-          try {
-            await commissionService.createCommission(
-              order.id,
-              order.agent_id,
-              order.user_id,
-              order.amount
-            );
-            console.log(`[PaymentService] 订单 ${orderNo} 佣金记录已创建`);
-          } catch (commissionError) {
-            console.error('[PaymentService] 创建佣金记录失败:', commissionError);
-            // 佣金记录创建失败不影响订单状态
+        // 代理商永久性收益：检查用户是否被代理商邀请，为每次订单创建佣金记录
+        // 实时查询代理商的分账比例，确保使用最新的比例
+        try {
+          const userAgentResult = await pool.query(
+            'SELECT invited_by_agent FROM users WHERE id = $1',
+            [order.user_id]
+          );
+          const invitedByAgentId = userAgentResult.rows[0]?.invited_by_agent;
+
+          if (invitedByAgentId) {
+            // 实时查询代理商信息和当前分账比例
+            const agent = await agentService.getAgentById(invitedByAgentId);
+            
+            if (agent && agent.status === 'active' && agent.wechatOpenid && agent.receiverAdded) {
+              // 检查是否已存在该订单的佣金记录（避免重复创建）
+              const existingCommission = await commissionService.getCommissionByOrderId(order.id);
+              
+              if (!existingCommission) {
+                await commissionService.createCommission(
+                  order.id,
+                  invitedByAgentId,
+                  order.user_id,
+                  order.amount
+                );
+                console.log(`[PaymentService] 代理商永久收益: 订单 ${orderNo} 佣金记录已创建，代理商ID: ${invitedByAgentId}, 当前分账比例: ${agent.commissionRate}`);
+              } else {
+                console.log(`[PaymentService] 订单 ${orderNo} 佣金记录已存在，跳过创建`);
+              }
+            } else if (agent) {
+              // 记录不满足分账条件的原因
+              const reasons = [];
+              if (agent.status !== 'active') reasons.push(`状态为${agent.status}`);
+              if (!agent.wechatOpenid) reasons.push('未绑定微信');
+              if (!agent.receiverAdded) reasons.push('未添加为分账接收方');
+              console.log(`[PaymentService] 代理商 ${invitedByAgentId} 不满足分账条件: ${reasons.join(', ')}，不创建佣金记录`);
+            }
           }
+        } catch (commissionError) {
+          console.error('[PaymentService] 创建代理商永久收益佣金记录失败:', commissionError);
+          // 佣金记录创建失败不影响订单状态
         }
 
         try {
