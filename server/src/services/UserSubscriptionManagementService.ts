@@ -563,9 +563,9 @@ class UserSubscriptionManagementService {
       const oldEndDate = subscription.end_date;
       const oldPlanId = subscription.plan_id;
 
-      // 获取免费版套餐
+      // 获取免费版套餐（包含 duration_days 配置）
       const freePlanResult = await client.query(
-        `SELECT id, plan_code, plan_name FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
+        `SELECT id, plan_code, plan_name, duration_days FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
       );
 
       if (freePlanResult.rows.length === 0) {
@@ -586,10 +586,11 @@ class UserSubscriptionManagementService {
           ['cancelled', subscription.id]
         );
 
-        // 创建新的免费版订阅
+        // 创建新的免费版订阅（根据商品配置的 duration_days 计算有效期）
         const startDate = new Date();
         const endDate = new Date();
-        endDate.setFullYear(endDate.getFullYear() + 1); // 免费版1年有效期
+        const durationDays = freePlan.duration_days || 365; // 默认1年，但优先使用配置
+        endDate.setDate(endDate.getDate() + durationDays);
 
         await client.query(
           `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, is_gift, gift_reason)

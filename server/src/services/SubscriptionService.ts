@@ -638,7 +638,19 @@ export class SubscriptionService {
         const storageMB = storageFeatureResult.rows[0].feature_value;
         storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
       } else {
-        storageQuotaBytes = 10 * 1024 * 1024; // 默认 10MB
+        // 从免费版套餐获取默认存储配额
+        const defaultQuotaResult = await client.query(
+          `SELECT pf.feature_value FROM plan_features pf
+           JOIN subscription_plans sp ON pf.plan_id = sp.id
+           WHERE sp.plan_code = 'free' AND pf.feature_code = 'storage_space'`
+        );
+        
+        if (defaultQuotaResult.rows.length > 0) {
+          const defaultMB = defaultQuotaResult.rows[0].feature_value;
+          storageQuotaBytes = defaultMB === -1 ? -1 : defaultMB * 1024 * 1024;
+        } else {
+          storageQuotaBytes = 10 * 1024 * 1024; // 兜底值
+        }
       }
       
       await client.query(

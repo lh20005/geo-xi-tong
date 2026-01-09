@@ -114,9 +114,9 @@ export class SubscriptionExpirationService {
         [subscription_id]
       );
 
-      // 2. 获取免费版套餐ID
+      // 2. 获取免费版套餐ID和有效期配置
       const freePlanResult = await client.query(
-        `SELECT id FROM subscription_plans WHERE plan_code = 'free' LIMIT 1`
+        `SELECT id, duration_days FROM subscription_plans WHERE plan_code = 'free' LIMIT 1`
       );
 
       if (freePlanResult.rows.length === 0) {
@@ -124,13 +124,14 @@ export class SubscriptionExpirationService {
       }
 
       const freePlanId = freePlanResult.rows[0].id;
+      const durationDays = freePlanResult.rows[0].duration_days || 36500; // 默认100年（永久）
 
-      // 3. 创建免费版订阅（永久有效）
+      // 3. 创建免费版订阅（根据商品配置的有效期）
       const newSubResult = await client.query(
         `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, quota_reset_anchor, quota_cycle_type)
-         VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '100 years', CURRENT_TIMESTAMP, 'monthly')
+         VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + $3 * INTERVAL '1 day', CURRENT_TIMESTAMP, 'monthly')
          RETURNING id`,
-        [user_id, freePlanId]
+        [user_id, freePlanId, durationDays]
       );
 
       console.log(`   - 已创建免费版订阅 (ID: ${newSubResult.rows[0].id})`);

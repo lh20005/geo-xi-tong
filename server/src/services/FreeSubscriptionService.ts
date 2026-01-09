@@ -20,9 +20,9 @@ export class FreeSubscriptionService {
       
       console.log(`[FreeSubscription] 开始为新用户 ${userId} 开通免费版订阅...`);
       
-      // 1. 获取免费版套餐
+      // 1. 获取免费版套餐（包含 duration_days 配置）
       const planResult = await client.query(
-        `SELECT id, plan_code, plan_name FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
+        `SELECT id, plan_code, plan_name, duration_days FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
       );
       
       if (planResult.rows.length === 0) {
@@ -30,7 +30,7 @@ export class FreeSubscriptionService {
       }
       
       const freePlan = planResult.rows[0];
-      console.log(`[FreeSubscription] 找到免费版套餐: ${freePlan.plan_name} (ID: ${freePlan.id})`);
+      console.log(`[FreeSubscription] 找到免费版套餐: ${freePlan.plan_name} (ID: ${freePlan.id}, duration_days: ${freePlan.duration_days})`);
       
       // 2. 检查用户是否已有订阅
       const existingSubResult = await client.query(
@@ -44,10 +44,11 @@ export class FreeSubscriptionService {
         return;
       }
       
-      // 3. 创建订阅（免费版默认1年有效期）
+      // 3. 创建订阅（根据商品配置的 duration_days 计算有效期）
       const startDate = new Date();
       const endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1); // 1年有效期
+      const durationDays = freePlan.duration_days || 365; // 默认1年，但优先使用配置
+      endDate.setDate(endDate.getDate() + durationDays);
       
       const subscriptionResult = await client.query(
         `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, is_gift, gift_reason)
@@ -90,9 +91,9 @@ export class FreeSubscriptionService {
     try {
       console.log('[FreeSubscription] 开始为现有无订阅用户重置免费版配额...');
       
-      // 1. 获取免费版套餐
+      // 1. 获取免费版套餐（包含 duration_days 配置）
       const planResult = await client.query(
-        `SELECT id, plan_code, plan_name FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
+        `SELECT id, plan_code, plan_name, duration_days FROM subscription_plans WHERE plan_code = 'free' AND is_active = true`
       );
       
       if (planResult.rows.length === 0) {
@@ -100,7 +101,7 @@ export class FreeSubscriptionService {
       }
       
       const freePlan = planResult.rows[0];
-      console.log(`[FreeSubscription] 找到免费版套餐: ${freePlan.plan_name} (ID: ${freePlan.id})`);
+      console.log(`[FreeSubscription] 找到免费版套餐: ${freePlan.plan_name} (ID: ${freePlan.id}, duration_days: ${freePlan.duration_days})`);
       
       // 2. 查找所有没有活跃订阅的用户
       const usersResult = await client.query(`
@@ -133,10 +134,11 @@ export class FreeSubscriptionService {
           
           console.log(`[FreeSubscription] 处理用户: ${user.username} (ID: ${user.id})`);
           
-          // 创建订阅
+          // 创建订阅（根据商品配置的 duration_days 计算有效期）
           const startDate = new Date();
           const endDate = new Date();
-          endDate.setFullYear(endDate.getFullYear() + 1); // 1年有效期
+          const durationDays = freePlan.duration_days || 365; // 默认1年，但优先使用配置
+          endDate.setDate(endDate.getDate() + durationDays);
           
           const subscriptionResult = await client.query(
             `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, is_gift, gift_reason)

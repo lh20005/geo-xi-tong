@@ -125,9 +125,22 @@ export class QuotaInitializationService {
       const storageMB = storageFeatureResult.rows[0].feature_value;
       storageQuotaBytes = storageMB === -1 ? -1 : storageMB * 1024 * 1024;
     } else {
-      // 默认 10MB
-      storageQuotaBytes = 10 * 1024 * 1024;
-      console.log(`[QuotaInit] ⚠️ 未找到存储配额配置，使用默认值: 10 MB`);
+      // 从免费版套餐获取默认存储配额
+      const defaultQuotaResult = await db.query(
+        `SELECT pf.feature_value FROM plan_features pf
+         JOIN subscription_plans sp ON pf.plan_id = sp.id
+         WHERE sp.plan_code = 'free' AND pf.feature_code = 'storage_space'`
+      );
+      
+      if (defaultQuotaResult.rows.length > 0) {
+        const defaultMB = defaultQuotaResult.rows[0].feature_value;
+        storageQuotaBytes = defaultMB === -1 ? -1 : defaultMB * 1024 * 1024;
+        console.log(`[QuotaInit] ⚠️ 套餐未配置存储配额，使用免费版默认值: ${defaultMB} MB`);
+      } else {
+        // 最后的兜底值，仅在数据库完全没有配置时使用
+        storageQuotaBytes = 10 * 1024 * 1024;
+        console.log(`[QuotaInit] ⚠️ 未找到任何存储配额配置，使用兜底值: 10 MB`);
+      }
     }
 
     // 检查是否已有存储记录
