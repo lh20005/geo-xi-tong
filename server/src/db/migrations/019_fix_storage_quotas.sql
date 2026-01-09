@@ -81,3 +81,6 @@ BEGIN
   RAISE NOTICE '   - 管理员存储配额已更新为 1GB';
   RAISE NOTICE '   - 普通用户默认存储配额已更新为 10MB';
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 迁移 026: 更新 check_user_quota 函数以支持企业图库和知识库
 -- 创建时间: 2026-01-04
 -- 说明: 为 gallery_albums 和 knowledge_bases 添加默认配额支持
@@ -99,3 +100,6 @@ BEGIN
   RAISE NOTICE '✅ check_user_quota 函数已更新';
   RAISE NOTICE '   现在支持 gallery_albums (默认: 10) 和 knowledge_bases (默认: 5)';
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

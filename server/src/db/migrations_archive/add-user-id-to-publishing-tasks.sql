@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 给 publishing_tasks 表添加 user_id 字段
 -- 这是多租户隔离的关键字段
 
@@ -35,3 +36,6 @@ CREATE INDEX IF NOT EXISTS idx_publishing_tasks_user_status ON publishing_tasks(
 
 -- 7. 添加注释
 COMMENT ON COLUMN publishing_tasks.user_id IS '任务所属用户ID（多租户隔离）';
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 迁移 025: 更新配额函数以支持企业图库和知识库
 -- 创建时间: 2026-01-04
 -- 说明: 更新 record_feature_usage 和 check_feature_quota 函数以支持 gallery_albums 和 knowledge_bases
@@ -109,3 +110,6 @@ BEGIN
   RAISE NOTICE '   - record_feature_usage: 支持永久配额类型';
   RAISE NOTICE '   - check_feature_quota: 添加默认配额值';
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

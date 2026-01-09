@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- ========================================
 -- 迁移 032: 修复 check_user_quota 函数以支持 custom_quotas
 -- 创建时间: 2026-01-05
@@ -154,3 +155,6 @@ BEGIN
     RAISE NOTICE '   - 未找到测试用户，跳过验证';
   END IF;
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

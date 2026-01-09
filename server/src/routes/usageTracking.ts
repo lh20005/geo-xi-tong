@@ -1,6 +1,9 @@
 import express from 'express';
 import { usageTrackingService } from '../services/UsageTrackingService';
 import { quotaAlertService } from '../services/QuotaAlertService';
+import { quotaConsumptionService } from '../services/QuotaConsumptionService';
+import { boosterPackService } from '../services/BoosterPackService';
+import { boosterExpirationService } from '../services/BoosterExpirationService';
 import { authenticate } from '../middleware/adminAuth';
 import { FeatureCode } from '../config/features';
 
@@ -234,3 +237,154 @@ router.get('/alerts/statistics', async (req, res) => {
 });
 
 export default router;
+
+
+// ==================== 加量包配额相关接口 ====================
+
+/**
+ * 获取组合配额概览（基础配额 + 加量包配额）
+ * GET /api/usage/combined-quota
+ */
+router.get('/combined-quota', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const overview = await quotaConsumptionService.getCombinedQuotaOverview(userId);
+    
+    res.json({
+      success: true,
+      data: overview
+    });
+  } catch (error: any) {
+    console.error('获取组合配额概览失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取组合配额概览失败'
+    });
+  }
+});
+
+/**
+ * 获取单个功能的组合配额
+ * GET /api/usage/combined-quota/:featureCode
+ */
+router.get('/combined-quota/:featureCode', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const featureCode = req.params.featureCode;
+    
+    const quota = await quotaConsumptionService.getFeatureCombinedQuota(userId, featureCode);
+    
+    if (!quota) {
+      return res.status(404).json({
+        success: false,
+        message: '未找到该功能的配额信息'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: quota
+    });
+  } catch (error: any) {
+    console.error('获取功能组合配额失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取功能组合配额失败'
+    });
+  }
+});
+
+/**
+ * 获取用户的活跃加量包配额
+ * GET /api/usage/booster-quotas
+ */
+router.get('/booster-quotas', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const featureCode = req.query.feature_code as string | undefined;
+    
+    const quotas = await boosterPackService.getUserActiveBoosterQuotas(userId, featureCode);
+    
+    res.json({
+      success: true,
+      data: quotas
+    });
+  } catch (error: any) {
+    console.error('获取加量包配额失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取加量包配额失败'
+    });
+  }
+});
+
+/**
+ * 获取用户的加量包汇总
+ * GET /api/usage/booster-summary
+ */
+router.get('/booster-summary', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const summary = await boosterPackService.getUserBoosterSummary(userId);
+    
+    res.json({
+      success: true,
+      data: summary
+    });
+  } catch (error: any) {
+    console.error('获取加量包汇总失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取加量包汇总失败'
+    });
+  }
+});
+
+/**
+ * 获取用户的加量包历史
+ * GET /api/usage/booster-history
+ */
+router.get('/booster-history', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.page_size as string) || 20;
+    
+    const result = await boosterPackService.getUserBoosterHistory(userId, page, pageSize);
+    
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error: any) {
+    console.error('获取加量包历史失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取加量包历史失败'
+    });
+  }
+});
+
+/**
+ * 获取即将过期的加量包
+ * GET /api/usage/expiring-boosters
+ */
+router.get('/expiring-boosters', async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const daysAhead = parseInt(req.query.days as string) || 7;
+    
+    const boosters = await boosterExpirationService.getExpiringBoosters(userId, daysAhead);
+    
+    res.json({
+      success: true,
+      data: boosters
+    });
+  } catch (error: any) {
+    console.error('获取即将过期的加量包失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取即将过期的加量包失败'
+    });
+  }
+});

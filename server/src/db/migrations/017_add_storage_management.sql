@@ -4,6 +4,8 @@
 -- 描述: 添加用户存储使用跟踪、历史记录和事务日志表
 -- ========================================
 
+-- ==================== UP ====================
+
 -- 1. 创建用户存储使用表
 CREATE TABLE IF NOT EXISTS user_storage_usage (
   id SERIAL PRIMARY KEY,
@@ -477,3 +479,30 @@ BEGIN
     RAISE EXCEPTION '❌ 迁移 017 失败';
   END IF;
 END $$;
+
+
+-- ==================== DOWN ====================
+
+-- 删除触发器
+DROP TRIGGER IF EXISTS storage_alert_trigger ON user_storage_usage;
+
+-- 删除函数
+DROP FUNCTION IF EXISTS trigger_storage_alert();
+DROP FUNCTION IF EXISTS check_storage_quota(INTEGER, BIGINT);
+DROP FUNCTION IF EXISTS record_storage_usage(INTEGER, VARCHAR, INTEGER, VARCHAR, BIGINT, JSONB);
+DROP FUNCTION IF EXISTS initialize_user_storage(INTEGER);
+DROP FUNCTION IF EXISTS get_user_storage_quota(INTEGER);
+
+-- 删除表
+DROP TABLE IF EXISTS admin_quota_modifications;
+DROP TABLE IF EXISTS storage_transactions;
+DROP TABLE IF EXISTS storage_usage_history;
+DROP TABLE IF EXISTS user_storage_usage;
+
+-- 删除 quota_alerts 表的新列
+ALTER TABLE quota_alerts DROP COLUMN IF EXISTS current_usage_bytes;
+ALTER TABLE quota_alerts DROP COLUMN IF EXISTS quota_bytes;
+ALTER TABLE quota_alerts DROP COLUMN IF EXISTS feature_type;
+
+-- 删除 plan_features 中的 storage_space 功能
+DELETE FROM plan_features WHERE feature_code = 'storage_space';

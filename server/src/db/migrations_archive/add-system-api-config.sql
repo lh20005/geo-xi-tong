@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- ==========================================
 -- 系统级API配置管理
 -- ==========================================
@@ -110,3 +111,6 @@ COMMENT ON COLUMN system_api_configs.priority IS '优先级，用于多密钥负
 COMMENT ON COLUMN api_usage_logs.cost_estimate IS '成本估算（美元）';
 COMMENT ON COLUMN api_quota_configs.monthly_limit IS '每月API调用次数限制，0表示无限制';
 COMMENT ON COLUMN api_quota_configs.daily_limit IS '每日API调用次数限制，0表示无限制';
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

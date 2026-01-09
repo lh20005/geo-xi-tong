@@ -2,12 +2,35 @@ import express from 'express';
 import { paymentService } from '../services/PaymentService';
 import { orderService } from '../services/OrderService';
 import { subscriptionService } from '../services/SubscriptionService';
+import { boosterPackService } from '../services/BoosterPackService';
 import { authenticate } from '../middleware/adminAuth';
 
 const router = express.Router();
 
 /**
- * 创建订单（支持购买和升级）
+ * 检查用户是否可以购买加量包
+ * GET /api/orders/can-purchase-booster
+ */
+router.get('/can-purchase-booster', authenticate, async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    const result = await boosterPackService.canPurchaseBooster(userId);
+    
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error: any) {
+    console.error('检查加量包购买资格失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '检查加量包购买资格失败'
+    });
+  }
+});
+
+/**
+ * 创建订单（支持购买、升级和加量包）
  * POST /api/orders
  */
 router.post('/', authenticate, async (req, res) => {
@@ -22,6 +45,35 @@ router.post('/', authenticate, async (req, res) => {
       });
     }
 
+    const { pool } = await import('../db/database');
+    
+    // 获取套餐信息
+    const planResult = await pool.query(
+      'SELECT plan_type, price FROM subscription_plans WHERE id = $1',
+      [plan_id]
+    );
+    
+    if (planResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '套餐不存在'
+      });
+    }
+    
+    const planType = planResult.rows[0].plan_type || 'base';
+    
+    // 如果是加量包，检查购买资格
+    if (planType === 'booster') {
+      const canPurchase = await boosterPackService.canPurchaseBooster(userId);
+      if (!canPurchase.canPurchase) {
+        return res.status(400).json({
+          success: false,
+          message: canPurchase.message || '无法购买加量包',
+          reason: canPurchase.reason
+        });
+      }
+    }
+
     // 如果是升级订单，先检查是否可以升级
     if (order_type === 'upgrade') {
       const subscription = await subscriptionService.getUserActiveSubscription(userId);
@@ -33,17 +85,13 @@ router.post('/', authenticate, async (req, res) => {
       }
       
       // 检查是否是升级到更高价格的套餐
-      const { pool } = await import('../db/database');
       const currentPlan = await pool.query(
         'SELECT price FROM subscription_plans WHERE id = $1',
         [subscription.plan_id]
       );
-      const newPlan = await pool.query(
-        'SELECT price FROM subscription_plans WHERE id = $1',
-        [plan_id]
-      );
+      const newPlan = planResult.rows[0];
       
-      if (newPlan.rows[0].price <= currentPlan.rows[0].price) {
+      if (newPlan.price <= currentPlan.rows[0].price) {
         return res.status(400).json({
           success: false,
           message: '只能升级到更高价格的套餐'
@@ -51,8 +99,11 @@ router.post('/', authenticate, async (req, res) => {
       }
     }
 
+    // 确定订单类型
+    const finalOrderType = planType === 'booster' ? 'booster' : (order_type || 'purchase');
+
     // 创建微信支付订单（包含二维码链接）
-    const result = await paymentService.createWeChatPayOrder(userId, plan_id, order_type || 'purchase');
+    const result = await paymentService.createWeChatPayOrder(userId, plan_id, finalOrderType);
 
     res.json({
       success: true,

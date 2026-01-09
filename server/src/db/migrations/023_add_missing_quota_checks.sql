@@ -99,3 +99,6 @@ BEGIN
   RAISE NOTICE '   - platformAccounts.ts: 添加配额检查和记录';
   RAISE NOTICE '   - publishingTasks.ts: 添加配额记录';
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

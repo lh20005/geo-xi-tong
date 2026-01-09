@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- ========================================
 -- 迁移 029: 更新 get_user_storage_quota 函数以支持自定义配额
 -- 创建时间: 2026-01-05
@@ -117,3 +118,6 @@ BEGIN
     RAISE NOTICE '   - 更新了 get_user_storage_quota 函数';
   END IF;
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

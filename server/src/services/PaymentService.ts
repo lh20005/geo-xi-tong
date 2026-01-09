@@ -395,6 +395,11 @@ export class PaymentService {
 
         if (order.order_type === 'upgrade') {
           await subscriptionService.applyUpgrade(order.user_id, order.plan_id);
+        } else if (order.order_type === 'booster') {
+          // 加量包订单：调用 BoosterPackService 开通加量包
+          const { boosterPackService } = await import('./BoosterPackService');
+          await boosterPackService.activateBoosterPack(order.user_id, order.plan_id, order.id);
+          console.log(`[PaymentService] 加量包开通成功: 用户 ${order.user_id}, 套餐 ${order.plan_id}`);
         } else {
           // 获取套餐的 billing_cycle 和 duration_days 来计算订阅时长
           const planResult = await client.query(

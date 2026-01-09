@@ -25,6 +25,7 @@ interface Plan {
   id: number;
   planCode: string;
   planName: string;
+  planType?: 'base' | 'booster';              // 套餐类型
   price: number;
   billingCycle: 'monthly' | 'yearly';        // 计费周期（前端价格显示）
   quotaCycleType: 'monthly' | 'yearly';      // 配额重置周期
@@ -59,6 +60,7 @@ export default function ProductManagementPage() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [history, setHistory] = useState<ConfigHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'base' | 'booster'>('all');
   const [form] = Form.useForm();
 
   // 功能配额选项
@@ -72,14 +74,18 @@ export default function ProductManagementPage() {
 
   useEffect(() => {
     loadPlans();
-  }, []);
+  }, [planTypeFilter]);
 
   // 加载套餐列表
   const loadPlans = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await axios.get('/api/admin/products/plans?include_inactive=true', {
+      let url = '/api/admin/products/plans?include_inactive=true';
+      if (planTypeFilter !== 'all') {
+        url += `&plan_type=${planTypeFilter}`;
+      }
+      const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
@@ -119,6 +125,7 @@ export default function ProductManagementPage() {
     form.setFieldsValue({
       planName: '',
       planCode: '',
+      planType: 'base',
       price: 0,
       billingCycle: 'monthly',
       quotaCycleType: 'monthly',
@@ -175,6 +182,7 @@ export default function ProductManagementPage() {
     
     form.setFieldsValue({
       planName: plan.planName,
+      planType: plan.planType || 'base',
       price: plan.price,
       billingCycle: plan.billingCycle,
       quotaCycleType: plan.quotaCycleType || plan.billingCycle || 'monthly',
@@ -284,7 +292,21 @@ export default function ProductManagementPage() {
           <Tag color={record.planCode === 'free' ? 'default' : record.planCode === 'professional' ? 'blue' : 'gold'}>
             {record.planCode}
           </Tag>
+          {record.planType === 'booster' && (
+            <Tag color="purple">加量包</Tag>
+          )}
         </Space>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'planType',
+      key: 'planType',
+      width: 100,
+      render: (planType) => (
+        <Tag color={planType === 'booster' ? 'purple' : 'cyan'}>
+          {planType === 'booster' ? '加量包' : '基础套餐'}
+        </Tag>
       ),
     },
     {
@@ -397,6 +419,15 @@ export default function ProductManagementPage() {
         }
         extra={
           <Space>
+            <Select
+              value={planTypeFilter}
+              onChange={(value) => setPlanTypeFilter(value)}
+              style={{ width: 140 }}
+            >
+              <Select.Option value="all">全部类型</Select.Option>
+              <Select.Option value="base">基础套餐</Select.Option>
+              <Select.Option value="booster">加量包</Select.Option>
+            </Select>
             <Button 
               icon={<HistoryOutlined />}
               onClick={() => handleViewHistory()}
@@ -449,6 +480,18 @@ export default function ProductManagementPage() {
               <Input placeholder="例如：professional" />
             </Form.Item>
           )}
+
+          <Form.Item
+            label="套餐类型"
+            name="planType"
+            rules={[{ required: true, message: '请选择套餐类型' }]}
+            tooltip="基础套餐是用户的主订阅，加量包是额外配额补充"
+          >
+            <Select disabled={!!currentPlan}>
+              <Select.Option value="base">基础套餐</Select.Option>
+              <Select.Option value="booster">加量包</Select.Option>
+            </Select>
+          </Form.Item>
 
           <Form.Item
             label="套餐名称"

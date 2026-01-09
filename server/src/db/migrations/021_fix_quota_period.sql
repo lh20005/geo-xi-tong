@@ -79,3 +79,6 @@ ON CONFLICT (user_id, feature_code, period_start) DO NOTHING;
 INSERT INTO schema_migrations (version, name, executed_at)
 VALUES ('021', 'fix_quota_period', CURRENT_TIMESTAMP)
 ON CONFLICT (version) DO NOTHING;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

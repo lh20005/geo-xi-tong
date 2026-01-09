@@ -99,3 +99,6 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION expire_storage_purchases() IS '检查并处理过期的存储购买，返回处理的记录数';
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

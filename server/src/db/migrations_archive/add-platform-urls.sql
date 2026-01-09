@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 添加平台 URL 字段
 -- 用于登录和测试登录功能
 
@@ -95,3 +96,6 @@ WHERE platform_id = 'bilibili';
 -- 3. 添加注释
 COMMENT ON COLUMN platforms_config.login_url IS '平台登录页面 URL';
 COMMENT ON COLUMN platforms_config.home_url IS '平台主页/后台首页 URL，用于测试登录';
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

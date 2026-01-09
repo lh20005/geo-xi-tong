@@ -130,3 +130,6 @@ BEGIN
   RAISE NOTICE '   - 本月使用量已重新计算';
   RAISE NOTICE '   - 缺失的配额记录已初始化';
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

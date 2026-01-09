@@ -21,6 +21,7 @@ export interface SubscriptionPlan {
   id?: number;
   planCode: string;
   planName: string;
+  planType?: 'base' | 'booster';                // 套餐类型：base=基础套餐, booster=加量包
   price: number;
   billingCycle: 'monthly' | 'yearly';        // 计费周期（用于前端价格显示）
   quotaCycleType: 'monthly' | 'yearly';      // 配额重置周期
@@ -53,15 +54,17 @@ export class ProductManagementService {
   /**
    * 获取所有套餐（包括未激活的）
    * @param includeInactive 是否包括未激活的套餐
+   * @param planType 套餐类型筛选（可选）
    * @returns 套餐列表
    */
-  async getAllPlans(includeInactive: boolean = false): Promise<SubscriptionPlan[]> {
+  async getAllPlans(includeInactive: boolean = false, planType?: 'base' | 'booster'): Promise<SubscriptionPlan[]> {
     try {
       let query = `
         SELECT 
           sp.id,
           sp.plan_code as "planCode",
           sp.plan_name as "planName",
+          COALESCE(sp.plan_type, 'base') as "planType",
           sp.price,
           sp.billing_cycle as "billingCycle",
           COALESCE(sp.quota_cycle_type, sp.billing_cycle, 'monthly') as "quotaCycleType",
@@ -89,15 +92,24 @@ export class ProductManagementService {
           ) FILTER (WHERE pf.id IS NOT NULL) as features
         FROM subscription_plans sp
         LEFT JOIN plan_features pf ON pf.plan_id = sp.id
+        WHERE 1=1
       `;
       
+      const params: any[] = [];
+      let paramIndex = 1;
+      
       if (!includeInactive) {
-        query += ` WHERE sp.is_active = TRUE`;
+        query += ` AND sp.is_active = TRUE`;
+      }
+      
+      if (planType) {
+        query += ` AND COALESCE(sp.plan_type, 'base') = $${paramIndex++}`;
+        params.push(planType);
       }
       
       query += ` GROUP BY sp.id ORDER BY sp.display_order ASC, sp.id ASC`;
       
-      const result = await pool.query(query);
+      const result = await pool.query(query, params);
       return result.rows;
     } catch (error) {
       console.error('获取套餐列表失败:', error);
@@ -117,6 +129,7 @@ export class ProductManagementService {
           sp.id,
           sp.plan_code as "planCode",
           sp.plan_name as "planName",
+          COALESCE(sp.plan_type, 'base') as "planType",
           sp.price,
           sp.billing_cycle as "billingCycle",
           COALESCE(sp.quota_cycle_type, sp.billing_cycle, 'monthly') as "quotaCycleType",
@@ -168,6 +181,14 @@ export class ProductManagementService {
     try {
       await client.query('BEGIN');
       
+      // 加量包验证：至少需要一个 feature_value > 0
+      if (plan.planType === 'booster') {
+        const hasValidFeature = plan.features?.some(f => f.featureValue > 0);
+        if (!hasValidFeature) {
+          throw new Error('加量包配置无效，至少需要一个配额项的值大于0');
+        }
+      }
+      
       // 根据 validityPeriod 计算 durationDays
       let durationDays = plan.durationDays;
       if (plan.validityPeriod === 'permanent') {
@@ -181,13 +202,14 @@ export class ProductManagementService {
       // 插入套餐
       const planResult = await client.query(
         `INSERT INTO subscription_plans (
-          plan_code, plan_name, price, billing_cycle, quota_cycle_type, duration_days,
+          plan_code, plan_name, plan_type, price, billing_cycle, quota_cycle_type, duration_days,
           is_active, description, display_order
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *`,
         [
           plan.planCode,
           plan.planName,
+          plan.planType || 'base',
           plan.price,
           plan.billingCycle,
           plan.quotaCycleType || plan.billingCycle || 'monthly',
@@ -552,7 +574,7 @@ export class ProductManagementService {
         throw new Error('套餐不存在');
       }
       
-      // 检查是否有用户正在使用
+      // 检查是否有用户正在使用（包括基础订阅和加量包）
       const usageCheck = await client.query(
         `SELECT COUNT(*) as count 
          FROM user_subscriptions 
@@ -561,7 +583,25 @@ export class ProductManagementService {
       );
       
       if (parseInt(usageCheck.rows[0].count) > 0) {
-        throw new Error('该套餐正在被用户使用，无法删除');
+        const errorMsg = plan.planType === 'booster' 
+          ? '该加量包有活跃订阅，无法删除'
+          : '该套餐正在被用户使用，无法删除';
+        throw new Error(errorMsg);
+      }
+      
+      // 如果是加量包，还需要检查是否有活跃的加量包配额
+      if (plan.planType === 'booster') {
+        const boosterQuotaCheck = await client.query(
+          `SELECT COUNT(*) as count 
+           FROM user_booster_quotas ubq
+           JOIN user_subscriptions us ON ubq.booster_subscription_id = us.id
+           WHERE us.plan_id = $1 AND ubq.status = 'active'`,
+          [planId]
+        );
+        
+        if (parseInt(boosterQuotaCheck.rows[0].count) > 0) {
+          throw new Error('该加量包有活跃配额记录，无法删除');
+        }
       }
       
       // 记录变更历史

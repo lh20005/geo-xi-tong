@@ -173,6 +173,12 @@ async function startServer() {
     subscriptionExpirationService.start();
     console.log('✅ 订阅到期检查服务已启动');
     
+    // 启动加量包过期检查服务
+    console.log('⏰ 启动加量包过期检查服务...');
+    const { boosterExpirationService } = await import('./services/BoosterExpirationService');
+    boosterExpirationService.startPeriodicCheck();
+    console.log('✅ 加量包过期检查服务已启动');
+    
     // 启动登录尝试清理任务（每小时运行一次）
     setInterval(async () => {
       try {
@@ -298,6 +304,11 @@ process.on('SIGTERM', async () => {
   // 停止订阅到期检查服务
   const { subscriptionExpirationService } = await import('./services/SubscriptionExpirationService');
   subscriptionExpirationService.stop();
+  
+  // 停止加量包过期检查服务
+  const { boosterExpirationService } = await import('./services/BoosterExpirationService');
+  boosterExpirationService.stopPeriodicCheck();
+  
   const webSocketService = getWebSocketService();
   webSocketService.close();
   process.exit(0);

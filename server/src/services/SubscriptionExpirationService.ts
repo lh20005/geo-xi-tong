@@ -60,6 +60,7 @@ export class SubscriptionExpirationService {
       console.log('[SubscriptionExpiration] 开始检查过期订阅...');
       
       // 查找所有刚过期的订阅（状态仍为 active 但已过期）
+      // 注意：只处理基础订阅，加量包订阅由 BoosterExpirationService 单独处理
       const expiredResult = await client.query(`
         SELECT 
           us.id as subscription_id,
@@ -72,6 +73,7 @@ export class SubscriptionExpirationService {
         JOIN users u ON u.id = us.user_id
         JOIN subscription_plans sp ON sp.id = us.plan_id
         WHERE us.status = 'active'
+          AND COALESCE(us.plan_type, 'base') = 'base'
           AND us.end_date <= CURRENT_TIMESTAMP
           AND us.end_date > CURRENT_TIMESTAMP - INTERVAL '1 day'
       `);
@@ -195,6 +197,7 @@ export class SubscriptionExpirationService {
 
   /**
    * 获取即将到期的订阅（7天内）
+   * 注意：只返回基础订阅，加量包订阅由 BoosterExpirationService 单独处理
    */
   async getExpiringSubscriptions(days: number = 7): Promise<any[]> {
     const result = await pool.query(
@@ -211,6 +214,7 @@ export class SubscriptionExpirationService {
       JOIN users u ON u.id = us.user_id
       JOIN subscription_plans sp ON sp.id = us.plan_id
       WHERE us.status = 'active'
+        AND COALESCE(us.plan_type, 'base') = 'base'
         AND us.end_date > CURRENT_TIMESTAMP
         AND us.end_date <= CURRENT_TIMESTAMP + $1 * INTERVAL '1 day'
       ORDER BY us.end_date ASC`,

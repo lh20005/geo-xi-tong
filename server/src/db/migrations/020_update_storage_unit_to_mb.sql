@@ -52,3 +52,6 @@ FROM plan_features pf
 JOIN subscription_plans sp ON pf.plan_id = sp.id
 WHERE pf.feature_code = 'storage_space'
 ORDER BY sp.display_order;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

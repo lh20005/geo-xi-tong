@@ -1,3 +1,4 @@
+-- ==================== UP ====================
 -- 迁移 024: 添加企业图库和知识库配额支持
 -- 创建时间: 2026-01-04
 -- 说明: 为所有用户初始化 gallery_albums 和 knowledge_bases 配额，并同步现有数据
@@ -127,3 +128,6 @@ BEGIN
   RAISE NOTICE '相册使用记录: %', album_record_count;
   RAISE NOTICE '知识库使用记录: %', kb_record_count;
 END $$;
+
+-- ==================== DOWN ====================
+-- Rollback not implemented for this migration

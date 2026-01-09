@@ -8,10 +8,13 @@ const router = express.Router();
 /**
  * 获取所有激活的套餐
  * GET /api/subscription/plans
+ * Query params:
+ *   - plan_type: 套餐类型筛选 (base | booster | all)，默认 base
  */
 router.get('/plans', async (req, res) => {
   try {
-    const plans = await subscriptionService.getAllActivePlans();
+    const planType = req.query.plan_type as 'base' | 'booster' | 'all' | undefined;
+    const plans = await subscriptionService.getAllActivePlans(planType);
 
     res.json({
       success: true,

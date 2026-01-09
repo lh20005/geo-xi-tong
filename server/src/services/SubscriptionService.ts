@@ -66,8 +66,19 @@ export class SubscriptionService {
 
   /**
    * 获取所有激活的套餐
+   * @param planType 可选的套餐类型筛选 ('base' | 'booster')，默认只返回基础套餐
    */
-  async getAllActivePlans(): Promise<Plan[]> {
+  async getAllActivePlans(planType?: 'base' | 'booster' | 'all'): Promise<Plan[]> {
+    let whereClause = 'WHERE p.is_active = true';
+    
+    // 默认只返回基础套餐（向后兼容）
+    if (!planType || planType === 'base') {
+      whereClause += ` AND COALESCE(p.plan_type, 'base') = 'base'`;
+    } else if (planType === 'booster') {
+      whereClause += ` AND p.plan_type = 'booster'`;
+    }
+    // planType === 'all' 时不添加额外筛选
+    
     const result = await pool.query(
       `SELECT p.*, 
         json_agg(
@@ -82,7 +93,7 @@ export class SubscriptionService {
         ) as features
       FROM subscription_plans p
       LEFT JOIN plan_features f ON p.id = f.plan_id
-      WHERE p.is_active = true
+      ${whereClause}
       GROUP BY p.id
       ORDER BY p.display_order ASC`
     );

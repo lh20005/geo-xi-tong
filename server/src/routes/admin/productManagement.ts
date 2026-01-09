@@ -1,6 +1,7 @@
 import express from 'express';
 import { productManagementService } from '../../services/ProductManagementService';
 import { authenticate, requireAdmin } from '../../middleware/adminAuth';
+import { pool } from '../../db/database';
 
 const router = express.Router();
 
@@ -11,11 +12,24 @@ router.use(requireAdmin);
 /**
  * 获取所有套餐（包括未激活的）
  * GET /api/admin/products/plans
+ * Query params:
+ *   - include_inactive: 是否包括未激活的套餐
+ *   - plan_type: 套餐类型筛选 (base | booster)
  */
 router.get('/plans', async (req, res) => {
   try {
     const includeInactive = req.query.include_inactive === 'true';
-    const plans = await productManagementService.getAllPlans(includeInactive);
+    const planType = req.query.plan_type as 'base' | 'booster' | undefined;
+    
+    // 验证 plan_type 参数
+    if (planType && !['base', 'booster'].includes(planType)) {
+      return res.status(400).json({
+        success: false,
+        message: '无效的套餐类型，必须是 base 或 booster'
+      });
+    }
+    
+    const plans = await productManagementService.getAllPlans(includeInactive, planType);
     
     res.json({
       success: true,
@@ -197,3 +211,49 @@ router.get('/history', async (req, res) => {
 });
 
 export default router;
+
+
+/**
+ * 获取加量包统计信息
+ * GET /api/admin/products/booster-stats
+ */
+router.get('/booster-stats', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        sp.id as plan_id,
+        sp.plan_name,
+        sp.plan_code,
+        sp.price,
+        COUNT(DISTINCT us.id) as total_sold,
+        COUNT(DISTINCT CASE WHEN us.status = 'active' AND us.end_date > CURRENT_TIMESTAMP THEN us.id END) as active_count,
+        COALESCE(SUM(CASE WHEN us.status = 'active' THEN sp.price ELSE 0 END), 0) as active_revenue,
+        COALESCE(SUM(sp.price), 0) as total_revenue
+      FROM subscription_plans sp
+      LEFT JOIN user_subscriptions us ON us.plan_id = sp.id AND us.plan_type = 'booster'
+      WHERE sp.plan_type = 'booster' AND sp.is_active = TRUE
+      GROUP BY sp.id
+      ORDER BY sp.display_order ASC
+    `);
+
+    res.json({
+      success: true,
+      data: result.rows.map(row => ({
+        planId: row.plan_id,
+        planName: row.plan_name,
+        planCode: row.plan_code,
+        price: parseFloat(row.price),
+        totalSold: parseInt(row.total_sold),
+        activeCount: parseInt(row.active_count),
+        activeRevenue: parseFloat(row.active_revenue),
+        totalRevenue: parseFloat(row.total_revenue)
+      }))
+    });
+  } catch (error: any) {
+    console.error('获取加量包统计失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取加量包统计失败'
+    });
+  }
+});
