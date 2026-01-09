@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import { 
   EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined,
-  SearchOutlined, ReloadOutlined, SendOutlined 
+  SearchOutlined, ReloadOutlined 
 } from '@ant-design/icons';
 import { 
   getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
@@ -15,7 +15,6 @@ import {
 import { apiClient } from '../api/client';
 import ArticlePreview from '../components/ArticlePreview';
 import ArticleEditorModal from '../components/ArticleEditorModal';
-import PublishingConfigModal from '../components/Publishing/PublishingConfigModal';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
 
@@ -48,7 +47,6 @@ export default function ArticleListPage() {
   const [viewModal, setViewModal] = useState<any>(null);
   const [editModal, setEditModal] = useState<any>(null);
   const [editorVisible, setEditorVisible] = useState(false);
-  const [publishingModalVisible, setPublishingModalVisible] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -229,17 +227,6 @@ export default function ArticleListPage() {
     const cleanContent = processArticleContent(content, imageUrl);
     navigator.clipboard.writeText(cleanContent);
     message.success('文章已复制到剪贴板');
-  };
-
-  const handlePublish = () => {
-    setPublishingModalVisible(true);
-  };
-
-  const handlePublishingSuccess = () => {
-    setPublishingModalVisible(false);
-    setSelectedIds(new Set());
-    loadArticles();
-    message.success('发布任务创建成功');
   };
 
   const handleSelectAll = (checked: boolean) => {
@@ -504,7 +491,6 @@ export default function ArticleListPage() {
           ) : (
             <Text type="secondary">可以在下方表格中选择文章进行批量操作</Text>
           )}
-          <Button type="primary" icon={<SendOutlined />} onClick={handlePublish}>发布到平台</Button>
         </Space>
       </Card>
 
@@ -577,12 +563,6 @@ export default function ArticleListPage() {
       </Modal>
 
       <ArticleEditorModal visible={editorVisible} article={editModal} onClose={handleEditorClose} onSave={handleEditorSave} />
-      
-      <PublishingConfigModal
-        visible={publishingModalVisible}
-        onSuccess={handlePublishingSuccess}
-        onCancel={() => setPublishingModalVisible(false)}
-      />
     </div>
   );
 }
