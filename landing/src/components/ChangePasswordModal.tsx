@@ -43,8 +43,18 @@ export default function ChangePasswordModal({ onClose, onSuccess, isForced = fal
       return;
     }
 
-    if (formData.newPassword.length < 6) {
-      setError('新密码至少需要6个字符');
+    if (formData.newPassword.length < 8) {
+      setError('密码必须至少8个字符');
+      return;
+    }
+
+    if (!/[A-Z]/.test(formData.newPassword)) {
+      setError('密码必须包含至少一个大写字母');
+      return;
+    }
+
+    if (!/[a-z]/.test(formData.newPassword)) {
+      setError('密码必须包含至少一个小写字母');
       return;
     }
 
@@ -159,9 +169,9 @@ export default function ChangePasswordModal({ onClose, onSuccess, isForced = fal
                 value={formData.newPassword}
                 onChange={(e) => handlePasswordChange(e.target.value)}
                 className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                placeholder="至少6个字符"
+                placeholder="至少8位，包含大小写字母"
                 required
-                minLength={6}
+                minLength={8}
               />
               <button
                 type="button"

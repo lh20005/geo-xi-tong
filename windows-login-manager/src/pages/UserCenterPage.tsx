@@ -761,10 +761,12 @@ const UserCenterPage = () => {
             name="newPassword"
             rules={[
               { required: true, message: '请输入新密码' },
-              { min: 6, message: '密码长度至少为6位' }
+              { min: 8, message: '密码必须至少8个字符' },
+              { pattern: /[A-Z]/, message: '密码必须包含至少一个大写字母' },
+              { pattern: /[a-z]/, message: '密码必须包含至少一个小写字母' }
             ]}
           >
-            <Input.Password size="large" placeholder="请输入新密码（至少6位）" />
+            <Input.Password size="large" placeholder="至少8位，包含大小写字母" />
           </Form.Item>
 
           <Form.Item
