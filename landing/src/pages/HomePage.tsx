@@ -5,6 +5,7 @@ import Header from '../components/Header';
 import PaymentModal from '../components/PaymentModal';
 import { config } from '../config/env';
 import { useDiscountEligibility } from '../hooks/useDiscountEligibility';
+import { useUserSubscription } from '../hooks/useUserSubscription';
 
 interface Plan {
   id: number;
@@ -38,6 +39,9 @@ export default function HomePage() {
   
   // 折扣资格检查
   const { eligibility, getDiscountedPrice } = useDiscountEligibility();
+  
+  // 用户订阅状态
+  const { hasAccessTo, isAddonPlan } = useUserSubscription();
 
   // 轮播图片列表
   const carouselImages = [
@@ -451,25 +455,83 @@ export default function HomePage() {
                           </>
                         )}
                       </div>
-                      {isFree ? (
-                        <Link
-                          to="/login"
-                          className="block w-full py-2.5 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                        >
-                          免费试用
-                        </Link>
-                      ) : (
-                        <button
-                          onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
-                          className={`block w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
-                            hasDiscount 
-                              ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-300' 
-                              : 'bg-white text-blue-600 hover:bg-gray-50'
-                          }`}
-                        >
-                          {hasDiscount ? '立即抢购' : '立即购买'}
-                        </button>
-                      )}
+                      {(() => {
+                        // 判断是否为加量包
+                        const isPlanAddon = isAddonPlan(plan.plan_code);
+                        // 判断用户是否已拥有该套餐等级或更高
+                        const userHasAccess = hasAccessTo(plan.plan_code);
+                        
+                        // 按钮显示逻辑：
+                        // 1. 加量包：已登录用户始终显示"立即升级"
+                        // 2. 基础套餐：用户已拥有该等级或更高 -> "进入GEO系统"
+                        // 3. 基础套餐：用户未拥有 -> "立即升级"（或未登录显示"免费使用"/"立即购买"）
+                        
+                        if (!isLoggedIn) {
+                          // 未登录用户
+                          return isFree ? (
+                            <Link
+                              to="/login"
+                              className="block w-full py-2.5 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                            >
+                              免费使用
+                            </Link>
+                          ) : (
+                            <button
+                              onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
+                              className={`block w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
+                                hasDiscount 
+                                  ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-300' 
+                                  : 'bg-white text-blue-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              {hasDiscount ? '立即抢购' : '立即购买'}
+                            </button>
+                          );
+                        }
+                        
+                        // 已登录用户
+                        if (isPlanAddon) {
+                          // 加量包：始终显示"立即升级"
+                          return (
+                            <button
+                              onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
+                              className={`block w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
+                                hasDiscount 
+                                  ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-300' 
+                                  : 'bg-white text-blue-600 hover:bg-gray-50'
+                              }`}
+                            >
+                              立即升级
+                            </button>
+                          );
+                        }
+                        
+                        if (userHasAccess) {
+                          // 用户已拥有该套餐等级或更高：显示"进入GEO系统"
+                          return (
+                            <button
+                              onClick={handleEnterSystem}
+                              className="block w-full py-2.5 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                            >
+                              进入GEO系统
+                            </button>
+                          );
+                        }
+                        
+                        // 用户未拥有该套餐：显示"立即升级"
+                        return (
+                          <button
+                            onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
+                            className={`block w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
+                              hasDiscount 
+                                ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-300' 
+                                : 'bg-white text-blue-600 hover:bg-gray-50'
+                            }`}
+                          >
+                            立即升级
+                          </button>
+                        );
+                      })()}
                     </div>
                     
                     {/* 功能列表 */}

@@ -341,7 +341,7 @@ export default function HomePage() {
                   to="/login"
                   className="block w-full py-2.5 md:py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors text-sm md:text-base"
                 >
-                  免费试用
+                  免费使用
                 </Link>
               </div>
               
@@ -551,7 +551,7 @@ export default function HomePage() {
                   to="/login"
                   className="block w-full py-3 bg-white text-blue-600 font-semibold rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  免费试用
+                  免费使用
                 </Link>
               </div>
               

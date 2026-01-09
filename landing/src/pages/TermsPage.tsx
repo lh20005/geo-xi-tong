@@ -76,9 +76,9 @@ export default function TermsPage() {
               <li>已支付费用不予退还，除非法律另有规定</li>
             </ul>
 
-            <h3 className="text-xl font-semibold text-gray-900 mb-3">3.3 免费试用</h3>
+            <h3 className="text-xl font-semibold text-gray-900 mb-3">3.3 免费使用</h3>
             <p className="text-gray-600 leading-relaxed">
-              体验版提供免费试用，试用期间享有基础功能。我们保留随时修改或终止免费试用的权利。
+              体验版提供免费使用，使用期间享有基础功能。我们保留随时修改或终止免费使用的权利。
             </p>
           </section>
 
