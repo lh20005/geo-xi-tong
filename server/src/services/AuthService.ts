@@ -111,7 +111,8 @@ export class AuthService {
       throw new Error('用户名已存在');
     }
     
-    // 如果提供了邀请码，验证其存在性
+    // 如果提供了邀请码，验证其存在性并查找关联的代理商
+    let invitedByAgentId: number | null = null;
     if (invitedByCode) {
       if (!invitationService.validateFormat(invitedByCode)) {
         console.log(`[Auth] 邀请码格式无效: ${invitedByCode}`);
@@ -123,6 +124,19 @@ export class AuthService {
           console.log(`[Auth] 邀请码不存在: ${invitedByCode}`);
           // 邀请码不存在，但允许注册继续（不建立邀请关系）
           invitedByCode = undefined;
+        } else {
+          // 查找邀请码对应的代理商（如果邀请者是代理商）
+          try {
+            const { agentService } = await import('./AgentService');
+            const agent = await agentService.getAgentByInvitationCode(invitedByCode);
+            if (agent && agent.status === 'active') {
+              invitedByAgentId = agent.id;
+              console.log(`[Auth] 邀请码 ${invitedByCode} 关联到代理商 ID: ${invitedByAgentId}`);
+            }
+          } catch (error) {
+            console.error(`[Auth] 查找代理商失败:`, error);
+            // 不影响注册流程
+          }
         }
       }
     }
@@ -138,25 +152,28 @@ export class AuthService {
       // 生成唯一的邀请码
       const invitationCode = await invitationService.generate();
       
-      // 创建用户
+      // 创建用户（包含 invited_by_agent 字段）
       const result = await client.query(
-        `INSERT INTO users (username, password_hash, invitation_code, invited_by_code, role, is_temp_password) 
-         VALUES ($1, $2, $3, $4, $5, $6) 
+        `INSERT INTO users (username, password_hash, invitation_code, invited_by_code, invited_by_agent, role, is_temp_password) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) 
          RETURNING *`,
-        [username, passwordHash, invitationCode, invitedByCode || null, 'user', false]
+        [username, passwordHash, invitationCode, invitedByCode || null, invitedByAgentId, 'user', false]
       );
       
       const user = result.rows[0];
       
-      // 保存密码历史
-      await passwordService.savePasswordHistory(user.id, passwordHash);
+      // 保存密码历史（在事务内使用 client）
+      await client.query(
+        `INSERT INTO password_history (user_id, password_hash) VALUES ($1, $2)`,
+        [user.id, passwordHash]
+      );
       
       // 初始化用户存储记录
       await client.query('SELECT initialize_user_storage($1)', [user.id]);
       
       await client.query('COMMIT');
       
-      console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}`);
+      console.log(`[Auth] 用户注册成功: ${username}, 邀请码: ${invitationCode}${invitedByCode ? `, 被邀请码: ${invitedByCode}` : ''}${invitedByAgentId ? `, 代理商ID: ${invitedByAgentId}` : ''}`);
       
       // 为新用户自动开通免费版订阅（在事务外执行，避免影响注册流程）
       try {
