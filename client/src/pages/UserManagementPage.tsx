@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Input, Button, Tag, Modal, Form, Select, message, Space, Card, Badge } from 'antd';
+import { Input, Button, Tag, Modal, Form, Select, Space, Card, Badge, App } from 'antd';
 import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { config } from '../config/env';
@@ -24,6 +24,7 @@ interface User {
 }
 
 export default function UserManagementPage() {
+  const { message, modal } = App.useApp();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -207,7 +208,7 @@ export default function UserManagementPage() {
   };
 
   const handleDelete = (user: User) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除用户 "${user.username}" 吗？此操作不可撤销。`,
       okText: '确认删除',

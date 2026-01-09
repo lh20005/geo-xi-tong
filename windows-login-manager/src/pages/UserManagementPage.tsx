@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Input, Button, Tag, Modal, Form, Select, message, Space, Card, Badge } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined } from '@ant-design/icons';
+import { Input, Button, Tag, Modal, Form, Select, Space, Card, Badge, App } from 'antd';
+import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { config } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import ResizableTable from '../components/ResizableTable';
+import SubscriptionDetailDrawer from '../components/UserSubscription/SubscriptionDetailDrawer';
 
 const { Search } = Input;
 
@@ -23,14 +24,15 @@ interface User {
 }
 
 export default function UserManagementPage() {
+  const { message, modal } = App.useApp();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
-  const [subscriptionFilter, setSubscriptionFilter] = useState<string>('');
-  const [onlineFilter, setOnlineFilter] = useState<string>('');
+  const [subscriptionFilter, setSubscriptionFilter] = useState<string>(''); // 新增：订阅套餐筛选
+  const [onlineFilter, setOnlineFilter] = useState<string>(''); // 新增：在线状态筛选
   const [roleFilter, setRoleFilter] = useState<string>(''); // 新增：角色筛选
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [resetPasswordModalVisible, setResetPasswordModalVisible] = useState(false);
@@ -38,9 +40,23 @@ export default function UserManagementPage() {
   const [tempPassword, setTempPassword] = useState('');
   const [form] = Form.useForm();
 
+  // 订阅管理抽屉
+  const [subscriptionDrawerVisible, setSubscriptionDrawerVisible] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedUsername, setSelectedUsername] = useState('');
+
+  // 获取套餐颜色
+  const getPlanColor = (planName?: string) => {
+    if (!planName || planName === '无订阅') return 'default';
+    if (planName.includes('体验')) return 'cyan';
+    if (planName.includes('专业')) return 'green';
+    if (planName.includes('企业')) return 'gold';
+    return 'purple';
+  };
+
   useEffect(() => {
     loadUsers();
-  }, [page, search, subscriptionFilter, onlineFilter, roleFilter]);
+  }, [page, search, subscriptionFilter, onlineFilter, roleFilter]); // 添加 roleFilter 依赖
 
   useEffect(() => {
     // 连接 WebSocket
@@ -79,9 +95,9 @@ export default function UserManagementPage() {
           page, 
           pageSize, 
           search: search || undefined,
-          subscriptionPlan: subscriptionFilter || undefined,
-          onlineStatus: onlineFilter || undefined,
-          roleFilter: roleFilter || undefined
+          subscriptionPlan: subscriptionFilter || undefined, // 添加套餐筛选参数
+          onlineStatus: onlineFilter || undefined, // 添加在线状态筛选参数
+          roleFilter: roleFilter || undefined // 添加角色筛选参数
         },
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -192,7 +208,7 @@ export default function UserManagementPage() {
   };
 
   const handleDelete = (user: User) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除用户 "${user.username}" 吗？此操作不可撤销。`,
       okText: '确认删除',
@@ -237,6 +253,12 @@ export default function UserManagementPage() {
     });
   };
 
+  const handleManageSubscription = (user: User) => {
+    setSelectedUserId(user.id);
+    setSelectedUsername(user.username);
+    setSubscriptionDrawerVisible(true);
+  };
+
   const copyTempPassword = () => {
     navigator.clipboard.writeText(tempPassword);
     message.success('临时密码已复制到剪贴板');
@@ -269,7 +291,7 @@ export default function UserManagementPage() {
       key: 'subscriptionPlanName',
       width: 120,
       render: (planName: string) => (
-        <Tag color={planName === '无订阅' ? 'default' : 'green'}>
+        <Tag color={getPlanColor(planName)}>
           {planName || '无订阅'}
         </Tag>
       ),
@@ -328,9 +350,9 @@ export default function UserManagementPage() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 280,
       render: (_: any, record: User) => (
-        <Space size="small">
+        <Space size="small" wrap>
           <Button
             type="link"
             size="small"
@@ -338,6 +360,14 @@ export default function UserManagementPage() {
             onClick={() => handleEdit(record)}
           >
             编辑
+          </Button>
+          <Button
+            type="link"
+            size="small"
+            icon={<CrownOutlined />}
+            onClick={() => handleManageSubscription(record)}
+          >
+            订阅管理
           </Button>
           <Button
             type="link"
@@ -382,10 +412,10 @@ export default function UserManagementPage() {
               placeholder="筛选订阅套餐"
               allowClear
               size="large"
-              style={{ width: 180 }}
+              style={{ width: 200 }}
               onChange={(value) => {
                 setSubscriptionFilter(value || '');
-                setPage(1);
+                setPage(1); // 重置到第一页
               }}
               value={subscriptionFilter || undefined}
             >
@@ -408,10 +438,10 @@ export default function UserManagementPage() {
               placeholder="筛选在线状态"
               allowClear
               size="large"
-              style={{ width: 150 }}
+              style={{ width: 160 }}
               onChange={(value) => {
                 setOnlineFilter(value || '');
-                setPage(1);
+                setPage(1); // 重置到第一页
               }}
               value={onlineFilter || undefined}
             >
@@ -428,10 +458,10 @@ export default function UserManagementPage() {
               placeholder="筛选角色"
               allowClear
               size="large"
-              style={{ width: 150 }}
+              style={{ width: 160 }}
               onChange={(value) => {
                 setRoleFilter(value || '');
-                setPage(1);
+                setPage(1); // 重置到第一页
               }}
               value={roleFilter || undefined}
             >
@@ -541,6 +571,18 @@ export default function UserManagementPage() {
           </p>
         )}
       </Modal>
+
+      {/* 订阅管理抽屉 */}
+      <SubscriptionDetailDrawer
+        visible={subscriptionDrawerVisible}
+        userId={selectedUserId}
+        username={selectedUsername}
+        onClose={() => {
+          setSubscriptionDrawerVisible(false);
+          setSelectedUserId(null);
+          setSelectedUsername('');
+        }}
+      />
     </div>
   );
 }
