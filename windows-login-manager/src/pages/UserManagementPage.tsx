@@ -112,10 +112,29 @@ export default function UserManagementPage() {
       const values = await form.validateFields();
       const token = localStorage.getItem('auth_token');
       
+      // 先获取确认令牌
+      const confirmResponse = await axios.post(
+        `${config.apiUrl}/confirm/initiate`,
+        { action: 'update-user', data: { userId: selectedUser?.id } },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!confirmResponse.data.success) {
+        message.error('获取确认令牌失败');
+        return;
+      }
+
+      const confirmationToken = confirmResponse.data.data.token;
+      
       const response = await axios.put(
         `${config.apiUrl}/admin/users/${selectedUser?.id}`,
         values,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'X-Confirmation-Token': confirmationToken
+          } 
+        }
       );
 
       if (response.data.success) {
@@ -137,10 +156,30 @@ export default function UserManagementPage() {
   const confirmResetPassword = async () => {
     try {
       const token = localStorage.getItem('auth_token');
+      
+      // 先获取确认令牌
+      const confirmResponse = await axios.post(
+        `${config.apiUrl}/confirm/initiate`,
+        { action: 'reset-password', data: { userId: selectedUser?.id } },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (!confirmResponse.data.success) {
+        message.error('获取确认令牌失败');
+        return;
+      }
+
+      const confirmationToken = confirmResponse.data.data.token;
+      
       const response = await axios.post(
         `${config.apiUrl}/admin/users/${selectedUser?.id}/reset-password`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { 
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            'X-Confirmation-Token': confirmationToken
+          } 
+        }
       );
 
       if (response.data.success) {
@@ -162,9 +201,29 @@ export default function UserManagementPage() {
       onOk: async () => {
         try {
           const token = localStorage.getItem('auth_token');
+          
+          // 先获取确认令牌
+          const confirmResponse = await axios.post(
+            `${config.apiUrl}/confirm/initiate`,
+            { action: 'delete-user', data: { userId: user.id } },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (!confirmResponse.data.success) {
+            message.error('获取确认令牌失败');
+            return;
+          }
+
+          const confirmationToken = confirmResponse.data.data.token;
+          
           const response = await axios.delete(
             `${config.apiUrl}/admin/users/${user.id}`,
-            { headers: { Authorization: `Bearer ${token}` } }
+            { 
+              headers: { 
+                Authorization: `Bearer ${token}`,
+                'X-Confirmation-Token': confirmationToken
+              } 
+            }
           );
 
           if (response.data.success) {
