@@ -4,6 +4,8 @@ import { invitationService } from './InvitationService';
 import { tokenService } from './TokenService';
 import { sessionService } from './SessionService';
 import { passwordService } from './PasswordService';
+import fs from 'fs';
+import path from 'path';
 
 interface User {
   id: number;
@@ -235,12 +237,70 @@ export class UserService {
     // 先使所有会话失效
     await sessionService.revokeAllSessions(id);
     
+    // 清理用户上传的文件
+    await this.cleanupUserFiles(id);
+    
     const result = await pool.query(
       'DELETE FROM users WHERE id = $1',
       [id]
     );
     
     console.log(`[User] 用户删除成功: ID ${id}`);
+  }
+
+  /**
+   * 清理用户上传的所有文件（图片和文档）
+   */
+  private async cleanupUserFiles(userId: number): Promise<void> {
+    const uploadsDir = path.join(__dirname, '../../uploads');
+    
+    try {
+      // 1. 清理用户的图片文件
+      const imagesResult = await pool.query(
+        'SELECT filepath FROM images WHERE user_id = $1',
+        [userId]
+      );
+      
+      for (const row of imagesResult.rows) {
+        if (row.filepath) {
+          const filePath = path.join(uploadsDir, 'gallery', row.filepath);
+          await this.deleteFileIfExists(filePath);
+        }
+      }
+      console.log(`[User] 已清理 ${imagesResult.rowCount} 个图片文件`);
+      
+      // 2. 清理用户的知识库文档文件
+      const docsResult = await pool.query(
+        'SELECT file_path FROM documents WHERE knowledge_base_id IN (SELECT id FROM knowledge_bases WHERE user_id = $1)',
+        [userId]
+      );
+      
+      for (const row of docsResult.rows) {
+        if (row.file_path) {
+          const filePath = path.join(uploadsDir, 'knowledge', row.file_path);
+          await this.deleteFileIfExists(filePath);
+        }
+      }
+      console.log(`[User] 已清理 ${docsResult.rowCount} 个文档文件`);
+      
+    } catch (error) {
+      console.error(`[User] 清理用户文件时出错:`, error);
+      // 不抛出错误，继续删除用户（文件清理失败不应阻止用户删除）
+    }
+  }
+
+  /**
+   * 删除文件（如果存在）
+   */
+  private async deleteFileIfExists(filePath: string): Promise<void> {
+    try {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`[User] 已删除文件: ${filePath}`);
+      }
+    } catch (error) {
+      console.error(`[User] 删除文件失败: ${filePath}`, error);
+    }
   }
 
   /**
