@@ -455,10 +455,10 @@ const UserCenterPage = () => {
                     <Col span={6}>
                       <Statistic
                         title="到期时间"
-                        value={new Date(subscription.end_date).toLocaleDateString('zh-CN')}
-                        valueStyle={{ color: showExpiryWarning ? '#ff4d4f' : '#3f8600' }}
+                        value={daysUntilExpiry > 36000 ? '永久有效' : new Date(subscription.end_date).toLocaleDateString('zh-CN')}
+                        valueStyle={{ color: daysUntilExpiry > 36000 ? '#52c41a' : (showExpiryWarning ? '#ff4d4f' : '#3f8600') }}
                       />
-                      {showExpiryWarning && (
+                      {showExpiryWarning && daysUntilExpiry <= 36000 && (
                         <Tag color="warning" style={{ marginTop: 8 }}>
                           <WarningOutlined /> 还有 {daysUntilExpiry} 天到期
                         </Tag>
@@ -516,8 +516,12 @@ const UserCenterPage = () => {
                               {stat.reset_period === 'daily' ? '每日重置' : 
                                stat.reset_period === 'monthly' ? (
                                  stat.reset_time 
-                                   ? `${new Date(stat.reset_time).toLocaleDateString('zh-CN')} 重置`
+                                   ? `下次重置: ${new Date(stat.reset_time).toLocaleDateString('zh-CN')}`
                                    : '每月重置'
+                               ) : stat.reset_period === 'yearly' ? (
+                                 stat.reset_time 
+                                   ? `下次重置: ${new Date(stat.reset_time).toLocaleDateString('zh-CN')}`
+                                   : '每年重置'
                                ) : '永久'}
                             </span>
                           </Space>
