@@ -365,8 +365,8 @@ export default function PaymentModal({ isOpen, onClose, planId, planName, price,
                     <span className="text-gray-600">优惠：</span>
                     <span className="text-green-600 font-semibold">-¥{(originalPrice - price).toFixed(2)}</span>
                   </div>
-                  <div className="bg-red-50 border border-red-200 rounded px-2 py-1 mb-2">
-                    <span className="text-red-600 text-xs font-medium">🎁 代理商专属优惠</span>
+                  <div className="bg-yellow-50 border border-yellow-300 rounded px-2 py-1 mb-2">
+                    <span className="text-yellow-700 text-xs font-medium animate-pulse">🎁 邀请码用户专享</span>
                   </div>
                 </>
               )}

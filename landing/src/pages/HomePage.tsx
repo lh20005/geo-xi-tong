@@ -157,7 +157,7 @@ export default function HomePage() {
       'professional': { text: '最受欢迎', color: 'yellow' },
       'enterprise': { text: '运营必备', color: 'yellow' }
     };
-    return badges[planCode] || { text: '推荐', color: 'yellow' };
+    return badges[planCode] || { text: '随时加量', color: 'yellow' };
   };
 
   // 处理购买按钮点击
@@ -426,21 +426,24 @@ export default function HomePage() {
                     key={plan.id}
                     className="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 relative flex flex-col"
                   >
-                    {/* 折扣标签 */}
-                    {hasDiscount ? (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap animate-pulse z-10">
-                        🎁 代理商专属优惠
-                      </div>
-                    ) : (
-                      <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap z-10">
-                        {badge.text}
+                    {/* 顶部标签 */}
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-yellow-400 text-gray-900 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap z-10">
+                      {badge.text}
+                    </div>
+                    
+                    {/* 邀请码用户专享绶带 - 有折扣时显示 */}
+                    {hasDiscount && (
+                      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+                        <div className="absolute right-[-32px] top-[18px] rotate-45 bg-yellow-400 text-gray-900 text-[10px] font-bold py-1 w-[140px] text-center shadow-md animate-pulse">
+                          邀请码用户专享
+                        </div>
                       </div>
                     )}
                     
-                    {/* 邀请码优惠绶带 - 仅对非免费套餐且未登录用户显示 */}
-                    {!isFree && !isLoggedIn && (
+                    {/* 邀请码享8折绶带 - 仅对非免费套餐且未登录用户且无折扣时显示 */}
+                    {!isFree && !isLoggedIn && !hasDiscount && (
                       <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
-                        <div className="absolute -right-8 top-5 rotate-45 bg-yellow-400 text-gray-900 text-xs font-bold py-1 px-10 shadow-md">
+                        <div className="absolute right-[-32px] top-[18px] rotate-45 bg-yellow-400 text-gray-900 text-[10px] font-bold py-1 w-[140px] text-center shadow-md">
                           邀请码享8折
                         </div>
                       </div>
