@@ -28,6 +28,42 @@ import ResizableTable from '../components/ResizableTable';
 
 const { Text } = Typography;
 
+// 平台图标映射 - 与平台管理页面保持一致
+const getPlatformIcon = (platformId: string): string => {
+  // 特殊平台使用指定路径
+  const specialIcons: Record<string, string> = {
+    'baijiahao': '/images/baijiahao.png',
+    'baidu': '/images/baijiahao.png',
+    'toutiao': '/images/toutiaohao.png',
+    'toutiaohao': '/images/toutiaohao.png',
+    'xiaohongshu': '/images/xiaohongshu.png',
+    'xhs': '/images/xiaohongshu.png',
+    'weixin': '/images/gongzhonghao.png',
+    'gongzhonghao': '/images/gongzhonghao.png',
+    'wechat': '/images/gongzhonghao.png',
+    'douyin': '/images/douyin.jpeg',
+    'sohu': '/images/souhu.jpeg',
+    'souhu': '/images/souhu.jpeg',
+    'wangyi': '/images/wangyi.png',
+    'netease': '/images/wangyi.png',
+    'bilibili': '/images/bili.png',
+    'bili': '/images/bili.png',
+    'qq': '/images/qie.png',
+    'qie': '/images/qie.png',
+    'penguin': '/images/qie.png',
+    'zhihu': '/images/zhihu.png',
+    'csdn': '/images/csdn.png',
+    'jianshu': '/images/jianshu.png'
+  };
+  
+  if (specialIcons[platformId]) {
+    return specialIcons[platformId];
+  }
+  
+  // 其他平台使用默认路径
+  return `/platform-icons/${platformId}.png`;
+};
+
 export default function PublishingTasksPage() {
   // 文章选择
   const [articles, setArticles] = useState<Article[]>([]);
@@ -1064,13 +1100,13 @@ export default function PublishingTasksPage() {
         {accounts.length === 0 ? (
           <Empty description="暂无已登录平台，请先到平台登录页面进行登录" />
         ) : (
-          <Row gutter={[16, 16]}>
+          <Row gutter={[12, 12]}>
             {accounts.map(account => {
               const platform = platforms.find(p => p.platform_id === account.platform_id);
               const isSelected = selectedAccounts.has(account.id);
               
               return (
-                <Col xs={24} sm={12} md={8} lg={6} key={account.id}>
+                <Col xs={12} sm={8} md={6} lg={4} xl={3} key={account.id}>
                   <Card
                     hoverable
                     onClick={() => handleAccountSelect(account.id)}
@@ -1081,45 +1117,75 @@ export default function PublishingTasksPage() {
                       border: isSelected ? '2px solid #52c41a' : '1px solid #e2e8f0',
                       background: isSelected ? '#f6ffed' : '#ffffff',
                       transition: 'all 0.3s ease',
-                      cursor: 'pointer'
+                      cursor: 'pointer',
+                      height: '100%'
                     }}
-                    bodyStyle={{ padding: '20px 16px' }}
+                    styles={{ body: { padding: '12px 8px' } }}
                   >
                     {isSelected && (
                       <div
                         style={{
                           position: 'absolute',
-                          top: 8,
-                          right: 8
+                          top: 4,
+                          right: 4
                         }}
                       >
-                        <CheckCircleOutlined style={{ fontSize: 20, color: '#52c41a' }} />
+                        <CheckCircleOutlined style={{ fontSize: 14, color: '#52c41a' }} />
                       </div>
                     )}
                     
                     <div
                       style={{
-                        width: 56,
-                        height: 56,
-                        margin: '0 auto 12px',
+                        width: 48,
+                        height: 48,
+                        margin: '0 auto 8px',
                         borderRadius: 8,
-                        background: isSelected ? '#52c41a' : '#1890ff',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: 24,
-                        fontWeight: 'bold',
-                        color: '#ffffff'
+                        overflow: 'hidden'
                       }}
                     >
-                      {platform?.platform_name.charAt(0) || 'P'}
+                      <img 
+                        src={getPlatformIcon(account.platform_id)} 
+                        alt={platform?.platform_name || account.platform_id}
+                        style={{ 
+                          width: '100%', 
+                          height: '100%', 
+                          objectFit: 'contain'
+                        }}
+                        onError={(e) => {
+                          // 图标加载失败，显示首字母
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const parent = target.parentElement;
+                          if (parent) {
+                            parent.style.background = isSelected ? '#52c41a' : '#0ea5e9';
+                            parent.innerHTML = `<span style="font-size: 24px; font-weight: bold; color: #ffffff;">${(platform?.platform_name || account.platform_id).charAt(0)}</span>`;
+                          }
+                        }}
+                      />
                     </div>
                     
-                    <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4, color: '#1e293b' }}>
+                    <div style={{ 
+                      fontSize: 12, 
+                      fontWeight: 500, 
+                      marginBottom: 4, 
+                      color: '#1e293b',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
                       {platform?.platform_name || account.platform_id}
                     </div>
                     
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                    <div style={{ 
+                      fontSize: 11, 
+                      color: '#64748b',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}>
                       {account.account_name}
                     </div>
                   </Card>
