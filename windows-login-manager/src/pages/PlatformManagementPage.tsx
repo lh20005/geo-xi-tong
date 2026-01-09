@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined, LockOutlined, CrownOutlined } from '@ant-design/icons';
 import { getPlatforms, getAccounts, Platform, Account, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
 import AccountBindingModal from '../components/Publishing/AccountBindingModal';
 import AccountManagementModal from '../components/Publishing/AccountManagementModal';
 import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 import ipcBridge from '../services/ipc';
+import { apiClient } from '../api/client';
 
 // const { Title } = Typography;
 
@@ -46,6 +47,27 @@ const getPlatformIcon = (platformId: string): string => {
   return `/platform-icons/${platformId}.png`;
 };
 
+// 订阅信息接口
+interface SubscriptionInfo {
+  plan_code: string;
+  plan_name: string;
+  status: string;
+}
+
+// 免费版只能使用抖音平台
+const FREE_PLAN_ALLOWED_PLATFORMS = ['douyin'];
+
+// 判断是否为免费版用户（包括购买了加量包的免费版用户）
+const isFreePlanUser = (planCode: string | undefined): boolean => {
+  if (!planCode) return true; // 没有订阅信息视为免费版
+  return planCode === 'free' || planCode === 'trial';
+};
+
+// 判断平台是否对免费版用户可用
+const isPlatformAvailableForFree = (platformId: string): boolean => {
+  return FREE_PLAN_ALLOWED_PLATFORMS.includes(platformId);
+};
+
 export default function PlatformManagementPage() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -56,9 +78,11 @@ export default function PlatformManagementPage() {
   const [wsConnected, setWsConnected] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
   useEffect(() => {
     loadData();
+    fetchSubscription();
     initializeWebSocketConnection();
 
     return () => {
@@ -71,6 +95,24 @@ export default function PlatformManagementPage() {
       }
     };
   }, []);
+
+  // 获取用户订阅信息
+  const fetchSubscription = async () => {
+    try {
+      const response = await apiClient.get('/subscription/current');
+      if (response.data.success && response.data.data) {
+        setSubscription({
+          plan_code: response.data.data.plan_code || response.data.data.plan?.plan_code || 'free',
+          plan_name: response.data.data.plan_name || '免费版',
+          status: response.data.data.status || 'active'
+        });
+      }
+    } catch (error) {
+      console.error('获取订阅信息失败:', error);
+      // 获取失败时默认为免费版
+      setSubscription({ plan_code: 'free', plan_name: '免费版', status: 'active' });
+    }
+  };
 
   const initializeWebSocketConnection = () => {
     try {
@@ -188,6 +230,12 @@ export default function PlatformManagementPage() {
   };
 
   const handlePlatformClick = async (platform: Platform) => {
+    // 检查免费版用户是否可以使用该平台
+    if (isFreePlanUser(subscription?.plan_code) && !isPlatformAvailableForFree(platform.platform_id)) {
+      message.warning('免费版用户仅支持抖音平台，升级套餐后可使用全部平台');
+      return;
+    }
+
     try {
       console.log('[前端] 点击平台卡片:', platform.platform_name, platform.platform_id);
       message.loading({ content: '正在打开登录页面...', key: 'browser-login', duration: 0 });
@@ -215,6 +263,12 @@ export default function PlatformManagementPage() {
       });
       message.error(error.message || '登录失败');
     }
+  };
+
+  // 跳转到落地页套餐购买页面
+  const handleNavigateToPricing = () => {
+    const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+    window.open(`${landingUrl}/#pricing`, '_blank');
   };
 
   const handleDeleteAccount = async (accountId: number) => {
@@ -485,12 +539,13 @@ export default function PlatformManagementPage() {
           {platforms.map(platform => {
             const bound = isPlatformBound(platform.platform_id);
             const platformAccounts = getPlatformAccounts(platform.platform_id);
+            const isLocked = isFreePlanUser(subscription?.plan_code) && !isPlatformAvailableForFree(platform.platform_id);
             
             return (
               <Col xs={12} sm={8} md={6} lg={4} xl={3} key={platform.platform_id}>
                 <Card
-                  hoverable
-                  onClick={() => handlePlatformClick(platform)}
+                  hoverable={!isLocked}
+                  onClick={() => !isLocked && handlePlatformClick(platform)}
                   style={{
                     textAlign: 'center',
                     position: 'relative',
@@ -498,12 +553,55 @@ export default function PlatformManagementPage() {
                     border: bound ? '2px solid #52c41a' : '1px solid #e2e8f0',
                     background: bound ? '#f6ffed' : '#ffffff',
                     transition: 'all 0.3s ease',
-                    cursor: 'pointer',
-                    height: '100%'
+                    cursor: isLocked ? 'not-allowed' : 'pointer',
+                    height: '100%',
+                    opacity: isLocked ? 0.7 : 1
                   }}
                   styles={{ body: { padding: '12px 8px' } }}
                 >
-                  {bound && (
+                  {/* 免费版锁定遮罩 */}
+                  {isLocked && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'rgba(0, 0, 0, 0.45)',
+                        borderRadius: 8,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 10,
+                        backdropFilter: 'blur(2px)'
+                      }}
+                    >
+                      <LockOutlined style={{ fontSize: 24, color: '#fff', marginBottom: 8 }} />
+                      <Button
+                        type="primary"
+                        size="small"
+                        icon={<CrownOutlined />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleNavigateToPricing();
+                        }}
+                        style={{
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          border: 'none',
+                          fontSize: 11,
+                          height: 26,
+                          padding: '0 8px',
+                          boxShadow: '0 2px 8px rgba(102, 126, 234, 0.4)'
+                        }}
+                      >
+                        升级套餐后可使用
+                      </Button>
+                    </div>
+                  )}
+
+                  {bound && !isLocked && (
                     <div
                       style={{
                         position: 'absolute',
