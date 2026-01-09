@@ -146,7 +146,11 @@ router.post('/accounts', async (req, res) => {
     
     if (isNewAccount) {
       const quota = await usageTrackingService.checkQuota(userId, 'platform_accounts');
-      if (!quota.hasQuota || quota.remaining < 1) {
+      console.log('[创建账号] 配额检查结果:', quota);
+      // 注意：当 quotaLimit = -1 时表示无限制，remaining 也会是 -1
+      // 所以需要特殊处理：只有当 quotaLimit > 0 且 remaining < 1 时才拒绝
+      const isQuotaExceeded = quota.quotaLimit !== -1 && (!quota.hasQuota || quota.remaining < 1);
+      if (isQuotaExceeded) {
         return res.status(403).json({ 
           error: '平台账号配额不足',
           message: `您的平台账号数量已达上限。当前 ${quota.currentUsage}/${quota.quotaLimit}`,

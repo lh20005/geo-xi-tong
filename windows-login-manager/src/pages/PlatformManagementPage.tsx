@@ -99,16 +99,26 @@ export default function PlatformManagementPage() {
   // 获取用户订阅信息
   const fetchSubscription = async () => {
     try {
+      console.log('[订阅] 开始获取订阅信息...');
       const response = await apiClient.get('/subscription/current');
+      console.log('[订阅] API 响应:', response.data);
+      
       if (response.data.success && response.data.data) {
+        const data = response.data.data;
+        const planCode = data.plan_code || data.plan?.plan_code || 'free';
+        console.log('[订阅] 解析的 plan_code:', planCode);
         setSubscription({
-          plan_code: response.data.data.plan_code || response.data.data.plan?.plan_code || 'free',
-          plan_name: response.data.data.plan_name || '免费版',
-          status: response.data.data.status || 'active'
+          plan_code: planCode,
+          plan_name: data.plan_name || data.plan?.plan_name || '免费版',
+          status: data.status || 'active'
         });
+      } else {
+        // API 返回成功但没有订阅数据，设置为免费版
+        console.log('[订阅] 没有订阅数据，设置为免费版');
+        setSubscription({ plan_code: 'free', plan_name: '免费版', status: 'active' });
       }
     } catch (error) {
-      console.error('获取订阅信息失败:', error);
+      console.error('[订阅] 获取订阅信息失败:', error);
       // 获取失败时默认为免费版
       setSubscription({ plan_code: 'free', plan_name: '免费版', status: 'active' });
     }
@@ -229,11 +239,25 @@ export default function PlatformManagementPage() {
   };
 
   const handlePlatformClick = async (platform: Platform) => {
+    console.log('========== 平台登录调试开始 ==========');
+    console.log('[调试] 当前订阅状态:', subscription);
+    console.log('[调试] subscription?.plan_code:', subscription?.plan_code);
+    console.log('[调试] isFreePlanUser 结果:', isFreePlanUser(subscription?.plan_code));
+    console.log('[调试] isPlatformAvailableForFree 结果:', isPlatformAvailableForFree(platform.platform_id));
+    console.log('[调试] 平台信息:', platform);
+    
     // 检查免费版用户是否可以使用该平台
-    if (isFreePlanUser(subscription?.plan_code) && !isPlatformAvailableForFree(platform.platform_id)) {
+    const isFreeUser = isFreePlanUser(subscription?.plan_code);
+    const isPlatformAllowed = isPlatformAvailableForFree(platform.platform_id);
+    console.log('[调试] isFreeUser:', isFreeUser, ', isPlatformAllowed:', isPlatformAllowed);
+    
+    if (isFreeUser && !isPlatformAllowed) {
+      console.log('[调试] 被阻止：免费版用户尝试使用非抖音平台');
       message.warning('免费版用户仅支持抖音平台，升级套餐后可使用全部平台');
       return;
     }
+
+    console.log('[调试] 通过权限检查，开始登录流程');
 
     try {
       console.log('[前端] 点击平台卡片:', platform.platform_name, platform.platform_id);
@@ -243,13 +267,16 @@ export default function PlatformManagementPage() {
       console.log('[前端] 调用 IPC loginPlatform...');
       const result = await ipcBridge.loginPlatform(platform.platform_id);
       console.log('[前端] IPC返回结果:', result);
+      console.log('[前端] IPC返回结果详情:', JSON.stringify(result, null, 2));
       
       message.destroy('browser-login');
       
       if (result.success) {
+        console.log('[调试] 登录成功');
         message.success('登录成功，Cookie已保存');
         loadData(); // 重新加载数据
       } else {
+        console.log('[调试] 登录失败，message:', result.message, ', error:', result.error);
         message.error(result.message || '登录失败');
       }
     } catch (error: any) {
@@ -260,8 +287,10 @@ export default function PlatformManagementPage() {
         response: error.response,
         stack: error.stack
       });
+      console.log('========== 平台登录调试结束（异常）==========');
       message.error(error.message || '登录失败');
     }
+    console.log('========== 平台登录调试结束 ==========');
   };
 
   // 跳转到落地页套餐购买页面
