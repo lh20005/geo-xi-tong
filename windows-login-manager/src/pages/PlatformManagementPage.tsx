@@ -573,37 +573,43 @@ export default function PlatformManagementPage() {
       </Card>
 
       {/* 账号列表 - 与其他页面表格风格一致 */}
-      {accounts.length > 0 && (
-        <Card
-          title={
-            <Space>
-              <StarFilled style={{ color: '#0ea5e9' }} />
-              <span>账号管理</span>
-            </Space>
-          }
-          variant="borderless"
-        >
-          <ResizableTable<Account>
-            tableId="platform-accounts-list"
-            columns={columns}
-            dataSource={accounts}
-            rowKey="id"
-            scroll={{ x: 920 }}
-            pagination={{
-              current: currentPage,
-              pageSize: pageSize,
-              showSizeChanger: true,
-              showQuickJumper: true,
-              showTotal: (total) => `共 ${total} 个账号`,
-              pageSizeOptions: ['10', '20', '50', '100'],
-              onChange: (page, size) => {
-                setCurrentPage(page);
-                setPageSize(size);
-              }
-            }}
-          />
-        </Card>
-      )}
+      <Card
+        title={
+          <Space>
+            <StarFilled style={{ color: '#0ea5e9' }} />
+            <span>账号管理</span>
+          </Space>
+        }
+        extra={
+          <Button 
+            icon={<ReloadOutlined />} 
+            onClick={loadData}
+          >
+            刷新
+          </Button>
+        }
+        variant="borderless"
+      >
+        <ResizableTable<Account>
+          tableId="platform-accounts-list"
+          columns={columns}
+          dataSource={accounts}
+          rowKey="id"
+          scroll={{ x: 920 }}
+          pagination={{
+            current: currentPage,
+            pageSize: pageSize,
+            showSizeChanger: true,
+            showQuickJumper: true,
+            showTotal: (total) => `共 ${total} 个账号`,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            onChange: (page, size) => {
+              setCurrentPage(page);
+              setPageSize(size);
+            }
+          }}
+        />
+      </Card>
 
       {selectedPlatform && (
         <>
