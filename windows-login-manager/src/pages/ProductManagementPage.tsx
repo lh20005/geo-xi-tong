@@ -27,12 +27,14 @@ interface Plan {
   planCode: string;
   planName: string;
   price: number;
-  billingCycle: 'monthly' | 'yearly';
+  billingCycle: 'monthly' | 'yearly';        // 计费周期（前端价格显示）
+  quotaCycleType: 'monthly' | 'yearly';      // 配额重置周期
   durationDays: number;
+  validityPeriod: 'monthly' | 'yearly' | 'permanent';  // 套餐有效期类型
   isActive: boolean;
   description?: string;
   displayOrder: number;
-  agentDiscountRate?: number;
+  agentDiscountRate?: number; // 代理商折扣比例（1-100）
   features?: PlanFeature[];
   createdAt?: string;
   updatedAt?: string;
@@ -119,6 +121,8 @@ const ProductManagementPage = () => {
       planCode: '',
       price: 0,
       billingCycle: 'monthly',
+      quotaCycleType: 'monthly',
+      validityPeriod: 'monthly',
       durationDays: 30,
       description: '',
       displayOrder: plans.length + 1,
@@ -132,6 +136,8 @@ const ProductManagementPage = () => {
   // 打开编辑模态框
   const handleEdit = (plan: Plan) => {
     console.log('[ProductManagement] 编辑套餐:', plan);
+    console.log('[ProductManagement] 套餐功能配额:', plan.features);
+    
     setCurrentPlan(plan);
     
     // 确保 features 数据完整，并统一单位为 MB
@@ -139,6 +145,7 @@ const ProductManagementPage = () => {
       let featureValue = feature.featureValue;
       let featureUnit = feature.featureUnit;
       
+      // 如果是存储空间且单位是 bytes，转换为 MB
       if (feature.featureCode === 'storage_space' && feature.featureUnit === 'bytes') {
         if (featureValue !== -1) {
           featureValue = Math.round((featureValue / (1024 * 1024)) * 100) / 100;
@@ -154,10 +161,24 @@ const ProductManagementPage = () => {
       };
     });
     
+    console.log('[ProductManagement] 设置表单 features:', features);
+    
+    // 计算 validityPeriod
+    let validityPeriod: 'monthly' | 'yearly' | 'permanent';
+    if (plan.durationDays >= 36500) {
+      validityPeriod = 'permanent';
+    } else if (plan.durationDays >= 365) {
+      validityPeriod = 'yearly';
+    } else {
+      validityPeriod = 'monthly';
+    }
+    
     form.setFieldsValue({
       planName: plan.planName,
       price: plan.price,
       billingCycle: plan.billingCycle,
+      quotaCycleType: plan.quotaCycleType || plan.billingCycle || 'monthly',
+      validityPeriod: validityPeriod,
       description: plan.description,
       displayOrder: plan.displayOrder,
       isActive: plan.isActive,
@@ -414,10 +435,36 @@ const ProductManagementPage = () => {
             label="计费周期"
             name="billingCycle"
             rules={[{ required: true, message: '请选择计费周期' }]}
+            tooltip="用于前端价格显示，如 ¥99/月 或 ¥999/年"
           >
             <Select>
               <Select.Option value="monthly">月付</Select.Option>
               <Select.Option value="yearly">年付</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="套餐重置周期"
+            name="quotaCycleType"
+            rules={[{ required: true, message: '请选择套餐重置周期' }]}
+            tooltip="控制用户配额的重置周期，月度表示每月重置，年度表示每年重置"
+          >
+            <Select>
+              <Select.Option value="monthly">月度（每月重置配额）</Select.Option>
+              <Select.Option value="yearly">年度（每年重置配额）</Select.Option>
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            label="套餐有效期"
+            name="validityPeriod"
+            rules={[{ required: true, message: '请选择套餐有效期' }]}
+            tooltip="套餐购买后的有效期，到期后套餐关闭，恢复到免费版配额"
+          >
+            <Select>
+              <Select.Option value="monthly">月度（30天）</Select.Option>
+              <Select.Option value="yearly">年度（365天）</Select.Option>
+              <Select.Option value="permanent">永久（不过期）</Select.Option>
             </Select>
           </Form.Item>
 
@@ -426,7 +473,7 @@ const ProductManagementPage = () => {
               label="有效天数"
               name="durationDays"
               rules={[{ required: true, message: '请输入有效天数' }]}
-              tooltip="套餐购买后的有效期，单位：天"
+              tooltip="套餐购买后的有效期，单位：天（选择套餐有效期后会自动计算）"
             >
               <InputNumber min={1} style={{ width: '100%' }} placeholder="例如：30" />
             </Form.Item>
