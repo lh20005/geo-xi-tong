@@ -283,23 +283,6 @@ const UserCenterPage = () => {
     }
   };
 
-  const handleToggleAutoRenew = async () => {
-    if (!subscription) return;
-
-    try {
-      const response = await apiClient.put('/subscription/auto-renew', {
-        auto_renew: !subscription.auto_renew
-      });
-
-      if (response.data.success) {
-        message.success(response.data.message);
-        fetchSubscription();
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '操作失败');
-    }
-  };
-
   // 跳转到落地页套餐购买页面
   const handleNavigateToPricing = () => {
     const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
@@ -424,17 +407,9 @@ const UserCenterPage = () => {
                 loading={loading}
                 extra={
                   subscription ? (
-                    <Space>
-                      <Button
-                        type={subscription.auto_renew ? 'default' : 'primary'}
-                        onClick={handleToggleAutoRenew}
-                      >
-                        {subscription.auto_renew ? '关闭自动续费' : '开启自动续费'}
-                      </Button>
-                      <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
-                        升级套餐
-                      </Button>
-                    </Space>
+                    <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
+                      升级套餐
+                    </Button>
                   ) : (
                     <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
                       查看套餐
@@ -444,7 +419,7 @@ const UserCenterPage = () => {
               >
                 {subscription ? (
                   <Row gutter={16}>
-                    <Col span={6}>
+                    <Col span={8}>
                       <Statistic
                         title="当前套餐"
                         value={subscription.plan_name}
@@ -452,7 +427,7 @@ const UserCenterPage = () => {
                         prefix={<CrownOutlined />}
                       />
                     </Col>
-                    <Col span={6}>
+                    <Col span={8}>
                       <Statistic
                         title="到期时间"
                         value={daysUntilExpiry > 36000 ? '永久有效' : new Date(subscription.end_date).toLocaleDateString('zh-CN')}
@@ -464,18 +439,11 @@ const UserCenterPage = () => {
                         </Tag>
                       )}
                     </Col>
-                    <Col span={6}>
+                    <Col span={8}>
                       <Statistic
                         title="订阅状态"
                         value={subscription.status === 'active' ? '正常' : '已过期'}
                         valueStyle={{ color: subscription.status === 'active' ? '#3f8600' : '#cf1322' }}
-                      />
-                    </Col>
-                    <Col span={6}>
-                      <Statistic
-                        title="自动续费"
-                        value={subscription.auto_renew ? '已开启' : '已关闭'}
-                        valueStyle={{ color: subscription.auto_renew ? '#3f8600' : '#8c8c8c' }}
                       />
                     </Col>
                   </Row>
