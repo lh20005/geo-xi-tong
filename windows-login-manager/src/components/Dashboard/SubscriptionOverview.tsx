@@ -87,6 +87,14 @@ export const SubscriptionOverview: React.FC = () => {
     return value.toLocaleString();
   };
 
+  // 判断是否为永久有效（日期超过50年视为永久）
+  const isPermanent = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const yearsDiff = date.getFullYear() - now.getFullYear();
+    return yearsDiff > 50;
+  };
+
   if (loading) {
     return (
       <Card style={{ borderRadius: 8, marginBottom: 16 }}>
@@ -110,7 +118,7 @@ export const SubscriptionOverview: React.FC = () => {
           <Text strong style={{ fontSize: 15 }}>{subscription?.plan_name || '免费版'}</Text>
           {subscription?.status === 'active' && subscription?.end_date && (
             <Text type="secondary" style={{ fontSize: 12 }}>
-              · 有效期至 {new Date(subscription.end_date).toLocaleDateString('zh-CN')}
+              · {isPermanent(subscription.end_date) ? '永久有效' : `有效期至 ${new Date(subscription.end_date).toLocaleDateString('zh-CN')}`}
             </Text>
           )}
         </Space>
