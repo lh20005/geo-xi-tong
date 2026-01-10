@@ -98,7 +98,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
               boxShadow: 'none', display: 'flex', alignItems: 'center', lineHeight: 1
             }} />
           </Space>
-          <Button type="link" style={{ color: ACCENT_BLUE, padding: 0, fontSize: 13 }} onClick={handleGoToAgentCenter}>
+          <Button type="link" style={{ color: ACCENT_GOLD, padding: 0, fontSize: 13 }} onClick={handleGoToAgentCenter}>
             查看详情 <ArrowRightOutlined />
           </Button>
         </div>

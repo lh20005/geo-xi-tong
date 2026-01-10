@@ -130,7 +130,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
           </Space>
           <Button 
             type="link" 
-            style={{ color: ACCENT_BLUE, padding: 0, fontSize: 13 }}
+            style={{ color: ACCENT_GOLD, padding: 0, fontSize: 13 }}
             onClick={handleGoToAgentCenter}
           >
             查看详情 <ArrowRightOutlined />
