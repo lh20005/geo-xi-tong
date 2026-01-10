@@ -19,8 +19,8 @@ import { Agent, AgentStats, getAgentStatus, getAgentStats } from '../../api/agen
 
 const { Text, Title } = Typography;
 
-// 基于项目主色 #1890ff 的深色方案
-const PANEL_BG = 'linear-gradient(135deg, #001529 0%, #002140 100%)';  // Ant Design 深蓝色
+// 基于侧边栏的深色方案
+const PANEL_BG = 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)';  // 与侧边栏一致
 const CARD_BG = 'rgba(255, 255, 255, 0.06)';  // 卡片背景
 const CARD_BORDER = 'rgba(255, 255, 255, 0.08)';  // 卡片边框
 const ACCENT_GOLD = '#fadb14';  // Ant Design 金色 - 主要数字
@@ -283,7 +283,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
       style={{
         marginBottom: 24,
         borderRadius: 12,
-        background: 'linear-gradient(135deg, #001529 0%, #002140 100%)',
+        background: PANEL_BG,
         border: 'none',
         position: 'relative',
         overflow: 'hidden'
@@ -336,7 +336,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
               <CrownOutlined style={{ fontSize: 28, color: '#fff' }} />
             </div>
             <div>
-              <Title level={4} style={{ margin: 0, marginBottom: 4, color: '#fff' }}>
+              <Title level={4} style={{ margin: 0, marginBottom: 4, color: ACCENT_GOLD }}>
                 开启代理商模式，轻松躺赚
               </Title>
               <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>

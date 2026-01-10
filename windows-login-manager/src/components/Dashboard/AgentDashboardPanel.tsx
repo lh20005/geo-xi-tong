@@ -19,8 +19,8 @@ import { Agent, AgentStats, getAgentStatus, getAgentStats } from '../../api/agen
 
 const { Text, Title } = Typography;
 
-// 基于项目主色 #1890ff 的深色方案
-const PANEL_BG = 'linear-gradient(135deg, #001529 0%, #002140 100%)';
+// 基于侧边栏的深色方案
+const PANEL_BG = 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)';
 const CARD_BG = 'rgba(255, 255, 255, 0.06)';
 const CARD_BORDER = 'rgba(255, 255, 255, 0.08)';
 const ACCENT_GOLD = '#fadb14';
@@ -186,7 +186,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
   // 未开通代理商 - 显示引导面板
   return (
     <Card
-      style={{ marginBottom: 24, borderRadius: 12, background: 'linear-gradient(135deg, #001529 0%, #002140 100%)', border: 'none', position: 'relative', overflow: 'hidden' }}
+      style={{ marginBottom: 24, borderRadius: 12, background: PANEL_BG, border: 'none', position: 'relative', overflow: 'hidden' }}
       styles={{ body: { padding: 0 } }}
     >
       <div style={{ position: 'absolute', top: -80, right: -80, width: 250, height: 250, background: 'radial-gradient(circle, rgba(24, 144, 255, 0.15) 0%, transparent 70%)', borderRadius: '50%' }} />
@@ -199,7 +199,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
               <CrownOutlined style={{ fontSize: 28, color: '#fff' }} />
             </div>
             <div>
-              <Title level={4} style={{ margin: 0, marginBottom: 4, color: '#fff' }}>开启代理商模式，轻松躺赚</Title>
+              <Title level={4} style={{ margin: 0, marginBottom: 4, color: ACCENT_GOLD }}>开启代理商模式，轻松躺赚</Title>
               <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>邀请好友使用 GEO 系统，每笔订单您都能获得 30% 佣金，T+1 自动到账微信零钱</Text>
             </div>
           </Space>

@@ -80,7 +80,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
 
   const menuItems = [
     {
-      key: '/',
+      key: '/dashboard',
       icon: <DashboardOutlined />,
       label: '工作台',
     },
