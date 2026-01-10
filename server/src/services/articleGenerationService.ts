@@ -427,9 +427,9 @@ export class ArticleGenerationService {
         gt.distillation_keyword as keyword,
         d.provider,
         (
-          SELECT STRING_AGG(t.question, '|||' ORDER BY a.id)
+          SELECT STRING_AGG(COALESCE(a.topic_question_snapshot, t.question), '|||' ORDER BY a.id)
           FROM articles a
-          INNER JOIN topics t ON a.topic_id = t.id
+          LEFT JOIN topics t ON a.topic_id = t.id
           WHERE a.task_id = gt.id
         ) as distillation_result
        FROM generation_tasks gt
@@ -507,9 +507,9 @@ export class ArticleGenerationService {
         gt.distillation_keyword as keyword,
         d.provider,
         (
-          SELECT STRING_AGG(DISTINCT t.question, ', ' ORDER BY t.question)
+          SELECT STRING_AGG(DISTINCT COALESCE(a.topic_question_snapshot, t.question), ', ' ORDER BY COALESCE(a.topic_question_snapshot, t.question))
           FROM articles a
-          INNER JOIN topics t ON a.topic_id = t.id
+          LEFT JOIN topics t ON a.topic_id = t.id
           WHERE a.task_id = gt.id
         ) as distillation_result
        FROM generation_tasks gt

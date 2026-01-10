@@ -26,12 +26,13 @@ export class PublishingExecutor {
       await client.query('BEGIN');
       
       // 1. 获取文章完整信息（包括关联数据）用于快照
+      // 优先使用文章表的快照字段，确保即使蒸馏结果被删除也能获取数据
       const articleResult = await client.query(
         `SELECT 
           a.id, a.title, a.content, a.keyword, a.image_url, a.image_id,
           a.distillation_id, a.topic_id, a.task_id,
-          t.question as topic_question,
-          d.keyword as distillation_keyword,
+          COALESCE(a.topic_question_snapshot, t.question) as topic_question,
+          COALESCE(a.distillation_keyword_snapshot, d.keyword) as distillation_keyword,
           COALESCE(gt.article_setting_name, ast.name) as article_setting_name
          FROM articles a
          LEFT JOIN topics t ON a.topic_id = t.id

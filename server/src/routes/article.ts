@@ -482,7 +482,7 @@ articleRouter.get('/', async (req, res) => {
     const total = parseInt(countResult.rows[0].count);
 
     // 获取文章列表
-    // 优先使用话题表的keyword快照字段，删除蒸馏记录后仍能显示关键词
+    // 优先使用文章表的快照字段，删除蒸馏记录后仍能显示关键词和话题
     queryParams.push(pageSize, offset);
     const result = await pool.query(
       `SELECT 
@@ -490,9 +490,9 @@ articleRouter.get('/', async (req, res) => {
         a.title,
         a.keyword,
         a.distillation_id,
-        t.keyword as distillation_keyword,
+        COALESCE(a.distillation_keyword_snapshot, t.keyword) as distillation_keyword,
         a.topic_id,
-        t.question as topic_question,
+        COALESCE(a.topic_question_snapshot, t.question) as topic_question,
         a.task_id,
         gt.conversion_target_id,
         gt.conversion_target_name,
@@ -549,16 +549,16 @@ articleRouter.get('/:id', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const { id } = req.params;
     
-    // 完全解耦：直接使用快照字段
+    // 优先使用文章表的快照字段，删除蒸馏记录后仍能显示关键词和话题
     const result = await pool.query(
       `SELECT 
         a.id,
         a.title,
         a.keyword,
         a.distillation_id,
-        t.keyword as distillation_keyword,
+        COALESCE(a.distillation_keyword_snapshot, t.keyword) as distillation_keyword,
         a.topic_id,
-        t.question as topic_question,
+        COALESCE(a.topic_question_snapshot, t.question) as topic_question,
         a.task_id,
         gt.conversion_target_id,
         gt.conversion_target_name,
