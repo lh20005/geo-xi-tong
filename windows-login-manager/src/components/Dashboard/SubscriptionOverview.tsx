@@ -130,7 +130,7 @@ export const SubscriptionOverview: React.FC = () => {
       <Row gutter={[16, 12]}>
         {mainFeatures.map((feature) => (
           <Col xs={24} sm={8} key={feature.feature_code}>
-            <div style={{ background: '#fafafa', borderRadius: 8, padding: '12px 16px' }}>
+            <div style={{ background: '#fafafa', borderRadius: 8, padding: '12px 16px', border: '1px solid #52c41a' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                 <Space size={6}>
                   {getFeatureIcon(feature.feature_code)}

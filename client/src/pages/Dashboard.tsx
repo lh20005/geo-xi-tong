@@ -92,7 +92,7 @@ export default function Dashboard() {
   const handleQuickAction = (type: string) => {
     switch (type) {
       case 'distillations':
-        navigate('/distillation-results');
+        navigate('/distillation');
         break;
       case 'articles':
         navigate('/articles');

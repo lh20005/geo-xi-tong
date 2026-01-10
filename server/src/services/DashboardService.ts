@@ -288,24 +288,26 @@ export class DashboardService {
     const client = await pool.connect();
     
     try {
-      // 查询蒸馏使用情况
+      // 查询蒸馏使用情况（添加 user_id 过滤）
       const distillationsQuery = `
         SELECT 
           COUNT(*) AS total,
           COUNT(*) FILTER (WHERE usage_count > 0) AS used
         FROM distillations
+        WHERE user_id = $1
       `;
-      const distillationsResult = await client.query(distillationsQuery);
+      const distillationsResult = await client.query(distillationsQuery, [userId]);
       const distillations = distillationsResult.rows[0];
 
-      // 查询话题使用情况
+      // 查询话题使用情况（添加 user_id 过滤）
       const topicsQuery = `
         SELECT 
           COUNT(*) AS total,
           COUNT(*) FILTER (WHERE usage_count > 0) AS used
         FROM topics
+        WHERE user_id = $1
       `;
-      const topicsResult = await client.query(topicsQuery);
+      const topicsResult = await client.query(topicsQuery, [userId]);
       const topics = topicsResult.rows[0];
 
       // 查询图片使用情况

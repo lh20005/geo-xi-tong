@@ -116,7 +116,7 @@ export const QuickStatsCards: React.FC<QuickStatsCardsProps> = ({
             size="small"
             hoverable
             onClick={() => onCardClick?.(card.key)}
-            style={{ borderRadius: 8, cursor: 'pointer', transition: 'all 0.3s', height: '100%' }}
+            style={{ borderRadius: 8, cursor: 'pointer', transition: 'all 0.3s', height: '100%', border: '1px solid #52c41a' }}
             bodyStyle={{ padding: '14px 16px' }}
           >
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>

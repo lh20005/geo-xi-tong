@@ -93,8 +93,9 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
             <TrophyOutlined style={{ fontSize: 18, color: ACCENT_GOLD }} />
             <Text style={{ color: '#fff', fontSize: 15, fontWeight: 600 }}>代理商中心</Text>
             <Badge count="已认证" style={{ 
-              backgroundColor: 'rgba(24, 144, 255, 0.15)', color: ACCENT_BLUE,
-              fontSize: 11, fontWeight: 500, border: `1px solid rgba(64, 169, 255, 0.4)`
+              backgroundColor: 'rgba(250, 219, 20, 0.15)', color: ACCENT_GOLD,
+              fontSize: 11, fontWeight: 500, border: `1px solid ${ACCENT_GOLD}`,
+              boxShadow: 'none', display: 'flex', alignItems: 'center', lineHeight: 1
             }} />
           </Space>
           <Button type="link" style={{ color: ACCENT_BLUE, padding: 0, fontSize: 13 }} onClick={handleGoToAgentCenter}>
@@ -105,7 +106,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
         <div style={{ padding: '16px 24px 20px' }}>
           <Row gutter={[16, 16]}>
             <Col xs={24} sm={12} lg={6}>
-              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${CARD_BORDER}` }}>
+              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${ACCENT_GOLD}` }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
                     <DollarOutlined style={{ marginRight: 6, color: ACCENT_GOLD }} />累计收益
@@ -123,7 +124,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
             </Col>
 
             <Col xs={24} sm={12} lg={6}>
-              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${CARD_BORDER}` }}>
+              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${ACCENT_GOLD}` }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
                     <ClockCircleOutlined style={{ marginRight: 6, color: '#faad14' }} />待结算
@@ -137,7 +138,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
             </Col>
 
             <Col xs={24} sm={12} lg={6}>
-              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${CARD_BORDER}` }}>
+              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${ACCENT_GOLD}` }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
                     <TeamOutlined style={{ marginRight: 6, color: ACCENT_BLUE }} />邀请用户
@@ -156,7 +157,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
             </Col>
 
             <Col xs={24} sm={12} lg={6}>
-              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${CARD_BORDER}` }}>
+              <div style={{ background: CARD_BG, borderRadius: 10, padding: '16px 18px', height: '100%', minHeight: 110, border: `1px solid ${ACCENT_GOLD}` }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
                     <RiseOutlined style={{ marginRight: 6, color: ACCENT_BLUE }} />转化率

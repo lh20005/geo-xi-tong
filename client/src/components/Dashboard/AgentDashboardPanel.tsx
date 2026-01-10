@@ -116,11 +116,15 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
             <Badge 
               count="已认证" 
               style={{ 
-                backgroundColor: 'rgba(24, 144, 255, 0.15)',
-                color: ACCENT_BLUE,
+                backgroundColor: 'rgba(250, 219, 20, 0.15)',
+                color: ACCENT_GOLD,
                 fontSize: 11,
                 fontWeight: 500,
-                border: `1px solid rgba(64, 169, 255, 0.4)`
+                border: `1px solid ${ACCENT_GOLD}`,
+                boxShadow: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                lineHeight: 1
               }} 
             />
           </Space>
@@ -144,7 +148,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
                 padding: '16px 18px',
                 height: '100%',
                 minHeight: 110,
-                border: `1px solid ${CARD_BORDER}`,
+                border: `1px solid ${ACCENT_GOLD}`,
                 transition: 'all 0.3s',
               }}>
                 <div style={{ marginBottom: 8 }}>
@@ -177,7 +181,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
                 padding: '16px 18px',
                 height: '100%',
                 minHeight: 110,
-                border: `1px solid ${CARD_BORDER}`
+                border: `1px solid ${ACCENT_GOLD}`
               }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
@@ -206,7 +210,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
                 padding: '16px 18px',
                 height: '100%',
                 minHeight: 110,
-                border: `1px solid ${CARD_BORDER}`
+                border: `1px solid ${ACCENT_GOLD}`
               }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>
@@ -237,7 +241,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
                 padding: '16px 18px',
                 height: '100%',
                 minHeight: 110,
-                border: `1px solid ${CARD_BORDER}`
+                border: `1px solid ${ACCENT_GOLD}`
               }}>
                 <div style={{ marginBottom: 8 }}>
                   <Text style={{ color: 'rgba(255,255,255,0.65)', fontSize: 12 }}>

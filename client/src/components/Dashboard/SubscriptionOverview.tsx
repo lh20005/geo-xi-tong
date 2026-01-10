@@ -152,7 +152,8 @@ export const SubscriptionOverview: React.FC = () => {
             <div style={{ 
               background: '#fafafa', 
               borderRadius: 8, 
-              padding: '12px 16px' 
+              padding: '12px 16px',
+              border: '1px solid #52c41a'
             }}>
               <div style={{ 
                 display: 'flex', 

@@ -120,7 +120,8 @@ export const QuickStatsCards: React.FC<QuickStatsCardsProps> = ({
               borderRadius: 8,
               cursor: 'pointer',
               transition: 'all 0.3s',
-              height: '100%'
+              height: '100%',
+              border: '1px solid #52c41a'
             }}
             bodyStyle={{ padding: '14px 16px' }}
           >
