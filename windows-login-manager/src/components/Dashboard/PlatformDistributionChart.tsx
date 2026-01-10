@@ -38,19 +38,29 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
     },
     grid: {
       left: '3%',
-      right: '4%',
-      bottom: '3%',
+      right: '12%',
+      bottom: '8%',
+      top: '10%',
       containLabel: true
     },
     xAxis: {
       type: 'value',
-      name: '发布数量'
+      name: '发布数量',
+      nameLocation: 'end',
+      nameGap: 5,
+      nameTextStyle: {
+        color: '#8c8c8c',
+        fontSize: 12,
+        padding: [0, 0, 0, 0]
+      }
     },
     yAxis: {
       type: 'category',
       data: platforms,
       axisLabel: {
-        interval: 0
+        interval: 0,
+        color: '#595959',
+        fontSize: 12
       }
     },
     series: [
@@ -75,8 +85,12 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
         label: {
           show: true,
           position: 'right',
-          formatter: '{c}'
-        }
+          formatter: '{c}',
+          color: '#595959',
+          fontSize: 12,
+          fontWeight: 500
+        },
+        barMaxWidth: 30
       }
     ]
   };

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar } from 'antd';
 import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { API_BASE_URL } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
@@ -70,6 +71,7 @@ interface PasswordFormValues {
 }
 
 const UserCenterPage = () => {
+  const location = useLocation();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usageStats, setUsageStats] = useState<UsageStats[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -79,7 +81,9 @@ const UserCenterPage = () => {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
   const [passwordForm] = Form.useForm();
-  const [activeTab, setActiveTab] = useState('subscription');
+  // 从 location.state 获取初始 Tab，支持从 Dashboard 跳转
+  const initialTab = (location.state as any)?.activeTab || 'subscription';
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [passwordLoading, setPasswordLoading] = useState(false);
   
   // 存储相关状态

@@ -1,3 +1,8 @@
+/**
+ * 工作台页面
+ * 重新设计的专业数据仪表盘，包含代理商视图、核心指标、数据分析等
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { Row, Col, Typography, Button, Space, message, DatePicker, Select, Card, Divider } from 'antd';
 import { 
@@ -6,11 +11,16 @@ import {
   FileTextOutlined, 
   RocketOutlined,
   BarChartOutlined,
-  DashboardOutlined
+  DashboardOutlined,
+  SettingOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs, { Dayjs } from 'dayjs';
-import MetricsCards from '../components/Dashboard/MetricsCards';
+
+// Dashboard 组件
+import AgentDashboardPanel from '../components/Dashboard/AgentDashboardPanel';
+import SubscriptionOverview from '../components/Dashboard/SubscriptionOverview';
+import QuickStatsCards from '../components/Dashboard/QuickStatsCards';
 import TrendsChart from '../components/Dashboard/TrendsChart';
 import PublishingStatusChart from '../components/Dashboard/PublishingStatusChart';
 import PlatformDistributionChart from '../components/Dashboard/PlatformDistributionChart';
@@ -19,6 +29,7 @@ import ArticleStatsChart from '../components/Dashboard/ArticleStatsChart';
 import KeywordDistributionChart from '../components/Dashboard/KeywordDistributionChart';
 import MonthlyComparisonChart from '../components/Dashboard/MonthlyComparisonChart';
 import HourlyActivityChart from '../components/Dashboard/HourlyActivityChart';
+
 import { getAllDashboardData } from '../api/dashboard';
 import type { TimeRange } from '../types/dashboard';
 
@@ -75,6 +86,28 @@ export default function Dashboard() {
     }
 
     setTimeRange({ startDate, endDate, preset });
+  };
+
+  // 快捷操作点击
+  const handleQuickAction = (type: string) => {
+    switch (type) {
+      case 'distillations':
+        navigate('/distillation-results');
+        break;
+      case 'articles':
+        navigate('/articles');
+        break;
+      case 'tasks':
+      case 'successRate':
+        navigate('/publishing-tasks');
+        break;
+      case 'knowledge':
+        navigate('/distillation-results');
+        break;
+      case 'images':
+        navigate('/gallery');
+        break;
+    }
   };
 
   return (
@@ -159,14 +192,20 @@ export default function Dashboard() {
         margin: '0 auto', 
         padding: '24px 32px 32px' 
       }}>
+        {/* 代理商视图面板 - 顶部醒目位置 */}
+        <AgentDashboardPanel onRefresh={loadData} />
+
+        {/* 订阅概览 */}
+        <SubscriptionOverview />
+
         {/* 快捷操作区 */}
         <Card 
           style={{ 
-            marginBottom: 24,
+            marginBottom: 16,
             borderRadius: 8,
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
           }}
-          bodyStyle={{ padding: '20px 24px' }}
+          bodyStyle={{ padding: '16px 20px' }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text strong style={{ fontSize: 15, color: '#262626' }}>快捷操作</Text>
@@ -193,25 +232,31 @@ export default function Dashboard() {
               >
                 发布任务
               </Button>
+              <Button 
+                icon={<SettingOutlined />}
+                onClick={() => navigate('/user-center')}
+                style={{ borderRadius: 6 }}
+              >
+                个人中心
+              </Button>
             </Space>
           </div>
         </Card>
 
-        {/* 核心指标卡片 */}
-        <MetricsCards
-          data={dashboardData?.metrics}
-          loading={loading}
-          onCardClick={(type) => {
-            if (type === 'distillations') navigate('/distillation-results');
-            if (type === 'articles') navigate('/articles');
-            if (type === 'tasks') navigate('/publishing-tasks');
-          }}
-        />
+        {/* 核心数据概览 - 6个小卡片 */}
+        <div style={{ marginBottom: 16 }}>
+          <QuickStatsCards 
+            metrics={dashboardData?.metrics}
+            resourceUsage={dashboardData?.resourceUsage}
+            loading={loading}
+            onCardClick={handleQuickAction}
+          />
+        </div>
 
         {/* 数据分析区域标题 */}
         <Divider orientation="left" style={{ 
-          marginTop: 32, 
-          marginBottom: 24,
+          marginTop: 24, 
+          marginBottom: 20,
           fontSize: 16,
           fontWeight: 600,
           color: '#262626'
@@ -220,7 +265,7 @@ export default function Dashboard() {
           数据分析与趋势
         </Divider>
 
-        {/* 第一行：趋势图和文章统计 */}
+        {/* 第二行：趋势图和文章统计 */}
         <Row gutter={[16, 16]}>
           <Col xs={24} xl={16}>
             <TrendsChart data={dashboardData?.trends} loading={loading} />
@@ -230,21 +275,21 @@ export default function Dashboard() {
           </Col>
         </Row>
 
-        {/* 第二行：月度对比 */}
+        {/* 第三行：月度对比 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24}>
             <MonthlyComparisonChart data={dashboardData?.monthlyComparison} loading={loading} />
           </Col>
         </Row>
 
-        {/* 第三行：资源效率 */}
+        {/* 第四行：资源效率 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24}>
             <ResourceEfficiencyChart data={dashboardData?.resourceUsage} loading={loading} />
           </Col>
         </Row>
 
-        {/* 第四行：发布状态和平台分布 */}
+        {/* 第五行：发布状态和平台分布 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} lg={12}>
             <PublishingStatusChart data={dashboardData?.publishingStatus} loading={loading} />
@@ -254,14 +299,14 @@ export default function Dashboard() {
           </Col>
         </Row>
 
-        {/* 第五行：关键词分布 */}
+        {/* 第六行：关键词分布 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24}>
             <KeywordDistributionChart data={dashboardData?.keywordDistribution} loading={loading} />
           </Col>
         </Row>
 
-        {/* 第六行：24小时活动热力图 */}
+        {/* 第七行：24小时活动热力图 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24}>
             <HourlyActivityChart data={dashboardData?.hourlyActivity} loading={loading} />

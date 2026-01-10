@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar } from 'antd';
 import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import { StorageUsageCard } from '../components/Storage/StorageUsageCard';
@@ -68,6 +69,7 @@ interface PasswordFormValues {
 }
 
 const UserCenterPage = () => {
+  const location = useLocation();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usageStats, setUsageStats] = useState<UsageStats[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -89,6 +91,14 @@ const UserCenterPage = () => {
   const [isAgent, setIsAgent] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
+
+  // 从路由状态读取 activeTab
+  useEffect(() => {
+    const state = location.state as { activeTab?: string } | null;
+    if (state?.activeTab) {
+      setActiveTab(state.activeTab);
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const loadAllData = async () => {

@@ -51,14 +51,21 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
     },
     grid: {
       left: '3%',
-      right: '8%',
-      bottom: '3%',
+      right: '12%',
+      bottom: '8%',
       top: '10%',
       containLabel: true
     },
     xAxis: {
       type: 'value',
       name: '发布数量',
+      nameLocation: 'end',
+      nameGap: 5,
+      nameTextStyle: {
+        color: '#8c8c8c',
+        fontSize: 12,
+        padding: [0, 0, 0, 0]
+      },
       ...axisStyle
     },
     yAxis: {

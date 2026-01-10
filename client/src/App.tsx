@@ -91,7 +91,7 @@ function App() {
     const wsService = getUserWebSocketService();
 
     // Connect to WebSocket (with graceful error handling)
-    wsService.connect().catch((error) => {
+    wsService.connect().catch((_error) => {
       // Silently handle connection errors - WebSocket is not critical for basic functionality
       console.warn('[Client] WebSocket connection failed - real-time updates will be unavailable');
     });

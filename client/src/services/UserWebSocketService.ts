@@ -79,7 +79,7 @@ export class UserWebSocketService {
           }
         };
 
-        this.ws.onerror = (error) => {
+        this.ws.onerror = (_error) => {
           console.warn('[UserWebSocket] Connection error - this is normal if server is not running');
           this.isConnecting = false;
           // Don't reject immediately, let onclose handle reconnection

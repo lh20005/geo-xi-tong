@@ -9,8 +9,7 @@ import {
   TeamOutlined, 
   CheckCircleOutlined,
   ClockCircleOutlined,
-  ReloadOutlined,
-  WechatOutlined
+  ReloadOutlined
 } from '@ant-design/icons';
 import { Agent, AgentStats, getAgentStats } from '../../api/agent';
 import WechatBindCard from './WechatBindCard';
