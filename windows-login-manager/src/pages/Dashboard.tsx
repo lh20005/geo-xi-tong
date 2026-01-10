@@ -30,7 +30,7 @@ import KeywordDistributionChart from '../components/Dashboard/KeywordDistributio
 import MonthlyComparisonChart from '../components/Dashboard/MonthlyComparisonChart';
 import HourlyActivityChart from '../components/Dashboard/HourlyActivityChart';
 
-import { ipcBridge } from '../services/ipc';
+import { getAllDashboardData } from '../api/dashboard';
 import type { TimeRange } from '../types/dashboard';
 
 const { Title, Text } = Typography;
@@ -52,14 +52,12 @@ export default function Dashboard() {
     setLoading(true);
     
     try {
-      const res = await ipcBridge.getDashboardAllData({
+      const data = await getAllDashboardData({
         startDate: timeRange.startDate,
         endDate: timeRange.endDate
       });
 
-      if (!res.success) throw new Error(res.error || '加载失败');
-      
-      setDashboardData(res.data);
+      setDashboardData(data);
       setLastUpdate(new Date());
       setLoading(false);
     } catch (error) {

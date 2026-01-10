@@ -1,6 +1,7 @@
 import ReactECharts from 'echarts-for-react';
 import { Card, Empty, Spin } from 'antd';
 import type { PlatformDistributionData } from '../../types/dashboard';
+import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
 
 interface PlatformDistributionChartProps {
   data: PlatformDistributionData | null;
@@ -10,7 +11,10 @@ interface PlatformDistributionChartProps {
 export default function PlatformDistributionChart({ data, loading }: PlatformDistributionChartProps) {
   if (loading) {
     return (
-      <Card title="发布平台分布">
+      <Card 
+        title={<span style={cardTitleStyle}>发布平台分布</span>}
+        style={cardStyle}
+      >
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
         </div>
@@ -20,7 +24,10 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
 
   if (!data || data.data.length === 0) {
     return (
-      <Card title="发布平台分布">
+      <Card 
+        title={<span style={cardTitleStyle}>发布平台分布</span>}
+        style={cardStyle}
+      >
         <Empty description="暂无数据" />
       </Card>
     );
@@ -34,6 +41,12 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
       trigger: 'axis',
       axisPointer: {
         type: 'shadow'
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e8e8e8',
+      borderWidth: 1,
+      textStyle: {
+        color: '#262626'
       }
     },
     grid: {
@@ -52,7 +65,8 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
         color: '#8c8c8c',
         fontSize: 12,
         padding: [0, 0, 0, 0]
-      }
+      },
+      ...axisStyle
     },
     yAxis: {
       type: 'category',
@@ -61,6 +75,11 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
         interval: 0,
         color: '#595959',
         fontSize: 12
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#e8e8e8'
+        }
       }
     },
     series: [
@@ -76,11 +95,11 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
             x2: 1,
             y2: 0,
             colorStops: [
-              { offset: 0, color: '#4facfe' },
-              { offset: 1, color: '#00f2fe' }
+              { offset: 0, color: colors.cyan },
+              { offset: 1, color: '#36cfc9' }
             ]
           },
-          borderRadius: [0, 5, 5, 0]
+          borderRadius: [0, 6, 6, 0]
         },
         label: {
           show: true,
@@ -96,8 +115,11 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
   };
 
   return (
-    <Card title="发布平台分布">
-      <ReactECharts option={option} style={{ height: '300px' }} />
+    <Card 
+      title={<span style={cardTitleStyle}>发布平台分布</span>}
+      style={cardStyle}
+    >
+      <ReactECharts option={option} style={{ height: '320px' }} />
     </Card>
   );
 }

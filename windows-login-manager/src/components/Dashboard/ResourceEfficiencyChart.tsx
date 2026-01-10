@@ -1,6 +1,7 @@
 import ReactECharts from 'echarts-for-react';
 import { Card, Empty, Spin } from 'antd';
 import type { ResourceUsageData } from '../../types/dashboard';
+import { cardStyle, cardTitleStyle, colors } from './chartStyles';
 
 interface ResourceEfficiencyChartProps {
   data: ResourceUsageData | null;
@@ -10,7 +11,10 @@ interface ResourceEfficiencyChartProps {
 export default function ResourceEfficiencyChart({ data, loading }: ResourceEfficiencyChartProps) {
   if (loading) {
     return (
-      <Card title="资源使用效率">
+      <Card 
+        title={<span style={cardTitleStyle}>资源使用效率</span>}
+        style={cardStyle}
+      >
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
         </div>
@@ -20,7 +24,10 @@ export default function ResourceEfficiencyChart({ data, loading }: ResourceEffic
 
   if (!data) {
     return (
-      <Card title="资源使用效率">
+      <Card 
+        title={<span style={cardTitleStyle}>资源使用效率</span>}
+        style={cardStyle}
+      >
         <Empty description="暂无数据" />
       </Card>
     );
@@ -34,6 +41,12 @@ export default function ResourceEfficiencyChart({ data, loading }: ResourceEffic
   const topicPercent = calculatePercentage(data.topics.used, data.topics.total);
   const imagePercent = calculatePercentage(data.images.used, data.images.total);
 
+  const getColor = (percent: number) => {
+    if (percent < 30) return colors.success;
+    if (percent < 70) return colors.warning;
+    return colors.error;
+  };
+
   const option = {
     tooltip: {
       trigger: 'axis',
@@ -42,25 +55,53 @@ export default function ResourceEfficiencyChart({ data, loading }: ResourceEffic
       },
       formatter: (params: any) => {
         const item = params[0];
-        return `${item.name}<br/>使用率: ${item.value}%`;
+        const resourceData = [
+          { used: data.distillations.used, total: data.distillations.total },
+          { used: data.topics.used, total: data.topics.total },
+          { used: data.images.used, total: data.images.total }
+        ];
+        const resource = resourceData[item.dataIndex];
+        return `${item.name}<br/>使用率: ${item.value}%<br/>已用/总量: ${resource.used}/${resource.total}`;
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e8e8e8',
+      borderWidth: 1,
+      textStyle: {
+        color: '#262626'
       }
     },
     grid: {
       left: '3%',
-      right: '4%',
+      right: '12%',
       bottom: '3%',
+      top: '10%',
       containLabel: true
     },
     xAxis: {
       type: 'value',
       max: 100,
       axisLabel: {
-        formatter: '{value}%'
+        formatter: '{value}%',
+        color: '#8c8c8c'
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#f0f0f0'
+        }
       }
     },
     yAxis: {
       type: 'category',
-      data: ['蒸馏结果', '话题', '图片']
+      data: ['蒸馏结果', '话题', '图片'],
+      axisLabel: {
+        color: '#595959',
+        fontSize: 12
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#e8e8e8'
+        }
+      }
     },
     series: [
       {
@@ -70,22 +111,22 @@ export default function ResourceEfficiencyChart({ data, loading }: ResourceEffic
           {
             value: parseFloat(distillationPercent),
             itemStyle: {
-              color: parseFloat(distillationPercent) < 30 ? '#52c41a' :
-                     parseFloat(distillationPercent) < 70 ? '#faad14' : '#ff4d4f'
+              color: getColor(parseFloat(distillationPercent)),
+              borderRadius: [0, 6, 6, 0]
             }
           },
           {
             value: parseFloat(topicPercent),
             itemStyle: {
-              color: parseFloat(topicPercent) < 30 ? '#52c41a' :
-                     parseFloat(topicPercent) < 70 ? '#faad14' : '#ff4d4f'
+              color: getColor(parseFloat(topicPercent)),
+              borderRadius: [0, 6, 6, 0]
             }
           },
           {
             value: parseFloat(imagePercent),
             itemStyle: {
-              color: parseFloat(imagePercent) < 30 ? '#52c41a' :
-                     parseFloat(imagePercent) < 70 ? '#faad14' : '#ff4d4f'
+              color: getColor(parseFloat(imagePercent)),
+              borderRadius: [0, 6, 6, 0]
             }
           }
         ],
@@ -100,16 +141,22 @@ export default function ResourceEfficiencyChart({ data, loading }: ResourceEffic
             ];
             const resource = resourceData[params.dataIndex];
             return `${params.value}% (${resource.used}/${resource.total})`;
-          }
+          },
+          color: '#595959',
+          fontSize: 12,
+          fontWeight: 500
         },
-        barWidth: 30
+        barMaxWidth: 30
       }
     ]
   };
 
   return (
-    <Card title="资源使用效率">
-      <ReactECharts option={option} style={{ height: '250px' }} />
+    <Card 
+      title={<span style={cardTitleStyle}>资源使用效率</span>}
+      style={cardStyle}
+    >
+      <ReactECharts option={option} style={{ height: '280px' }} />
     </Card>
   );
 }

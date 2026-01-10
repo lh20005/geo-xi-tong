@@ -10,7 +10,14 @@ interface TrendsChartProps {
 export default function TrendsChart({ data, loading }: TrendsChartProps) {
   if (loading) {
     return (
-      <Card title="内容生产趋势">
+      <Card 
+        title={<span style={{ fontSize: 15, fontWeight: 600 }}>内容生产趋势</span>}
+        style={{ 
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          height: '100%'
+        }}
+      >
         <div style={{ textAlign: 'center', padding: '60px 0' }}>
           <Spin size="large" />
         </div>
@@ -20,7 +27,14 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
 
   if (!data || data.data.length === 0) {
     return (
-      <Card title="内容生产趋势">
+      <Card 
+        title={<span style={{ fontSize: 15, fontWeight: 600 }}>内容生产趋势</span>}
+        style={{ 
+          borderRadius: 8,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          height: '100%'
+        }}
+      >
         <Empty description="暂无数据" />
       </Card>
     );
@@ -35,16 +49,26 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
       trigger: 'axis',
       axisPointer: {
         type: 'cross'
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#e8e8e8',
+      borderWidth: 1,
+      textStyle: {
+        color: '#262626'
       }
     },
     legend: {
       data: ['文章生成', '关键词蒸馏'],
-      top: 10
+      top: 10,
+      textStyle: {
+        fontSize: 13
+      }
     },
     grid: {
       left: '3%',
       right: '4%',
       bottom: '3%',
+      top: '15%',
       containLabel: true
     },
     xAxis: {
@@ -55,12 +79,29 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
         formatter: (value: string) => {
           const date = new Date(value);
           return `${date.getMonth() + 1}/${date.getDate()}`;
+        },
+        color: '#8c8c8c'
+      },
+      axisLine: {
+        lineStyle: {
+          color: '#e8e8e8'
         }
       }
     },
     yAxis: {
       type: 'value',
-      name: '数量'
+      name: '数量',
+      nameTextStyle: {
+        color: '#8c8c8c'
+      },
+      axisLabel: {
+        color: '#8c8c8c'
+      },
+      splitLine: {
+        lineStyle: {
+          color: '#f0f0f0'
+        }
+      }
     },
     series: [
       {
@@ -69,7 +110,10 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
         smooth: true,
         data: articleCounts,
         itemStyle: {
-          color: '#f5576c'
+          color: '#722ed1'
+        },
+        lineStyle: {
+          width: 3
         },
         areaStyle: {
           color: {
@@ -79,8 +123,8 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(245, 87, 108, 0.3)' },
-              { offset: 1, color: 'rgba(245, 87, 108, 0.05)' }
+              { offset: 0, color: 'rgba(114, 46, 209, 0.25)' },
+              { offset: 1, color: 'rgba(114, 46, 209, 0.05)' }
             ]
           }
         }
@@ -91,7 +135,10 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
         smooth: true,
         data: distillationCounts,
         itemStyle: {
-          color: '#667eea'
+          color: '#1890ff'
+        },
+        lineStyle: {
+          width: 3
         },
         areaStyle: {
           color: {
@@ -101,8 +148,8 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
             x2: 0,
             y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(102, 126, 234, 0.3)' },
-              { offset: 1, color: 'rgba(102, 126, 234, 0.05)' }
+              { offset: 0, color: 'rgba(24, 144, 255, 0.25)' },
+              { offset: 1, color: 'rgba(24, 144, 255, 0.05)' }
             ]
           }
         }
@@ -111,7 +158,14 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
   };
 
   return (
-    <Card title="内容生产趋势">
+    <Card 
+      title={<span style={{ fontSize: 15, fontWeight: 600 }}>内容生产趋势</span>}
+      style={{ 
+        borderRadius: 8,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        height: '100%'
+      }}
+    >
       <ReactECharts option={option} style={{ height: '350px' }} />
     </Card>
   );
