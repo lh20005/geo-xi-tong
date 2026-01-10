@@ -24,10 +24,19 @@ AND pr.user_id IS NULL;
 ALTER TABLE publishing_records 
 ALTER COLUMN user_id SET NOT NULL;
 
--- 5. 添加外键约束
-ALTER TABLE publishing_records 
-ADD CONSTRAINT fk_publishing_records_user 
-FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+-- 5. 添加外键约束（如果不存在）
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'fk_publishing_records_user' 
+    AND table_name = 'publishing_records'
+  ) THEN
+    ALTER TABLE publishing_records 
+    ADD CONSTRAINT fk_publishing_records_user 
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+  END IF;
+END $$;
 
 -- 6. 创建索引以提高查询性能
 CREATE INDEX IF NOT EXISTS idx_publishing_records_user_id ON publishing_records(user_id);

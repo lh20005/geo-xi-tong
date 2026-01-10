@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { 
   Table, Button, Modal, Form, Input, InputNumber, Switch, 
   message, Card, Tag, Space, Timeline, Descriptions,
-  Popconfirm, Select, Spin, Tooltip
+  Popconfirm, Select, Spin, Tooltip, Statistic, Row, Col
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  HistoryOutlined, SettingOutlined 
+  HistoryOutlined, SettingOutlined, ShoppingOutlined,
+  DollarOutlined, UserOutlined, RocketOutlined
 } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import { ensureTokensSync } from '../utils/tokenSync';
@@ -26,6 +27,7 @@ interface Plan {
   id: number;
   planCode: string;
   planName: string;
+  planType?: 'base' | 'booster';              // 套餐类型
   price: number;
   billingCycle: 'monthly' | 'yearly';        // 计费周期（前端价格显示）
   quotaCycleType: 'monthly' | 'yearly';      // 配额重置周期
@@ -52,6 +54,17 @@ interface ConfigHistory {
   createdAt: string;
 }
 
+interface BoosterStats {
+  planId: number;
+  planName: string;
+  planCode: string;
+  price: number;
+  totalSold: number;
+  activeCount: number;
+  activeRevenue: number;
+  totalRevenue: number;
+}
+
 // 功能配额选项
 const featureOptions = [
   { code: 'articles_per_month', name: '每月生成文章数', unit: '篇' },
@@ -69,22 +82,30 @@ const ProductManagementPage = () => {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [history, setHistory] = useState<ConfigHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'base' | 'booster'>('all');
+  const [boosterStats, setBoosterStats] = useState<BoosterStats[]>([]);
+  const [boosterStatsLoading, setBoosterStatsLoading] = useState(false);
   const [form] = Form.useForm();
 
   useEffect(() => {
     const initPage = async () => {
       await ensureTokensSync();
       loadPlans();
+      loadBoosterStats();
     };
     initPage();
-  }, []);
+  }, [planTypeFilter]);
 
   // 加载套餐列表
   const loadPlans = async () => {
     setLoading(true);
     try {
       console.log('[ProductManagement] 开始获取套餐列表');
-      const response = await apiClient.get('/admin/products/plans?include_inactive=true');
+      let url = '/admin/products/plans?include_inactive=true';
+      if (planTypeFilter !== 'all') {
+        url += `&plan_type=${planTypeFilter}`;
+      }
+      const response = await apiClient.get(url);
       
       console.log('[ProductManagement] API 响应:', response.data);
       setPlans(response.data.data || []);
@@ -93,6 +114,20 @@ const ProductManagementPage = () => {
       message.error(error.response?.data?.message || '加载套餐失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 加载加量包统计
+  const loadBoosterStats = async () => {
+    setBoosterStatsLoading(true);
+    try {
+      const response = await apiClient.get('/admin/products/booster-stats');
+      console.log('[ProductManagement] 加载加量包统计:', response.data);
+      setBoosterStats(response.data.data || []);
+    } catch (error: any) {
+      console.error('[ProductManagement] 加载加量包统计失败:', error);
+    } finally {
+      setBoosterStatsLoading(false);
     }
   };
 
@@ -119,6 +154,7 @@ const ProductManagementPage = () => {
     form.setFieldsValue({
       planName: '',
       planCode: '',
+      planType: 'base',
       price: 0,
       billingCycle: 'monthly',
       quotaCycleType: 'monthly',
@@ -175,6 +211,7 @@ const ProductManagementPage = () => {
     
     form.setFieldsValue({
       planName: plan.planName,
+      planType: plan.planType || 'base',
       price: plan.price,
       billingCycle: plan.billingCycle,
       quotaCycleType: plan.quotaCycleType || plan.billingCycle || 'monthly',
@@ -273,7 +310,21 @@ const ProductManagementPage = () => {
           <Tag color={record.planCode === 'free' ? 'default' : record.planCode === 'professional' ? 'blue' : 'gold'}>
             {record.planCode}
           </Tag>
+          {record.planType === 'booster' && (
+            <Tag color="purple">加量包</Tag>
+          )}
         </Space>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'planType',
+      key: 'planType',
+      width: 100,
+      render: (planType) => (
+        <Tag color={planType === 'booster' ? 'purple' : 'cyan'}>
+          {planType === 'booster' ? '加量包' : '基础套餐'}
+        </Tag>
       ),
     },
     {
@@ -363,6 +414,60 @@ const ProductManagementPage = () => {
 
   return (
     <div style={{ padding: 24 }}>
+      {/* 加量包统计卡片 */}
+      {(planTypeFilter === 'all' || planTypeFilter === 'booster') && boosterStats.length > 0 && (
+        <Card 
+          title={
+            <Space>
+              <RocketOutlined />
+              <span>加量包销售统计</span>
+            </Space>
+          }
+          style={{ marginBottom: 16 }}
+          loading={boosterStatsLoading}
+        >
+          <Row gutter={[16, 16]}>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="总销售数量"
+                value={boosterStats.reduce((sum, s) => sum + s.totalSold, 0)}
+                prefix={<ShoppingOutlined />}
+                suffix="份"
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="活跃加量包"
+                value={boosterStats.reduce((sum, s) => sum + s.activeCount, 0)}
+                prefix={<UserOutlined />}
+                suffix="份"
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="总收入"
+                value={boosterStats.reduce((sum, s) => sum + s.totalRevenue, 0)}
+                prefix={<DollarOutlined />}
+                precision={2}
+                suffix="元"
+                valueStyle={{ color: '#cf1322' }}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="活跃收入"
+                value={boosterStats.reduce((sum, s) => sum + s.activeRevenue, 0)}
+                prefix={<DollarOutlined />}
+                precision={2}
+                suffix="元"
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Col>
+          </Row>
+        </Card>
+      )}
+
       <Card 
         title={
           <Space>
@@ -372,6 +477,15 @@ const ProductManagementPage = () => {
         }
         extra={
           <Space>
+            <Select
+              value={planTypeFilter}
+              onChange={(value) => setPlanTypeFilter(value)}
+              style={{ width: 140 }}
+            >
+              <Select.Option value="all">全部类型</Select.Option>
+              <Select.Option value="base">基础套餐</Select.Option>
+              <Select.Option value="booster">加量包</Select.Option>
+            </Select>
             <Button icon={<HistoryOutlined />} onClick={() => handleViewHistory()}>
               查看所有历史
             </Button>
@@ -414,6 +528,18 @@ const ProductManagementPage = () => {
               <Input placeholder="例如：professional" />
             </Form.Item>
           )}
+
+          <Form.Item
+            label="套餐类型"
+            name="planType"
+            rules={[{ required: true, message: '请选择套餐类型' }]}
+            tooltip="基础套餐是用户的主订阅，加量包是额外配额补充"
+          >
+            <Select disabled={!!currentPlan}>
+              <Select.Option value="base">基础套餐</Select.Option>
+              <Select.Option value="booster">加量包</Select.Option>
+            </Select>
+          </Form.Item>
 
           <Form.Item
             label="套餐名称"

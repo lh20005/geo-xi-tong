@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { 
   Table, Button, Modal, Form, Input, InputNumber, Switch, 
   message, Card, Tag, Space, Timeline, Descriptions,
-  Popconfirm, Select, Spin
+  Popconfirm, Select, Spin, Statistic, Row, Col
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
-  HistoryOutlined, SettingOutlined 
+  HistoryOutlined, SettingOutlined, ShoppingOutlined,
+  DollarOutlined, UserOutlined, RocketOutlined
 } from '@ant-design/icons';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
@@ -52,6 +53,17 @@ interface ConfigHistory {
   createdAt: string;
 }
 
+interface BoosterStats {
+  planId: number;
+  planName: string;
+  planCode: string;
+  price: number;
+  totalSold: number;
+  activeCount: number;
+  activeRevenue: number;
+  totalRevenue: number;
+}
+
 export default function ProductManagementPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(false);
@@ -61,6 +73,8 @@ export default function ProductManagementPage() {
   const [history, setHistory] = useState<ConfigHistory[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'base' | 'booster'>('all');
+  const [boosterStats, setBoosterStats] = useState<BoosterStats[]>([]);
+  const [boosterStatsLoading, setBoosterStatsLoading] = useState(false);
   const [form] = Form.useForm();
 
   // 功能配额选项
@@ -74,6 +88,7 @@ export default function ProductManagementPage() {
 
   useEffect(() => {
     loadPlans();
+    loadBoosterStats();
   }, [planTypeFilter]);
 
   // 加载套餐列表
@@ -96,6 +111,25 @@ export default function ProductManagementPage() {
       message.error(error.response?.data?.message || '加载套餐失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 加载加量包统计
+  const loadBoosterStats = async () => {
+    setBoosterStatsLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get('/api/admin/products/booster-stats', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      console.log('[ProductManagement] 加载加量包统计:', response.data);
+      setBoosterStats(response.data.data || []);
+    } catch (error: any) {
+      console.error('[ProductManagement] 加载加量包统计失败:', error);
+      // 不显示错误消息，因为这是可选功能
+    } finally {
+      setBoosterStatsLoading(false);
     }
   };
 
@@ -410,6 +444,81 @@ export default function ProductManagementPage() {
 
   return (
     <div className="p-6">
+      {/* 加量包统计卡片 */}
+      {(planTypeFilter === 'all' || planTypeFilter === 'booster') && boosterStats.length > 0 && (
+        <Card 
+          title={
+            <Space>
+              <RocketOutlined />
+              <span>加量包销售统计</span>
+            </Space>
+          }
+          className="mb-4"
+          loading={boosterStatsLoading}
+        >
+          <Row gutter={[16, 16]}>
+            {/* 总体统计 */}
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="总销售数量"
+                value={boosterStats.reduce((sum, s) => sum + s.totalSold, 0)}
+                prefix={<ShoppingOutlined />}
+                suffix="份"
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="活跃加量包"
+                value={boosterStats.reduce((sum, s) => sum + s.activeCount, 0)}
+                prefix={<UserOutlined />}
+                suffix="份"
+                valueStyle={{ color: '#52c41a' }}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="总收入"
+                value={boosterStats.reduce((sum, s) => sum + s.totalRevenue, 0)}
+                prefix={<DollarOutlined />}
+                precision={2}
+                suffix="元"
+                valueStyle={{ color: '#cf1322' }}
+              />
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Statistic
+                title="活跃收入"
+                value={boosterStats.reduce((sum, s) => sum + s.activeRevenue, 0)}
+                prefix={<DollarOutlined />}
+                precision={2}
+                suffix="元"
+                valueStyle={{ color: '#1890ff' }}
+              />
+            </Col>
+          </Row>
+          
+          {/* 各加量包详细统计 */}
+          {boosterStats.length > 1 && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="text-sm text-gray-500 mb-2">各加量包详情</div>
+              <Row gutter={[16, 8]}>
+                {boosterStats.map(stat => (
+                  <Col key={stat.planId} xs={24} sm={12} md={8} lg={6}>
+                    <Card size="small" className="bg-gray-50">
+                      <div className="font-medium mb-1">{stat.planName}</div>
+                      <div className="text-xs text-gray-500 space-y-1">
+                        <div>售出: {stat.totalSold} 份 | 活跃: {stat.activeCount} 份</div>
+                        <div>收入: ¥{stat.totalRevenue.toFixed(2)}</div>
+                      </div>
+                    </Card>
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          )}
+        </Card>
+      )}
+
       <Card 
         title={
           <Space>
