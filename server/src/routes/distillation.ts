@@ -706,13 +706,37 @@ distillationRouter.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: '记录不存在或无权访问' });
     }
     
-    // 删除记录（级联删除会自动删除关联的话题）
-    await pool.query('DELETE FROM distillations WHERE id = $1 AND user_id = $2', [distillationId, userId]);
-    
-    res.json({
-      success: true,
-      message: '记录删除成功'
-    });
+    // 使用事务确保数据一致性
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // 先删除关联的 topics 记录（蒸馏结果）
+      const topicsResult = await client.query(
+        'DELETE FROM topics WHERE distillation_id = $1 RETURNING id',
+        [distillationId]
+      );
+      const deletedTopicsCount = topicsResult.rowCount || 0;
+      
+      // 再删除 distillations 记录
+      await client.query(
+        'DELETE FROM distillations WHERE id = $1 AND user_id = $2',
+        [distillationId, userId]
+      );
+      
+      await client.query('COMMIT');
+      
+      res.json({
+        success: true,
+        message: '记录删除成功',
+        deletedTopicsCount
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('删除记录错误:', error);
     res.status(500).json({ 
@@ -774,21 +798,44 @@ distillationRouter.delete('/all/records', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
     
-    // 获取删除前的记录数量（仅当前用户）
-    const countResult = await pool.query(
-      'SELECT COUNT(*) as count FROM distillations WHERE user_id = $1',
-      [userId]
-    );
-    const deletedCount = parseInt(countResult.rows[0].count);
-    
-    // 删除所有记录（级联删除会自动删除关联的话题，仅当前用户）
-    await pool.query('DELETE FROM distillations WHERE user_id = $1', [userId]);
-    
-    res.json({
-      success: true,
-      message: '所有记录删除成功',
-      deletedCount
-    });
+    // 使用事务确保数据一致性
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      // 获取删除前的记录数量（仅当前用户）
+      const countResult = await client.query(
+        'SELECT COUNT(*) as count FROM distillations WHERE user_id = $1',
+        [userId]
+      );
+      const deletedCount = parseInt(countResult.rows[0].count);
+      
+      // 先删除所有关联的 topics 记录（通过 distillation_id 关联）
+      const topicsResult = await client.query(
+        `DELETE FROM topics WHERE distillation_id IN (
+          SELECT id FROM distillations WHERE user_id = $1
+        ) RETURNING id`,
+        [userId]
+      );
+      const deletedTopicsCount = topicsResult.rowCount || 0;
+      
+      // 再删除所有 distillations 记录
+      await client.query('DELETE FROM distillations WHERE user_id = $1', [userId]);
+      
+      await client.query('COMMIT');
+      
+      res.json({
+        success: true,
+        message: '所有记录删除成功',
+        deletedCount,
+        deletedTopicsCount
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   } catch (error: any) {
     console.error('删除所有记录错误:', error);
     res.status(500).json({ 
