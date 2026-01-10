@@ -440,9 +440,10 @@ export class DashboardService {
           COUNT(*) FILTER (WHERE created_at >= $1) as today_generated,
           COUNT(*) FILTER (WHERE created_at >= $2) as month_generated
         FROM articles
+        WHERE user_id = $3
       `;
 
-      const result = await client.query(query, [todayStr, firstDayStr]);
+      const result = await client.query(query, [todayStr, firstDayStr, userId]);
       const stats = result.rows[0];
 
       return {
@@ -471,13 +472,14 @@ export class DashboardService {
           COUNT(DISTINCT d.id) as distillation_count,
           COUNT(DISTINCT a.id) as article_count
         FROM distillations d
-        LEFT JOIN articles a ON d.id = a.distillation_id
+        LEFT JOIN articles a ON d.id = a.distillation_id AND a.user_id = $1
+        WHERE d.user_id = $1
         GROUP BY d.keyword
         ORDER BY distillation_count DESC, article_count DESC
         LIMIT 10
       `;
 
-      const result = await client.query(query);
+      const result = await client.query(query, [userId]);
 
       // 获取总数
       const totalQuery = `
@@ -485,8 +487,9 @@ export class DashboardService {
           COUNT(DISTINCT keyword) as total_keywords,
           COUNT(*) as total_distillations
         FROM distillations
+        WHERE user_id = $1
       `;
-      const totalResult = await client.query(totalQuery);
+      const totalResult = await client.query(totalQuery, [userId]);
 
       return {
         totalKeywords: parseInt(totalResult.rows[0].total_keywords),
@@ -604,9 +607,9 @@ export class DashboardService {
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE status = 'completed') as success
         FROM publishing_tasks
-        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+        WHERE user_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '30 days'
       `;
-      const publishingResult = await client.query(publishingQuery);
+      const publishingResult = await client.query(publishingQuery, [userId]);
       const publishingTotal = parseInt(publishingResult.rows[0].total);
       const publishingSuccess = parseInt(publishingResult.rows[0].success);
       const publishingRate = publishingTotal > 0 ? (publishingSuccess / publishingTotal) * 100 : 0;
@@ -617,9 +620,9 @@ export class DashboardService {
           COUNT(*) as total,
           COUNT(*) FILTER (WHERE status = 'completed') as success
         FROM generation_tasks
-        WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+        WHERE user_id = $1 AND created_at >= CURRENT_DATE - INTERVAL '30 days'
       `;
-      const generationResult = await client.query(generationQuery);
+      const generationResult = await client.query(generationQuery, [userId]);
       const generationTotal = parseInt(generationResult.rows[0].total);
       const generationSuccess = parseInt(generationResult.rows[0].success);
       const generationRate = generationTotal > 0 ? (generationSuccess / generationTotal) * 100 : 0;

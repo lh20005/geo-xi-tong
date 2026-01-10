@@ -200,7 +200,7 @@ export const AgentDashboardPanel: React.FC<AgentDashboardPanelProps> = ({ onRefr
               <CrownOutlined style={{ fontSize: 28, color: '#fff' }} />
             </div>
             <div>
-              <Title level={4} style={{ margin: 0, marginBottom: 4, color: ACCENT_GOLD }}>开启代理商模式，轻松躺赚</Title>
+              <Title level={4} style={{ margin: 0, marginBottom: 4, color: ACCENT_GOLD }}>开启代理商模式，永久30%分佣，轻轻松躺赚</Title>
               <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>邀请好友使用 GEO 系统，每笔订单您都能获得 30% 佣金，T+1 自动到账微信零钱</Text>
             </div>
           </Space>
