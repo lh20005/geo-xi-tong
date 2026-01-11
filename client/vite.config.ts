@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => ({
   plugins: [react()],
-  base: mode === 'production' ? '/app/' : '/',  // 生产环境使用 /app/，开发环境使用 /
+  base: mode === 'production' ? '/app/' : '/',  // 生产环境部署在 /app 路径下
   server: {
     port: 5173,
     proxy: {

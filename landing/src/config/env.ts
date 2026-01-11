@@ -1,140 +1,83 @@
 /**
  * Landing页面环境配置
  * 智能环境检测：自动根据运行环境选择正确的配置
- * 更新时间：2025-12-27 - 修复IP地址访问时的重定向问题
+ * 更新时间：2026-01-11 - 完全运行时动态构建，避免任何静态内联
  */
 
-// 配置版本号（用于强制更新缓存）
-const CONFIG_VERSION = '1.0.3-20251229-ngrok-fix';
+// 配置版本号
+const CONFIG_VERSION = '1.0.5-20260111-full-runtime';
 
 const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
 
-// 智能环境检测函数
-const detectEnvironment = () => {
-  const hostname = window.location.hostname;
+// 创建配置的工厂函数 - 每次访问时动态计算
+const createConfig = () => {
+  // 运行时获取当前位置信息
+  const loc = window.location;
+  const hostname = loc.hostname;
+  const protocol = loc.protocol;
+  const port = loc.port;
   
-  // ngrok 环境检测
-  const isNgrok = hostname.includes('ngrok');
-  
-  // 本地开发环境检测
+  // 环境检测
+  const isNgrok = hostname.indexOf('ngrok') !== -1;
   const isLocalDev = hostname === 'localhost' || 
                     hostname === '127.0.0.1' || 
-                    hostname.startsWith('192.168.') ||
-                    hostname.startsWith('10.') ||
-                    hostname.endsWith('.local');
-  
-  // 远程测试服务器检测（IP地址）
+                    hostname.indexOf('192.168.') === 0 ||
+                    hostname.indexOf('10.') === 0 ||
+                    hostname.indexOf('.local') !== -1;
   const isRemoteTestServer = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+  const isProductionDomain = !isLocalDev && !isRemoteTestServer && !isNgrok && hostname.indexOf('.') !== -1;
   
-  // 生产域名检测
-  const isProductionDomain = !isLocalDev && !isRemoteTestServer && !isNgrok && hostname.includes('.');
+  // 动态构建 URL
+  let apiUrl: string;
+  let clientUrl: string;
+  let environment: string;
+  
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_CLIENT_URL) {
+    // 环境变量优先
+    apiUrl = import.meta.env.VITE_API_URL;
+    clientUrl = import.meta.env.VITE_CLIENT_URL;
+    environment = 'custom';
+  } else if (isNgrok) {
+    // ngrok: API 同域，客户端本地
+    apiUrl = protocol + '//' + loc.host + '/api';
+    clientUrl = protocol + '//' + hostname + ':5173';
+    environment = 'ngrok';
+  } else if (isLocalDev) {
+    // 本地开发
+    apiUrl = protocol + '//' + hostname + ':3000/api';
+    clientUrl = protocol + '//' + hostname + ':5173';
+    environment = 'local';
+  } else {
+    // 远程服务器（IP 或域名）- 统一使用 /app 路径
+    apiUrl = protocol + '//' + hostname + (port ? ':' + port : '') + '/api';
+    clientUrl = protocol + '//' + hostname + (port ? ':' + port : '') + '/app';
+    environment = isRemoteTestServer ? 'remote-test' : 'production';
+  }
   
   return {
+    apiUrl,
+    clientUrl,
+    environment,
+    isDevelopment,
+    isProduction,
     isLocalDev,
     isRemoteTestServer,
     isProductionDomain,
-    isNgrok
+    isNgrok,
+    appName: 'GEO优化SaaS系统',
+    version: '1.0.0',
+    configVersion: CONFIG_VERSION,
   };
 };
 
-const env = detectEnvironment();
+// 导出配置（运行时计算）
+export const config = createConfig();
 
-// 配置映射
-const configs = {
-  // 本地开发环境配置
-  local: {
-    apiUrl: 'http://localhost:3000/api',
-    clientUrl: 'http://localhost:5173',  // 本地开发时前端在5173端口
-    environment: 'local'
-  },
-  
-  // ngrok 环境配置（用于微信支付测试）
-  ngrok: {
-    // ngrok 环境下，API 使用相同的 ngrok 域名
-    apiUrl: `${window.location.protocol}//${window.location.host}/api`,
-    clientUrl: 'http://localhost:5173',  // 客户端仍然在本地
-    environment: 'ngrok'
-  },
-  
-  // 远程测试服务器配置（IP访问）
-  remoteTest: {
-    apiUrl: `http://${window.location.hostname}/api`,
-    clientUrl: `http://${window.location.hostname}/app`,
-    environment: 'remote-test'
-  },
-  
-  // 生产环境配置（域名访问）
-  production: {
-    apiUrl: 'https://your-domain.com/api',
-    clientUrl: 'https://app.your-domain.com',
-    environment: 'production'
-  }
-};
-
-// 根据环境选择配置
-const getConfig = () => {
-  // 优先使用环境变量（如果设置了的话）
-  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_CLIENT_URL) {
-    return {
-      apiUrl: import.meta.env.VITE_API_URL,
-      clientUrl: import.meta.env.VITE_CLIENT_URL,
-      environment: 'custom'
-    };
-  }
-  
-  // 自动环境检测
-  if (env.isNgrok) {
-    return configs.ngrok;
-  } else if (env.isLocalDev) {
-    return configs.local;
-  } else if (env.isRemoteTestServer) {
-    return configs.remoteTest;
-  } else if (env.isProductionDomain) {
-    return configs.production;
-  } else {
-    // 默认使用远程测试配置
-    return configs.remoteTest;
-  }
-};
-
-const selectedConfig = getConfig();
-
-export const config = {
-  // 动态配置
-  ...selectedConfig,
-  
-  // 环境标识
-  isDevelopment,
-  isProduction,
-  isLocalDev: env.isLocalDev,
-  isRemoteTestServer: env.isRemoteTestServer,
-  isProductionDomain: env.isProductionDomain,
-  isNgrok: env.isNgrok,
-  
-  // 其他配置
-  appName: 'GEO优化SaaS系统',
-  version: '1.0.0',
-  configVersion: CONFIG_VERSION,
-};
-
-// 开发环境日志
-if (isDevelopment) {
-  console.log('[Landing Config] 🚀 智能环境检测结果:', {
-    hostname: window.location.hostname,
-    port: window.location.port,
-    detectedEnv: env,
-    selectedConfig: selectedConfig,
-    finalConfig: config
-  });
-}
-
-// 生产环境也输出配置信息（用于调试）
-console.log('[Landing Config] 环境:', {
-  configVersion: CONFIG_VERSION,
-  hostname: window.location.hostname,
-  isLocalDev: env.isLocalDev,
-  isRemoteTestServer: env.isRemoteTestServer,
-  isProductionDomain: env.isProductionDomain,
-  clientUrl: selectedConfig.clientUrl
+// 调试日志
+console.log('[Landing Config]', {
+  v: CONFIG_VERSION,
+  env: config.environment,
+  api: config.apiUrl,
+  client: config.clientUrl
 });

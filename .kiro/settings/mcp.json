@@ -4,22 +4,16 @@
       "command": "npx",
       "args": [
         "-y",
-        "@fangjunjie/ssh-mcp-server"
+        "@idletoaster/ssh-mcp-server@latest"
       ],
       "env": {
         "SSH_HOST": "43.143.163.6",
         "SSH_PORT": "22",
-        "SSH_USER": "ubuntu",
-        "SSH_PRIVATE_KEY_PATH": "/Users/lzc/.ssh/kiro.pem"
+        "SSH_USERNAME": "ubuntu",
+        "SSH_KEY_PATH": "/Users/lzc/.ssh/kiro.pem"
       },
       "disabled": false,
-      "autoApprove": [
-        "ssh_connect",
-        "ssh_exec",
-        "ssh_upload_file",
-        "ssh_download_file",
-        "ssh_list_files"
-      ]
+      "autoApprove": []
     }
   }
 }

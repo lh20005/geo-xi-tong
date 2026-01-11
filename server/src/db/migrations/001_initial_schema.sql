@@ -562,6 +562,7 @@ CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform ON platform_accounts(p
 -- 发布任务表
 CREATE TABLE IF NOT EXISTS publishing_tasks (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
   account_id INTEGER NOT NULL REFERENCES platform_accounts(id) ON DELETE CASCADE,
   platform_id VARCHAR(50) NOT NULL,
@@ -580,6 +581,8 @@ CREATE TABLE IF NOT EXISTS publishing_tasks (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_publishing_tasks_user_id ON publishing_tasks(user_id);
+CREATE INDEX IF NOT EXISTS idx_publishing_tasks_user_status ON publishing_tasks(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_article ON publishing_tasks(article_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_status ON publishing_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_scheduled ON publishing_tasks(scheduled_at);
@@ -617,6 +620,7 @@ CREATE TABLE IF NOT EXISTS publishing_records (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES publishing_tasks(id) ON DELETE SET NULL,
   account_id INTEGER REFERENCES platform_accounts(id) ON DELETE SET NULL,
   platform_id VARCHAR(50) NOT NULL,
   platform_article_id VARCHAR(255),
@@ -631,6 +635,7 @@ CREATE TABLE IF NOT EXISTS publishing_records (
 
 CREATE INDEX IF NOT EXISTS idx_publishing_records_user_id ON publishing_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_article_id ON publishing_records(article_id);
+CREATE INDEX IF NOT EXISTS idx_publishing_records_task ON publishing_records(task_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_platform_id ON publishing_records(platform_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_status ON publishing_records(status);
 

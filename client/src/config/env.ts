@@ -7,18 +7,18 @@ const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
 
 export const config = {
-  // API基础URL（包含 /api 路径）
+  // API基础URL
   apiUrl: import.meta.env.VITE_API_URL 
     ? `${import.meta.env.VITE_API_URL}/api`
-    : (isProduction ? 'https://your-domain.com/api' : 'http://localhost:3000/api'),
+    : (isProduction ? 'http://43.143.163.6/api' : 'http://localhost:3000/api'),
   
   // WebSocket URL
   wsUrl: import.meta.env.VITE_WS_URL || 
-    (isProduction ? 'wss://your-domain.com/ws' : 'ws://localhost:3000/ws'),
+    (isProduction ? 'ws://43.143.163.6/ws' : 'ws://localhost:3000/ws'),
   
   // Landing页面URL（退出登录时跳转）
   landingUrl: import.meta.env.VITE_LANDING_URL || 
-    (isProduction ? 'https://your-domain.com' : 'http://localhost:8080'),
+    (isProduction ? 'http://43.143.163.6' : 'http://localhost:8080'),
   
   // 环境标识
   isDevelopment,

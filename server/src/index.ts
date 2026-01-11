@@ -23,8 +23,9 @@ import { authService } from './services/AuthService';
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
-// 识别反向代理的 X-Forwarded-For，避免限流中间件报错
-app.set('trust proxy', true);
+// 识别反向代理的 X-Forwarded-For
+// 使用 'loopback' 表示只信任本地回环地址的代理（如 nginx）
+app.set('trust proxy', 'loopback');
 const PORT = process.env.PORT || 3000;
 
 // ========== 🔒 安全中间件 ==========
