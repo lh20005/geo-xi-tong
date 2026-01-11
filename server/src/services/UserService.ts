@@ -55,7 +55,7 @@ export class UserService {
    */
   async getUserById(id: number): Promise<User | null> {
     const result = await pool.query(
-      `SELECT id, username, invitation_code, invited_by_code, role, is_temp_password, 
+      `SELECT id, username, email, email_verified, invitation_code, invited_by_code, role, is_temp_password, 
               created_at, updated_at, last_login_at 
        FROM users 
        WHERE id = $1`,

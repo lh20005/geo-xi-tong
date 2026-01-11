@@ -568,6 +568,75 @@ router.post('/reset-password', async (req, res) => {
 });
 
 /**
+ * 更换邮箱 - 验证密码
+ * POST /api/auth/change-email/verify-password
+ */
+router.post('/change-email/verify-password', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: '未登录'
+      });
+    }
+
+    let decoded: any;
+    try {
+      decoded = tokenService.verifyAccessToken(token);
+    } catch (error) {
+      return res.status(401).json({
+        success: false,
+        message: '登录已过期'
+      });
+    }
+
+    const { password } = req.body;
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: '密码不能为空'
+      });
+    }
+
+    // 获取用户信息
+    const userResult = await pool.query(
+      'SELECT password_hash FROM users WHERE id = $1',
+      [decoded.userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+
+    // 验证密码
+    const isValid = await authService.verifyPassword(password, userResult.rows[0].password_hash);
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: '密码错误'
+      });
+    }
+
+    console.log(`[Auth] 用户更换邮箱密码验证成功: userId=${decoded.userId}`);
+
+    res.json({
+      success: true,
+      message: '密码验证成功'
+    });
+  } catch (error) {
+    console.error('[Auth] 更换邮箱密码验证失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '验证失败，请重试'
+    });
+  }
+});
+
+/**
  * 绑定邮箱 - 发送验证码
  * POST /api/auth/bind-email/send-code
  */

@@ -98,12 +98,13 @@ const UserCenterPage = () => {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
 
-  // 邮箱绑定相关状态
+  // 邮箱更换相关状态
   const [emailModalVisible, setEmailModalVisible] = useState(false);
   const [emailForm] = Form.useForm();
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [emailCountdown, setEmailCountdown] = useState(0);
+  const [emailStep, setEmailStep] = useState<'verify' | 'change'>('verify'); // 更换邮箱步骤
 
   // 邮箱验证码倒计时
   useEffect(() => {
@@ -456,9 +457,36 @@ const UserCenterPage = () => {
     }
   };
 
-  // 发送邮箱验证码
+  // 验证密码后发送邮箱验证码
   const handleSendEmailCode = async () => {
     try {
+      // 如果已有邮箱，需要先验证密码
+      if (userProfile?.email && emailStep === 'verify') {
+        await emailForm.validateFields(['password']);
+        const password = emailForm.getFieldValue('password');
+        
+        setEmailLoading(true);
+        try {
+          const token = localStorage.getItem('auth_token');
+          const response = await axios.post(
+            `${API_BASE_URL}/auth/change-email/verify-password`,
+            { password },
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+
+          if (response.data.success) {
+            setEmailStep('change');
+            message.success('密码验证成功，请输入新邮箱');
+          }
+        } catch (error: any) {
+          message.error(error.response?.data?.message || '密码验证失败');
+        } finally {
+          setEmailLoading(false);
+        }
+        return;
+      }
+
+      // 验证新邮箱
       await emailForm.validateFields(['email']);
     } catch {
       return;
@@ -487,7 +515,7 @@ const UserCenterPage = () => {
     }
   };
 
-  // 绑定邮箱
+  // 更换邮箱
   const handleBindEmail = async (values: { email: string; code: string }) => {
     setEmailLoading(true);
 
@@ -500,15 +528,16 @@ const UserCenterPage = () => {
       );
 
       if (response.data.success) {
-        message.success('邮箱绑定成功');
+        message.success('邮箱更换成功');
         setEmailModalVisible(false);
         emailForm.resetFields();
         setEmailCodeSent(false);
+        setEmailStep('verify');
         // 刷新用户信息
         fetchUserProfile();
       }
     } catch (error: any) {
-      message.error(error.response?.data?.message || '绑定失败');
+      message.error(error.response?.data?.message || '更换失败');
     } finally {
       setEmailLoading(false);
     }
@@ -762,10 +791,10 @@ const UserCenterPage = () => {
                 }
               >
                 <Space direction="vertical" size="large" style={{ width: '100%' }}>
-                  {/* 邮箱绑定 */}
+                  {/* 邮箱管理 */}
                   <div>
                     <div style={{ marginBottom: 8 }}>
-                      <strong>绑定邮箱</strong>
+                      <strong>更换邮箱</strong>
                       {userProfile?.emailVerified && (
                         <Tag color="success" style={{ marginLeft: 8 }}>
                           <CheckCircleOutlined /> 已验证
@@ -774,14 +803,14 @@ const UserCenterPage = () => {
                     </div>
                     <div style={{ color: '#8c8c8c', marginBottom: 16 }}>
                       {userProfile?.email 
-                        ? `当前绑定邮箱：${userProfile.email}`
-                        : '绑定邮箱后可用于找回密码'}
+                        ? `当前邮箱：${userProfile.email}`
+                        : '尚未绑定邮箱'}
                     </div>
                     <Button 
                       icon={<MailOutlined />} 
                       onClick={() => setEmailModalVisible(true)}
                     >
-                      {userProfile?.email ? '更换邮箱' : '绑定邮箱'}
+                      更换邮箱
                     </Button>
                   </div>
 
@@ -944,12 +973,12 @@ const UserCenterPage = () => {
         </Form>
       </Modal>
 
-      {/* 邮箱绑定 Modal */}
+      {/* 更换邮箱 Modal */}
       <Modal
         title={
           <Space>
             <MailOutlined />
-            {userProfile?.email ? '更换邮箱' : '绑定邮箱'}
+            更换邮箱
           </Space>
         }
         open={emailModalVisible}
@@ -957,6 +986,7 @@ const UserCenterPage = () => {
           setEmailModalVisible(false);
           emailForm.resetFields();
           setEmailCodeSent(false);
+          setEmailStep('verify');
         }}
         footer={null}
         destroyOnClose
@@ -966,37 +996,69 @@ const UserCenterPage = () => {
           layout="vertical"
           onFinish={handleBindEmail}
         >
-          <Form.Item
-            label="邮箱地址"
-            name="email"
-            rules={[
-              { required: true, message: '请输入邮箱地址' },
-              { type: 'email', message: '请输入有效的邮箱地址' }
-            ]}
-          >
-            <Input 
-              size="large" 
-              placeholder="请输入邮箱地址" 
-              prefix={<MailOutlined />}
-              disabled={emailCodeSent}
-            />
-          </Form.Item>
+          {/* 步骤1：验证密码（仅当已有邮箱时） */}
+          {userProfile?.email && emailStep === 'verify' && (
+            <>
+              <div style={{ marginBottom: 16, padding: '12px 16px', background: '#f5f5f5', borderRadius: 8 }}>
+                <div style={{ color: '#8c8c8c', fontSize: 13 }}>当前邮箱</div>
+                <div style={{ fontWeight: 500 }}>{userProfile.email}</div>
+              </div>
+              <Form.Item
+                label="请输入登录密码验证身份"
+                name="password"
+                rules={[
+                  { required: true, message: '请输入密码' }
+                ]}
+              >
+                <Input.Password 
+                  size="large" 
+                  placeholder="请输入当前账户密码" 
+                />
+              </Form.Item>
+            </>
+          )}
 
-          {emailCodeSent && (
-            <Form.Item
-              label="验证码"
-              name="code"
-              rules={[
-                { required: true, message: '请输入验证码' },
-                { len: 6, message: '验证码为6位数字' }
-              ]}
-            >
-              <Input 
-                size="large" 
-                placeholder="请输入6位验证码" 
-                maxLength={6}
-              />
-            </Form.Item>
+          {/* 步骤2：输入新邮箱并验证 */}
+          {(!userProfile?.email || emailStep === 'change') && (
+            <>
+              {userProfile?.email && (
+                <div style={{ marginBottom: 16, padding: '12px 16px', background: '#e6f7ff', borderRadius: 8, borderLeft: '3px solid #1890ff' }}>
+                  <div style={{ color: '#1890ff', fontSize: 13 }}>身份验证通过，请输入新邮箱</div>
+                </div>
+              )}
+              <Form.Item
+                label="新邮箱地址"
+                name="email"
+                rules={[
+                  { required: true, message: '请输入邮箱地址' },
+                  { type: 'email', message: '请输入有效的邮箱地址' }
+                ]}
+              >
+                <Input 
+                  size="large" 
+                  placeholder="请输入新邮箱地址" 
+                  prefix={<MailOutlined />}
+                  disabled={emailCodeSent}
+                />
+              </Form.Item>
+
+              {emailCodeSent && (
+                <Form.Item
+                  label="验证码"
+                  name="code"
+                  rules={[
+                    { required: true, message: '请输入验证码' },
+                    { len: 6, message: '验证码为6位数字' }
+                  ]}
+                >
+                  <Input 
+                    size="large" 
+                    placeholder="请输入6位验证码" 
+                    maxLength={6}
+                  />
+                </Form.Item>
+              )}
+            </>
           )}
 
           <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
@@ -1005,10 +1067,22 @@ const UserCenterPage = () => {
                 setEmailModalVisible(false);
                 emailForm.resetFields();
                 setEmailCodeSent(false);
+                setEmailStep('verify');
               }}>
                 取消
               </Button>
-              {!emailCodeSent ? (
+              {/* 步骤1：验证密码 */}
+              {userProfile?.email && emailStep === 'verify' && (
+                <Button 
+                  type="primary" 
+                  onClick={handleSendEmailCode}
+                  loading={emailLoading}
+                >
+                  验证身份
+                </Button>
+              )}
+              {/* 步骤2：发送验证码或确认更换 */}
+              {(!userProfile?.email || emailStep === 'change') && !emailCodeSent && (
                 <Button 
                   type="primary" 
                   onClick={handleSendEmailCode}
@@ -1017,7 +1091,8 @@ const UserCenterPage = () => {
                 >
                   {emailCountdown > 0 ? `${emailCountdown}秒后重试` : '发送验证码'}
                 </Button>
-              ) : (
+              )}
+              {(!userProfile?.email || emailStep === 'change') && emailCodeSent && (
                 <>
                   <Button 
                     onClick={handleSendEmailCode}
@@ -1027,7 +1102,7 @@ const UserCenterPage = () => {
                     {emailCountdown > 0 ? `${emailCountdown}秒后重发` : '重新发送'}
                   </Button>
                   <Button type="primary" htmlType="submit" loading={emailLoading}>
-                    确认绑定
+                    确认更换
                   </Button>
                 </>
               )}
