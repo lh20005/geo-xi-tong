@@ -14,7 +14,8 @@
       },
       "disabled": false,
       "autoApprove": [
-        "remote-ssh"
+        "remote-ssh",
+        "ssh-edit-block"
       ]
     }
   }
