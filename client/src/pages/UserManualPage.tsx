@@ -183,6 +183,16 @@ export default function UserManualPage() {
                   title: '使用须知与法律声明',
                 },
                 {
+                  key: 'dual-system',
+                  href: '#dual-system',
+                  title: '双系统使用指南',
+                },
+                {
+                  key: 'agent-join',
+                  href: '#agent-join',
+                  title: '代理商加盟',
+                },
+                {
                   key: 'intro',
                   href: '#intro',
                   title: '系统简介',
@@ -372,6 +382,251 @@ export default function UserManualPage() {
 
             <Divider />
 
+            {/* 双系统使用指南 */}
+            <section id="dual-system">
+              <Title level={3}>
+                <InfoCircleOutlined style={{ marginRight: 8, color: '#722ed1' }} />
+                双系统使用指南
+              </Title>
+              <Alert
+                message="系统架构说明"
+                description="GEO优化系统采用 Windows客户端 + 网络端 双系统架构，支持本地使用和完全的互联网使用，让您随时随地高效工作。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+              
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>一、双系统介绍</Text>
+              </Paragraph>
+              <List size="small" bordered style={{ marginBottom: 16 }}>
+                <List.Item>
+                  <Text strong>Windows客户端（Win端）：</Text>安装在您的Windows电脑上，主要用于媒体平台账号的绑定和管理。由于平台安全策略，账号绑定必须在本地完成。
+                </List.Item>
+                <List.Item>
+                  <Text strong>网络端（Web端）：</Text>通过浏览器访问，支持关键词蒸馏、文章生成、发布任务管理等全部功能，随时随地可用。
+                </List.Item>
+              </List>
+
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>二、首次使用必读（重要！）</Text>
+              </Paragraph>
+              <Alert
+                message="关键步骤提醒"
+                description="在使用网络端发布文章之前，您必须先完成以下准备工作，否则无法正常发布内容到各媒体平台。"
+                type="warning"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+              
+              <Steps
+                direction="vertical"
+                current={-1}
+                items={[
+                  {
+                    title: '步骤一：下载并安装Windows客户端',
+                    description: (
+                      <div>
+                        <Paragraph style={{ marginBottom: 8 }}>
+                          访问官方网站下载Windows客户端安装包，按照提示完成安装。
+                        </Paragraph>
+                        <Text type="secondary">系统要求：Windows 10 及以上版本</Text>
+                      </div>
+                    ),
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '步骤二：在Win端登录您的账号',
+                    description: '打开Windows客户端，使用您的GEO系统账号登录。',
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '步骤三：绑定媒体平台账号（核心步骤）',
+                    description: (
+                      <div>
+                        <Paragraph style={{ marginBottom: 8 }}>
+                          在Win端的"平台登录"页面，逐一添加您要发布内容的媒体平台账号：
+                        </Paragraph>
+                        <List size="small">
+                          <List.Item>• 点击对应平台卡片，系统会自动打开浏览器</List.Item>
+                          <List.Item>• 在浏览器中完成平台登录（扫码或账号密码）</List.Item>
+                          <List.Item>• 登录成功后，系统会自动保存登录状态</List.Item>
+                          <List.Item>• 重复以上步骤，绑定所有需要的平台</List.Item>
+                        </List>
+                        <Alert
+                          message="为什么必须在Win端绑定？"
+                          description="由于各媒体平台的安全策略，账号登录需要在本地浏览器环境中完成，以确保登录凭证的安全性和有效性。这是平台的安全要求，无法绕过。"
+                          type="info"
+                          showIcon
+                          style={{ marginTop: 12 }}
+                        />
+                      </div>
+                    ),
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '步骤四：同步账号到网络端',
+                    description: (
+                      <div>
+                        <Paragraph style={{ marginBottom: 8 }}>
+                          账号绑定完成后，登录网络端系统，您绑定的平台账号会自动同步显示。
+                        </Paragraph>
+                        <Text type="secondary">同步通常在几秒内完成，如未显示请刷新页面。</Text>
+                      </div>
+                    ),
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '步骤五：开始使用网络端发布',
+                    description: '账号同步完成后，您就可以在网络端创建发布任务，系统会自动将文章发布到已绑定的平台。',
+                    icon: <CheckCircleOutlined />,
+                  },
+                ]}
+              />
+
+              <Paragraph style={{ marginTop: 24 }}>
+                <Text strong style={{ fontSize: 16 }}>三、日常使用建议</Text>
+              </Paragraph>
+              <List size="small" bordered>
+                <List.Item>
+                  <Text strong>日常操作：</Text>完成首次账号绑定后，日常的关键词蒸馏、文章生成、发布任务等操作都可以在网络端完成，无需打开Win端。
+                </List.Item>
+                <List.Item>
+                  <Text strong>账号维护：</Text>如果某个平台提示登录失效，需要回到Win端重新登录该平台账号。
+                </List.Item>
+                <List.Item>
+                  <Text strong>新增平台：</Text>如需添加新的媒体平台账号，同样需要在Win端完成绑定操作。
+                </List.Item>
+                <List.Item>
+                  <Text strong>多设备使用：</Text>网络端支持多设备访问，您可以在办公室、家里或移动设备上随时管理您的内容发布。
+                </List.Item>
+              </List>
+
+              <Alert
+                message="温馨提示"
+                description="建议定期检查各平台的登录状态，确保发布任务能够顺利执行。如遇到发布失败，首先检查对应平台的登录状态是否正常。"
+                type="success"
+                showIcon
+                style={{ marginTop: 16 }}
+              />
+            </section>
+
+            <Divider />
+
+            {/* 代理商加盟 */}
+            <section id="agent-join">
+              <Title level={3}>
+                <InfoCircleOutlined style={{ marginRight: 8, color: '#fa8c16' }} />
+                代理商加盟
+              </Title>
+              <Alert
+                message="💰 邀请好友，轻松躺赚"
+                description="成为GEO代理商，分享您的专属邀请码，好友注册付费后您即可获得永久30%分佣，佣金自动到账微信零钱！"
+                type="success"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+              
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>一、代理商核心权益</Text>
+              </Paragraph>
+              <List size="small" bordered style={{ marginBottom: 16 }}>
+                <List.Item>
+                  <Text strong>💰 永久30%分佣：</Text>您邀请的客户每一笔订单，您都能获得30%佣金，不限时间、不限次数，客户续费您同样享有分成。
+                </List.Item>
+                <List.Item>
+                  <Text strong>🎁 客户首单8折：</Text>通过您的邀请链接注册的新用户，首次购买可享受8折优惠，帮助您更轻松地转化客户。
+                </List.Item>
+                <List.Item>
+                  <Text strong>⚡ T+1自动到账：</Text>佣金次日自动结算到您的微信零钱，无需手动提现，资金安全有保障。
+                </List.Item>
+                <List.Item>
+                  <Text strong>🔗 客户永久绑定：</Text>客户一经绑定，永久归属于您，后续所有消费您都能持续获得分佣。
+                </List.Item>
+                <List.Item>
+                  <Text strong>🆓 零门槛开通：</Text>免费申请成为代理商，无需缴纳任何费用，一键开通即可开始推广。
+                </List.Item>
+              </List>
+
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>二、代理商后台功能</Text>
+              </Paragraph>
+              <List size="small" bordered style={{ marginBottom: 16 }}>
+                <List.Item>✅ 专属邀请链接和邀请码，方便分享推广</List.Item>
+                <List.Item>✅ 实时查看邀请用户数量和付费转化情况</List.Item>
+                <List.Item>✅ 累计收益、已结算、待结算金额一目了然</List.Item>
+                <List.Item>✅ 佣金明细记录，每笔收益清晰可查</List.Item>
+                <List.Item>✅ 微信收款绑定，自动到账无忧</List.Item>
+              </List>
+
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>三、如何开通代理商？</Text>
+              </Paragraph>
+              <Alert
+                message="开通条件"
+                description="代理商功能仅对付费套餐用户开放。如您当前是免费版用户，需先升级任意付费套餐后方可开通。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 16 }}
+              />
+              <Steps
+                direction="vertical"
+                current={-1}
+                items={[
+                  {
+                    title: '第一步：进入个人中心',
+                    description: '点击页面右上角头像，选择"个人中心"进入。',
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '第二步：一键开通代理商',
+                    description: '切换到"代理商"标签页，点击"免费升级为代理商"按钮，即刻开通成功。',
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '第三步：绑定微信收款（重要）',
+                    description: '在代理商页面找到"微信收款绑定"卡片，扫码绑定您的微信。未绑定微信将无法接收佣金！',
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '第四步：复制邀请码开始推广',
+                    description: '开通后您将看到专属6位邀请码，复制分享给好友即可。好友注册时填写您的邀请码，即可享受首单8折优惠。',
+                    icon: <CheckCircleOutlined />,
+                  },
+                  {
+                    title: '第五步：坐等收益到账',
+                    description: '好友付费后，您的佣金会在次日（T+1）自动结算到微信零钱，无需手动提现。',
+                    icon: <CheckCircleOutlined />,
+                  },
+                ]}
+              />
+
+              <Alert
+                message="开始赚取被动收入！"
+                description={
+                  <div>
+                    <Paragraph style={{ marginBottom: 8, marginTop: 8 }}>
+                      代理商推广非常简单，您可以：
+                    </Paragraph>
+                    <List size="small">
+                      <List.Item>• 分享邀请码给有内容营销需求的朋友</List.Item>
+                      <List.Item>• 在社交媒体、社群中推荐GEO系统</List.Item>
+                      <List.Item>• 向您的客户推荐，作为增值服务</List.Item>
+                      <List.Item>• 写测评文章或制作视频介绍系统功能</List.Item>
+                    </List>
+                    <Paragraph style={{ marginTop: 12, marginBottom: 0 }}>
+                      <Text strong>现在就去"个人中心 → 代理商"开通，开启您的被动收入之旅！</Text>
+                    </Paragraph>
+                  </div>
+                }
+                type="warning"
+                showIcon
+                style={{ marginTop: 16 }}
+              />
+            </section>
+
+            <Divider />
+
             {/* 系统简介 */}
             <section id="intro">
               <Title level={3}>
@@ -398,21 +653,6 @@ export default function UserManualPage() {
                     <CheckCircleOutlined style={{ color: '#52c41a', marginRight: 8 }} />
                     {item}
                   </List.Item>
-                )}
-              />
-              <Paragraph style={{ marginTop: 16 }}>
-                <Text strong>适用场景：</Text>
-              </Paragraph>
-              <List
-                size="small"
-                dataSource={[
-                  '企业品牌推广和内容营销',
-                  '教育培训机构的课程推广',
-                  '电商平台的产品宣传',
-                  '本地服务商的业务推广',
-                ]}
-                renderItem={(item) => (
-                  <List.Item>• {item}</List.Item>
                 )}
               />
             </section>
