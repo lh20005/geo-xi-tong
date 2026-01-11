@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { config } from '../config/env';
 import ChangePasswordModal from '../components/ChangePasswordModal';
+import SEO from '../components/SEO';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -111,6 +112,13 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <SEO 
+        title="登录 - GEO优化系统"
+        description="登录GEO优化系统，开始您的AI时代品牌推荐优化之旅。智能关键词蒸馏、AI内容生成、多平台自动发布。"
+        keywords="GEO优化登录,品牌AI优化,内容营销工具"
+        canonicalUrl="https://jzgeo.cc/login"
+        noIndex={true}
+      />
       {/* 导航栏 */}
       <nav className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

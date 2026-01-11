@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Header from '../components/Header';
 import PaymentModal from '../components/PaymentModal';
+import SEO from '../components/SEO';
 import { config } from '../config/env';
 import { useDiscountEligibility } from '../hooks/useDiscountEligibility';
 import { useUserSubscription } from '../hooks/useUserSubscription';
@@ -219,6 +220,12 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
+      <SEO 
+        title="GEO优化系统 - AI时代品牌推荐优化工具 | 提升ChatGPT、Claude等AI平台曝光率"
+        description="GEO优化系统是基于普林斯顿大学GEO研究方法论的SaaS工具，帮助品牌提升在ChatGPT、Claude、Gemini等AI平台的推荐率。支持智能关键词蒸馏、AI内容生成、12+平台自动发布。"
+        keywords="GEO优化,生成式引擎优化,AI推荐优化,ChatGPT优化,Claude优化,Gemini优化,品牌AI曝光,AI搜索优化,内容营销,SEO工具"
+        canonicalUrl="https://jzgeo.cc/"
+      />
       {/* 导航栏 */}
       <Header activeSection={activeSection} />
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '../services/api';
 import Header from '../components/Header';
+import SEO from '../components/SEO';
 
 export default function RegistrationPage() {
   const [formData, setFormData] = useState({
@@ -138,6 +139,13 @@ export default function RegistrationPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <SEO 
+        title="注册 - GEO优化系统"
+        description="免费注册GEO优化系统账号，开始您的AI时代品牌推荐优化之旅。支持邀请码注册享8折优惠。"
+        keywords="GEO优化注册,免费注册,品牌AI优化,邀请码"
+        canonicalUrl="https://jzgeo.cc/register"
+        noIndex={true}
+      />
       {/* 导航栏 */}
       <Header />
 
