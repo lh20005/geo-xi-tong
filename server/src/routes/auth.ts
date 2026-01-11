@@ -132,16 +132,22 @@ router.post('/login', loginRateLimit, async (req, res) => {
     // 先获取用户ID用于账户锁定检查
     const userCheck = await authService.getUserByUsername(username);
     
-    if (userCheck) {
-      // 检查账户是否被锁定
-      const lockStatus = passwordService.isAccountLocked(userCheck.id);
-      if (lockStatus.locked) {
-        const minutesLeft = Math.ceil((lockStatus.unlockAt!.getTime() - Date.now()) / 60000);
-        return res.status(403).json({
-          success: false,
-          message: `账户已被锁定，请在${minutesLeft}分钟后重试`
-        });
-      }
+    // 检查用户是否存在
+    if (!userCheck) {
+      return res.status(401).json({
+        success: false,
+        message: '用户不存在'
+      });
+    }
+    
+    // 检查账户是否被锁定
+    const lockStatus = passwordService.isAccountLocked(userCheck.id);
+    if (lockStatus.locked) {
+      const minutesLeft = Math.ceil((lockStatus.unlockAt!.getTime() - Date.now()) / 60000);
+      return res.status(403).json({
+        success: false,
+        message: `账户已被锁定，请在${minutesLeft}分钟后重试`
+      });
     }
 
     // 验证用户
@@ -149,13 +155,11 @@ router.post('/login', loginRateLimit, async (req, res) => {
     
     if (!user) {
       // 记录失败的登录尝试
-      if (userCheck) {
-        passwordService.recordLoginAttempt(userCheck.id, false);
-      }
+      passwordService.recordLoginAttempt(userCheck.id, false);
       
       return res.status(401).json({
         success: false,
-        message: '用户名或密码错误'
+        message: '密码错误'
       });
     }
 
