@@ -6,7 +6,7 @@ import {
 import { 
   BookOutlined, SearchOutlined, PrinterOutlined, 
   CheckCircleOutlined, InfoCircleOutlined, QuestionCircleOutlined,
-  RightOutlined, LeftOutlined, ExclamationCircleOutlined
+  RightOutlined, LeftOutlined, ExclamationCircleOutlined, CustomerServiceOutlined
 } from '@ant-design/icons';
 import '../styles/manual.css';
 
@@ -257,6 +257,11 @@ export default function UserManualPage() {
                   key: 'faq',
                   href: '#faq',
                   title: '常见问题',
+                },
+                {
+                  key: 'contact',
+                  href: '#contact',
+                  title: '联系客服',
                 },
               ]}
             />
@@ -1163,6 +1168,68 @@ export default function UserManualPage() {
                     ),
                   },
                 ]}
+              />
+            </section>
+
+            <Divider />
+
+            {/* 联系客服 */}
+            <section id="contact">
+              <Title level={3}>
+                <CustomerServiceOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+                联系客服
+              </Title>
+              <Alert
+                message="我们随时为您服务"
+                description="如果您在使用过程中遇到任何问题，或有功能建议和合作意向，欢迎随时联系我们的客服团队。"
+                type="info"
+                showIcon
+                style={{ marginBottom: 24 }}
+              />
+              
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+                <Card 
+                  style={{ 
+                    textAlign: 'center', 
+                    maxWidth: 400,
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  <img 
+                    src="/images/qrcode.jpg" 
+                    alt="客服微信二维码" 
+                    style={{ 
+                      width: 200, 
+                      height: 200, 
+                      marginBottom: 16,
+                      borderRadius: 8
+                    }} 
+                  />
+                  <Title level={4} style={{ marginBottom: 8 }}>扫码添加客服微信</Title>
+                  <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                    工作时间：周一至周五 9:00-18:00
+                  </Paragraph>
+                </Card>
+              </div>
+
+              <Paragraph>
+                <Text strong style={{ fontSize: 16 }}>客服可以帮您解决：</Text>
+              </Paragraph>
+              <List size="small" bordered>
+                <List.Item>✅ 系统使用问题咨询与指导</List.Item>
+                <List.Item>✅ 账号相关问题处理</List.Item>
+                <List.Item>✅ 套餐升级与续费咨询</List.Item>
+                <List.Item>✅ 功能建议与需求反馈</List.Item>
+                <List.Item>✅ 技术问题排查与支持</List.Item>
+                <List.Item>✅ 商务合作与代理加盟咨询</List.Item>
+              </List>
+
+              <Alert
+                message="温馨提示"
+                description="添加客服时请备注「GEO系统」，以便我们更快地为您提供服务。"
+                type="success"
+                showIcon
+                style={{ marginTop: 24 }}
               />
             </section>
           </div>
