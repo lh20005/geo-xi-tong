@@ -31,6 +31,8 @@ router.get('/profile', async (req, res) => {
       data: {
         id: profile.id,
         username: profile.username,
+        email: profile.email || null,
+        emailVerified: profile.email_verified || false,
         invitationCode: profile.invitation_code,
         invitedByCode: profile.invited_by_code,
         role: profile.role,

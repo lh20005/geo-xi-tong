@@ -264,6 +264,11 @@ export default function LoginPage() {
                 </Link>
               </p>
               <p className="text-sm">
+                <Link to="/forgot-password" className="text-gray-500 hover:text-gray-700 transition-colors">
+                  忘记密码？
+                </Link>
+              </p>
+              <p className="text-sm">
                 <Link to="/" className="text-gray-500 hover:text-gray-700 transition-colors">
                   ← 返回首页
                 </Link>

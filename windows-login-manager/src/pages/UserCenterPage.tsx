@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar } from 'antd';
-import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined } from '@ant-design/icons';
+import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined, MailOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
@@ -47,6 +47,8 @@ interface Order {
 interface UserProfile {
   id: number;
   username: string;
+  email?: string;
+  emailVerified?: boolean;
   role: string;
   invitationCode: string;
   createdAt: string;
@@ -91,6 +93,21 @@ const UserCenterPage = () => {
   const [isAgent, setIsAgent] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [agentLoading, setAgentLoading] = useState(false);
+
+  // 邮箱绑定相关状态
+  const [emailModalVisible, setEmailModalVisible] = useState(false);
+  const [emailForm] = Form.useForm();
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailCodeSent, setEmailCodeSent] = useState(false);
+  const [emailCountdown, setEmailCountdown] = useState(0);
+
+  // 邮箱验证码倒计时
+  useEffect(() => {
+    if (emailCountdown > 0) {
+      const timer = setTimeout(() => setEmailCountdown(emailCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [emailCountdown]);
 
   // 从路由状态读取 activeTab
   useEffect(() => {
@@ -392,6 +409,57 @@ const UserCenterPage = () => {
     }
   };
 
+  // 发送邮箱验证码
+  const handleSendEmailCode = async () => {
+    try {
+      await emailForm.validateFields(['email']);
+    } catch {
+      return;
+    }
+
+    const email = emailForm.getFieldValue('email');
+    setEmailLoading(true);
+
+    try {
+      const response = await apiClient.post('/auth/bind-email/send-code', { email });
+
+      if (response.data.success) {
+        message.success('验证码已发送到您的邮箱');
+        setEmailCodeSent(true);
+        setEmailCountdown(60);
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '发送验证码失败');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  // 绑定邮箱
+  const handleBindEmail = async (values: { email: string; code: string }) => {
+    setEmailLoading(true);
+
+    try {
+      const response = await apiClient.post('/auth/bind-email/verify', {
+        email: values.email,
+        code: values.code
+      });
+
+      if (response.data.success) {
+        message.success('邮箱绑定成功');
+        setEmailModalVisible(false);
+        emailForm.resetFields();
+        setEmailCodeSent(false);
+        // 刷新用户信息
+        fetchUserProfile();
+      }
+    } catch (error: any) {
+      message.error(error.response?.data?.message || '绑定失败');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   return (
     <div style={{ padding: 24 }}>
       <Tabs activeKey={activeTab} onChange={setActiveTab} size="large">
@@ -627,6 +695,30 @@ const UserCenterPage = () => {
                 }
               >
                 <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                  {/* 邮箱绑定 */}
+                  <div>
+                    <div style={{ marginBottom: 8 }}>
+                      <strong>绑定邮箱</strong>
+                      {userProfile?.emailVerified && (
+                        <Tag color="success" style={{ marginLeft: 8 }}>
+                          <CheckCircleOutlined /> 已验证
+                        </Tag>
+                      )}
+                    </div>
+                    <div style={{ color: '#8c8c8c', marginBottom: 16 }}>
+                      {userProfile?.email 
+                        ? `当前绑定邮箱：${userProfile.email}`
+                        : '绑定邮箱后可用于找回密码'}
+                    </div>
+                    <Button 
+                      icon={<MailOutlined />} 
+                      onClick={() => setEmailModalVisible(true)}
+                    >
+                      {userProfile?.email ? '更换邮箱' : '绑定邮箱'}
+                    </Button>
+                  </div>
+
+                  {/* 修改密码 */}
                   <div>
                     <div style={{ marginBottom: 8 }}>
                       <strong>密码</strong>
@@ -780,6 +872,98 @@ const UserCenterPage = () => {
               <Button type="primary" htmlType="submit" loading={passwordLoading}>
                 确认修改
               </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 邮箱绑定 Modal */}
+      <Modal
+        title={
+          <Space>
+            <MailOutlined />
+            {userProfile?.email ? '更换邮箱' : '绑定邮箱'}
+          </Space>
+        }
+        open={emailModalVisible}
+        onCancel={() => {
+          setEmailModalVisible(false);
+          emailForm.resetFields();
+          setEmailCodeSent(false);
+        }}
+        footer={null}
+        destroyOnClose
+      >
+        <Form
+          form={emailForm}
+          layout="vertical"
+          onFinish={handleBindEmail}
+        >
+          <Form.Item
+            label="邮箱地址"
+            name="email"
+            rules={[
+              { required: true, message: '请输入邮箱地址' },
+              { type: 'email', message: '请输入有效的邮箱地址' }
+            ]}
+          >
+            <Input 
+              size="large" 
+              placeholder="请输入邮箱地址" 
+              prefix={<MailOutlined />}
+              disabled={emailCodeSent}
+            />
+          </Form.Item>
+
+          {emailCodeSent && (
+            <Form.Item
+              label="验证码"
+              name="code"
+              rules={[
+                { required: true, message: '请输入验证码' },
+                { len: 6, message: '验证码为6位数字' }
+              ]}
+            >
+              <Input 
+                size="large" 
+                placeholder="请输入6位验证码" 
+                maxLength={6}
+              />
+            </Form.Item>
+          )}
+
+          <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+            <Space style={{ width: '100%', justifyContent: 'flex-end' }}>
+              <Button onClick={() => {
+                setEmailModalVisible(false);
+                emailForm.resetFields();
+                setEmailCodeSent(false);
+              }}>
+                取消
+              </Button>
+              {!emailCodeSent ? (
+                <Button 
+                  type="primary" 
+                  onClick={handleSendEmailCode}
+                  loading={emailLoading}
+                  disabled={emailCountdown > 0}
+                >
+                  {emailCountdown > 0 ? `${emailCountdown}秒后重试` : '发送验证码'}
+                </Button>
+              ) : (
+                <>
+                  <Button 
+                    onClick={handleSendEmailCode}
+                    loading={emailLoading}
+                    disabled={emailCountdown > 0}
+                  >
+                    {emailCountdown > 0 ? `${emailCountdown}秒后重发` : '重新发送'}
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={emailLoading}>
+                    确认绑定
+                  </Button>
+                </>
+              )}
             </Space>
           </Form.Item>
         </Form>
