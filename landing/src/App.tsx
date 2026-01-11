@@ -6,7 +6,7 @@ import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import CasesPage from './pages/CasesPage';
 import PrivacyPage from './pages/PrivacyPage';
 import TermsPage from './pages/TermsPage';
-import ProtectedRoute from './components/ProtectedRoute';
+// import ProtectedRoute from './components/ProtectedRoute';
 import { config } from './config/env';
 import { useEffect } from 'react';
 

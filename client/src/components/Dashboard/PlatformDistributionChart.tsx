@@ -61,12 +61,12 @@ export default function PlatformDistributionChart({ data, loading }: PlatformDis
       name: '发布数量',
       nameLocation: 'end',
       nameGap: 5,
+      ...axisStyle,
       nameTextStyle: {
         color: '#8c8c8c',
         fontSize: 12,
         padding: [0, 0, 0, 0]
-      },
-      ...axisStyle
+      }
     },
     yAxis: {
       type: 'category',

@@ -215,7 +215,7 @@ async function main() {
       elig1.eligible === true &&
       elig2.eligible === false &&
       elig3.eligible === false &&
-      parseFloat(order1.amount) < parseFloat(planData.price);
+      Number(order1.amount) < parseFloat(planData.price);
     
     if (allPassed) {
       logSuccess('所有测试通过！');

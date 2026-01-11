@@ -46,10 +46,11 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
     onLogout();
   };
 
-  const handleMenuItemClick = (path: string) => {
+  const _handleMenuItemClick = (path: string) => {
     setIsOpen(false);
     navigate(path);
   };
+  void _handleMenuItemClick; // 保留以备将来使用
 
   const handleProfileClick = () => {
     setIsOpen(false);

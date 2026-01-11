@@ -195,7 +195,7 @@ async function testDiscountSettlement() {
     log(`订单创建成功: ${order.order_no}, 金额: ¥${order.amount}`);
     
     // 验证订单金额
-    const orderPassed = Math.abs(parseFloat(order.amount) - discountedPrice) < 0.01;
+    const orderPassed = Math.abs(Number(order.amount) - discountedPrice) < 0.01;
     results.push({
       testName: `订单金额验证 - ${testCase.planName}`,
       passed: orderPassed,

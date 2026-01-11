@@ -39,7 +39,7 @@ export default function HomePage() {
   const [plansLoading, setPlansLoading] = useState(true);
   
   // 折扣资格检查
-  const { eligibility, getDiscountedPrice } = useDiscountEligibility();
+  const { getDiscountedPrice } = useDiscountEligibility();
   
   // 用户订阅状态
   const { hasAccessTo, isAddonPlan } = useUserSubscription();

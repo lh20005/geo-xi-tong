@@ -27,10 +27,11 @@ export default function MobileUserMenu({ username, isAdmin, onLogout }: MobileUs
     onLogout();
   };
 
-  const handleMenuItemClick = (path: string) => {
+  const _handleMenuItemClick = (path: string) => {
     setIsOpen(false);
     navigate(path);
   };
+  void _handleMenuItemClick; // 保留以备将来使用
 
   const handleProfileClick = () => {
     setIsOpen(false);
