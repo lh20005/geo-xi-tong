@@ -39,7 +39,7 @@ FOREIGN KEY (knowledge_base_id) REFERENCES knowledge_bases(id) ON DELETE SET NUL
 
 -- 5. 更新触发器函数：统一处理所有快照字段
 CREATE OR REPLACE FUNCTION sync_generation_task_snapshots()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
   -- 同步转化目标快照
   IF NEW.conversion_target_id IS NOT NULL THEN
@@ -73,7 +73,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- 6. 删除旧的单独触发器，创建统一触发器
 DROP TRIGGER IF EXISTS trigger_sync_conversion_target_snapshot ON generation_tasks;

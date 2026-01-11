@@ -29,7 +29,7 @@ WHERE a.distillation_id = d.id
 
 -- 4. 创建触发器函数：在创建/更新文章时自动填充快照
 CREATE OR REPLACE FUNCTION sync_article_distillation_snapshot()
-RETURNS TRIGGER AS $
+RETURNS TRIGGER AS $$
 BEGIN
   -- 当设置了 topic_id 时，从 topics 表获取快照
   IF NEW.topic_id IS NOT NULL THEN
@@ -51,7 +51,7 @@ BEGIN
   
   RETURN NEW;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- 5. 创建触发器
 DROP TRIGGER IF EXISTS trigger_sync_article_distillation_snapshot ON articles;

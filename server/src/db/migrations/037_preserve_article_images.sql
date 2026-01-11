@@ -10,13 +10,13 @@
 
 -- 创建一个辅助函数，用于检查图片是否被文章引用
 CREATE OR REPLACE FUNCTION is_image_referenced_by_article(image_path VARCHAR)
-RETURNS BOOLEAN AS $
+RETURNS BOOLEAN AS $$
 BEGIN
   RETURN EXISTS (
     SELECT 1 FROM articles WHERE image_url = image_path
   );
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- 添加函数注释
 COMMENT ON FUNCTION is_image_referenced_by_article(VARCHAR) IS '检查图片路径是否被文章引用，用于决定删除图库时是否保留图片文件';

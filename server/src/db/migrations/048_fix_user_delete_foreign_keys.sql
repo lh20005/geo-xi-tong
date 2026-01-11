@@ -29,7 +29,7 @@ FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE SET NULL;
 -- 4. 修复 plan_change_history 表的 changed_by 外键（如果存在）
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'plan_change_history') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'plan_change_history' AND column_name = 'changed_by') THEN
     ALTER TABLE plan_change_history 
     DROP CONSTRAINT IF EXISTS plan_change_history_changed_by_fkey;
     
@@ -42,7 +42,7 @@ END $$;
 -- 5. 修复 system_api_configs 表的 created_by 外键（如果存在）
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'system_api_configs') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'system_api_configs' AND column_name = 'created_by') THEN
     ALTER TABLE system_api_configs 
     DROP CONSTRAINT IF EXISTS system_api_configs_created_by_fkey;
     
@@ -52,17 +52,19 @@ BEGIN
   END IF;
 END $$;
 
--- 6. 修复 security_config 表的外键（如果存在）
+-- 6. 修复 security_config 表的外键（如果存在且有相应列）
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'security_config') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'security_config' AND column_name = 'created_by') THEN
     ALTER TABLE security_config 
     DROP CONSTRAINT IF EXISTS security_config_created_by_fkey;
     
     ALTER TABLE security_config 
     ADD CONSTRAINT security_config_created_by_fkey 
     FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL;
-    
+  END IF;
+  
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'security_config' AND column_name = 'updated_by') THEN
     ALTER TABLE security_config 
     DROP CONSTRAINT IF EXISTS security_config_updated_by_fkey;
     
@@ -75,7 +77,7 @@ END $$;
 -- 7. 修复 security_config_history 表的 changed_by 外键（如果存在）
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'security_config_history') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'security_config_history' AND column_name = 'changed_by') THEN
     ALTER TABLE security_config_history 
     DROP CONSTRAINT IF EXISTS security_config_history_changed_by_fkey;
     

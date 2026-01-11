@@ -1,8 +1,9 @@
 -- ==================== UP ====================
 -- 初始数据库结构
 -- 
--- 描述：创建所有基础表和索引
+-- 描述：创建所有基础表和索引（包含多租户支持）
 -- 日期：2025-12-27
+-- 更新：2026-01-11 - 添加所有多租户 user_id 字段
 
 -- ========================================
 -- 1. 用户和认证相关表
@@ -91,6 +92,8 @@ CREATE TABLE IF NOT EXISTS plan_features (
   feature_name VARCHAR(100) NOT NULL,
   quota_value INTEGER NOT NULL,
   quota_unit VARCHAR(20),
+  feature_value INTEGER,
+  feature_unit VARCHAR(20),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -135,11 +138,12 @@ CREATE TABLE IF NOT EXISTS user_usage (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   feature_code VARCHAR(50) NOT NULL,
-  used_count INTEGER DEFAULT 0,
+  usage_count INTEGER DEFAULT 0,
   period_start TIMESTAMP NOT NULL,
   period_end TIMESTAMP NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT user_usage_user_feature_period_key UNIQUE (user_id, feature_code, period_start)
 );
 
 CREATE INDEX IF NOT EXISTS idx_user_usage_user_id ON user_usage(user_id);
@@ -157,6 +161,7 @@ CREATE TABLE IF NOT EXISTS product_config_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_product_config_history_plan_id ON product_config_history(plan_id);
+
 
 -- ========================================
 -- 3. 安全和审计相关表
@@ -214,20 +219,6 @@ CREATE TABLE IF NOT EXISTS security_alerts (
 CREATE INDEX IF NOT EXISTS idx_security_alerts_user_id ON security_alerts(user_id);
 CREATE INDEX IF NOT EXISTS idx_security_alerts_is_read ON security_alerts(is_read);
 
--- 配置历史表
-CREATE TABLE IF NOT EXISTS config_history (
-  id SERIAL PRIMARY KEY,
-  config_key VARCHAR(100) NOT NULL,
-  old_value TEXT,
-  new_value TEXT,
-  changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  change_reason TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX IF NOT EXISTS idx_config_history_key ON config_history(config_key);
-CREATE INDEX IF NOT EXISTS idx_config_history_created_at ON config_history(created_at DESC);
-
 -- 安全配置表
 CREATE TABLE IF NOT EXISTS security_config (
   id SERIAL PRIMARY KEY,
@@ -247,6 +238,20 @@ CREATE TABLE IF NOT EXISTS security_config_history (
   changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 配置历史表
+CREATE TABLE IF NOT EXISTS config_history (
+  id SERIAL PRIMARY KEY,
+  config_key VARCHAR(100) NOT NULL,
+  old_value TEXT,
+  new_value TEXT,
+  changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  change_reason TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_config_history_key ON config_history(config_key);
+CREATE INDEX IF NOT EXISTS idx_config_history_created_at ON config_history(created_at DESC);
 
 -- IP白名单表
 CREATE TABLE IF NOT EXISTS ip_whitelist (
@@ -301,8 +306,9 @@ CREATE TABLE IF NOT EXISTS admin_logs (
 CREATE INDEX IF NOT EXISTS idx_admin_logs_admin_id ON admin_logs(admin_id);
 CREATE INDEX IF NOT EXISTS idx_admin_logs_created_at ON admin_logs(created_at DESC);
 
+
 -- ========================================
--- 5. 内容管理相关表
+-- 5. 内容管理相关表（包含多租户 user_id）
 -- ========================================
 
 -- API配置表
@@ -314,25 +320,23 @@ CREATE TABLE IF NOT EXISTS api_configs (
   ollama_model VARCHAR(100),
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT check_ollama_config CHECK (
-    (provider = 'ollama' AND ollama_base_url IS NOT NULL AND ollama_model IS NOT NULL AND api_key IS NULL)
-    OR
-    (provider IN ('deepseek', 'gemini') AND api_key IS NOT NULL AND ollama_base_url IS NULL AND ollama_model IS NULL)
-  )
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_configs_provider ON api_configs(provider);
 CREATE INDEX IF NOT EXISTS idx_api_configs_active ON api_configs(is_active);
 
--- 关键词蒸馏记录表
+-- 关键词蒸馏记录表（多租户）
 CREATE TABLE IF NOT EXISTS distillations (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   keyword VARCHAR(255) NOT NULL,
   provider VARCHAR(20) NOT NULL,
+  usage_count INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_distillations_user_id ON distillations(user_id);
 CREATE INDEX IF NOT EXISTS idx_distillations_keyword ON distillations(keyword);
 
 -- 话题表
@@ -340,19 +344,22 @@ CREATE TABLE IF NOT EXISTS topics (
   id SERIAL PRIMARY KEY,
   distillation_id INTEGER REFERENCES distillations(id) ON DELETE CASCADE,
   question TEXT NOT NULL,
+  usage_count INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_topics_distillation ON topics(distillation_id);
 
--- 相册表
+-- 相册表（多租户）
 CREATE TABLE IF NOT EXISTS albums (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_albums_user_id ON albums(user_id);
 CREATE INDEX IF NOT EXISTS idx_albums_created_at ON albums(created_at DESC);
 
 -- 图片表
@@ -371,15 +378,17 @@ CREATE INDEX IF NOT EXISTS idx_images_album_id ON images(album_id);
 CREATE INDEX IF NOT EXISTS idx_images_created_at ON images(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_images_usage_count ON images(album_id, usage_count ASC, created_at ASC);
 
--- 知识库表
+-- 知识库表（多租户）
 CREATE TABLE IF NOT EXISTS knowledge_bases (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_knowledge_bases_user_id ON knowledge_bases(user_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_bases_created_at ON knowledge_bases(created_at DESC);
 
 -- 知识文档表
@@ -395,26 +404,26 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_documents_kb_id ON knowledge_documents(knowledge_base_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_documents_created_at ON knowledge_documents(created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_knowledge_documents_content ON knowledge_documents USING gin(to_tsvector('english', content));
 
--- 转化目标表
+-- 转化目标表（多租户）
 CREATE TABLE IF NOT EXISTS conversion_targets (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   company_name VARCHAR(255) NOT NULL,
-  industry VARCHAR(100) NOT NULL,
-  company_size VARCHAR(50) NOT NULL,
+  industry VARCHAR(100),
+  company_size VARCHAR(50),
   features TEXT,
-  contact_info VARCHAR(255) NOT NULL,
+  contact_info VARCHAR(255),
   website VARCHAR(500),
   target_audience TEXT,
   core_products TEXT,
+  address VARCHAR(500),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT unique_company_name UNIQUE (company_name)
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_conversion_targets_user_id ON conversion_targets(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversion_targets_company_name ON conversion_targets(company_name);
-CREATE INDEX IF NOT EXISTS idx_conversion_targets_industry ON conversion_targets(industry);
 CREATE INDEX IF NOT EXISTS idx_conversion_targets_created_at ON conversion_targets(created_at DESC);
 
 -- 关键词蒸馏配置表
@@ -429,20 +438,23 @@ CREATE TABLE IF NOT EXISTS distillation_config (
 
 CREATE INDEX IF NOT EXISTS idx_distillation_config_active ON distillation_config(is_active);
 
--- 文章设置表
+-- 文章设置表（多租户）
 CREATE TABLE IF NOT EXISTS article_settings (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   prompt TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_article_settings_user_id ON article_settings(user_id);
 CREATE INDEX IF NOT EXISTS idx_article_settings_created_at ON article_settings(created_at DESC);
 
--- 文章生成任务表
+-- 文章生成任务表（多租户）
 CREATE TABLE IF NOT EXISTS generation_tasks (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   distillation_id INTEGER NOT NULL REFERENCES distillations(id) ON DELETE CASCADE,
   album_id INTEGER NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
   knowledge_base_id INTEGER NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
@@ -453,33 +465,43 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
   progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
   error_message TEXT,
+  selected_distillation_ids TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_generation_tasks_user_id ON generation_tasks(user_id);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_status ON generation_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_created_at ON generation_tasks(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_generation_tasks_conversion_target ON generation_tasks(conversion_target_id);
 
--- 文章表
+-- 文章表（多租户）
 CREATE TABLE IF NOT EXISTS articles (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   title VARCHAR(500),
   keyword VARCHAR(255) NOT NULL,
   distillation_id INTEGER REFERENCES distillations(id),
+  topic_id INTEGER REFERENCES topics(id),
   task_id INTEGER REFERENCES generation_tasks(id) ON DELETE SET NULL,
   requirements TEXT,
   content TEXT NOT NULL,
   image_url VARCHAR(500),
   provider VARCHAR(20) NOT NULL,
+  is_published BOOLEAN DEFAULT false,
+  published_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_articles_user_id ON articles(user_id);
 CREATE INDEX IF NOT EXISTS idx_articles_keyword ON articles(keyword);
 CREATE INDEX IF NOT EXISTS idx_articles_distillation ON articles(distillation_id);
+CREATE INDEX IF NOT EXISTS idx_articles_topic_id ON articles(topic_id);
 CREATE INDEX IF NOT EXISTS idx_articles_task_id ON articles(task_id);
 CREATE INDEX IF NOT EXISTS idx_articles_title ON articles(title);
+CREATE INDEX IF NOT EXISTS idx_articles_is_published ON articles(is_published);
+
 
 -- 图片使用追踪表
 CREATE TABLE IF NOT EXISTS image_usage (
@@ -516,12 +538,13 @@ CREATE INDEX IF NOT EXISTS idx_distillation_usage_distillation_id ON distillatio
 CREATE INDEX IF NOT EXISTS idx_distillation_usage_article_id ON distillation_usage(article_id);
 
 -- ========================================
--- 6. 发布系统相关表
+-- 6. 发布系统相关表（多租户）
 -- ========================================
 
--- 平台账号表
+-- 平台账号表（多租户）
 CREATE TABLE IF NOT EXISTS platform_accounts (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   platform VARCHAR(50) NOT NULL,
   platform_id VARCHAR(50) NOT NULL,
   account_name VARCHAR(100) NOT NULL,
@@ -533,6 +556,7 @@ CREATE TABLE IF NOT EXISTS platform_accounts (
   last_used_at TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_platform_accounts_user_id ON platform_accounts(user_id);
 CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform ON platform_accounts(platform_id);
 
 -- 发布任务表
@@ -549,6 +573,9 @@ CREATE TABLE IF NOT EXISTS publishing_tasks (
   error_message TEXT,
   retry_count INTEGER DEFAULT 0,
   max_retries INTEGER DEFAULT 3,
+  batch_id VARCHAR(50),
+  batch_order INTEGER DEFAULT 0,
+  interval_minutes INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -556,6 +583,7 @@ CREATE TABLE IF NOT EXISTS publishing_tasks (
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_article ON publishing_tasks(article_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_status ON publishing_tasks(status);
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_scheduled ON publishing_tasks(scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_publishing_tasks_batch_id ON publishing_tasks(batch_id);
 
 -- 发布日志表
 CREATE TABLE IF NOT EXISTS publishing_logs (
@@ -584,20 +612,24 @@ CREATE TABLE IF NOT EXISTS platforms_config (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 发布记录表
+-- 发布记录表（多租户）
 CREATE TABLE IF NOT EXISTS publishing_records (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  account_id INTEGER REFERENCES platform_accounts(id) ON DELETE SET NULL,
   platform_id VARCHAR(50) NOT NULL,
   platform_article_id VARCHAR(255),
   platform_url TEXT,
   status VARCHAR(20) DEFAULT 'pending',
+  publishing_status VARCHAR(20) DEFAULT 'draft',
   published_at TIMESTAMP,
   error_message TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_publishing_records_user_id ON publishing_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_article_id ON publishing_records(article_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_platform_id ON publishing_records(platform_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_status ON publishing_records(status);
@@ -620,6 +652,68 @@ INSERT INTO platforms_config (platform_id, platform_name, icon_url, adapter_clas
 ('jianshu', '简书', '/icons/jianshu.png', 'JianshuAdapter', '["username", "password"]'),
 ('csdn', 'CSDN', '/icons/csdn.png', 'CSDNAdapter', '["username", "password"]')
 ON CONFLICT (platform_id) DO NOTHING;
+
+-- ========================================
+-- 8. 插入基础套餐数据
+-- ========================================
+
+INSERT INTO subscription_plans (plan_code, plan_name, price, duration_days, is_active, description)
+VALUES 
+  ('free', '体验版', 0, 30, true, '免费体验套餐'),
+  ('professional', '专业版', 99, 30, true, '专业版套餐'),
+  ('enterprise', '企业版', 299, 30, true, '企业版套餐')
+ON CONFLICT (plan_code) DO NOTHING;
+
+-- 插入套餐功能配额（体验版）
+INSERT INTO plan_features (plan_id, feature_code, feature_name, quota_value, quota_unit, feature_value, feature_unit)
+SELECT p.id, f.feature_code, f.feature_name, f.quota_value, f.quota_unit, f.quota_value, f.quota_unit
+FROM subscription_plans p
+CROSS JOIN (
+  VALUES 
+    ('articles_per_month', '每月文章数', 10, '篇'),
+    ('publish_per_month', '每月发布数', 20, '次'),
+    ('keyword_distillation', '关键词蒸馏', 5, '次'),
+    ('platform_accounts', '平台账号数', 3, '个'),
+    ('albums', '相册数量', 3, '个'),
+    ('knowledge_bases', '知识库数量', 2, '个'),
+    ('storage_space', '存储空间', 100, 'MB')
+) AS f(feature_code, feature_name, quota_value, quota_unit)
+WHERE p.plan_code = 'free'
+ON CONFLICT DO NOTHING;
+
+-- 插入套餐功能配额（专业版）
+INSERT INTO plan_features (plan_id, feature_code, feature_name, quota_value, quota_unit, feature_value, feature_unit)
+SELECT p.id, f.feature_code, f.feature_name, f.quota_value, f.quota_unit, f.quota_value, f.quota_unit
+FROM subscription_plans p
+CROSS JOIN (
+  VALUES 
+    ('articles_per_month', '每月文章数', 100, '篇'),
+    ('publish_per_month', '每月发布数', 200, '次'),
+    ('keyword_distillation', '关键词蒸馏', 50, '次'),
+    ('platform_accounts', '平台账号数', 10, '个'),
+    ('albums', '相册数量', 20, '个'),
+    ('knowledge_bases', '知识库数量', 10, '个'),
+    ('storage_space', '存储空间', 1024, 'MB')
+) AS f(feature_code, feature_name, quota_value, quota_unit)
+WHERE p.plan_code = 'professional'
+ON CONFLICT DO NOTHING;
+
+-- 插入套餐功能配额（企业版，-1表示无限）
+INSERT INTO plan_features (plan_id, feature_code, feature_name, quota_value, quota_unit, feature_value, feature_unit)
+SELECT p.id, f.feature_code, f.feature_name, f.quota_value, f.quota_unit, f.quota_value, f.quota_unit
+FROM subscription_plans p
+CROSS JOIN (
+  VALUES 
+    ('articles_per_month', '每月文章数', -1, '篇'),
+    ('publish_per_month', '每月发布数', -1, '次'),
+    ('keyword_distillation', '关键词蒸馏', -1, '次'),
+    ('platform_accounts', '平台账号数', -1, '个'),
+    ('albums', '相册数量', -1, '个'),
+    ('knowledge_bases', '知识库数量', -1, '个'),
+    ('storage_space', '存储空间', -1, 'MB')
+) AS f(feature_code, feature_name, quota_value, quota_unit)
+WHERE p.plan_code = 'enterprise'
+ON CONFLICT DO NOTHING;
 
 -- ==================== DOWN ====================
 -- 回滚初始结构（删除所有表）

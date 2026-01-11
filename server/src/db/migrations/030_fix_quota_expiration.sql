@@ -6,6 +6,10 @@
 -- ========================================
 
 -- 1. 更新 record_feature_usage 函数 - 移除永久配额概念
+-- 先删除旧版本的函数
+DROP FUNCTION IF EXISTS record_feature_usage(INTEGER, VARCHAR, VARCHAR, INTEGER, INTEGER, JSONB);
+DROP FUNCTION IF EXISTS record_feature_usage(INTEGER, VARCHAR, INTEGER);
+
 CREATE OR REPLACE FUNCTION record_feature_usage(
   p_user_id INTEGER,
   p_feature_code VARCHAR(50),
@@ -85,6 +89,10 @@ $$ LANGUAGE plpgsql;
 COMMENT ON FUNCTION record_feature_usage IS '记录功能使用量 - 所有配额都与订阅周期绑定';
 
 -- 2. 更新 check_feature_quota 函数 - 添加订阅到期检查
+-- 先删除旧版本的函数（因为返回类型不同）
+DROP FUNCTION IF EXISTS check_feature_quota(INTEGER, VARCHAR);
+DROP FUNCTION IF EXISTS check_feature_quota(INTEGER, VARCHAR, INTEGER);
+
 CREATE OR REPLACE FUNCTION check_feature_quota(
   p_user_id INTEGER,
   p_feature_code VARCHAR(50),

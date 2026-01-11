@@ -161,22 +161,22 @@ BEGIN
   
   -- 为体验版添加 100MB 存储
   IF v_free_plan_id IS NOT NULL THEN
-    INSERT INTO plan_features (plan_id, feature_code, feature_name, feature_value, feature_unit)
-    VALUES (v_free_plan_id, 'storage_space', '存储空间', 104857600, 'bytes')
+    INSERT INTO plan_features (plan_id, feature_code, feature_name, quota_value, quota_unit, feature_value, feature_unit)
+    VALUES (v_free_plan_id, 'storage_space', '存储空间', 104857600, 'bytes', 104857600, 'bytes')
     ON CONFLICT (plan_id, feature_code) DO NOTHING;
   END IF;
   
   -- 为专业版添加 1GB 存储
   IF v_professional_plan_id IS NOT NULL THEN
-    INSERT INTO plan_features (plan_id, feature_code, feature_name, feature_value, feature_unit)
-    VALUES (v_professional_plan_id, 'storage_space', '存储空间', 1073741824, 'bytes')
+    INSERT INTO plan_features (plan_id, feature_code, feature_name, quota_value, quota_unit, feature_value, feature_unit)
+    VALUES (v_professional_plan_id, 'storage_space', '存储空间', 1073741824, 'bytes', 1073741824, 'bytes')
     ON CONFLICT (plan_id, feature_code) DO NOTHING;
   END IF;
   
   -- 为企业版添加无限存储
   IF v_enterprise_plan_id IS NOT NULL THEN
-    INSERT INTO plan_features (plan_id, feature_code, feature_name, feature_value, feature_unit)
-    VALUES (v_enterprise_plan_id, 'storage_space', '存储空间', -1, 'bytes')
+    INSERT INTO plan_features (plan_id, feature_code, feature_name, quota_value, quota_unit, feature_value, feature_unit)
+    VALUES (v_enterprise_plan_id, 'storage_space', '存储空间', -1, 'bytes', -1, 'bytes')
     ON CONFLICT (plan_id, feature_code) DO NOTHING;
   END IF;
 END $$;

@@ -41,6 +41,8 @@ WHERE i.album_id = a.id AND i.user_id IS NULL;
 -- ============================================
 -- 3. 更新存储计算函数
 -- ============================================
+DROP FUNCTION IF EXISTS sync_user_storage_usage(INTEGER);
+
 CREATE OR REPLACE FUNCTION sync_user_storage_usage(p_user_id INTEGER)
 RETURNS VOID AS $$
 DECLARE
@@ -112,6 +114,8 @@ COMMENT ON FUNCTION sync_user_storage_usage(INTEGER) IS '同步用户存储使�
 -- ============================================
 -- 4. 更新获取孤儿图片函数
 -- ============================================
+DROP FUNCTION IF EXISTS get_orphan_images_to_cleanup(INTEGER);
+
 CREATE OR REPLACE FUNCTION get_orphan_images_to_cleanup(
   min_age_hours INTEGER DEFAULT 24
 )
@@ -142,6 +146,8 @@ COMMENT ON FUNCTION get_orphan_images_to_cleanup(INTEGER) IS '获取可清理的
 -- ============================================
 -- 5. 更新减少引用计数函数（返回 user_id 用于存储同步）
 -- ============================================
+DROP FUNCTION IF EXISTS decrement_image_reference(INTEGER);
+
 CREATE OR REPLACE FUNCTION decrement_image_reference(p_image_id INTEGER)
 RETURNS TABLE(should_delete BOOLEAN, filepath VARCHAR, image_user_id INTEGER) AS $$
 DECLARE
@@ -202,7 +208,7 @@ SELECT
 FROM users u;
 
 -- ==================== DOWN ====================
--- 回滚脚本
+-- 回滚脚本（注释掉，仅供参考）
 
 -- 恢复原来的函数（使用 JOIN albums）
 -- CREATE OR REPLACE FUNCTION sync_user_storage_usage(p_user_id INTEGER) ...

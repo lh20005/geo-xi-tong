@@ -74,16 +74,14 @@ CREATE INDEX IF NOT EXISTS idx_generation_tasks_distillation_keyword ON generati
 COMMENT ON COLUMN generation_tasks.distillation_keyword IS '关键词（独立存储）';
 
 -- ========== 3. topic_usage 表 ==========
+-- 添加 keyword 列用于独立存储
 ALTER TABLE topic_usage ADD COLUMN IF NOT EXISTS keyword VARCHAR(255);
 
+-- 通过 topic_id 关联获取 keyword（topic_usage 没有 distillation_id 列）
 UPDATE topic_usage tu
-SET keyword = d.keyword
-FROM distillations d
-WHERE tu.distillation_id = d.id AND tu.keyword IS NULL;
-
-ALTER TABLE topic_usage DROP CONSTRAINT IF EXISTS topic_usage_distillation_id_fkey;
-ALTER TABLE topic_usage ADD CONSTRAINT topic_usage_distillation_id_fkey 
-  FOREIGN KEY (distillation_id) REFERENCES distillations(id) ON DELETE SET NULL;
+SET keyword = t.keyword
+FROM topics t
+WHERE tu.topic_id = t.id AND tu.keyword IS NULL AND t.keyword IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_topic_usage_keyword ON topic_usage(keyword);
 COMMENT ON COLUMN topic_usage.keyword IS '关键词（独立存储）';
@@ -111,11 +109,8 @@ ALTER TABLE generation_tasks ALTER COLUMN distillation_id SET NOT NULL;
 ALTER TABLE generation_tasks ADD CONSTRAINT generation_tasks_distillation_id_fkey 
   FOREIGN KEY (distillation_id) REFERENCES distillations(id) ON DELETE CASCADE;
 
-ALTER TABLE topic_usage DROP CONSTRAINT IF EXISTS topic_usage_distillation_id_fkey;
-ALTER TABLE topic_usage ADD CONSTRAINT topic_usage_distillation_id_fkey 
-  FOREIGN KEY (distillation_id) REFERENCES distillations(id) ON DELETE CASCADE;
+ALTER TABLE topic_usage DROP COLUMN IF EXISTS keyword;
 
 ALTER TABLE topics DROP COLUMN IF EXISTS keyword;
 ALTER TABLE topics DROP COLUMN IF EXISTS user_id;
 ALTER TABLE generation_tasks DROP COLUMN IF EXISTS distillation_keyword;
-ALTER TABLE topic_usage DROP COLUMN IF EXISTS keyword;
