@@ -6,6 +6,7 @@ import Header from '../components/Header';
 export default function RegistrationPage() {
   const [formData, setFormData] = useState({
     username: '',
+    email: '',
     password: '',
     confirmPassword: '',
     invitationCode: ''
@@ -83,11 +84,19 @@ export default function RegistrationPage() {
       return;
     }
 
+    // 验证邮箱格式
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('请输入有效的邮箱地址');
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await apiClient.register({
         username: formData.username,
+        email: formData.email,
         password: formData.password,
         invitationCode: formData.invitationCode || undefined
       });
@@ -179,6 +188,21 @@ export default function RegistrationPage() {
                   maxLength={20}
                   pattern="[a-zA-Z0-9_]+"
                   autoComplete="off"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  邮箱
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  placeholder="请输入常用邮箱，用于找回密码"
+                  required
+                  autoComplete="email"
                 />
               </div>
 

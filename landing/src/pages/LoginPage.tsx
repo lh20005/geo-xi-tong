@@ -256,23 +256,26 @@ export default function LoginPage() {
               </button>
             </form>
 
-            <div className="mt-6 text-center space-y-2">
-              <p className="text-sm text-gray-600">
-                还没有账号？
-                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium ml-1">
-                  立即注册
-                </Link>
-              </p>
-              <p className="text-sm">
-                <Link to="/forgot-password" className="text-gray-500 hover:text-gray-700 transition-colors">
-                  忘记密码？
-                </Link>
-              </p>
-              <p className="text-sm">
-                <Link to="/" className="text-gray-500 hover:text-gray-700 transition-colors">
-                  ← 返回首页
-                </Link>
-              </p>
+            <div className="mt-8 flex items-center justify-center space-x-4">
+              <Link 
+                to="/forgot-password" 
+                className="text-sm text-blue-600 hover:text-purple-600 transition-colors"
+              >
+                忘记密码？
+              </Link>
+              <span className="text-gray-300">|</span>
+              <Link 
+                to="/register" 
+                className="text-sm text-blue-600 hover:text-purple-600 transition-colors"
+              >
+                注册新用户
+              </Link>
+            </div>
+
+            <div className="mt-4 text-center">
+              <Link to="/" className="text-sm text-gray-400 hover:text-gray-600 transition-colors">
+                ← 返回首页
+              </Link>
             </div>
           </div>
         </div>

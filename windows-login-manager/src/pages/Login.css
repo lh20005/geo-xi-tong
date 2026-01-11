@@ -183,3 +183,28 @@
   color: #999;
   margin-top: 8px;
 }
+
+.login-links {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.login-links a {
+  color: #667eea;
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.login-links a:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+.login-links .link-divider {
+  color: #ddd;
+  font-size: 12px;
+}

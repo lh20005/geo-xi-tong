@@ -10,6 +10,8 @@ import path from 'path';
 interface User {
   id: number;
   username: string;
+  email?: string;
+  email_verified?: boolean;
   invitation_code: string;
   invited_by_code?: string;
   role: 'admin' | 'user';

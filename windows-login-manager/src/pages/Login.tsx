@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ipcBridge } from '../services/ipc';
+import { config } from '../config/env';
 import './Login.css';
 
 interface LoginProps {
@@ -151,8 +152,26 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             {loading ? '登录中...' : '登录'}
           </button>
 
-          <div className="login-hint">
-            默认账号: admin / admin123
+          <div className="login-links">
+            <a 
+              href="#" 
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(`${config.landingUrl}/forgot-password`, '_blank');
+              }}
+            >
+              忘记密码？
+            </a>
+            <span className="link-divider">|</span>
+            <a 
+              href="#" 
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(`${config.landingUrl}/register`, '_blank');
+              }}
+            >
+              注册新用户
+            </a>
           </div>
         </form>
       </div>

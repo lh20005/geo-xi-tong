@@ -36,7 +36,7 @@ const REFRESH_TOKEN_EXPIRES_IN = '7d';
  */
 router.post('/register', registrationRateLimit, async (req, res) => {
   try {
-    const { username, password, invitationCode } = req.body;
+    const { username, email, password, invitationCode } = req.body;
 
     if (!username || !password) {
       return res.status(400).json({
@@ -45,11 +45,40 @@ router.post('/register', registrationRateLimit, async (req, res) => {
       });
     }
 
+    // 验证邮箱（必填）
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱不能为空'
+      });
+    }
+
+    // 验证邮箱格式
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: '邮箱格式不正确'
+      });
+    }
+
+    // 检查邮箱是否已被使用
+    const existingEmail = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: '该邮箱已被注册'
+      });
+    }
+
     // 检查速率限制（注册限制：每小时3次）
     const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
     
-    // 注册用户
-    const user = await authService.registerUser(username, password, invitationCode);
+    // 注册用户（包含邮箱）
+    const user = await authService.registerUser(username, password, invitationCode, email);
     
     // 生成令牌
     const accessToken = tokenService.generateAccessToken(user.id, user.username, user.role);

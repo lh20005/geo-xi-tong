@@ -82,12 +82,13 @@ export class AuthService {
 
   /**
    * 注册新用户
-   * 支持可选的邀请码
+   * 支持可选的邀请码和必填的邮箱
    */
   async registerUser(
     username: string, 
     password: string, 
-    invitedByCode?: string
+    invitedByCode?: string,
+    email?: string
   ): Promise<User> {
     // 验证用户名格式（3-20字符，字母数字和下划线）
     if (!username || username.length < 3 || username.length > 20) {
@@ -152,12 +153,12 @@ export class AuthService {
       // 生成唯一的邀请码
       const invitationCode = await invitationService.generate();
       
-      // 创建用户（包含 invited_by_agent 字段）
+      // 创建用户（包含 invited_by_agent 字段和邮箱）
       const result = await client.query(
-        `INSERT INTO users (username, password_hash, invitation_code, invited_by_code, invited_by_agent, role, is_temp_password) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+        `INSERT INTO users (username, password_hash, email, email_verified, invitation_code, invited_by_code, invited_by_agent, role, is_temp_password) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
          RETURNING *`,
-        [username, passwordHash, invitationCode, invitedByCode || null, invitedByAgentId, 'user', false]
+        [username, passwordHash, email ? email.toLowerCase() : null, email ? true : false, invitationCode, invitedByCode || null, invitedByAgentId, 'user', false]
       );
       
       const user = result.rows[0];
