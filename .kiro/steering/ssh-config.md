@@ -4,11 +4,11 @@ inclusion: manual
 
 # 服务器 SSH 配置
 
-## 生产服务器 (43.143.163.6)
+## 生产服务器 (124.221.247.107)
 
 | 项目 | 值 |
 |------|-----|
-| Host | 43.143.163.6 |
+| Host | 124.221.247.107 |
 | User | ubuntu |
 | Private Key | /Users/lzc/.ssh/kiro_geo.pem |
 | 项目路径 | /var/www/geo-system |
@@ -18,7 +18,7 @@ inclusion: manual
 ## MCP SSH 工具调用参数
 
 ```
-host: 43.143.163.6
+host: 124.221.247.107
 user: ubuntu
 privateKeyPath: /Users/lzc/.ssh/kiro_geo.pem
 ```

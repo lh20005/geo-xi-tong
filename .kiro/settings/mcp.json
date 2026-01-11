@@ -7,13 +7,15 @@
         "@idletoaster/ssh-mcp-server@latest"
       ],
       "env": {
-        "SSH_HOST": "43.143.163.6",
+        "SSH_HOST": "124.221.247.107",
         "SSH_PORT": "22",
         "SSH_USERNAME": "ubuntu",
-        "SSH_KEY_PATH": "/Users/lzc/.ssh/kiro.pem"
+        "SSH_KEY_PATH": "/Users/lzc/.ssh/kiro_geo.pem"
       },
       "disabled": false,
-      "autoApprove": []
+      "autoApprove": [
+        "remote-ssh"
+      ]
     }
   }
 }

@@ -6,9 +6,12 @@ import zhCN from 'antd/locale/zh_CN';
 import App from './App';
 import './index.css';
 
+// 生产环境下使用 /app 作为 basename
+const basename = import.meta.env.PROD ? '/app' : '/';
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename={basename}>
       <ConfigProvider
         locale={zhCN}
         theme={{
