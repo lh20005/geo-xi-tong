@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, App,
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
@@ -114,6 +114,9 @@ export default function PublishingTasksPage() {
     logs: [],
     isLive: false
   });
+
+  // 日志容器 ref
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   // 静默发布模式（默认开启静默模式）
   const [previewModal, setPreviewModal] = useState<{
@@ -367,16 +370,15 @@ export default function PublishingTasksPage() {
 
   // 自动滚动到日志底部
   useEffect(() => {
-    if (logsModal.visible && logsModal.logs.length > 0) {
-      const container = document.getElementById('logs-container');
-      if (container) {
-        // 使用 setTimeout 确保 DOM 已更新
-        setTimeout(() => {
-          container.scrollTop = container.scrollHeight;
-        }, 100);
-      }
+    if (logsModal.visible && logsModal.logs.length > 0 && logsContainerRef.current) {
+      // 使用 requestAnimationFrame 确保 DOM 已更新
+      requestAnimationFrame(() => {
+        if (logsContainerRef.current) {
+          logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+        }
+      });
     }
-  }, [logsModal.logs, logsModal.visible]);
+  }, [logsModal.logs.length, logsModal.visible]);
 
 
 
@@ -1727,6 +1729,12 @@ export default function PublishingTasksPage() {
                 try {
                   const logs = await getTaskLogs(logsModal.taskId);
                   setLogsModal(prev => ({ ...prev, logs }));
+                  // 刷新后滚动到底部
+                  requestAnimationFrame(() => {
+                    if (logsContainerRef.current) {
+                      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+                    }
+                  });
                   message.success('日志已刷新');
                 } catch (error: any) {
                   message.error('刷新失败');
@@ -1746,7 +1754,7 @@ export default function PublishingTasksPage() {
         ]}
       >
         <div 
-          id="logs-container"
+          ref={logsContainerRef}
           style={{ 
             maxHeight: 600, 
             overflow: 'auto',
