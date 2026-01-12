@@ -26,8 +26,9 @@ export class UsageTrackingService {
   ): Promise<void> {
     try {
       // 使用数据库函数记录使用量
+      // 显式类型转换避免 PostgreSQL 无法推断参数类型
       await pool.query(
-        `SELECT record_feature_usage($1, $2, $3, $4, $5, $6)`,
+        `SELECT record_feature_usage($1::INTEGER, $2::VARCHAR, $3::VARCHAR, $4::INTEGER, $5::INTEGER, $6::JSONB)`,
         [
           userId,
           featureCode,
