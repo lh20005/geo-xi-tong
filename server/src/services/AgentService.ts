@@ -57,7 +57,7 @@ export class AgentService {
       throw new Error('您已经是代理商');
     }
 
-    // 获取用户的邀请码（代理商使用用户注册时的邀请码）
+    // 获取用户的邀请码
     const userResult = await pool.query(
       'SELECT invitation_code FROM users WHERE id = $1',
       [userId]
@@ -65,12 +65,11 @@ export class AgentService {
     const userInvitationCode = userResult.rows[0]?.invitation_code;
 
     // 创建代理商记录，默认状态为 active，佣金比例 30%
-    // 不再使用专用邀请码，使用用户的邀请码
     const result = await pool.query<AgentRow>(
-      `INSERT INTO agents (user_id, status, commission_rate)
-       VALUES ($1, 'active', 0.30)
+      `INSERT INTO agents (user_id, invitation_code, status, commission_rate)
+       VALUES ($1, $2, 'active', 0.30)
        RETURNING *`,
-      [userId]
+      [userId, userInvitationCode]
     );
 
     // 记录审计日志
@@ -80,7 +79,7 @@ export class AgentService {
       invitationCode: userInvitationCode
     });
 
-    console.log(`[AgentService] 用户 ${userId} 成功申请成为代理商，使用邀请码: ${userInvitationCode}`);
+    console.log(`[AgentService] 用户 ${userId} 成功申请成为代理商，邀请码: ${userInvitationCode}`);
     return this.rowToAgent(result.rows[0]);
   }
 
@@ -243,14 +242,14 @@ export class AgentService {
       throw new Error('代理商不存在');
     }
 
-    // 获取用户的邀请码（代理商使用用户注册时的邀请码）
-    const userResult = await pool.query(
-      'SELECT invitation_code FROM users WHERE id = $1',
-      [agent.userId]
+    // 获取代理商的邀请码
+    const agentResult = await pool.query(
+      'SELECT invitation_code FROM agents WHERE id = $1',
+      [agentId]
     );
-    const invitationCode = userResult.rows[0]?.invitation_code;
+    const invitationCode = agentResult.rows[0]?.invitation_code;
 
-    // 统计邀请用户数（使用用户的邀请码）
+    // 统计邀请用户数（使用代理商的邀请码）
     const inviteResult = await pool.query(
       `SELECT 
         COUNT(*) as total_invites,

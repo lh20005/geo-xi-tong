@@ -9,7 +9,7 @@
 CREATE TABLE IF NOT EXISTS agents (
   id SERIAL PRIMARY KEY,
   user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  invitation_code VARCHAR(20) UNIQUE NOT NULL,  -- 邀请码
+  invitation_code VARCHAR(20) UNIQUE,  -- 邀请码（从用户表复制）
   status VARCHAR(20) NOT NULL DEFAULT 'active',  -- active/suspended（无需审核，直接激活）
   commission_rate DECIMAL(5,4) NOT NULL DEFAULT 0.30,  -- 默认30%（微信支付最大比例）
   wechat_openid VARCHAR(128),  -- 微信OpenID（用于分账）
