@@ -102,6 +102,68 @@ router.post('/', authenticate, async (req, res) => {
     // 确定订单类型
     const finalOrderType = planType === 'booster' ? 'booster' : (order_type || 'purchase');
 
+    // 检查套餐价格，如果是免费套餐则直接开通
+    const planPrice = parseFloat(planResult.rows[0].price);
+    
+    if (planPrice === 0) {
+      // 免费套餐：直接创建订单并开通
+      const order = await orderService.createOrder(userId, plan_id, finalOrderType as 'purchase' | 'upgrade');
+      
+      // 直接标记为已支付并开通订阅
+      await orderService.updateOrderStatus(order.order_no, 'paid');
+      
+      // 开通订阅
+      const { QuotaInitializationService } = await import('../services/QuotaInitializationService');
+      
+      // 将用户现有的 active 订阅标记为已替换
+      await pool.query(
+        `UPDATE user_subscriptions 
+         SET status = 'replaced', updated_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND status = 'active'`,
+        [userId]
+      );
+      
+      // 获取套餐的 duration_days
+      const durationResult = await pool.query(
+        'SELECT duration_days, billing_cycle FROM subscription_plans WHERE id = $1',
+        [plan_id]
+      );
+      let durationDays = 30;
+      if (durationResult.rows.length > 0) {
+        const { duration_days, billing_cycle } = durationResult.rows[0];
+        if (duration_days && duration_days > 0) {
+          durationDays = duration_days;
+        } else if (billing_cycle === 'yearly') {
+          durationDays = 365;
+        } else if (billing_cycle === 'quarterly') {
+          durationDays = 90;
+        }
+      }
+      
+      // 创建订阅
+      await pool.query(
+        `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
+         VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, (CURRENT_TIMESTAMP + INTERVAL '1 day' * $3)::timestamp + TIME '23:59:59')`,
+        [userId, plan_id, durationDays]
+      );
+      
+      // 初始化配额
+      await QuotaInitializationService.initializeUserQuotas(userId, plan_id, { resetUsage: true });
+      await QuotaInitializationService.updateStorageQuota(userId, plan_id);
+      
+      return res.json({
+        success: true,
+        data: {
+          order_no: order.order_no,
+          amount: 0,
+          plan_name: '体验版',
+          status: 'paid',
+          is_free: true
+        },
+        message: '免费套餐开通成功'
+      });
+    }
+
     // 创建微信支付订单（包含二维码链接）
     const result = await paymentService.createWeChatPayOrder(userId, plan_id, finalOrderType);
 

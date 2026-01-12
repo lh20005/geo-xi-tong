@@ -16,8 +16,10 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash VARCHAR(255) NOT NULL,
   email VARCHAR(100),
   role VARCHAR(20) DEFAULT 'user',
-  invitation_code VARCHAR(20) UNIQUE,
-  invited_by_code VARCHAR(20),
+  name VARCHAR(100),
+  is_active BOOLEAN DEFAULT true,
+  invitation_code VARCHAR(6) NOT NULL,
+  invited_by_code VARCHAR(6),
   is_temp_password BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -25,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_invitation_code ON users(invitation_code);
 CREATE INDEX IF NOT EXISTS idx_users_invited_by_code ON users(invited_by_code);
 
@@ -37,6 +40,7 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
   user_agent TEXT,
   last_used_at TIMESTAMP,
   expires_at TIMESTAMP NOT NULL,
+  revoked BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -48,13 +52,12 @@ CREATE TABLE IF NOT EXISTS login_attempts (
   id SERIAL PRIMARY KEY,
   username VARCHAR(50) NOT NULL,
   ip_address VARCHAR(45) NOT NULL,
-  attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  success BOOLEAN DEFAULT FALSE
+  success BOOLEAN NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(username);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
-CREATE INDEX IF NOT EXISTS idx_login_attempts_attempted_at ON login_attempts(attempted_at);
 
 -- 密码历史表
 CREATE TABLE IF NOT EXISTS password_history (
@@ -65,7 +68,6 @@ CREATE TABLE IF NOT EXISTS password_history (
 );
 
 CREATE INDEX IF NOT EXISTS idx_password_history_user_id ON password_history(user_id);
-CREATE INDEX IF NOT EXISTS idx_password_history_created_at ON password_history(created_at DESC);
 
 -- ========================================
 -- 2. 订阅和支付相关表
@@ -77,7 +79,7 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
   plan_code VARCHAR(50) UNIQUE NOT NULL,
   plan_name VARCHAR(100) NOT NULL,
   price DECIMAL(10,2) NOT NULL,
-  duration_days INTEGER NOT NULL,
+  duration_days INTEGER NOT NULL DEFAULT 30,
   is_active BOOLEAN DEFAULT true,
   description TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -90,11 +92,12 @@ CREATE TABLE IF NOT EXISTS plan_features (
   plan_id INTEGER REFERENCES subscription_plans(id) ON DELETE CASCADE,
   feature_code VARCHAR(50) NOT NULL,
   feature_name VARCHAR(100) NOT NULL,
-  quota_value INTEGER NOT NULL,
-  quota_unit VARCHAR(20),
-  feature_value INTEGER,
+  feature_value INTEGER NOT NULL,
   feature_unit VARCHAR(20),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  quota_value INTEGER,
+  quota_unit VARCHAR(20),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(plan_id, feature_code)
 );
 
 CREATE INDEX IF NOT EXISTS idx_plan_features_plan_id ON plan_features(plan_id);
@@ -123,8 +126,11 @@ CREATE TABLE IF NOT EXISTS orders (
   plan_id INTEGER REFERENCES subscription_plans(id),
   amount DECIMAL(10,2) NOT NULL,
   status VARCHAR(20) DEFAULT 'pending',
-  payment_method VARCHAR(50),
-  payment_time TIMESTAMP,
+  payment_method VARCHAR(20),
+  order_type VARCHAR(20) DEFAULT 'purchase',
+  transaction_id VARCHAR(100),
+  paid_at TIMESTAMP,
+  expired_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -139,8 +145,8 @@ CREATE TABLE IF NOT EXISTS user_usage (
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   feature_code VARCHAR(50) NOT NULL,
   usage_count INTEGER DEFAULT 0,
-  period_start TIMESTAMP NOT NULL,
-  period_end TIMESTAMP NOT NULL,
+  period_start DATE NOT NULL,
+  period_end DATE NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT user_usage_user_feature_period_key UNIQUE (user_id, feature_code, period_start)
@@ -174,8 +180,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   action VARCHAR(100) NOT NULL,
   target_type VARCHAR(50),
   target_id INTEGER,
-  details TEXT,
-  ip_address VARCHAR(45),
+  details JSONB,
+  ip_address VARCHAR(45) NOT NULL,
   user_agent TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -191,17 +197,13 @@ CREATE TABLE IF NOT EXISTS security_events (
   severity VARCHAR(20) NOT NULL,
   user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
   ip_address VARCHAR(45),
-  description TEXT,
-  details TEXT,
-  resolved BOOLEAN DEFAULT false,
-  resolved_at TIMESTAMP,
-  resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  message TEXT NOT NULL,
+  details JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_security_events_type ON security_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_security_events_severity ON security_events(severity);
-CREATE INDEX IF NOT EXISTS idx_security_events_resolved ON security_events(resolved);
 CREATE INDEX IF NOT EXISTS idx_security_events_created_at ON security_events(created_at DESC);
 
 -- 安全告警表
@@ -224,7 +226,13 @@ CREATE TABLE IF NOT EXISTS security_config (
   id SERIAL PRIMARY KEY,
   config_key VARCHAR(100) NOT NULL UNIQUE,
   config_value TEXT NOT NULL,
+  config_type VARCHAR(50) NOT NULL,
   description TEXT,
+  validation_rule TEXT,
+  is_active BOOLEAN DEFAULT true,
+  version INTEGER DEFAULT 1,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -233,9 +241,12 @@ CREATE TABLE IF NOT EXISTS security_config (
 CREATE TABLE IF NOT EXISTS security_config_history (
   id SERIAL PRIMARY KEY,
   config_id INTEGER REFERENCES security_config(id) ON DELETE CASCADE,
+  config_key VARCHAR(100) NOT NULL,
   old_value TEXT,
-  new_value TEXT,
+  new_value TEXT NOT NULL,
+  version INTEGER NOT NULL,
   changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  change_reason TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -245,8 +256,8 @@ CREATE TABLE IF NOT EXISTS config_history (
   config_key VARCHAR(100) NOT NULL,
   old_value TEXT,
   new_value TEXT,
-  changed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  change_reason TEXT,
+  changed_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ip_address VARCHAR(45) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -258,9 +269,8 @@ CREATE TABLE IF NOT EXISTS ip_whitelist (
   id SERIAL PRIMARY KEY,
   ip_address VARCHAR(45) NOT NULL UNIQUE,
   description TEXT,
-  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  added_by INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_ip_whitelist_ip ON ip_whitelist(ip_address);
@@ -274,7 +284,7 @@ CREATE TABLE IF NOT EXISTS permissions (
   id SERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL UNIQUE,
   description TEXT,
-  category VARCHAR(50),
+  category VARCHAR(50) NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -311,9 +321,10 @@ CREATE INDEX IF NOT EXISTS idx_admin_logs_created_at ON admin_logs(created_at DE
 -- 5. 内容管理相关表（包含多租户 user_id）
 -- ========================================
 
--- API配置表
+-- API配置表（多租户）
 CREATE TABLE IF NOT EXISTS api_configs (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   provider VARCHAR(20) NOT NULL CHECK (provider IN ('deepseek', 'gemini', 'ollama')),
   api_key TEXT,
   ollama_base_url VARCHAR(255),
@@ -323,6 +334,7 @@ CREATE TABLE IF NOT EXISTS api_configs (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_api_configs_user_id ON api_configs(user_id);
 CREATE INDEX IF NOT EXISTS idx_api_configs_provider ON api_configs(provider);
 CREATE INDEX IF NOT EXISTS idx_api_configs_active ON api_configs(is_active);
 
@@ -339,16 +351,20 @@ CREATE TABLE IF NOT EXISTS distillations (
 CREATE INDEX IF NOT EXISTS idx_distillations_user_id ON distillations(user_id);
 CREATE INDEX IF NOT EXISTS idx_distillations_keyword ON distillations(keyword);
 
--- 话题表
+-- 话题表（多租户）
 CREATE TABLE IF NOT EXISTS topics (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   distillation_id INTEGER REFERENCES distillations(id) ON DELETE CASCADE,
+  keyword VARCHAR(255) NOT NULL,
   question TEXT NOT NULL,
   usage_count INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_topics_user_id ON topics(user_id);
 CREATE INDEX IF NOT EXISTS idx_topics_distillation ON topics(distillation_id);
+CREATE INDEX IF NOT EXISTS idx_topics_keyword ON topics(keyword);
 
 -- 相册表（多租户）
 CREATE TABLE IF NOT EXISTS albums (
@@ -362,21 +378,28 @@ CREATE TABLE IF NOT EXISTS albums (
 CREATE INDEX IF NOT EXISTS idx_albums_user_id ON albums(user_id);
 CREATE INDEX IF NOT EXISTS idx_albums_created_at ON albums(created_at DESC);
 
--- 图片表
+-- 图片表（多租户）
 CREATE TABLE IF NOT EXISTS images (
   id SERIAL PRIMARY KEY,
-  album_id INTEGER NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  album_id INTEGER REFERENCES albums(id) ON DELETE CASCADE,
   filename VARCHAR(255) NOT NULL,
   filepath VARCHAR(500) NOT NULL,
   mime_type VARCHAR(50) NOT NULL,
   size INTEGER NOT NULL,
   usage_count INTEGER DEFAULT 0,
+  deleted_at TIMESTAMP,
+  is_orphan BOOLEAN DEFAULT false,
+  reference_count INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_images_user_id ON images(user_id);
 CREATE INDEX IF NOT EXISTS idx_images_album_id ON images(album_id);
 CREATE INDEX IF NOT EXISTS idx_images_created_at ON images(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_images_usage_count ON images(album_id, usage_count ASC, created_at ASC);
+CREATE INDEX IF NOT EXISTS idx_images_is_orphan ON images(is_orphan);
+CREATE INDEX IF NOT EXISTS idx_images_deleted_at ON images(deleted_at);
 
 -- 知识库表（多租户）
 CREATE TABLE IF NOT EXISTS knowledge_bases (
@@ -426,9 +449,10 @@ CREATE INDEX IF NOT EXISTS idx_conversion_targets_user_id ON conversion_targets(
 CREATE INDEX IF NOT EXISTS idx_conversion_targets_company_name ON conversion_targets(company_name);
 CREATE INDEX IF NOT EXISTS idx_conversion_targets_created_at ON conversion_targets(created_at DESC);
 
--- 关键词蒸馏配置表
+-- 关键词蒸馏配置表（多租户）
 CREATE TABLE IF NOT EXISTS distillation_config (
   id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   prompt TEXT NOT NULL,
   topic_count INTEGER NOT NULL DEFAULT 12 CHECK (topic_count >= 5 AND topic_count <= 30),
   is_active BOOLEAN DEFAULT true,
@@ -436,6 +460,7 @@ CREATE TABLE IF NOT EXISTS distillation_config (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE INDEX IF NOT EXISTS idx_distillation_config_user_id ON distillation_config(user_id);
 CREATE INDEX IF NOT EXISTS idx_distillation_config_active ON distillation_config(is_active);
 
 -- 文章设置表（多租户）
@@ -454,11 +479,11 @@ CREATE INDEX IF NOT EXISTS idx_article_settings_created_at ON article_settings(c
 -- 文章生成任务表（多租户）
 CREATE TABLE IF NOT EXISTS generation_tasks (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  distillation_id INTEGER NOT NULL REFERENCES distillations(id) ON DELETE CASCADE,
-  album_id INTEGER NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
-  knowledge_base_id INTEGER NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
-  article_setting_id INTEGER NOT NULL REFERENCES article_settings(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  distillation_id INTEGER REFERENCES distillations(id) ON DELETE SET NULL,
+  album_id INTEGER REFERENCES albums(id) ON DELETE SET NULL,
+  knowledge_base_id INTEGER REFERENCES knowledge_bases(id) ON DELETE SET NULL,
+  article_setting_id INTEGER REFERENCES article_settings(id) ON DELETE SET NULL,
   conversion_target_id INTEGER REFERENCES conversion_targets(id) ON DELETE SET NULL,
   requested_count INTEGER NOT NULL CHECK (requested_count > 0),
   generated_count INTEGER DEFAULT 0 CHECK (generated_count >= 0),
@@ -466,6 +491,16 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
   error_message TEXT,
   selected_distillation_ids TEXT,
+  -- 快照字段（保留删除后的引用信息）
+  conversion_target_name VARCHAR(255),
+  conversion_target_industry VARCHAR(100),
+  conversion_target_website VARCHAR(500),
+  conversion_target_address VARCHAR(500),
+  distillation_keyword VARCHAR(255),
+  album_name VARCHAR(255),
+  knowledge_base_name VARCHAR(255),
+  article_setting_name VARCHAR(255),
+  article_setting_prompt TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -478,18 +513,24 @@ CREATE INDEX IF NOT EXISTS idx_generation_tasks_conversion_target ON generation_
 -- 文章表（多租户）
 CREATE TABLE IF NOT EXISTS articles (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   title VARCHAR(500),
   keyword VARCHAR(255) NOT NULL,
-  distillation_id INTEGER REFERENCES distillations(id),
-  topic_id INTEGER REFERENCES topics(id),
+  distillation_id INTEGER REFERENCES distillations(id) ON DELETE SET NULL,
+  topic_id INTEGER REFERENCES topics(id) ON DELETE SET NULL,
   task_id INTEGER REFERENCES generation_tasks(id) ON DELETE SET NULL,
+  image_id INTEGER REFERENCES images(id) ON DELETE SET NULL,
   requirements TEXT,
   content TEXT NOT NULL,
   image_url VARCHAR(500),
+  image_size_bytes INTEGER DEFAULT 0,
   provider VARCHAR(20) NOT NULL,
   is_published BOOLEAN DEFAULT false,
+  publishing_status VARCHAR(20),
   published_at TIMESTAMP,
+  -- 快照字段（保留删除后的引用信息）
+  distillation_keyword_snapshot VARCHAR(255),
+  topic_question_snapshot TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -499,8 +540,10 @@ CREATE INDEX IF NOT EXISTS idx_articles_keyword ON articles(keyword);
 CREATE INDEX IF NOT EXISTS idx_articles_distillation ON articles(distillation_id);
 CREATE INDEX IF NOT EXISTS idx_articles_topic_id ON articles(topic_id);
 CREATE INDEX IF NOT EXISTS idx_articles_task_id ON articles(task_id);
+CREATE INDEX IF NOT EXISTS idx_articles_image_id ON articles(image_id);
 CREATE INDEX IF NOT EXISTS idx_articles_title ON articles(title);
 CREATE INDEX IF NOT EXISTS idx_articles_is_published ON articles(is_published);
+CREATE INDEX IF NOT EXISTS idx_articles_publishing_status ON articles(publishing_status);
 
 
 -- 图片使用追踪表
@@ -518,23 +561,30 @@ CREATE INDEX IF NOT EXISTS idx_image_usage_article_id ON image_usage(article_id)
 -- 话题使用记录表
 CREATE TABLE IF NOT EXISTS topic_usage (
   id SERIAL PRIMARY KEY,
-  topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
-  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  topic_id INTEGER REFERENCES topics(id) ON DELETE CASCADE,
+  distillation_id INTEGER REFERENCES distillations(id) ON DELETE CASCADE,
+  article_id INTEGER REFERENCES articles(id) ON DELETE CASCADE,
+  task_id INTEGER REFERENCES generation_tasks(id) ON DELETE SET NULL,
+  keyword VARCHAR(255),
   used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_topic_usage_topic_id ON topic_usage(topic_id);
+CREATE INDEX IF NOT EXISTS idx_topic_usage_distillation_id ON topic_usage(distillation_id);
 CREATE INDEX IF NOT EXISTS idx_topic_usage_article_id ON topic_usage(article_id);
+CREATE INDEX IF NOT EXISTS idx_topic_usage_task_id ON topic_usage(task_id);
 
 -- 蒸馏使用记录表
 CREATE TABLE IF NOT EXISTS distillation_usage (
   id SERIAL PRIMARY KEY,
-  distillation_id INTEGER NOT NULL REFERENCES distillations(id) ON DELETE CASCADE,
-  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  distillation_id INTEGER REFERENCES distillations(id) ON DELETE CASCADE,
+  task_id INTEGER NOT NULL REFERENCES generation_tasks(id) ON DELETE CASCADE,
+  article_id INTEGER REFERENCES articles(id) ON DELETE CASCADE,
   used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_distillation_usage_distillation_id ON distillation_usage(distillation_id);
+CREATE INDEX IF NOT EXISTS idx_distillation_usage_task_id ON distillation_usage(task_id);
 CREATE INDEX IF NOT EXISTS idx_distillation_usage_article_id ON distillation_usage(article_id);
 
 -- ========================================
@@ -544,20 +594,25 @@ CREATE INDEX IF NOT EXISTS idx_distillation_usage_article_id ON distillation_usa
 -- 平台账号表（多租户）
 CREATE TABLE IF NOT EXISTS platform_accounts (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   platform VARCHAR(50) NOT NULL,
-  platform_id VARCHAR(50) NOT NULL,
-  account_name VARCHAR(100) NOT NULL,
-  credentials TEXT NOT NULL,
-  status VARCHAR(20) DEFAULT 'active',
+  platform_id VARCHAR(50),
+  account_name VARCHAR(100),
+  real_username VARCHAR(255),
+  credentials TEXT,
+  cookies TEXT,
+  status VARCHAR(20) DEFAULT 'inactive',
   is_default BOOLEAN DEFAULT FALSE,
+  error_message TEXT,
+  last_used_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  last_used_at TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_platform_accounts_user_id ON platform_accounts(user_id);
-CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform ON platform_accounts(platform_id);
+CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform ON platform_accounts(platform);
+CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform_id ON platform_accounts(platform_id);
+CREATE INDEX IF NOT EXISTS idx_platform_accounts_status ON platform_accounts(status);
 
 -- 发布任务表
 CREATE TABLE IF NOT EXISTS publishing_tasks (
@@ -611,6 +666,9 @@ CREATE TABLE IF NOT EXISTS platforms_config (
   adapter_class VARCHAR(100) NOT NULL,
   required_fields TEXT NOT NULL,
   config_schema TEXT,
+  login_url TEXT,
+  home_url VARCHAR(500),
+  selectors JSONB DEFAULT '{"username": [], "loginSuccess": []}'::jsonb,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -618,17 +676,26 @@ CREATE TABLE IF NOT EXISTS platforms_config (
 -- 发布记录表（多租户）
 CREATE TABLE IF NOT EXISTS publishing_records (
   id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,
   task_id INTEGER REFERENCES publishing_tasks(id) ON DELETE SET NULL,
-  account_id INTEGER REFERENCES platform_accounts(id) ON DELETE SET NULL,
+  account_id INTEGER NOT NULL REFERENCES platform_accounts(id) ON DELETE CASCADE,
+  account_name VARCHAR(100),
   platform_id VARCHAR(50) NOT NULL,
   platform_article_id VARCHAR(255),
-  platform_url TEXT,
+  platform_url VARCHAR(500),
   status VARCHAR(20) DEFAULT 'pending',
   publishing_status VARCHAR(20) DEFAULT 'draft',
   published_at TIMESTAMP,
   error_message TEXT,
+  -- 快照字段（保留删除后的引用信息）
+  article_title VARCHAR(500),
+  article_content TEXT,
+  article_keyword VARCHAR(255),
+  article_image_url TEXT,
+  topic_question TEXT,
+  article_setting_name VARCHAR(255),
+  distillation_keyword VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -636,8 +703,10 @@ CREATE TABLE IF NOT EXISTS publishing_records (
 CREATE INDEX IF NOT EXISTS idx_publishing_records_user_id ON publishing_records(user_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_article_id ON publishing_records(article_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_task ON publishing_records(task_id);
+CREATE INDEX IF NOT EXISTS idx_publishing_records_account_id ON publishing_records(account_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_platform_id ON publishing_records(platform_id);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_status ON publishing_records(status);
+CREATE INDEX IF NOT EXISTS idx_publishing_records_publishing_status ON publishing_records(publishing_status);
 
 -- ========================================
 -- 7. 插入平台配置数据

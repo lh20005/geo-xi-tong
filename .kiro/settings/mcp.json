@@ -15,7 +15,8 @@
       "disabled": false,
       "autoApprove": [
         "remote-ssh",
-        "ssh-edit-block"
+        "ssh-edit-block",
+        "ssh-write-chunk"
       ]
     }
   }

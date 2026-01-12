@@ -64,6 +64,7 @@ pack_project() {
     cp -r server/dist /tmp/geo-deploy/server-dist
     cp -r server/node_modules /tmp/geo-deploy/server-node_modules
     cp server/package.json /tmp/geo-deploy/server-package.json
+    cp -r server/src/db/migrations /tmp/geo-deploy/server-migrations
     cp -r landing/dist /tmp/geo-deploy/landing-dist
     
     # 打包
@@ -109,6 +110,8 @@ deploy_on_server() {
         mv server-dist server/dist
         mv server-node_modules server/node_modules
         mv server-package.json server/package.json
+        mkdir -p server/src/db
+        mv server-migrations server/src/db/migrations
         mv landing-dist landing/dist
         
         # 创建上传目录

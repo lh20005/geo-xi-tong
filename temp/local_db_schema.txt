@@ -1,0 +1,620 @@
+ admin_quota_modifications|id|integer|NO|nextval('admin_quota_modifications_id_seq'::regclass)
+ admin_quota_modifications|admin_id|integer|NO|NULL
+ admin_quota_modifications|user_id|integer|NO|NULL
+ admin_quota_modifications|feature_type|character varying(50)|NO|NULL
+ admin_quota_modifications|old_quota|bigint|NO|NULL
+ admin_quota_modifications|new_quota|bigint|NO|NULL
+ admin_quota_modifications|reason|text|YES|NULL
+ admin_quota_modifications|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ agent_audit_logs|id|integer|NO|nextval('agent_audit_logs_id_seq'::regclass)
+ agent_audit_logs|agent_id|integer|YES|NULL
+ agent_audit_logs|action_type|character varying(50)|NO|NULL
+ agent_audit_logs|operator_id|integer|YES|NULL
+ agent_audit_logs|old_value|jsonb|YES|NULL
+ agent_audit_logs|new_value|jsonb|YES|NULL
+ agent_audit_logs|ip_address|character varying(45)|YES|NULL
+ agent_audit_logs|user_agent|text|YES|NULL
+ agent_audit_logs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ agents|id|integer|NO|nextval('agents_id_seq'::regclass)
+ agents|user_id|integer|NO|NULL
+ agents|status|character varying(20)|NO|'active'::character varying
+ agents|commission_rate|numeric|NO|0.30
+ agents|wechat_openid|character varying(128)|YES|NULL
+ agents|wechat_nickname|character varying(100)|YES|NULL
+ agents|wechat_bindtime|timestamp without time zone|YES|NULL
+ agents|receiver_added|boolean|YES|false
+ agents|total_earnings|numeric|YES|0
+ agents|settled_earnings|numeric|YES|0
+ agents|pending_earnings|numeric|YES|0
+ agents|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ agents|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ agents|invitation_code|character varying(20)|YES|NULL
+ albums|id|integer|NO|nextval('albums_id_seq'::regclass)
+ albums|name|character varying(255)|NO|NULL
+ albums|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ albums|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ albums|user_id|integer|NO|NULL
+ api_configs|id|integer|NO|nextval('api_configs_id_seq'::regclass)
+ api_configs|provider|character varying(20)|NO|NULL
+ api_configs|api_key|text|YES|NULL
+ api_configs|is_active|boolean|YES|true
+ api_configs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ api_configs|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ api_configs|ollama_base_url|character varying(255)|YES|NULL
+ api_configs|ollama_model|character varying(100)|YES|NULL
+ api_configs|user_id|integer|NO|NULL
+ article_settings|id|integer|NO|nextval('article_settings_id_seq'::regclass)
+ article_settings|name|character varying(255)|NO|NULL
+ article_settings|prompt|text|NO|NULL
+ article_settings|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ article_settings|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ article_settings|user_id|integer|NO|NULL
+ articles|id|integer|NO|nextval('articles_id_seq'::regclass)
+ articles|keyword|character varying(255)|NO|NULL
+ articles|distillation_id|integer|YES|NULL
+ articles|requirements|text|YES|NULL
+ articles|content|text|NO|NULL
+ articles|provider|character varying(20)|NO|NULL
+ articles|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ articles|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ articles|title|character varying(500)|YES|NULL
+ articles|task_id|integer|YES|NULL
+ articles|image_url|character varying(500)|YES|NULL
+ articles|is_published|boolean|YES|false
+ articles|published_at|timestamp without time zone|YES|NULL
+ articles|topic_id|integer|YES|NULL
+ articles|publishing_status|character varying(20)|YES|NULL
+ articles|user_id|integer|NO|NULL
+ articles|image_size_bytes|integer|YES|0
+ articles|image_id|integer|YES|NULL
+ articles|distillation_keyword_snapshot|character varying(255)|YES|NULL
+ articles|topic_question_snapshot|text|YES|NULL
+ audit_logs|id|integer|NO|nextval('audit_logs_id_seq'::regclass)
+ audit_logs|admin_id|integer|NO|NULL
+ audit_logs|action|character varying(100)|NO|NULL
+ audit_logs|target_type|character varying(50)|YES|NULL
+ audit_logs|target_id|integer|YES|NULL
+ audit_logs|details|jsonb|YES|NULL
+ audit_logs|ip_address|character varying(45)|NO|NULL
+ audit_logs|user_agent|text|YES|NULL
+ audit_logs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ auth_logs|id|integer|NO|nextval('auth_logs_id_seq'::regclass)
+ auth_logs|user_id|integer|YES|NULL
+ auth_logs|action|character varying(50)|NO|NULL
+ auth_logs|ip_address|character varying(45)|YES|NULL
+ auth_logs|user_agent|text|YES|NULL
+ auth_logs|success|boolean|YES|true
+ auth_logs|error_message|text|YES|NULL
+ auth_logs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ commission_records|id|integer|NO|nextval('commission_records_id_seq'::regclass)
+ commission_records|agent_id|integer|NO|NULL
+ commission_records|order_id|integer|NO|NULL
+ commission_records|invited_user_id|integer|NO|NULL
+ commission_records|order_amount|numeric|NO|NULL
+ commission_records|commission_rate|numeric|NO|NULL
+ commission_records|commission_amount|numeric|NO|NULL
+ commission_records|status|character varying(20)|NO|'pending'::character varying
+ commission_records|settle_date|date|YES|NULL
+ commission_records|settled_at|timestamp without time zone|YES|NULL
+ commission_records|fail_reason|text|YES|NULL
+ commission_records|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ commission_records|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ config_history|id|integer|NO|nextval('config_history_id_seq'::regclass)
+ config_history|config_key|character varying(100)|NO|NULL
+ config_history|old_value|text|YES|NULL
+ config_history|new_value|text|YES|NULL
+ config_history|changed_by|integer|NO|NULL
+ config_history|ip_address|character varying(45)|NO|NULL
+ config_history|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ conversion_targets|id|integer|NO|nextval('conversion_targets_id_seq'::regclass)
+ conversion_targets|company_name|character varying(255)|NO|NULL
+ conversion_targets|industry|character varying(100)|YES|NULL
+ conversion_targets|website|character varying(500)|YES|NULL
+ conversion_targets|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ conversion_targets|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ conversion_targets|address|character varying(500)|YES|NULL
+ conversion_targets|user_id|integer|NO|NULL
+ distillation_config|id|integer|NO|nextval('distillation_config_id_seq'::regclass)
+ distillation_config|prompt|text|NO|NULL
+ distillation_config|topic_count|integer|NO|12
+ distillation_config|is_active|boolean|YES|true
+ distillation_config|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ distillation_config|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ distillation_config|user_id|integer|YES|NULL
+ distillation_usage|id|integer|NO|nextval('distillation_usage_id_seq'::regclass)
+ distillation_usage|distillation_id|integer|YES|NULL
+ distillation_usage|task_id|integer|NO|NULL
+ distillation_usage|article_id|integer|YES|NULL
+ distillation_usage|used_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ distillations|id|integer|NO|nextval('distillations_id_seq'::regclass)
+ distillations|keyword|character varying(255)|NO|NULL
+ distillations|provider|character varying(20)|NO|NULL
+ distillations|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ distillations|usage_count|integer|NO|0
+ distillations|user_id|integer|NO|NULL
+ encryption_keys|id|integer|NO|nextval('encryption_keys_id_seq'::regclass)
+ encryption_keys|key_name|character varying(50)|NO|NULL
+ encryption_keys|key_value|text|NO|NULL
+ encryption_keys|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ generation_tasks|id|integer|NO|nextval('generation_tasks_id_seq'::regclass)
+ generation_tasks|distillation_id|integer|YES|NULL
+ generation_tasks|album_id|integer|YES|NULL
+ generation_tasks|knowledge_base_id|integer|YES|NULL
+ generation_tasks|article_setting_id|integer|YES|NULL
+ generation_tasks|requested_count|integer|NO|NULL
+ generation_tasks|generated_count|integer|YES|0
+ generation_tasks|status|character varying(20)|NO|'pending'::character varying
+ generation_tasks|progress|integer|YES|0
+ generation_tasks|error_message|text|YES|NULL
+ generation_tasks|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ generation_tasks|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ generation_tasks|conversion_target_id|integer|YES|NULL
+ generation_tasks|selected_distillation_ids|text|YES|NULL
+ generation_tasks|user_id|integer|NO|NULL
+ generation_tasks|conversion_target_name|character varying(255)|YES|NULL
+ generation_tasks|conversion_target_industry|character varying(100)|YES|NULL
+ generation_tasks|conversion_target_website|character varying(500)|YES|NULL
+ generation_tasks|conversion_target_address|character varying(500)|YES|NULL
+ generation_tasks|distillation_keyword|character varying(255)|YES|NULL
+ generation_tasks|album_name|character varying(255)|YES|NULL
+ generation_tasks|knowledge_base_name|character varying(255)|YES|NULL
+ generation_tasks|article_setting_name|character varying(255)|YES|NULL
+ generation_tasks|article_setting_prompt|text|YES|NULL
+ image_usage|id|integer|NO|nextval('image_usage_id_seq'::regclass)
+ image_usage|image_id|integer|YES|NULL
+ image_usage|article_id|integer|YES|NULL
+ image_usage|used_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ images|id|integer|NO|nextval('images_id_seq'::regclass)
+ images|album_id|integer|YES|NULL
+ images|filename|character varying(255)|NO|NULL
+ images|filepath|character varying(500)|NO|NULL
+ images|mime_type|character varying(50)|NO|NULL
+ images|size|integer|NO|NULL
+ images|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ images|usage_count|integer|YES|0
+ images|deleted_at|timestamp without time zone|YES|NULL
+ images|is_orphan|boolean|YES|false
+ images|reference_count|integer|YES|0
+ images|user_id|integer|YES|NULL
+ ip_whitelist|id|integer|NO|nextval('ip_whitelist_id_seq'::regclass)
+ ip_whitelist|ip_address|character varying(45)|NO|NULL
+ ip_whitelist|description|text|YES|NULL
+ ip_whitelist|added_by|integer|NO|NULL
+ ip_whitelist|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ knowledge_bases|id|integer|NO|nextval('knowledge_bases_id_seq'::regclass)
+ knowledge_bases|name|character varying(255)|NO|NULL
+ knowledge_bases|description|text|YES|NULL
+ knowledge_bases|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ knowledge_bases|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ knowledge_bases|user_id|integer|NO|NULL
+ knowledge_documents|id|integer|NO|nextval('knowledge_documents_id_seq'::regclass)
+ knowledge_documents|knowledge_base_id|integer|NO|NULL
+ knowledge_documents|filename|character varying(255)|NO|NULL
+ knowledge_documents|file_type|character varying(50)|NO|NULL
+ knowledge_documents|file_size|integer|NO|NULL
+ knowledge_documents|content|text|NO|NULL
+ knowledge_documents|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ login_attempts|id|integer|NO|nextval('login_attempts_id_seq'::regclass)
+ login_attempts|username|character varying(50)|NO|NULL
+ login_attempts|ip_address|character varying(45)|NO|NULL
+ login_attempts|success|boolean|NO|NULL
+ login_attempts|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ orders|id|integer|NO|nextval('orders_id_seq'::regclass)
+ orders|order_no|character varying(50)|NO|NULL
+ orders|user_id|integer|YES|NULL
+ orders|plan_id|integer|YES|NULL
+ orders|amount|numeric|NO|NULL
+ orders|status|character varying(20)|YES|'pending'::character varying
+ orders|payment_method|character varying(20)|YES|NULL
+ orders|transaction_id|character varying(100)|YES|NULL
+ orders|paid_at|timestamp without time zone|YES|NULL
+ orders|expired_at|timestamp without time zone|YES|NULL
+ orders|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ orders|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ orders|order_type|character varying(20)|YES|'purchase'::character varying
+ orders|agent_id|integer|YES|NULL
+ orders|profit_sharing|boolean|YES|false
+ orders|expected_commission|numeric|YES|NULL
+ orders|original_price|numeric|YES|NULL
+ orders|discount_rate|integer|YES|100
+ orders|is_agent_discount|boolean|YES|false
+ password_history|id|integer|NO|nextval('password_history_id_seq'::regclass)
+ password_history|user_id|integer|NO|NULL
+ password_history|password_hash|character varying(255)|NO|NULL
+ password_history|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ permissions|id|integer|NO|nextval('permissions_id_seq'::regclass)
+ permissions|name|character varying(100)|NO|NULL
+ permissions|description|text|YES|NULL
+ permissions|category|character varying(50)|NO|NULL
+ permissions|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ plan_features|id|integer|NO|nextval('plan_features_id_seq'::regclass)
+ plan_features|plan_id|integer|YES|NULL
+ plan_features|feature_code|character varying(50)|NO|NULL
+ plan_features|feature_name|character varying(100)|NO|NULL
+ plan_features|feature_value|integer|NO|NULL
+ plan_features|feature_unit|character varying(20)|YES|NULL
+ plan_features|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ plan_features|quota_value|integer|YES|NULL
+ plan_features|quota_unit|character varying(20)|YES|NULL
+ platform_accounts|id|integer|NO|nextval('platform_accounts_id_seq'::regclass)
+ platform_accounts|platform|character varying(50)|NO|NULL
+ platform_accounts|account_name|character varying(100)|YES|NULL
+ platform_accounts|cookies|text|YES|NULL
+ platform_accounts|status|character varying(20)|YES|'inactive'::character varying
+ platform_accounts|last_used_at|timestamp without time zone|YES|NULL
+ platform_accounts|error_message|text|YES|NULL
+ platform_accounts|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ platform_accounts|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ platform_accounts|credentials|text|YES|NULL
+ platform_accounts|is_default|boolean|YES|false
+ platform_accounts|platform_id|character varying(50)|YES|NULL
+ platform_accounts|real_username|character varying(255)|YES|NULL
+ platform_accounts|user_id|integer|NO|NULL
+ platforms_config|id|integer|NO|nextval('platforms_config_id_seq'::regclass)
+ platforms_config|platform_id|character varying(50)|NO|NULL
+ platforms_config|platform_name|character varying(100)|NO|NULL
+ platforms_config|icon_url|character varying(255)|NO|NULL
+ platforms_config|is_enabled|boolean|YES|true
+ platforms_config|adapter_class|character varying(100)|NO|NULL
+ platforms_config|required_fields|text|NO|NULL
+ platforms_config|config_schema|text|YES|NULL
+ platforms_config|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ platforms_config|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ platforms_config|login_url|text|YES|NULL
+ platforms_config|selectors|jsonb|YES|'{"username": [], "loginSuccess": []}'::jsonb
+ platforms_config|home_url|character varying(500)|YES|NULL
+ product_config_history|id|integer|NO|nextval('product_config_history_id_seq'::regclass)
+ product_config_history|plan_id|integer|YES|NULL
+ product_config_history|changed_by|integer|YES|NULL
+ product_config_history|change_type|character varying(50)|NO|NULL
+ product_config_history|field_name|character varying(100)|YES|NULL
+ product_config_history|old_value|text|YES|NULL
+ product_config_history|new_value|text|YES|NULL
+ product_config_history|ip_address|character varying(45)|YES|NULL
+ product_config_history|user_agent|text|YES|NULL
+ product_config_history|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ profit_sharing_records|id|integer|NO|nextval('profit_sharing_records_id_seq'::regclass)
+ profit_sharing_records|commission_id|integer|NO|NULL
+ profit_sharing_records|transaction_id|character varying(64)|NO|NULL
+ profit_sharing_records|out_order_no|character varying(64)|NO|NULL
+ profit_sharing_records|wechat_order_id|character varying(64)|YES|NULL
+ profit_sharing_records|amount|integer|NO|NULL
+ profit_sharing_records|status|character varying(20)|NO|'pending'::character varying
+ profit_sharing_records|fail_reason|text|YES|NULL
+ profit_sharing_records|request_time|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ profit_sharing_records|finish_time|timestamp without time zone|YES|NULL
+ profit_sharing_records|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publish_records|id|integer|NO|nextval('publish_records_id_seq'::regclass)
+ publish_records|article_id|integer|NO|NULL
+ publish_records|platform_account_id|integer|NO|NULL
+ publish_records|status|character varying(20)|YES|'pending'::character varying
+ publish_records|platform_article_id|character varying(100)|YES|NULL
+ publish_records|platform_url|character varying(500)|YES|NULL
+ publish_records|error_message|text|YES|NULL
+ publish_records|published_at|timestamp without time zone|YES|NULL
+ publish_records|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publish_records|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_logs|id|integer|NO|nextval('publishing_logs_id_seq'::regclass)
+ publishing_logs|task_id|integer|YES|NULL
+ publishing_logs|level|character varying(20)|NO|NULL
+ publishing_logs|message|text|NO|NULL
+ publishing_logs|details|text|YES|NULL
+ publishing_logs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_records|id|integer|NO|nextval('publishing_records_id_seq'::regclass)
+ publishing_records|article_id|integer|YES|NULL
+ publishing_records|task_id|integer|YES|NULL
+ publishing_records|platform_id|character varying(50)|NO|NULL
+ publishing_records|account_id|integer|NO|NULL
+ publishing_records|account_name|character varying(100)|YES|NULL
+ publishing_records|platform_article_id|character varying(255)|YES|NULL
+ publishing_records|platform_url|character varying(500)|YES|NULL
+ publishing_records|published_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_records|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_records|user_id|integer|NO|NULL
+ publishing_records|article_title|character varying(500)|YES|NULL
+ publishing_records|article_content|text|YES|NULL
+ publishing_records|article_keyword|character varying(255)|YES|NULL
+ publishing_records|article_image_url|text|YES|NULL
+ publishing_records|topic_question|text|YES|NULL
+ publishing_records|article_setting_name|character varying(255)|YES|NULL
+ publishing_records|distillation_keyword|character varying(255)|YES|NULL
+ publishing_records|status|character varying(20)|YES|'pending'::character varying
+ publishing_records|publishing_status|character varying(20)|YES|'draft'::character varying
+ publishing_records|error_message|text|YES|NULL
+ publishing_records|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_tasks|id|integer|NO|nextval('publishing_tasks_id_seq'::regclass)
+ publishing_tasks|article_id|integer|YES|NULL
+ publishing_tasks|account_id|integer|NO|NULL
+ publishing_tasks|platform_id|character varying(50)|NO|NULL
+ publishing_tasks|status|character varying(20)|YES|'pending'::character varying
+ publishing_tasks|config|text|NO|NULL
+ publishing_tasks|scheduled_at|timestamp without time zone|YES|NULL
+ publishing_tasks|started_at|timestamp without time zone|YES|NULL
+ publishing_tasks|completed_at|timestamp without time zone|YES|NULL
+ publishing_tasks|error_message|text|YES|NULL
+ publishing_tasks|retry_count|integer|YES|0
+ publishing_tasks|max_retries|integer|YES|3
+ publishing_tasks|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_tasks|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ publishing_tasks|batch_id|character varying(50)|YES|NULL
+ publishing_tasks|batch_order|integer|YES|0
+ publishing_tasks|interval_minutes|integer|YES|0
+ publishing_tasks|user_id|integer|NO|1
+ quota_alerts|id|integer|NO|nextval('quota_alerts_id_seq'::regclass)
+ quota_alerts|user_id|integer|NO|NULL
+ quota_alerts|feature_code|character varying(50)|NO|NULL
+ quota_alerts|alert_type|character varying(20)|NO|NULL
+ quota_alerts|threshold_percentage|integer|NO|NULL
+ quota_alerts|current_usage|integer|NO|NULL
+ quota_alerts|quota_limit|integer|NO|NULL
+ quota_alerts|is_sent|boolean|YES|false
+ quota_alerts|sent_at|timestamp without time zone|YES|NULL
+ quota_alerts|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ quota_alerts|current_usage_bytes|bigint|YES|NULL
+ quota_alerts|quota_bytes|bigint|YES|NULL
+ quota_alerts|feature_type|character varying(50)|YES|NULL
+ quota_audit_logs|id|integer|NO|nextval('quota_audit_logs_id_seq'::regclass)
+ quota_audit_logs|operation_type|character varying(20)|NO|NULL
+ quota_audit_logs|user_id|integer|YES|NULL
+ quota_audit_logs|feature_code|character varying(50)|YES|NULL
+ quota_audit_logs|before_value|integer|YES|NULL
+ quota_audit_logs|after_value|integer|YES|NULL
+ quota_audit_logs|status|character varying(20)|NO|NULL
+ quota_audit_logs|details|jsonb|YES|NULL
+ quota_audit_logs|performed_by|integer|YES|NULL
+ quota_audit_logs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ quota_configs|id|integer|NO|nextval('quota_configs_id_seq'::regclass)
+ quota_configs|feature_code|character varying(50)|NO|NULL
+ quota_configs|quota_type|character varying(20)|NO|NULL
+ quota_configs|unit|character varying(10)|NO|NULL
+ quota_configs|reversible|boolean|YES|false
+ quota_configs|check_on_operation|boolean|YES|true
+ quota_configs|record_on_success|boolean|YES|true
+ quota_configs|description|text|YES|NULL
+ quota_configs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ quota_configs|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ refresh_tokens|id|integer|NO|nextval('refresh_tokens_id_seq'::regclass)
+ refresh_tokens|user_id|integer|NO|NULL
+ refresh_tokens|token|character varying(500)|NO|NULL
+ refresh_tokens|expires_at|timestamp without time zone|NO|NULL
+ refresh_tokens|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ refresh_tokens|revoked|boolean|YES|false
+ refresh_tokens|ip_address|character varying(45)|YES|NULL
+ refresh_tokens|user_agent|text|YES|NULL
+ refresh_tokens|last_used_at|timestamp without time zone|YES|NULL
+ schema_migrations|version|character varying(10)|NO|NULL
+ schema_migrations|name|character varying(255)|NO|NULL
+ schema_migrations|executed_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ security_config|id|integer|NO|nextval('security_config_id_seq'::regclass)
+ security_config|config_key|character varying(100)|NO|NULL
+ security_config|config_value|text|NO|NULL
+ security_config|config_type|character varying(50)|NO|NULL
+ security_config|description|text|YES|NULL
+ security_config|validation_rule|text|YES|NULL
+ security_config|is_active|boolean|YES|true
+ security_config|version|integer|YES|1
+ security_config|created_by|integer|YES|NULL
+ security_config|updated_by|integer|YES|NULL
+ security_config|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ security_config|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ security_config_history|id|integer|NO|nextval('security_config_history_id_seq'::regclass)
+ security_config_history|config_id|integer|YES|NULL
+ security_config_history|config_key|character varying(100)|NO|NULL
+ security_config_history|old_value|text|YES|NULL
+ security_config_history|new_value|text|NO|NULL
+ security_config_history|version|integer|NO|NULL
+ security_config_history|changed_by|integer|YES|NULL
+ security_config_history|change_reason|text|YES|NULL
+ security_config_history|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ security_events|id|integer|NO|nextval('security_events_id_seq'::regclass)
+ security_events|event_type|character varying(50)|NO|NULL
+ security_events|severity|character varying(20)|NO|NULL
+ security_events|user_id|integer|YES|NULL
+ security_events|ip_address|character varying(45)|YES|NULL
+ security_events|message|text|NO|NULL
+ security_events|details|jsonb|YES|NULL
+ security_events|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ storage_purchases|id|integer|NO|nextval('storage_purchases_id_seq'::regclass)
+ storage_purchases|user_id|integer|NO|NULL
+ storage_purchases|order_id|integer|NO|NULL
+ storage_purchases|storage_bytes|bigint|NO|NULL
+ storage_purchases|expiration_date|timestamp without time zone|YES|NULL
+ storage_purchases|status|character varying(20)|NO|'pending'::character varying
+ storage_purchases|activated_at|timestamp without time zone|YES|NULL
+ storage_purchases|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ storage_purchases|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ storage_transactions|id|integer|NO|nextval('storage_transactions_id_seq'::regclass)
+ storage_transactions|user_id|integer|NO|NULL
+ storage_transactions|resource_type|character varying(20)|NO|NULL
+ storage_transactions|resource_id|integer|NO|NULL
+ storage_transactions|operation|character varying(10)|NO|NULL
+ storage_transactions|size_bytes|bigint|NO|NULL
+ storage_transactions|metadata|jsonb|YES|NULL
+ storage_transactions|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ storage_usage_history|id|integer|NO|nextval('storage_usage_history_id_seq'::regclass)
+ storage_usage_history|user_id|integer|NO|NULL
+ storage_usage_history|image_storage_bytes|bigint|NO|NULL
+ storage_usage_history|document_storage_bytes|bigint|NO|NULL
+ storage_usage_history|article_storage_bytes|bigint|NO|NULL
+ storage_usage_history|total_storage_bytes|bigint|NO|NULL
+ storage_usage_history|snapshot_date|date|NO|NULL
+ storage_usage_history|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ subscription_adjustments|id|integer|NO|nextval('subscription_adjustments_id_seq'::regclass)
+ subscription_adjustments|user_id|integer|NO|NULL
+ subscription_adjustments|subscription_id|integer|YES|NULL
+ subscription_adjustments|adjustment_type|character varying(50)|NO|NULL
+ subscription_adjustments|old_plan_id|integer|YES|NULL
+ subscription_adjustments|new_plan_id|integer|YES|NULL
+ subscription_adjustments|old_end_date|timestamp without time zone|YES|NULL
+ subscription_adjustments|new_end_date|timestamp without time zone|YES|NULL
+ subscription_adjustments|days_added|integer|YES|NULL
+ subscription_adjustments|quota_adjustments|jsonb|YES|NULL
+ subscription_adjustments|reason|text|YES|NULL
+ subscription_adjustments|admin_id|integer|YES|NULL
+ subscription_adjustments|admin_note|text|YES|NULL
+ subscription_adjustments|ip_address|character varying(45)|YES|NULL
+ subscription_adjustments|user_agent|text|YES|NULL
+ subscription_adjustments|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ subscription_plans|id|integer|NO|nextval('subscription_plans_id_seq'::regclass)
+ subscription_plans|plan_code|character varying(50)|NO|NULL
+ subscription_plans|plan_name|character varying(100)|NO|NULL
+ subscription_plans|price|numeric|NO|NULL
+ subscription_plans|billing_cycle|character varying(20)|YES|'monthly'::character varying
+ subscription_plans|is_active|boolean|YES|true
+ subscription_plans|display_order|integer|YES|0
+ subscription_plans|description|text|YES|NULL
+ subscription_plans|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ subscription_plans|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ subscription_plans|duration_days|integer|NO|30
+ subscription_plans|agent_discount_rate|integer|YES|100
+ subscription_plans|quota_cycle_type|character varying(20)|YES|'monthly'::character varying
+ subscription_plans|plan_type|character varying(20)|YES|'base'::character varying
+ system_api_configs|id|integer|NO|nextval('system_api_configs_id_seq'::regclass)
+ system_api_configs|provider|character varying(50)|NO|NULL
+ system_api_configs|api_key_encrypted|text|YES|NULL
+ system_api_configs|ollama_base_url|character varying(255)|YES|NULL
+ system_api_configs|ollama_model|character varying(100)|YES|NULL
+ system_api_configs|is_active|boolean|YES|false
+ system_api_configs|priority|integer|YES|0
+ system_api_configs|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ system_api_configs|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ system_api_configs|created_by|integer|YES|NULL
+ system_api_configs|notes|text|YES|NULL
+ topic_usage|id|integer|NO|nextval('topic_usage_id_seq'::regclass)
+ topic_usage|topic_id|integer|YES|NULL
+ topic_usage|distillation_id|integer|YES|NULL
+ topic_usage|article_id|integer|YES|NULL
+ topic_usage|task_id|integer|YES|NULL
+ topic_usage|used_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ topic_usage|keyword|character varying(255)|YES|NULL
+ topics|id|integer|NO|nextval('topics_id_seq'::regclass)
+ topics|distillation_id|integer|YES|NULL
+ topics|question|text|NO|NULL
+ topics|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ topics|usage_count|integer|YES|0
+ topics|keyword|character varying(255)|NO|NULL
+ topics|user_id|integer|NO|NULL
+ usage_records|id|integer|NO|nextval('usage_records_id_seq'::regclass)
+ usage_records|user_id|integer|NO|NULL
+ usage_records|feature_code|character varying(50)|NO|NULL
+ usage_records|resource_type|character varying(50)|YES|NULL
+ usage_records|resource_id|integer|YES|NULL
+ usage_records|amount|integer|YES|1
+ usage_records|metadata|jsonb|YES|NULL
+ usage_records|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ usage_records|source|character varying(20)|YES|'base'::character varying
+ usage_records|booster_subscription_id|integer|YES|NULL
+ user_booster_quotas|id|integer|NO|nextval('user_booster_quotas_id_seq'::regclass)
+ user_booster_quotas|user_id|integer|NO|NULL
+ user_booster_quotas|booster_subscription_id|integer|NO|NULL
+ user_booster_quotas|feature_code|character varying(50)|NO|NULL
+ user_booster_quotas|quota_limit|integer|NO|NULL
+ user_booster_quotas|quota_used|integer|YES|0
+ user_booster_quotas|status|character varying(20)|YES|'active'::character varying
+ user_booster_quotas|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_booster_quotas|expires_at|timestamp without time zone|NO|NULL
+ user_booster_quotas|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_permissions|id|integer|NO|nextval('user_permissions_id_seq'::regclass)
+ user_permissions|user_id|integer|NO|NULL
+ user_permissions|permission_id|integer|NO|NULL
+ user_permissions|granted_by|integer|YES|NULL
+ user_permissions|granted_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_sessions|id|integer|NO|nextval('user_sessions_id_seq'::regclass)
+ user_sessions|user_id|integer|NO|NULL
+ user_sessions|refresh_token_id|integer|YES|NULL
+ user_sessions|ip_address|character varying(45)|YES|NULL
+ user_sessions|user_agent|text|YES|NULL
+ user_sessions|last_activity|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_sessions|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_storage_usage|id|integer|NO|nextval('user_storage_usage_id_seq'::regclass)
+ user_storage_usage|user_id|integer|NO|NULL
+ user_storage_usage|image_storage_bytes|bigint|YES|0
+ user_storage_usage|document_storage_bytes|bigint|YES|0
+ user_storage_usage|article_storage_bytes|bigint|YES|0
+ user_storage_usage|total_storage_bytes|bigint|YES|NULL
+ user_storage_usage|image_count|integer|YES|0
+ user_storage_usage|document_count|integer|YES|0
+ user_storage_usage|article_count|integer|YES|0
+ user_storage_usage|storage_quota_bytes|bigint|NO|NULL
+ user_storage_usage|purchased_storage_bytes|bigint|YES|0
+ user_storage_usage|last_updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_storage_usage|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_subscriptions|id|integer|NO|nextval('user_subscriptions_id_seq'::regclass)
+ user_subscriptions|user_id|integer|YES|NULL
+ user_subscriptions|plan_id|integer|YES|NULL
+ user_subscriptions|status|character varying(20)|YES|'active'::character varying
+ user_subscriptions|start_date|timestamp without time zone|NO|NULL
+ user_subscriptions|end_date|timestamp without time zone|NO|NULL
+ user_subscriptions|auto_renew|boolean|YES|false
+ user_subscriptions|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_subscriptions|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_subscriptions|next_plan_id|integer|YES|NULL
+ user_subscriptions|paused_at|timestamp without time zone|YES|NULL
+ user_subscriptions|pause_reason|text|YES|NULL
+ user_subscriptions|custom_quotas|jsonb|YES|NULL
+ user_subscriptions|is_gift|boolean|YES|false
+ user_subscriptions|gift_reason|text|YES|NULL
+ user_subscriptions|quota_reset_anchor|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_subscriptions|quota_cycle_type|character varying(20)|YES|'monthly'::character varying
+ user_subscriptions|plan_type|character varying(20)|YES|'base'::character varying
+ user_usage|id|integer|NO|nextval('user_usage_id_seq'::regclass)
+ user_usage|user_id|integer|YES|NULL
+ user_usage|feature_code|character varying(50)|NO|NULL
+ user_usage|usage_count|integer|YES|0
+ user_usage|period_start|date|NO|NULL
+ user_usage|period_end|date|NO|NULL
+ user_usage|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_usage|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ user_usage|last_reset_at|timestamp without time zone|YES|NULL
+ users|id|integer|NO|nextval('users_id_seq'::regclass)
+ users|username|character varying(50)|NO|NULL
+ users|password_hash|character varying(255)|NO|NULL
+ users|email|character varying(100)|YES|NULL
+ users|role|character varying(20)|YES|'user'::character varying
+ users|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ users|updated_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+ users|last_login_at|timestamp without time zone|YES|NULL
+ users|name|character varying(100)|YES|NULL
+ users|is_active|boolean|YES|true
+ users|invitation_code|character varying(6)|NO|NULL
+ users|invited_by_code|character varying(6)|YES|NULL
+ users|is_temp_password|boolean|YES|false
+ users|invited_by_agent|integer|YES|NULL
+ users|first_purchase_discount_used|boolean|YES|false
+ users|email_verified|boolean|YES|false
+ v_function_count|count|bigint|YES|NULL
+ v_subscription_adjustment_history|id|integer|YES|NULL
+ v_subscription_adjustment_history|user_id|integer|YES|NULL
+ v_subscription_adjustment_history|username|character varying(50)|YES|NULL
+ v_subscription_adjustment_history|subscription_id|integer|YES|NULL
+ v_subscription_adjustment_history|adjustment_type|character varying(50)|YES|NULL
+ v_subscription_adjustment_history|adjustment_type_label|character varying|YES|NULL
+ v_subscription_adjustment_history|old_plan_name|character varying(100)|YES|NULL
+ v_subscription_adjustment_history|new_plan_name|character varying(100)|YES|NULL
+ v_subscription_adjustment_history|old_end_date|timestamp without time zone|YES|NULL
+ v_subscription_adjustment_history|new_end_date|timestamp without time zone|YES|NULL
+ v_subscription_adjustment_history|days_added|integer|YES|NULL
+ v_subscription_adjustment_history|quota_adjustments|jsonb|YES|NULL
+ v_subscription_adjustment_history|reason|text|YES|NULL
+ v_subscription_adjustment_history|admin_note|text|YES|NULL
+ v_subscription_adjustment_history|admin_id|integer|YES|NULL
+ v_subscription_adjustment_history|admin_username|character varying(50)|YES|NULL
+ v_subscription_adjustment_history|ip_address|character varying(45)|YES|NULL
+ v_subscription_adjustment_history|created_at|timestamp without time zone|YES|NULL
+ v_user_storage_detail|user_id|integer|YES|NULL
+ v_user_storage_detail|username|character varying(50)|YES|NULL
+ v_user_storage_detail|gallery_image_bytes|bigint|YES|NULL
+ v_user_storage_detail|orphan_image_bytes|bigint|YES|NULL
+ v_user_storage_detail|document_bytes|bigint|YES|NULL
+ v_user_storage_detail|article_count|bigint|YES|NULL
+ verification_codes|id|integer|NO|nextval('verification_codes_id_seq'::regclass)
+ verification_codes|target|character varying(255)|NO|NULL
+ verification_codes|code|character varying(6)|NO|NULL
+ verification_codes|type|character varying(30)|NO|NULL
+ verification_codes|user_id|integer|YES|NULL
+ verification_codes|expires_at|timestamp without time zone|NO|NULL
+ verification_codes|used|boolean|YES|false
+ verification_codes|attempts|integer|YES|0
+ verification_codes|ip_address|character varying(45)|YES|NULL
+ verification_codes|created_at|timestamp without time zone|YES|CURRENT_TIMESTAMP
+

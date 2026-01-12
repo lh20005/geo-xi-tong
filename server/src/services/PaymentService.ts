@@ -303,6 +303,13 @@ export class PaymentService {
 
       return result;
     } catch (error: any) {
+      // 输出详细错误信息用于调试
+      console.error('[PaymentService] 微信支付API调用失败:', {
+        message: error.message,
+        code: error.code,
+        response: error.response?.data,
+        status: error.response?.status
+      });
       await orderService.updateOrderStatus(order.order_no, 'failed');
       AnomalyDetectionService.recordPaymentFailure(userId, order.order_no).catch(() => {});
       throw new Error('创建支付订单失败，请稍后重试');
