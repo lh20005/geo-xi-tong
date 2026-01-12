@@ -62,9 +62,7 @@ async function checkQuotaSync() {
         'articles_per_month',
         'publish_per_month',
         'platform_accounts',
-        'keyword_distillation',
-        'gallery_albums',
-        'knowledge_bases'
+        'keyword_distillation'
       ];
 
       for (const feature of features) {

@@ -63,8 +63,6 @@ BEGIN
         WHEN 'platform_accounts' THEN v_feature_value := 1;
         WHEN 'keyword_distillation' THEN v_feature_value := 50;
         WHEN 'storage_space' THEN v_feature_value := 100;
-        WHEN 'gallery_albums' THEN v_feature_value := 10;
-        WHEN 'knowledge_bases' THEN v_feature_value := 5;
         ELSE
           -- 未知功能，返回无配额
           RETURN QUERY SELECT FALSE, 0, 0, 0, 0::NUMERIC;

@@ -131,9 +131,7 @@ async function diagnoseQuotaSync() {
           'articles_per_month',
           'publish_per_month',
           'platform_accounts',
-          'keyword_distillation',
-          'gallery_albums',
-          'knowledge_bases'
+          'keyword_distillation'
         ];
 
         const quotaChecks: Record<string, any> = {};

@@ -6,9 +6,7 @@ import { pool } from '../db/database';
  */
 
 interface PlanQuotas {
-  albums: number;
   articles: number;
-  knowledge_bases: number;
   images_per_album: number;
   api_calls_per_day: number;
   storage_mb: number;
@@ -17,33 +15,25 @@ interface PlanQuotas {
 // 套餐配额定义
 const PLAN_QUOTAS: Record<string, PlanQuotas> = {
   free: {
-    albums: 5,
     articles: 50,
-    knowledge_bases: 2,
     images_per_album: 20,
     api_calls_per_day: 100,
     storage_mb: 100
   },
   basic: {
-    albums: 20,
     articles: 200,
-    knowledge_bases: 10,
     images_per_album: 100,
     api_calls_per_day: 1000,
     storage_mb: 1000
   },
   pro: {
-    albums: 100,
     articles: 1000,
-    knowledge_bases: 50,
     images_per_album: 500,
     api_calls_per_day: 10000,
     storage_mb: 10000
   },
   enterprise: {
-    albums: -1, // 无限制
-    articles: -1,
-    knowledge_bases: -1,
+    articles: -1, // 无限制
     images_per_album: -1,
     api_calls_per_day: -1,
     storage_mb: -1
@@ -82,26 +72,12 @@ export class QuotaService {
    * 获取用户当前使用量
    */
   async getUserUsage(userId: number): Promise<{
-    albums: number;
     articles: number;
-    knowledge_bases: number;
     storage_mb: number;
   }> {
-    // 相册数量
-    const albumsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM albums WHERE user_id = $1',
-      [userId]
-    );
-
     // 文章数量
     const articlesResult = await pool.query(
       'SELECT COUNT(*) as count FROM articles WHERE user_id = $1',
-      [userId]
-    );
-
-    // 知识库数量
-    const kbResult = await pool.query(
-      'SELECT COUNT(*) as count FROM knowledge_bases WHERE user_id = $1',
       [userId]
     );
 
@@ -121,9 +97,7 @@ export class QuotaService {
     const storageMb = Math.ceil(totalBytes / (1024 * 1024));
 
     return {
-      albums: parseInt(albumsResult.rows[0].count),
       articles: parseInt(articlesResult.rows[0].count),
-      knowledge_bases: parseInt(kbResult.rows[0].count),
       storage_mb: storageMb
     };
   }
@@ -148,14 +122,8 @@ export class QuotaService {
 
     let current = 0;
     switch (resourceType) {
-      case 'albums':
-        current = usage.albums;
-        break;
       case 'articles':
         current = usage.articles;
-        break;
-      case 'knowledge_bases':
-        current = usage.knowledge_bases;
         break;
       case 'storage_mb':
         current = usage.storage_mb;
@@ -181,9 +149,7 @@ export class QuotaService {
    */
   private getResourceName(resourceType: keyof PlanQuotas): string {
     const names: Record<keyof PlanQuotas, string> = {
-      albums: '相册',
       articles: '文章',
-      knowledge_bases: '知识库',
       images_per_album: '相册图片',
       api_calls_per_day: 'API调用',
       storage_mb: '存储空间'

@@ -149,9 +149,7 @@ export class QuotaSyncService {
       'articles_per_month',
       'publish_per_month',
       'platform_accounts',
-      'keyword_distillation',
-      'gallery_albums',
-      'knowledge_bases'
+      'keyword_distillation'
     ];
 
     const overview: any[] = [];
@@ -183,9 +181,7 @@ export class QuotaSyncService {
       'articles_per_month',
       'publish_per_month',
       'platform_accounts',
-      'keyword_distillation',
-      'gallery_albums',
-      'knowledge_bases'
+      'keyword_distillation'
     ];
 
     for (const featureCode of featureCodes) {

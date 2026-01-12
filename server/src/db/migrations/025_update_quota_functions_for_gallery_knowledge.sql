@@ -1,9 +1,10 @@
 -- ==================== UP ====================
--- 迁移 025: 更新配额函数以支持企业图库和知识库
+-- 迁移 025: 更新配额函数
 -- 创建时间: 2026-01-04
--- 说明: 更新 record_feature_usage 和 check_feature_quota 函数以支持 gallery_albums 和 knowledge_bases
+-- 更新时间: 2026-01-12
+-- 说明: 更新 record_feature_usage 和 check_feature_quota 函数（已移除 gallery_albums 和 knowledge_bases 支持）
 
--- 1. 更新 record_feature_usage 函数，添加对 gallery_albums 和 knowledge_bases 的支持
+-- 1. 更新 record_feature_usage 函数
 CREATE OR REPLACE FUNCTION record_feature_usage(
   p_user_id INTEGER,
   p_feature_code VARCHAR(50),
@@ -11,7 +12,7 @@ CREATE OR REPLACE FUNCTION record_feature_usage(
   p_resource_id INTEGER DEFAULT NULL,
   p_amount INTEGER DEFAULT 1,
   p_metadata JSONB DEFAULT NULL
-) RETURNS BOOLEAN AS $$
+) RETURNS BOOLEAN AS $
 DECLARE
   v_period_start TIMESTAMP;
   v_period_end TIMESTAMP;
@@ -24,8 +25,8 @@ BEGIN
       v_reset_period := 'monthly';
       v_period_start := DATE_TRUNC('month', CURRENT_TIMESTAMP);
       v_period_end := v_period_start + INTERVAL '1 month';
-    -- 永久配额（如平台账号数、相册数、知识库数）
-    WHEN 'platform_accounts', 'gallery_albums', 'knowledge_bases' THEN
+    -- 永久配额（如平台账号数）
+    WHEN 'platform_accounts' THEN
       v_reset_period := 'never';
       v_period_start := '2000-01-01'::TIMESTAMP;
       v_period_end := '2099-12-31'::TIMESTAMP;
@@ -50,11 +51,11 @@ BEGIN
   
   RETURN TRUE;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION record_feature_usage IS '记录功能使用量函数 - 支持月度配额和永久配额（包括图库和知识库）';
+COMMENT ON FUNCTION record_feature_usage IS '记录功能使用量函数 - 支持月度配额和永久配额';
 
--- 2. 更新 check_feature_quota 函数（简化版，直接使用默认配额）
+-- 2. 更新 check_feature_quota 函数
 CREATE OR REPLACE FUNCTION check_feature_quota(
   p_user_id INTEGER,
   p_feature_code VARCHAR(50)
@@ -63,7 +64,7 @@ CREATE OR REPLACE FUNCTION check_feature_quota(
   quota_limit INTEGER,
   current_usage INTEGER,
   remaining INTEGER
-) AS $$
+) AS $
 DECLARE
   v_quota_limit INTEGER;
   v_current_usage INTEGER;
@@ -75,8 +76,6 @@ BEGIN
     WHEN 'platform_accounts' THEN v_quota_limit := 1;
     WHEN 'keyword_distillation' THEN v_quota_limit := 50;
     WHEN 'storage_space' THEN v_quota_limit := 100;
-    WHEN 'gallery_albums' THEN v_quota_limit := 10;
-    WHEN 'knowledge_bases' THEN v_quota_limit := 5;
     ELSE v_quota_limit := 0;
   END CASE;
   
@@ -99,17 +98,16 @@ BEGIN
     v_current_usage,
     GREATEST(v_quota_limit - v_current_usage, 0) AS remaining;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION check_feature_quota IS '检查功能配额 - 使用默认配额值（包括图库和知识库）';
+COMMENT ON FUNCTION check_feature_quota IS '检查功能配额 - 使用默认配额值';
 
 -- 3. 验证函数更新
-DO $$
+DO $
 BEGIN
-  RAISE NOTICE '✅ 配额函数已更新，现在支持 gallery_albums 和 knowledge_bases';
-  RAISE NOTICE '   - record_feature_usage: 支持永久配额类型';
-  RAISE NOTICE '   - check_feature_quota: 添加默认配额值';
-END $$;
+  RAISE NOTICE '✅ 配额函数已更新';
+END $;
 
 -- ==================== DOWN ====================
 -- Rollback not implemented for this migration
+

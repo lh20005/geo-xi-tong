@@ -748,8 +748,6 @@ CROSS JOIN (
     ('publish_per_month', '每月发布数', 20, '次'),
     ('keyword_distillation', '关键词蒸馏', 5, '次'),
     ('platform_accounts', '平台账号数', 3, '个'),
-    ('albums', '相册数量', 3, '个'),
-    ('knowledge_bases', '知识库数量', 2, '个'),
     ('storage_space', '存储空间', 100, 'MB')
 ) AS f(feature_code, feature_name, quota_value, quota_unit)
 WHERE p.plan_code = 'free'
@@ -765,8 +763,6 @@ CROSS JOIN (
     ('publish_per_month', '每月发布数', 200, '次'),
     ('keyword_distillation', '关键词蒸馏', 50, '次'),
     ('platform_accounts', '平台账号数', 10, '个'),
-    ('albums', '相册数量', 20, '个'),
-    ('knowledge_bases', '知识库数量', 10, '个'),
     ('storage_space', '存储空间', 1024, 'MB')
 ) AS f(feature_code, feature_name, quota_value, quota_unit)
 WHERE p.plan_code = 'professional'
@@ -782,8 +778,6 @@ CROSS JOIN (
     ('publish_per_month', '每月发布数', -1, '次'),
     ('keyword_distillation', '关键词蒸馏', -1, '次'),
     ('platform_accounts', '平台账号数', -1, '个'),
-    ('albums', '相册数量', -1, '个'),
-    ('knowledge_bases', '知识库数量', -1, '个'),
     ('storage_space', '存储空间', -1, 'MB')
 ) AS f(feature_code, feature_name, quota_value, quota_unit)
 WHERE p.plan_code = 'enterprise'

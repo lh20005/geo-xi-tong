@@ -1,9 +1,10 @@
 -- ==================== UP ====================
--- 迁移 026: 更新 check_user_quota 函数以支持企业图库和知识库
+-- 迁移 026: 更新 check_user_quota 函数
 -- 创建时间: 2026-01-04
--- 说明: 为 gallery_albums 和 knowledge_bases 添加默认配额支持
+-- 更新时间: 2026-01-12
+-- 说明: 更新 check_user_quota 函数（已移除 gallery_albums 和 knowledge_bases 支持）
 
--- 更新 check_user_quota 函数，添加对新功能的默认配额支持
+-- 更新 check_user_quota 函数
 CREATE OR REPLACE FUNCTION check_user_quota(
   p_user_id INTEGER,
   p_feature_code VARCHAR(50)
@@ -13,7 +14,7 @@ CREATE OR REPLACE FUNCTION check_user_quota(
   quota_limit INTEGER,
   remaining INTEGER,
   percentage NUMERIC
-) AS $$
+) AS $
 DECLARE
   v_subscription_id INTEGER;
   v_plan_id INTEGER;
@@ -49,8 +50,6 @@ BEGIN
       WHEN 'platform_accounts' THEN v_feature_value := 1;
       WHEN 'keyword_distillation' THEN v_feature_value := 50;
       WHEN 'storage_space' THEN v_feature_value := 100;
-      WHEN 'gallery_albums' THEN v_feature_value := 10;
-      WHEN 'knowledge_bases' THEN v_feature_value := 5;
       ELSE
         -- 未知功能，返回无配额
         RETURN QUERY SELECT FALSE, 0, 0, 0, 0::NUMERIC;
@@ -90,16 +89,16 @@ BEGIN
       ELSE 0::NUMERIC
     END AS percentage;
 END;
-$$ LANGUAGE plpgsql;
+$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION check_user_quota IS '检查用户配额函数 - 支持所有功能类型（包括图库和知识库）的默认配额';
+COMMENT ON FUNCTION check_user_quota IS '检查用户配额函数';
 
 -- 验证函数更新
-DO $$
+DO $
 BEGIN
   RAISE NOTICE '✅ check_user_quota 函数已更新';
-  RAISE NOTICE '   现在支持 gallery_albums (默认: 10) 和 knowledge_bases (默认: 5)';
-END $$;
+END $;
 
 -- ==================== DOWN ====================
 -- Rollback not implemented for this migration
+

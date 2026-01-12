@@ -7,7 +7,7 @@ import { getCurrentTenantId } from './tenantContext';
  * 在创建资源前检查用户配额
  */
 
-type ResourceType = 'albums' | 'articles' | 'knowledge_bases' | 'storage_mb';
+type ResourceType = 'articles' | 'storage_mb';
 
 /**
  * 创建配额检查中间件
@@ -50,15 +50,6 @@ export function checkQuota(resourceType: ResourceType, count: number = 1) {
 
 /**
  * 使用示例：
- * 
- * // 创建相册时检查配额
- * router.post('/albums', 
- *   requireTenantContext,
- *   checkQuota('albums'),
- *   async (req, res) => {
- *     // 创建相册逻辑
- *   }
- * );
  * 
  * // 批量创建文章时检查配额
  * router.post('/articles/batch',
