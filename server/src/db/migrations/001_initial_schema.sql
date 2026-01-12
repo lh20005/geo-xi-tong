@@ -618,7 +618,7 @@ CREATE INDEX IF NOT EXISTS idx_platform_accounts_status ON platform_accounts(sta
 CREATE TABLE IF NOT EXISTS publishing_tasks (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  article_id INTEGER REFERENCES articles(id) ON DELETE SET NULL,  -- 文章删除后保留任务记录
   account_id INTEGER NOT NULL REFERENCES platform_accounts(id) ON DELETE CASCADE,
   platform_id VARCHAR(50) NOT NULL,
   status VARCHAR(20) DEFAULT 'pending',

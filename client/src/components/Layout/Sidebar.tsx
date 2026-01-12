@@ -237,7 +237,7 @@ export default function Sidebar() {
         }}
       >
         <img 
-          src="/images/logo.png" 
+          src={`${import.meta.env.BASE_URL}images/logo.png`}
           alt="Logo" 
           style={{ 
             width: 32, 

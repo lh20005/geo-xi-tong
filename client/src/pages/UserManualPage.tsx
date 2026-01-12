@@ -1164,7 +1164,7 @@ export default function UserManualPage() {
                   }}
                 >
                   <img 
-                    src="/images/qrcode.jpg" 
+                    src={`${import.meta.env.BASE_URL}images/qrcode.jpg`}
                     alt="客服微信二维码" 
                     style={{ 
                       width: 200, 

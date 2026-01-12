@@ -323,7 +323,7 @@ CREATE INDEX IF NOT EXISTS idx_platform_accounts_platform ON platform_accounts(p
 -- 发布任务表
 CREATE TABLE IF NOT EXISTS publishing_tasks (
   id SERIAL PRIMARY KEY,
-  article_id INTEGER NOT NULL,
+  article_id INTEGER,  -- 可空，文章删除后保留任务记录
   account_id INTEGER NOT NULL,
   platform_id VARCHAR(50) NOT NULL,
   status VARCHAR(20) DEFAULT 'pending',
@@ -336,7 +336,7 @@ CREATE TABLE IF NOT EXISTS publishing_tasks (
   max_retries INTEGER DEFAULT 3,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  FOREIGN KEY (article_id) REFERENCES articles(id) ON DELETE SET NULL,
   FOREIGN KEY (account_id) REFERENCES platform_accounts(id) ON DELETE CASCADE
 );
 
