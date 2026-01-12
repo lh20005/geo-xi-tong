@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, message, 
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
-  InputNumber, Switch, Table
+  InputNumber, Table
 } from 'antd';
 import {
   SendOutlined, ReloadOutlined, CheckCircleOutlined,
@@ -96,11 +96,8 @@ export default function PublishingTasksPage() {
   // 间隔发布（分钟）
   const [publishInterval, setPublishInterval] = useState<number>(5);
 
-  // 静默发布模式（默认开启静默模式）
-  const [headlessMode, setHeadlessMode] = useState<boolean>(() => {
-    const saved = localStorage.getItem('publishHeadlessMode');
-    return saved !== null ? saved === 'true' : true;
-  });
+  // 静默发布模式（Web端强制静默模式，可视化模式仅桌面端可用）
+  const [headlessMode] = useState<boolean>(true);
 
   // 日志查看
   const [logsModal, setLogsModal] = useState<{ 
@@ -166,11 +163,6 @@ export default function PublishingTasksPage() {
 
     return () => clearInterval(intervalId);
   }, [tasks]); // 依赖tasks，当tasks变化时重新设置定时器
-
-  // 保存静默模式设置到 localStorage
-  useEffect(() => {
-    localStorage.setItem('publishHeadlessMode', headlessMode.toString());
-  }, [headlessMode]);
 
   // 加载草稿文章
   const loadDraftArticles = async () => {
@@ -1277,34 +1269,21 @@ export default function PublishingTasksPage() {
               </Col>
             </Row>
 
-            {/* 发布模式切换 */}
+            {/* 发布模式提示 - Web端仅支持静默模式 */}
             <Row gutter={16} align="middle" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
               <Col flex="auto">
                 <Space size="middle" align="center">
-                  {headlessMode ? (
-                    <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
-                  ) : (
-                    <EyeOutlined style={{ color: '#fff', fontSize: 20 }} />
-                  )}
+                  <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
                   <Text style={{ color: '#fff', fontSize: 14 }}>发布模式：</Text>
-                  <Switch
-                    checked={!headlessMode}
-                    onChange={(checked) => setHeadlessMode(!checked)}
-                    checkedChildren="可视化发布"
-                    unCheckedChildren="静默发布"
-                    style={{ minWidth: 100 }}
-                  />
-                  <Tooltip 
-                    title={
-                      headlessMode 
-                        ? "静默模式：浏览器在后台运行，不显示界面，速度更快" 
-                        : "可视化模式：打开浏览器窗口，可以实时观看自动操作过程"
-                    }
-                  >
-                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
-                      {headlessMode ? '🔇 静默模式：后台运行，不显示浏览器' : '👁️ 可视化模式：打开浏览器窗口观看操作'}
-                    </Text>
-                  </Tooltip>
+                  <Tag color="blue" style={{ fontSize: 13, padding: '4px 12px' }}>
+                    🔇 静默发布
+                  </Tag>
+                  <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
+                    后台运行，不显示浏览器窗口
+                  </Text>
+                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>
+                    （可视化模式仅 Windows 登录管理器可用）
+                  </Text>
                 </Space>
               </Col>
             </Row>
