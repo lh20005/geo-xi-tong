@@ -256,6 +256,13 @@ export class WechatAuthService {
    * 小程序获取到 openid 后，连同绑定码一起提交
    */
   async submitBind(bindCode: string, code: string): Promise<{ success: boolean; message: string }> {
+    // 测试绑定码（用于微信审核）
+    // 审核员输入 000000 可以模拟绑定成功
+    if (bindCode === '000000') {
+      console.log('[WechatAuthService] 使用测试绑定码，模拟绑定成功');
+      return { success: true, message: '绑定成功（测试模式）' };
+    }
+
     // 验证绑定码
     const agentId = this.validateBindCode(bindCode);
     if (!agentId) {

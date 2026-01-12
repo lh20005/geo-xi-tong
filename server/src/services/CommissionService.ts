@@ -233,6 +233,8 @@ export class CommissionService {
 
   /**
    * 获取待结算的佣金列表（用于定时任务）
+   * 不在 SQL 中过滤代理商状态，让定时任务在处理时检查
+   * 这样代理商绑定微信后可以补发之前的佣金
    */
   async getPendingCommissions(settleDate?: Date): Promise<Commission[]> {
     const targetDate = settleDate || new Date();
@@ -243,8 +245,6 @@ export class CommissionService {
        WHERE c.status = 'pending' 
        AND c.settle_date <= $1
        AND a.status = 'active'
-       AND a.wechat_openid IS NOT NULL
-       AND a.receiver_added = TRUE
        ORDER BY c.created_at ASC`,
       [targetDate]
     );

@@ -211,7 +211,7 @@ export class PaymentService {
       isAgentDiscount: discountInfo.isAgentDiscount
     } : undefined);
 
-    // 检查用户是否被代理商邀请，如果是则标记为分账订单
+    // 检查用户是否被代理商邀请，记录代理商关联（无论是否满足分账条件）
     let agentId: number | null = null;
     let expectedCommission: number | null = null;
     let profitSharing = false;
@@ -225,13 +225,14 @@ export class PaymentService {
       const invitedByCode = userResult.rows[0]?.invited_by_code;
 
       if (invitedByCode) {
-        // 检查邀请者是否是已激活的代理商
+        // 检查邀请者是否是已激活的代理商（不要求绑定微信）
         const agent = await agentService.getAgentByInvitationCode(invitedByCode);
-        if (agent && agent.status === 'active' && agent.wechatOpenid && agent.receiverAdded) {
+        if (agent && agent.status === 'active') {
           agentId = agent.id;
           expectedCommission = commissionService.calculateCommission(order.amount, agent.commissionRate);
-          profitSharing = true;
-          console.log(`[PaymentService] 订单 ${order.order_no} 标记为分账订单，代理商: ${agentId}, 预计佣金: ${expectedCommission}`);
+          // 只有绑定微信且添加为分账接收方才能实际分账
+          profitSharing = !!(agent.wechatOpenid && agent.receiverAdded);
+          console.log(`[PaymentService] 订单 ${order.order_no} 关联代理商: ${agentId}, 预计佣金: ${expectedCommission}, 可分账: ${profitSharing}`);
         }
       }
     } catch (error) {
@@ -239,8 +240,8 @@ export class PaymentService {
       // 不影响订单创建
     }
 
-    // 更新订单的分账信息
-    if (profitSharing) {
+    // 更新订单的代理商关联信息（无论是否可分账都记录）
+    if (agentId) {
       await pool.query(
         `UPDATE orders SET agent_id = $1, profit_sharing = $2, expected_commission = $3 WHERE order_no = $4`,
         [agentId, profitSharing, expectedCommission, order.order_no]
@@ -473,7 +474,7 @@ export class PaymentService {
         }
 
         // 代理商永久性收益：检查用户是否被代理商邀请，为每次订单创建佣金记录
-        // 实时查询代理商的分账比例，确保使用最新的比例
+        // 即使代理商未绑定微信也创建佣金记录，只是暂时无法分账
         try {
           const userAgentResult = await pool.query(
             'SELECT invited_by_agent FROM users WHERE id = $1',
@@ -485,7 +486,7 @@ export class PaymentService {
             // 实时查询代理商信息和当前分账比例
             const agent = await agentService.getAgentById(invitedByAgentId);
             
-            if (agent && agent.status === 'active' && agent.wechatOpenid && agent.receiverAdded) {
+            if (agent && agent.status === 'active') {
               // 检查是否已存在该订单的佣金记录（避免重复创建）
               const existingCommission = await commissionService.getCommissionByOrderId(order.id);
               
@@ -497,16 +498,19 @@ export class PaymentService {
                   order.amount
                 );
                 console.log(`[PaymentService] 代理商永久收益: 订单 ${orderNo} 佣金记录已创建，代理商ID: ${invitedByAgentId}, 当前分账比例: ${agent.commissionRate}`);
+                
+                // 记录分账条件状态
+                if (!agent.wechatOpenid || !agent.receiverAdded) {
+                  const reasons = [];
+                  if (!agent.wechatOpenid) reasons.push('未绑定微信');
+                  if (!agent.receiverAdded) reasons.push('未添加为分账接收方');
+                  console.log(`[PaymentService] 代理商 ${invitedByAgentId} 暂不满足分账条件: ${reasons.join(', ')}，佣金记录已创建但暂无法分账`);
+                }
               } else {
                 console.log(`[PaymentService] 订单 ${orderNo} 佣金记录已存在，跳过创建`);
               }
             } else if (agent) {
-              // 记录不满足分账条件的原因
-              const reasons = [];
-              if (agent.status !== 'active') reasons.push(`状态为${agent.status}`);
-              if (!agent.wechatOpenid) reasons.push('未绑定微信');
-              if (!agent.receiverAdded) reasons.push('未添加为分账接收方');
-              console.log(`[PaymentService] 代理商 ${invitedByAgentId} 不满足分账条件: ${reasons.join(', ')}，不创建佣金记录`);
+              console.log(`[PaymentService] 代理商 ${invitedByAgentId} 状态为 ${agent.status}，不创建佣金记录`);
             }
           }
         } catch (commissionError) {

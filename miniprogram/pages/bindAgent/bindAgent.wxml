@@ -6,7 +6,7 @@
   <!-- 扫码进入时显示自动绑定中 -->
   <block wx:if="{{isFromScan && loading && !resultType}}">
     <view class="header">
-      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <image class="logo" src="/images/logo.jpeg" mode="aspectFit"></image>
       <view class="title">正在绑定...</view>
       <view class="subtitle">请稍候，正在完成微信账户绑定</view>
     </view>
@@ -20,7 +20,7 @@
   <!-- 绑定成功 -->
   <block wx:elif="{{resultType === 'success'}}">
     <view class="header">
-      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <image class="logo" src="/images/logo.jpeg" mode="aspectFit"></image>
       <view class="title">绑定成功</view>
       <view class="subtitle">您的微信账户已成功绑定</view>
     </view>
@@ -38,7 +38,7 @@
   <!-- 绑定失败 -->
   <block wx:elif="{{resultType === 'error'}}">
     <view class="header">
-      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <image class="logo" src="/images/logo.jpeg" mode="aspectFit"></image>
       <view class="title">绑定失败</view>
       <view class="subtitle">请检查绑定码后重试</view>
     </view>
@@ -75,7 +75,7 @@
   <!-- 正常输入绑定码 -->
   <block wx:else>
     <view class="header">
-      <image class="logo" src="/images/logo.png" mode="aspectFit"></image>
+      <image class="logo" src="/images/logo.jpeg" mode="aspectFit"></image>
       <view class="title">绑定代理商账户</view>
       <view class="subtitle">输入网页端显示的6位绑定码</view>
     </view>
