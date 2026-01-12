@@ -105,11 +105,18 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION get_user_quota_period IS '计算用户配额周期 - 基于订阅锚点时间和周期类型';
 
--- 4. 更新 record_feature_usage 函数 - 使用订阅周期
+-- 4. 更新 record_feature_usage 函数 - 使用订阅周期，支持 6 个参数
+-- 先删除旧版本的函数（所有签名）
+DROP FUNCTION IF EXISTS record_feature_usage(INTEGER, VARCHAR, INTEGER);
+DROP FUNCTION IF EXISTS record_feature_usage(INTEGER, VARCHAR, VARCHAR, INTEGER, INTEGER, JSONB);
+
 CREATE OR REPLACE FUNCTION record_feature_usage(
   p_user_id INTEGER,
   p_feature_code VARCHAR(50),
-  p_amount INTEGER DEFAULT 1
+  p_resource_type VARCHAR(50) DEFAULT NULL,
+  p_resource_id INTEGER DEFAULT NULL,
+  p_amount INTEGER DEFAULT 1,
+  p_metadata JSONB DEFAULT NULL
 ) RETURNS BOOLEAN AS $$
 DECLARE
   v_period RECORD;
@@ -124,7 +131,7 @@ BEGIN
     RAISE EXCEPTION '用户没有有效订阅';
   END IF;
   
-  -- 记录使用量
+  -- 记录使用量到 user_usage 表
   INSERT INTO user_usage (
     user_id, 
     feature_code, 
@@ -146,11 +153,32 @@ BEGIN
     usage_count = user_usage.usage_count + p_amount,
     updated_at = CURRENT_TIMESTAMP;
   
+  -- 如果 usage_records 表存在，也记录详细使用记录
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'usage_records') THEN
+    INSERT INTO usage_records (
+      user_id,
+      feature_code,
+      resource_type,
+      resource_id,
+      amount,
+      metadata,
+      created_at
+    ) VALUES (
+      p_user_id,
+      p_feature_code,
+      p_resource_type,
+      p_resource_id,
+      p_amount,
+      p_metadata,
+      CURRENT_TIMESTAMP
+    );
+  END IF;
+  
   RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION record_feature_usage IS '记录功能使用量 - 基于用户订阅周期';
+COMMENT ON FUNCTION record_feature_usage IS '记录功能使用量 - 基于用户订阅周期，支持资源类型、资源ID和元数据';
 
 -- 5. 更新 check_feature_quota 函数 - 使用订阅周期
 CREATE OR REPLACE FUNCTION check_feature_quota(
