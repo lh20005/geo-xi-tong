@@ -113,7 +113,9 @@
       
       // 1秒后跳转到登录页
       setTimeout(() => {
-        window.location.href = 'http://localhost:8080/login?expired=true&message=' + 
+        // 动态获取当前域名，适配任何环境
+        const baseUrl = window.location.origin;
+        window.location.href = baseUrl + '/login?expired=true&message=' + 
           encodeURIComponent('Token已清除，请重新登录');
       }, 1000);
     }

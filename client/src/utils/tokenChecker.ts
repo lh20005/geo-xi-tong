@@ -65,7 +65,7 @@ export function checkAndClearExpiredToken(): boolean {
  */
 export function autoRedirectIfExpired(): void {
   if (checkAndClearExpiredToken()) {
-    const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+    const landingUrl = import.meta.env.VITE_LANDING_URL || window.location.origin;
     const message = '登录已过期，请重新登录';
     
     console.log('[TokenChecker] 跳转到登录页');

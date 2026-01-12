@@ -70,8 +70,8 @@ apiClient.interceptors.response.use(
           
           // 使用 setTimeout 确保在当前请求完成后再跳转
           setTimeout(() => {
-            // 跳转到落地页登录页面
-            const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+            // 跳转到落地页登录页面（空字符串时使用当前域名）
+            const landingUrl = import.meta.env.VITE_LANDING_URL || window.location.origin;
             window.location.href = `${landingUrl}/login?expired=true&message=${encodeURIComponent(message)}`;
           }, 100);
           
@@ -83,7 +83,7 @@ apiClient.interceptors.response.use(
         localStorage.clear();
         
         setTimeout(() => {
-          const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
+          const landingUrl = import.meta.env.VITE_LANDING_URL || window.location.origin;
           window.location.href = `${landingUrl}/login?expired=true&message=${encodeURIComponent('请先登录')}`;
         }, 100);
         

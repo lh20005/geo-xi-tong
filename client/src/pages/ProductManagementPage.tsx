@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { 
-  Table, Button, Modal, Form, Input, InputNumber, Switch, 
+  Button, Modal, Form, Input, InputNumber, Switch, 
   message, Card, Tag, Space, Timeline, Descriptions,
   Popconfirm, Select, Spin, Statistic, Row, Col
 } from 'antd';
@@ -11,6 +11,7 @@ import {
 } from '@ant-design/icons';
 import axios from 'axios';
 import type { ColumnsType } from 'antd/es/table';
+import ResizableTable from '../components/ResizableTable';
 
 const { TextArea } = Input;
 
@@ -313,13 +314,14 @@ export default function ProductManagementPage() {
       title: '排序',
       dataIndex: 'displayOrder',
       key: 'displayOrder',
-      width: 80,
+      width: 70,
       sorter: (a, b) => a.displayOrder - b.displayOrder,
     },
     {
       title: '套餐名称',
       dataIndex: 'planName',
       key: 'planName',
+      width: 200,
       render: (text, record) => (
         <Space>
           <span className="font-semibold">{text}</span>
@@ -336,7 +338,7 @@ export default function ProductManagementPage() {
       title: '类型',
       dataIndex: 'planType',
       key: 'planType',
-      width: 100,
+      width: 90,
       render: (planType) => (
         <Tag color={planType === 'booster' ? 'purple' : 'cyan'}>
           {planType === 'booster' ? '加量包' : '基础套餐'}
@@ -347,6 +349,7 @@ export default function ProductManagementPage() {
       title: '价格',
       dataIndex: 'price',
       key: 'price',
+      width: 120,
       render: (price, record) => (
         <span className="text-lg font-bold text-red-600">
           ¥{price} / {record.billingCycle === 'monthly' ? '月' : '年'}
@@ -357,7 +360,7 @@ export default function ProductManagementPage() {
       title: '代理商折扣',
       dataIndex: 'agentDiscountRate',
       key: 'agentDiscountRate',
-      width: 120,
+      width: 100,
       render: (rate) => {
         const discountRate = rate || 100;
         if (discountRate >= 100) {
@@ -375,6 +378,7 @@ export default function ProductManagementPage() {
     {
       title: '功能配额',
       key: 'features',
+      width: 220,
       render: (_, record) => (
         <Space direction="vertical" size="small">
           {record.features?.map((feature, index) => {
@@ -396,6 +400,7 @@ export default function ProductManagementPage() {
       title: '状态',
       dataIndex: 'isActive',
       key: 'isActive',
+      width: 80,
       render: (isActive) => (
         <Tag color={isActive ? 'success' : 'default'}>
           {isActive ? '启用' : '停用'}
@@ -553,7 +558,8 @@ export default function ProductManagementPage() {
           </Space>
         }
       >
-        <Table
+        <ResizableTable<Plan>
+          tableId="product-management-list"
           columns={columns}
           dataSource={plans}
           rowKey="id"
