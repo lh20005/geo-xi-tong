@@ -81,7 +81,8 @@ export default function HomePage() {
     const fetchPlans = async () => {
       try {
         setPlansLoading(true);
-        const response = await axios.get(`${config.apiUrl}/subscription/plans`);
+        // 请求所有类型的套餐（包括 base 基础套餐和 booster 加量包）
+        const response = await axios.get(`${config.apiUrl}/subscription/plans?plan_type=all`);
         if (response.data.success) {
           setPlans(response.data.data || []);
         }
