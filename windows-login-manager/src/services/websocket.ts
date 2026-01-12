@@ -84,6 +84,14 @@ export class WebSocketClient {
         
         this.emit('disconnected', { code: event.code, reason: event.reason });
         
+        // 1008 = Policy Violation (authentication failed)
+        // Don't reconnect if authentication failed - need to re-login
+        if (event.code === 1008) {
+          console.error('WebSocket authentication failed, stopping reconnection. Please re-login.');
+          this.emit('auth_failed', { code: event.code, reason: event.reason });
+          return;
+        }
+        
         // Auto reconnect if not manual close
         if (!this.isManualClose && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.scheduleReconnect();

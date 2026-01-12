@@ -401,7 +401,18 @@ export function subscribeToTaskLogs(
   onLog: (log: PublishingLog) => void,
   onError?: (error: Error) => void
 ): () => void {
-  const eventSource = new EventSource(`/api/publishing/tasks/${taskId}/logs/stream`);
+  // 从 localStorage 获取 token
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    if (onError) {
+      onError(new Error('未登录，无法订阅日志流'));
+    }
+    return () => {};
+  }
+
+  // 通过 URL 参数传递 token（EventSource 不支持自定义 headers）
+  const url = `/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(token)}`;
+  const eventSource = new EventSource(url);
 
   eventSource.onmessage = (event) => {
     try {

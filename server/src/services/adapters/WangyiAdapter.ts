@@ -373,18 +373,21 @@ export class WangyiAdapter extends PlatformAdapter {
       return imagePath;
     }
 
+    // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
+    const serverDir = path.resolve(__dirname, '../..');
+
     if (imagePath.startsWith('/uploads/')) {
-      return path.resolve(process.cwd(), imagePath.substring(1));
+      return path.resolve(serverDir, imagePath.substring(1));
     }
     
     if (imagePath.startsWith('uploads/')) {
-      return path.resolve(process.cwd(), imagePath);
+      return path.resolve(serverDir, imagePath);
     }
 
     if (path.isAbsolute(imagePath)) {
       return imagePath;
     }
 
-    return path.resolve(process.cwd(), imagePath);
+    return path.resolve(serverDir, imagePath);
   }
 }

@@ -96,6 +96,15 @@ export class UserWebSocketService {
           this.isConnecting = false;
           this.stopHeartbeat();
 
+          // 1008 = Policy Violation (authentication failed)
+          // Don't reconnect if authentication failed - need to re-login
+          if (event.code === 1008) {
+            console.error('[UserWebSocket] Authentication failed, stopping reconnection. Please re-login.');
+            this.shouldReconnect = false;
+            reject(new Error('Authentication failed'));
+            return;
+          }
+
           if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.scheduleReconnect();
           }

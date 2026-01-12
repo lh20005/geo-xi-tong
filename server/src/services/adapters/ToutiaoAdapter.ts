@@ -382,13 +382,15 @@ export class ToutiaoAdapter extends PlatformAdapter {
 
     // 如果以 /uploads/ 开头，这是相对于 server 目录的路径
     if (imagePath.startsWith('/uploads/')) {
-      // 去掉开头的 /，直接拼接到当前工作目录
-      return path.resolve(process.cwd(), imagePath.substring(1));
+      // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
+      const serverDir = path.resolve(__dirname, '../..');
+      return path.resolve(serverDir, imagePath.substring(1));
     }
     
-    // 如果以 uploads/ 开头，直接拼接到当前工作目录
+    // 如果以 uploads/ 开头，直接拼接到 server 目录
     if (imagePath.startsWith('uploads/')) {
-      return path.resolve(process.cwd(), imagePath);
+      const serverDir = path.resolve(__dirname, '../..');
+      return path.resolve(serverDir, imagePath);
     }
 
     // 如果是绝对路径，直接返回
@@ -396,7 +398,8 @@ export class ToutiaoAdapter extends PlatformAdapter {
       return imagePath;
     }
 
-    // 其他情况，尝试当前工作目录
-    return path.resolve(process.cwd(), imagePath);
+    // 其他情况，尝试 server 目录
+    const serverDir = path.resolve(__dirname, '../..');
+    return path.resolve(serverDir, imagePath);
   }
 }
