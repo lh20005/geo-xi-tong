@@ -162,10 +162,13 @@ class StorageManager {
 
   /**
    * 获取默认配置
+   * 优先使用环境变量，支持连接远程服务器
    */
   private getDefaultConfig(): AppConfig {
+    // 优先使用环境变量（支持 Electron 主进程）
+    const serverUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
     return {
-      serverUrl: 'http://localhost:3000',
+      serverUrl,
       autoSync: true,
       logLevel: 'info',
       theme: 'system',

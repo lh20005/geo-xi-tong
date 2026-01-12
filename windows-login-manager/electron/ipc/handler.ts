@@ -102,15 +102,16 @@ class IPCHandler {
         await apiClient.setBaseURL(config.serverUrl);
         log.info(`API client initialized with baseURL: ${config.serverUrl}`);
       } else {
-        // 使用默认配置
-        const defaultUrl = 'http://localhost:3000';
+        // 使用环境变量或默认配置
+        const defaultUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
         await apiClient.setBaseURL(defaultUrl);
         log.info(`API client initialized with default baseURL: ${defaultUrl}`);
       }
     } catch (error) {
       log.error('Failed to initialize API client:', error);
-      // 使用默认配置作为后备
-      await apiClient.setBaseURL('http://localhost:3000');
+      // 使用环境变量或默认配置作为后备
+      const fallbackUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      await apiClient.setBaseURL(fallbackUrl);
     }
   }
 
