@@ -12,10 +12,17 @@ interface JwtPayload {
 
 /**
  * 认证中间件 - 验证 JWT token
+ * 支持从 Authorization header 或 URL 查询参数 token 获取令牌
+ * URL 参数方式主要用于 SSE（EventSource 不支持自定义 headers）
  */
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    // 优先从 Authorization header 获取，其次从 URL 查询参数获取（用于 SSE）
+    let token = req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!token && req.query.token) {
+      token = req.query.token as string;
+    }
 
     if (!token) {
       return res.status(401).json({

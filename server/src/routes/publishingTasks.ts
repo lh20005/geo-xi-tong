@@ -1,7 +1,6 @@
 import express from 'express';
 import { publishingService } from '../services/PublishingService';
 import { pool } from '../db/database';
-import { logBroadcaster } from '../services/LogBroadcaster';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
@@ -299,64 +298,6 @@ router.get('/tasks/:id/logs', async (req, res) => {
       message: '获取任务日志失败'
     });
   }
-});
-
-/**
- * 实时日志流（SSE）
- */
-router.get('/tasks/:id/logs/stream', async (req, res) => {
-  const userId = getCurrentTenantId(req);
-  const taskId = parseInt(req.params.id);
-
-  // 验证任务所有权
-  const taskCheck = await pool.query(
-    'SELECT id FROM publishing_tasks WHERE id = $1 AND user_id = $2',
-    [taskId, userId]
-  );
-  
-  if (taskCheck.rows.length === 0) {
-    return res.status(404).json({
-      success: false,
-      message: '任务不存在或无权访问'
-    });
-  }
-
-  // 设置 SSE 响应头
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // 禁用 nginx 缓冲
-
-  // 发送初始连接成功消息
-  res.write(`data: ${JSON.stringify({ 
-    level: 'info', 
-    message: '日志流已连接', 
-    timestamp: new Date().toISOString() 
-  })}\n\n`);
-
-  // 添加客户端到广播器
-  logBroadcaster.addClient(taskId, res);
-
-  // 发送历史日志
-  try {
-    const logs = await publishingService.getTaskLogs(taskId);
-    for (const log of logs) {
-      res.write(`data: ${JSON.stringify({
-        level: log.level,
-        message: log.message,
-        timestamp: log.created_at,
-        details: log.details
-      })}\n\n`);
-    }
-  } catch (error) {
-    console.error('发送历史日志失败:', error);
-  }
-
-  // 客户端断开连接时清理
-  req.on('close', () => {
-    logBroadcaster.removeClient(taskId, res);
-    res.end();
-  });
 });
 
 /**

@@ -11,6 +11,7 @@ import { articleGenerationRouter } from './articleGeneration';
 import platformAccountsRouter from './platformAccounts';
 import publishingTasksRouter from './publishingTasks';
 import publishingRecordsRouter from './publishingRecords';
+import publishingSSERouter from './publishingSSE';
 import { dashboardRouter } from './dashboard';
 import authRouter from './auth';
 import platformsRouter from './platforms';
@@ -64,6 +65,8 @@ apiRouter.use('/knowledge-bases', knowledgeBaseRouter);
 apiRouter.use('/conversion-targets', conversionTargetRouter);
 apiRouter.use('/article-settings', articleSettingsRouter);
 apiRouter.use('/article-generation', articleGenerationRouter);
+// SSE 路由必须在其他 publishing 路由之前，因为它有自己的认证逻辑
+apiRouter.use('/publishing', publishingSSERouter);
 apiRouter.use('/publishing', platformAccountsRouter);
 apiRouter.use('/publishing', publishingTasksRouter);
 apiRouter.use('/publishing', publishingRecordsRouter);
