@@ -410,8 +410,11 @@ export function subscribeToTaskLogs(
     return () => {};
   }
 
+  // 获取 API 基础 URL（EventSource 不使用 axios 配置，需要完整 URL）
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+  
   // 通过 URL 参数传递 token（EventSource 不支持自定义 headers）
-  const url = `/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(token)}`;
+  const url = `${API_BASE_URL}/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(token)}`;
   const eventSource = new EventSource(url);
 
   eventSource.onmessage = (event) => {

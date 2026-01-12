@@ -398,8 +398,13 @@ export function subscribeToTaskLogs(
     return () => {};
   }
 
+  // 获取 API 基础 URL（EventSource 不使用 axios 配置，需要完整 URL）
+  // 生产环境使用相对路径（同域），开发环境使用配置的 API URL
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const baseUrl = apiUrl.endsWith('/api') ? apiUrl.slice(0, -4) : apiUrl;
+  
   // 通过 URL 参数传递 token（EventSource 不支持自定义 headers）
-  const url = `/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(token)}`;
+  const url = `${baseUrl}/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(token)}`;
   const eventSource = new EventSource(url);
 
   eventSource.onmessage = (event) => {
