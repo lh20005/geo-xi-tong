@@ -151,7 +151,21 @@ export default function AdjustQuotaModal({ visible, userId, features, onClose, o
               }
               rules={[
                 { required: true, message: '请输入新配额值' },
-                { type: 'number', min: -1, message: '配额值必须大于等于 -1' },
+                { 
+                  validator: (_, value) => {
+                    if (value === undefined || value === null || value === '') {
+                      return Promise.resolve();
+                    }
+                    const numValue = Number(value);
+                    if (isNaN(numValue)) {
+                      return Promise.reject(new Error('请输入有效的数字'));
+                    }
+                    if (numValue < -1) {
+                      return Promise.reject(new Error('配额值必须大于等于 -1（-1 表示无限制）'));
+                    }
+                    return Promise.resolve();
+                  }
+                },
               ]}
               extra={
                 selectedFeature?.feature_code === 'storage_space'
@@ -162,7 +176,6 @@ export default function AdjustQuotaModal({ visible, userId, features, onClose, o
               <Space.Compact style={{ width: '100%' }}>
                 <InputNumber
                   style={{ width: '100%' }}
-                  min={-1}
                   placeholder={
                     selectedFeature?.feature_code === 'storage_space'
                       ? '请输入新配额值（MB）'

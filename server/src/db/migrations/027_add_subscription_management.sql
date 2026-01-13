@@ -141,28 +141,31 @@ BEGIN
     us.is_gift,
     us.custom_quotas,
     (
-      SELECT jsonb_agg(
-        jsonb_build_object(
-          'feature_code', pf.feature_code,
-          'feature_name', pf.feature_name,
-          'feature_value', COALESCE(
-            (us.custom_quotas->>pf.feature_code)::INTEGER,
-            pf.feature_value
-          ),
-          'current_usage', COALESCE(uu.usage_count, 0),
-          'usage_percentage', CASE 
-            WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) = -1 THEN 0
-            WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) > 0 THEN 
-              ROUND((COALESCE(uu.usage_count, 0)::NUMERIC / COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value)::NUMERIC) * 100, 2)
-            ELSE 0
-          END
-        )
-      )
-      FROM plan_features pf
-      LEFT JOIN user_usage uu ON uu.user_id = p_user_id 
-        AND uu.feature_code = pf.feature_code
-        AND uu.period_end > CURRENT_TIMESTAMP
-      WHERE pf.plan_id = sp.id
+      SELECT jsonb_agg(feature_data)
+      FROM (
+        SELECT DISTINCT ON (pf.feature_code)
+          jsonb_build_object(
+            'feature_code', pf.feature_code,
+            'feature_name', pf.feature_name,
+            'feature_value', COALESCE(
+              (us.custom_quotas->>pf.feature_code)::INTEGER,
+              pf.feature_value
+            ),
+            'current_usage', COALESCE(uu.usage_count, 0),
+            'usage_percentage', CASE 
+              WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) = -1 THEN 0
+              WHEN COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value) > 0 THEN 
+                ROUND((COALESCE(uu.usage_count, 0)::NUMERIC / COALESCE((us.custom_quotas->>pf.feature_code)::INTEGER, pf.feature_value)::NUMERIC) * 100, 2)
+              ELSE 0
+            END
+          ) AS feature_data
+        FROM plan_features pf
+        LEFT JOIN user_usage uu ON uu.user_id = p_user_id 
+          AND uu.feature_code = pf.feature_code
+          AND uu.period_end > CURRENT_TIMESTAMP
+        WHERE pf.plan_id = sp.id
+        ORDER BY pf.feature_code, uu.period_end DESC NULLS LAST
+      ) sub
     ) AS features
   FROM user_subscriptions us
   JOIN subscription_plans sp ON sp.id = us.plan_id
