@@ -154,23 +154,21 @@ router.post('/tasks', async (req, res) => {
         
         console.log(`📊 批次 ${batch_id} 当前任务数: ${currentCount}/${batch_total}`);
         
-        // 如果所有任务都已创建，自动触发批次执行
+        // 如果所有任务都已创建，检查是否可以立即执行
         if (currentCount >= batch_total) {
-          console.log(`🚀 批次 ${batch_id} 所有任务已创建完成，自动触发执行`);
+          console.log(`✅ 批次 ${batch_id} 所有任务已创建完成`);
           
-          // 检查是否有用户的其他任务正在执行
-          const runningTasksResult = await pool.query(
-            `SELECT COUNT(*) as count FROM publishing_tasks 
-             WHERE user_id = $1 AND status = 'running' AND batch_id != $2`,
-            [userId, batch_id]
-          );
-          const runningCount = parseInt(runningTasksResult.rows[0].count);
+          const { batchExecutor } = require('../services/BatchExecutor');
           
-          if (runningCount > 0) {
-            console.log(`⏳ 用户 #${userId} 有 ${runningCount} 个其他任务正在执行，批次 ${batch_id} 将排队等待`);
+          // 检查是否有其他批次正在执行（全局队列检查）
+          const executingBatches = batchExecutor.getExecutingBatches();
+          
+          if (executingBatches.length > 0) {
+            console.log(`⏳ 当前有 ${executingBatches.length} 个批次正在执行，批次 ${batch_id} 已加入队列等待`);
+            console.log(`   正在执行的批次: ${executingBatches.join(', ')}`);
           } else {
-            // 异步执行批次，不阻塞响应
-            const { batchExecutor } = require('../services/BatchExecutor');
+            // 没有其他批次在执行，可以立即开始
+            console.log(`🚀 没有其他批次在执行，批次 ${batch_id} 立即开始执行`);
             batchExecutor.executeBatch(batch_id).catch((error: any) => {
               console.error(`批次 ${batch_id} 执行失败:`, error);
             });

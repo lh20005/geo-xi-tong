@@ -278,24 +278,26 @@ export class BatchExecutor {
 
   /**
    * 检查并执行所有待执行的批次
+   * 重要：同一时间只允许一个批次执行，其他批次需要排队等待
    */
   async checkAndExecuteBatches(): Promise<void> {
     try {
+      // 关键检查：如果已经有批次在执行，不启动新的批次
+      if (this.executingBatches.size > 0) {
+        // 不打印日志，避免每10秒刷屏
+        return;
+      }
+      
       const { pool } = require('../db/database');
       
-      // 查找所有有 pending 任务的批次
-      // 只查找batch_order最小的pending任务，但要排除正在执行的批次
+      // 查找所有有 pending 任务的批次，按创建时间排序（先创建的先执行）
       const result = await pool.query(`
-        SELECT DISTINCT batch_id 
+        SELECT DISTINCT ON (batch_id) batch_id, MIN(created_at) as first_created
         FROM publishing_tasks 
         WHERE batch_id IS NOT NULL 
         AND status = 'pending'
-        AND batch_order = (
-          SELECT MIN(batch_order) 
-          FROM publishing_tasks t2 
-          WHERE t2.batch_id = publishing_tasks.batch_id 
-          AND t2.status = 'pending'
-        )
+        GROUP BY batch_id
+        ORDER BY batch_id, first_created ASC
       `);
 
       const batchIds = result.rows.map((row: any) => row.batch_id);
@@ -303,18 +305,24 @@ export class BatchExecutor {
       if (batchIds.length > 0) {
         console.log(`📋 发现 ${batchIds.length} 个待执行的批次`);
         
-        for (const batchId of batchIds) {
-          // 跳过正在执行的批次（关键保护）
-          if (this.executingBatches.has(batchId)) {
-            console.log(`⏭️  批次 ${batchId} 正在执行中，跳过`);
-            continue;
-          }
-          
-          // 异步执行批次，不阻塞其他批次
-          this.executeBatch(batchId).catch(error => {
-            console.error(`批次 ${batchId} 执行失败:`, error);
-          });
+        // 只执行第一个批次（队列模式：一个一个执行）
+        const batchId = batchIds[0];
+        
+        // 再次检查是否有批次在执行（双重保护）
+        if (this.executingBatches.size > 0) {
+          console.log(`⏳ 有批次正在执行中，批次 ${batchId} 排队等待`);
+          return;
         }
+        
+        console.log(`🚀 开始执行队列中的第一个批次: ${batchId}`);
+        if (batchIds.length > 1) {
+          console.log(`📋 剩余 ${batchIds.length - 1} 个批次在队列中等待`);
+        }
+        
+        // 异步执行批次
+        this.executeBatch(batchId).catch(error => {
+          console.error(`批次 ${batchId} 执行失败:`, error);
+        });
       }
     } catch (error) {
       console.error('❌ 检查批次失败:', error);
