@@ -151,18 +151,17 @@ export default function PublishingTasksPage() {
     loadTasks();
   }, []);
 
-  // 自动刷新任务列表（每5秒刷新一次）
+  // 自动刷新任务列表（优化：从5秒改为15秒，减少带宽占用）
   useEffect(() => {
     const intervalId = setInterval(() => {
-      // 只在有任务时自动刷新
+      // 只在有运行中或等待中的任务时才刷新
       if (tasks.length > 0) {
-        const hasRunningTasks = tasks.some(t => t.status === 'running' || t.status === 'pending');
-        if (hasRunningTasks) {
-          console.log('🔄 自动刷新任务列表...');
+        const hasActiveTasks = tasks.some(t => t.status === 'running' || t.status === 'pending');
+        if (hasActiveTasks) {
           loadTasks();
         }
       }
-    }, 5000); // 每5秒刷新一次
+    }, 15000); // 优化：15秒刷新一次（原5秒），减少67%请求
 
     return () => clearInterval(intervalId);
   }, [tasks]); // 依赖tasks，当tasks变化时重新设置定时器
@@ -208,8 +207,9 @@ export default function PublishingTasksPage() {
   const loadTasks = async () => {
     setTasksLoading(true);
     try {
-      // 加载所有任务用于批次分组显示
-      const response = await getPublishingTasks(1, 1000);
+      // 优化：限制单次请求数量为100条（原1000条），减少90%数据传输
+      // 批次分组显示只需要最近的任务，不需要全部历史
+      const response = await getPublishingTasks(1, 100);
       setTasks(response.tasks || []);
       setTaskTotal(response.total || 0);
 

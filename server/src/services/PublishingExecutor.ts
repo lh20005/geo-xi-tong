@@ -173,8 +173,8 @@ export class PublishingExecutor {
     let page = null;
 
     try {
-      // 获取任务详情
-      const task = await publishingService.getTaskById(taskId);
+      // 获取任务详情（使用 getTaskForExecution 获取包含 article_content 的完整数据）
+      const task = await publishingService.getTaskForExecution(taskId);
       if (!task) {
         throw new Error('任务不存在');
       }

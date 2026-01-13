@@ -97,7 +97,9 @@ export class PublishingService {
        (article_id, account_id, platform_id, user_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes,
         article_title, article_content, article_keyword, article_image_url) 
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
-       RETURNING *`,
+       RETURNING id, article_id, account_id, platform_id, user_id, config, scheduled_at, status, 
+                 batch_id, batch_order, interval_minutes, retry_count, max_retries,
+                 created_at, updated_at, article_title, article_keyword`,
       [
         input.article_id,
         input.account_id,
@@ -126,8 +128,14 @@ export class PublishingService {
    * 获取任务详情
    */
   async getTaskById(taskId: number): Promise<PublishingTask | null> {
+    // 优化：排除 article_content 大字段
     const result = await pool.query(
-      'SELECT * FROM publishing_tasks WHERE id = $1',
+      `SELECT id, user_id, article_id, account_id, platform_id,
+              status, config, scheduled_at, started_at, completed_at,
+              error_message, retry_count, max_retries, batch_id,
+              batch_order, interval_minutes, created_at, updated_at,
+              article_title, article_keyword, article_image_url
+       FROM publishing_tasks WHERE id = $1`,
       [taskId]
     );
 
@@ -136,6 +144,32 @@ export class PublishingService {
     }
 
     return this.formatTask(result.rows[0]);
+  }
+
+  /**
+   * 获取任务详情（用于执行任务，包含 article_content）
+   * 仅在实际执行发布时调用，不用于列表展示
+   */
+  async getTaskForExecution(taskId: number): Promise<PublishingTask | null> {
+    const result = await pool.query(
+      `SELECT id, user_id, article_id, account_id, platform_id,
+              status, config, scheduled_at, started_at, completed_at,
+              error_message, retry_count, max_retries, batch_id,
+              batch_order, interval_minutes, created_at, updated_at,
+              article_title, article_content, article_keyword, article_image_url
+       FROM publishing_tasks WHERE id = $1`,
+      [taskId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    // 手动构建包含 article_content 的任务对象
+    const row = result.rows[0];
+    const task = this.formatTask(row);
+    task.article_content = row.article_content;
+    return task;
   }
 
   /**
@@ -182,10 +216,15 @@ export class PublishingService {
     const total = parseInt(countResult.rows[0].total);
 
     // 获取数据 - 使用LEFT JOIN获取账号信息
+    // 优化：排除 article_content 大字段，减少带宽
     const offset = (page - 1) * pageSize;
     const dataResult = await pool.query(
       `SELECT 
-        pt.*,
+        pt.id, pt.user_id, pt.article_id, pt.account_id, pt.platform_id,
+        pt.status, pt.config, pt.scheduled_at, pt.started_at, pt.completed_at,
+        pt.error_message, pt.retry_count, pt.max_retries, pt.batch_id,
+        pt.batch_order, pt.interval_minutes, pt.created_at, pt.updated_at,
+        pt.article_title, pt.article_keyword, pt.article_image_url,
         pa.account_name,
         pa.credentials
        FROM publishing_tasks pt
@@ -285,8 +324,14 @@ export class PublishingService {
    * - 立即执行任务（scheduled_at is null）
    */
   async getPendingScheduledTasks(): Promise<PublishingTask[]> {
+    // 优化：排除 article_content 大字段
     const result = await pool.query(
-      `SELECT * FROM publishing_tasks 
+      `SELECT id, user_id, article_id, account_id, platform_id,
+              status, config, scheduled_at, started_at, completed_at,
+              error_message, retry_count, max_retries, batch_id,
+              batch_order, interval_minutes, created_at, updated_at,
+              article_title, article_keyword, article_image_url
+       FROM publishing_tasks 
        WHERE status = 'pending' 
        AND (
          scheduled_at IS NULL 
@@ -585,8 +630,14 @@ export class PublishingService {
    * 获取批次中的下一个待执行任务
    */
   async getNextBatchTask(batchId: string): Promise<PublishingTask | null> {
+    // 优化：排除 article_content 大字段
     const result = await pool.query(
-      `SELECT * FROM publishing_tasks 
+      `SELECT id, user_id, article_id, account_id, platform_id,
+              status, config, scheduled_at, started_at, completed_at,
+              error_message, retry_count, max_retries, batch_id,
+              batch_order, interval_minutes, created_at, updated_at,
+              article_title, article_keyword, article_image_url
+       FROM publishing_tasks 
        WHERE batch_id = $1 AND status = 'pending'
        ORDER BY batch_order ASC 
        LIMIT 1`,
@@ -604,8 +655,14 @@ export class PublishingService {
    * 获取批次中所有任务
    */
   async getBatchTasks(batchId: string): Promise<PublishingTask[]> {
+    // 优化：排除 article_content 大字段
     const result = await pool.query(
-      `SELECT * FROM publishing_tasks 
+      `SELECT id, user_id, article_id, account_id, platform_id,
+              status, config, scheduled_at, started_at, completed_at,
+              error_message, retry_count, max_retries, batch_id,
+              batch_order, interval_minutes, created_at, updated_at,
+              article_title, article_keyword, article_image_url
+       FROM publishing_tasks 
        WHERE batch_id = $1 
        ORDER BY batch_order ASC`,
       [batchId]
@@ -652,9 +709,9 @@ export class PublishingService {
       interval_minutes: row.interval_minutes,
       created_at: row.created_at,
       updated_at: row.updated_at,
-      // 文章快照字段
+      // 文章快照字段（优化：不返回 article_content 大字段，减少带宽）
       article_title: row.article_title,
-      article_content: row.article_content,
+      // article_content 已从列表查询中排除，仅在执行任务时从数据库读取
       article_keyword: row.article_keyword,
       article_image_url: row.article_image_url
     };

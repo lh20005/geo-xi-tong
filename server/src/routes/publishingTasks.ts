@@ -250,9 +250,18 @@ router.get('/tasks', async (req, res) => {
     const currentPageSize = pageSize ? parseInt(pageSize as string) : 20;
     const offset = (currentPage - 1) * currentPageSize;
     
+    // 优化：只查询列表展示需要的字段，排除大字段以减少带宽
+    // 参考 Google Cloud 最佳实践：只返回需要的字段
+    // - 排除 article_content（每条约1-2KB，列表不需要）
+    // - 排除 config（详情页才需要）
+    // - credentials 只用于提取 real_username
     const dataResult = await pool.query(
       `SELECT 
-        pt.*,
+        pt.id, pt.user_id, pt.article_id, pt.account_id, pt.platform_id,
+        pt.status, pt.scheduled_at, pt.started_at, pt.completed_at,
+        pt.error_message, pt.retry_count, pt.max_retries, pt.batch_id,
+        pt.batch_order, pt.interval_minutes, pt.created_at, pt.updated_at,
+        pt.article_title, pt.article_keyword,
         pa.account_name,
         pa.credentials
        FROM publishing_tasks pt
