@@ -147,6 +147,7 @@ export interface CreatePublishingTaskInput {
   };
   batch_id?: string;
   batch_order?: number;
+  batch_total?: number; // 批次总任务数
   interval_minutes?: number;
 }
 

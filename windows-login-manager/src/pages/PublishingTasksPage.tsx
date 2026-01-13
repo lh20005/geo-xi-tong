@@ -96,6 +96,9 @@ export default function PublishingTasksPage() {
   // 间隔发布（分钟）
   const [publishInterval, setPublishInterval] = useState<number>(5);
 
+  // 创建任务中（防止重复提交）
+  const [creatingTasks, setCreatingTasks] = useState(false);
+
   // 静默发布模式（默认开启静默模式）
   const [headlessMode, setHeadlessMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('publishHeadlessMode');
@@ -249,6 +252,12 @@ export default function PublishingTasksPage() {
       message.warning('请选择发布平台');
       return;
     }
+    
+    // 防止重复提交
+    if (creatingTasks) {
+      message.warning('正在创建任务，请稍候...');
+      return;
+    }
 
     const articleIds = Array.from(selectedArticleIds);
     const accountIds = Array.from(selectedAccounts);
@@ -273,6 +282,7 @@ export default function PublishingTasksPage() {
         </div>
       ),
       onOk: async () => {
+        setCreatingTasks(true);
         try {
           // 生成批次ID（使用时间戳 + 随机数）
           const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -288,6 +298,12 @@ export default function PublishingTasksPage() {
             for (const accountId of accountIds) {
               const account = accounts.find(a => a.id === accountId);
               if (account) {
+                // 判断是否是最后一个任务
+                const isLastTask = (i === articleIds.length - 1) && (accountId === accountIds[accountIds.length - 1]);
+                
+                // 除了最后一个任务，其他任务都设置间隔
+                const intervalMinutes = isLastTask ? 0 : publishInterval;
+                
                 tasks.push(
                   createPublishingTask({
                     article_id: articleId,
@@ -296,7 +312,8 @@ export default function PublishingTasksPage() {
                     scheduled_time: null, // 不使用定时，由批次执行器控制
                     batch_id: batchId,
                     batch_order: batchOrder,
-                    interval_minutes: publishInterval,
+                    batch_total: articleIds.length * accountIds.length, // 批次总任务数
+                    interval_minutes: intervalMinutes,
                     config: {
                       headless: headlessMode
                     }
@@ -310,7 +327,7 @@ export default function PublishingTasksPage() {
           }
 
           await Promise.all(tasks);
-          message.success(`成功创建 ${tasks.length} 个发布任务，批次 ${batchId} 已开始执行`);
+          message.success(`成功创建 ${tasks.length} 个发布任务，批次已开始执行`);
           
           // 清空选择
           setSelectedArticleIds(new Set());
@@ -321,6 +338,8 @@ export default function PublishingTasksPage() {
           loadTasks();
         } catch (error: any) {
           message.error(error.message || '创建任务失败');
+        } finally {
+          setCreatingTasks(false);
         }
       }
     });
@@ -1251,7 +1270,8 @@ export default function PublishingTasksPage() {
                   size="large"
                   icon={<SendOutlined />}
                   onClick={handleCreateTasks}
-                  disabled={selectedArticleIds.size === 0 || selectedAccounts.size === 0}
+                  disabled={selectedArticleIds.size === 0 || selectedAccounts.size === 0 || creatingTasks}
+                  loading={creatingTasks}
                   style={{
                     background: '#fff',
                     color: '#667eea',
@@ -1260,7 +1280,7 @@ export default function PublishingTasksPage() {
                     height: 44
                   }}
                 >
-                  创建发布任务
+                  {creatingTasks ? '创建中...' : '创建发布任务'}
                 </Button>
               </Col>
             </Row>

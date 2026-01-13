@@ -26,6 +26,7 @@ router.post('/tasks', async (req, res) => {
       scheduled_time,
       batch_id,
       batch_order,
+      batch_total, // 批次总任务数
       interval_minutes
     } = req.body;
 
@@ -141,11 +142,41 @@ router.post('/tasks', async (req, res) => {
 
     // 如果有 batch_id，说明是批次任务，由批次执行器处理
     if (batch_id) {
-      console.log(`✅ 批次任务 #${task.id} 已创建 (批次: ${batch_id}, 顺序: ${batch_order})`);
+      console.log(`✅ 批次任务 #${task.id} 已创建 (批次: ${batch_id}, 顺序: ${batch_order}, 总数: ${batch_total})`);
       
-      // 注意：不再在这里触发批次执行
-      // 批次执行由前端在所有任务创建完成后调用 /batches/:batchId/start 触发
-      // 或者由 TaskScheduler 定时检查并执行
+      // 检查批次任务是否全部创建完成
+      if (batch_total && batch_total > 0) {
+        const batchTasksResult = await pool.query(
+          'SELECT COUNT(*) as count FROM publishing_tasks WHERE batch_id = $1',
+          [batch_id]
+        );
+        const currentCount = parseInt(batchTasksResult.rows[0].count);
+        
+        console.log(`📊 批次 ${batch_id} 当前任务数: ${currentCount}/${batch_total}`);
+        
+        // 如果所有任务都已创建，自动触发批次执行
+        if (currentCount >= batch_total) {
+          console.log(`🚀 批次 ${batch_id} 所有任务已创建完成，自动触发执行`);
+          
+          // 检查是否有用户的其他任务正在执行
+          const runningTasksResult = await pool.query(
+            `SELECT COUNT(*) as count FROM publishing_tasks 
+             WHERE user_id = $1 AND status = 'running' AND batch_id != $2`,
+            [userId, batch_id]
+          );
+          const runningCount = parseInt(runningTasksResult.rows[0].count);
+          
+          if (runningCount > 0) {
+            console.log(`⏳ 用户 #${userId} 有 ${runningCount} 个其他任务正在执行，批次 ${batch_id} 将排队等待`);
+          } else {
+            // 异步执行批次，不阻塞响应
+            const { batchExecutor } = require('../services/BatchExecutor');
+            batchExecutor.executeBatch(batch_id).catch((error: any) => {
+              console.error(`批次 ${batch_id} 执行失败:`, error);
+            });
+          }
+        }
+      }
     } else if (!scheduledTime) {
       // 普通立即发布任务
       const { publishingExecutor } = require('../services/PublishingExecutor');
