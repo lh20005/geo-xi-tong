@@ -98,13 +98,28 @@ npm run status           # 检查服务状态
 
 **重要：服务器上的目录结构与本地不同！**
 
-| 本地路径 | 服务器路径 |
-|---------|-----------|
-| `server/dist/` | `/var/www/geo-system/server/` |
-| `server/dist/services/` | `/var/www/geo-system/server/services/` |
-| `server/dist/routes/` | `/var/www/geo-system/server/routes/` |
-| `client/dist/` | `/var/www/geo-system/client/dist/` |
-| `landing/dist/` | `/var/www/geo-system/landing/dist/` |
+| 本地路径 | 服务器路径 | 说明 |
+|---------|-----------|------|
+| `server/dist/` | `/var/www/geo-system/server/` | 后端代码 |
+| `server/dist/services/` | `/var/www/geo-system/server/services/` | 服务层 |
+| `server/dist/routes/` | `/var/www/geo-system/server/routes/` | 路由层 |
+| `client/dist/` | `/var/www/geo-system/client/dist/` | 主前端应用 |
+| `landing/dist/` | `/var/www/geo-system/landing/` | **落地页（注意：不是 landing/dist/）** |
+| `landing/dist/assets/` | `/var/www/geo-system/landing/assets/` | 落地页静态资源 |
+
+### 落地页部署步骤（重要）
+
+**Nginx 的 root 指向 `/var/www/geo-system/landing/`（不是 `landing/dist/`），因此需要同步文件：**
+
+1. **本地构建**：`npm run landing:build`
+2. **上传并同步文件**：
+   ```bash
+   # 上传到 dist 目录
+   scp -i "私钥路径" -r landing/dist/* ubuntu@124.221.247.107:/var/www/geo-system/landing/dist/
+   
+   # 同步到 Nginx root 目录（关键步骤！）
+   ssh -i "私钥路径" ubuntu@124.221.247.107 "cp /var/www/geo-system/landing/dist/index.html /var/www/geo-system/landing/ && cp -r /var/www/geo-system/landing/dist/assets/* /var/www/geo-system/landing/assets/"
+   ```
 
 ### 后端部署步骤
 
@@ -123,6 +138,9 @@ npm run status           # 检查服务状态
 
 - ❌ 错误：上传到 `/var/www/geo-system/server/dist/services/`
 - ✅ 正确：上传到 `/var/www/geo-system/server/services/`
+
+- ❌ 错误：落地页只上传到 `/var/www/geo-system/landing/dist/`
+- ✅ 正确：落地页需要同步 `index.html` 和 `assets/` 到 `/var/www/geo-system/landing/`
 
 ### PM2 进程名称
 

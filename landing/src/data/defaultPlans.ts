@@ -24,6 +24,14 @@ export interface DefaultPlan {
   }[];
 }
 
+/**
+ * 默认套餐数据
+ * 
+ * ⚠️ 重要：此数据必须与数据库中的 subscription_plans 表保持一致！
+ * 当后台修改套餐价格或功能时，需要同步更新此文件并重新部署落地页。
+ * 
+ * 最后同步时间：2026-01-13
+ */
 export const DEFAULT_PLANS: DefaultPlan[] = [
   {
     id: 1,
@@ -44,7 +52,7 @@ export const DEFAULT_PLANS: DefaultPlan[] = [
     id: 2,
     plan_code: 'professional',
     plan_name: '专业版',
-    price: 99,
+    price: 0.10,
     billing_cycle: 'monthly',
     description: '专业版套餐',
     features: [
@@ -59,7 +67,7 @@ export const DEFAULT_PLANS: DefaultPlan[] = [
     id: 3,
     plan_code: 'enterprise',
     plan_name: '企业版',
-    price: 299,
+    price: 0.10,
     billing_cycle: 'monthly',
     description: '企业版套餐',
     features: [
@@ -74,9 +82,9 @@ export const DEFAULT_PLANS: DefaultPlan[] = [
     id: 4,
     plan_code: 'jlb',
     plan_name: '加量包',
-    price: 29,
+    price: 0.03,
     billing_cycle: 'monthly',
-    description: '额外配额加量包',
+    description: '',
     features: [
       { feature_code: 'articles_per_month', feature_name: '每月生成文章数', feature_value: 100, feature_unit: '篇' },
     ]

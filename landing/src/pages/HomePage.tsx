@@ -20,8 +20,8 @@ export default function HomePage() {
     isAgentDiscount?: boolean;
   } | null>(null);
   
-  // 使用优化后的套餐 Hook（立即显示缓存/静态数据，后台更新）
-  const { plans, loading: plansLoading, isStale } = usePlans();
+  // 使用套餐 Hook（从 API 动态获取）
+  const { plans, loading: plansLoading } = usePlans();
   
   // 用户状态（合并了折扣和订阅信息，减少 API 请求）
   const { getDiscountedPrice, hasAccessTo, isAddonPlan } = useUserStatus();
@@ -369,16 +369,19 @@ export default function HomePage() {
             </h2>
           </div>
 
-          {/* 立即显示套餐卡片，无需等待加载 */}
+          {/* 套餐卡片 */}
           <div className="relative">
-            {/* 后台更新指示器（可选，仅在更新时短暂显示） */}
-            {plansLoading && isStale && (
-              <div className="absolute -top-8 right-0 text-xs text-gray-400 flex items-center gap-1">
-                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                更新中...
+            {/* 加载状态 */}
+            {plansLoading && plans.length === 0 && (
+              <div className="flex justify-center items-center py-20">
+                <div className="flex items-center gap-3 text-gray-500">
+                  <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <span>加载套餐信息...</span>
+                </div>
               </div>
             )}
             
+            {plans.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
               {plans.map((plan) => {
                 const badge = getPlanBadge(plan.plan_code);
@@ -536,6 +539,7 @@ export default function HomePage() {
                 );
               })}
             </div>
+            )}
           </div>
         </div>
       </section>
