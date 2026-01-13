@@ -259,8 +259,14 @@ export default function PublishingTasksPage() {
       return;
     }
 
-    const articleIds = Array.from(selectedArticleIds);
-    const accountIds = Array.from(selectedAccounts);
+    // 按照文章在表格中的显示顺序排序（而不是用户点击选择的顺序）
+    const articleIds = articles
+      .filter(a => selectedArticleIds.has(a.id))
+      .map(a => a.id);
+    // 按照账号在列表中的显示顺序排序
+    const accountIds = accounts
+      .filter(a => selectedAccounts.has(a.id))
+      .map(a => a.id);
     const totalTasks = articleIds.length * accountIds.length;
     
     // 计算总耗时：总任务数减1，乘以间隔时间
