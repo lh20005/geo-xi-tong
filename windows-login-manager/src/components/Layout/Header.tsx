@@ -1,6 +1,6 @@
 import { Layout, Space, Tag, Avatar, Typography } from 'antd';
 import { DatabaseOutlined, UserOutlined } from '@ant-design/icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useApp } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
 
@@ -13,6 +13,7 @@ interface HeaderProps {
 
 export default function Header({ onLogout }: HeaderProps) {
   const [backendConnected, setBackendConnected] = useState<boolean>(true);
+  const failCountRef = useRef<number>(0); // 连续失败次数
   const { user } = useApp();
 
   useEffect(() => {
@@ -30,11 +31,19 @@ export default function Header({ onLogout }: HeaderProps) {
   const checkBackendConnection = async () => {
     try {
       // 使用配置好的 apiClient 来检查连接
-      await apiClient.get('/health', { timeout: 5000 });
+      // 增加超时时间到 15 秒，因为发布任务执行时浏览器自动化会占用资源
+      await apiClient.get('/health', { timeout: 15000 });
       setBackendConnected(true);
+      failCountRef.current = 0; // 重置失败计数
     } catch (error) {
-      console.error('后端连接检查失败:', error);
-      setBackendConnected(false);
+      // 连续失败 2 次才显示断开（避免单次超时误报）
+      failCountRef.current += 1;
+      if (failCountRef.current >= 2) {
+        console.error('后端连接检查连续失败:', error);
+        setBackendConnected(false);
+      } else {
+        console.warn('后端连接检查超时，将在下次检查时重试');
+      }
     }
   };
 
