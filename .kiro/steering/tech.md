@@ -271,4 +271,17 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-每次部署到服务器后，将本次部署之前的文件删除掉，只留最新一次文件，避免文件重复
+## 部署后清理旧文件（强制）
+
+每次部署前端或落地页后，删除旧的静态资源文件，只保留本次部署的文件。
+
+### 清理方法
+
+部署新文件后，根据 `index.html` 引用的文件名，删除 assets 目录中不再使用的旧文件：
+
+```bash
+# 前端：删除 /var/www/geo-system/client/assets/js/ 和 css/ 中的旧文件
+# 落地页：删除 /var/www/geo-system/landing/assets/ 中的旧文件
+```
+
+保留当前 `index.html` 引用的文件，删除其他带 hash 的 js/css 文件即可。
