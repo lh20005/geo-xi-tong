@@ -9,6 +9,7 @@ import { StorageBreakdownChart } from '../components/Storage/StorageBreakdownCha
 import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType, StorageBreakdown as StorageBreakdownType, formatStorageMB } from '../api/storage';
 import { AgentCenterPage } from '../components/Agent';
 import { Agent, getAgentStatus } from '../api/agent';
+import { BoosterQuotaCard } from '../components/Booster';
 
 const { TabPane } = Tabs;
 
@@ -630,6 +631,11 @@ const UserCenterPage = () => {
                   ))}
                 </Row>
               </Card>
+            </Col>
+
+            {/* 加量包配额卡片 */}
+            <Col span={24}>
+              <BoosterQuotaCard onPurchase={handleNavigateToPricing} />
             </Col>
           </Row>
         </TabPane>
