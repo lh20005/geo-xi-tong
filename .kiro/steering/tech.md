@@ -92,6 +92,49 @@ npm run status           # 检查服务状态
 - 5174：Windows 登录管理器（Vite 开发服务器）
 - 8080：落地页
 
+## 前端 API 配置规范（重要）
+
+### 配置文件说明
+
+前端 API URL 配置涉及两个文件，必须保持一致：
+
+1. **`client/.env.production`** - 环境变量
+   ```bash
+   # 不要在 VITE_API_URL 后面加 /api，env.ts 会自动添加
+   VITE_API_URL=https://www.jzgeo.cc
+   VITE_WS_URL=wss://www.jzgeo.cc/ws
+   VITE_LANDING_URL=https://www.jzgeo.cc
+   ```
+
+2. **`client/src/config/env.ts`** - 统一配置中心
+   ```typescript
+   // 自动在 VITE_API_URL 后面添加 /api
+   apiUrl: import.meta.env.VITE_API_URL 
+     ? `${import.meta.env.VITE_API_URL}/api`
+     : (isProduction ? '/api' : 'http://localhost:3000/api'),
+   ```
+
+3. **`client/src/api/client.ts`** - API 客户端
+   ```typescript
+   // 必须使用 API_BASE_URL，不要直接使用 VITE_API_URL
+   import { API_BASE_URL } from '../config/env';
+   export const apiClient = axios.create({
+     baseURL: API_BASE_URL,  // 正确：使用统一配置
+     // baseURL: import.meta.env.VITE_API_URL,  // 错误：会缺少 /api
+   });
+   ```
+
+### 常见错误
+
+| 错误配置 | 结果 | 正确配置 |
+|---------|------|---------|
+| `VITE_API_URL=https://www.jzgeo.cc/api` | 请求变成 `/api/api/xxx` | `VITE_API_URL=https://www.jzgeo.cc` |
+| `apiClient` 直接用 `VITE_API_URL` | 请求缺少 `/api` 前缀 | 使用 `API_BASE_URL` |
+
+### 验证方法
+
+构建后检查请求路径应该是：`https://www.jzgeo.cc/api/xxx`
+
 ## 部署规则（强制）
 
 ### 服务器目录结构
@@ -152,3 +195,80 @@ npm run status           # 检查服务状态
 部署后必须验证：
 1. `pm2 status` 确认服务在线
 2. `curl http://localhost:3000/api/health` 确认健康检查通过
+
+## Nginx 配置规范（重要）
+
+### 服务器 Nginx 配置路径
+
+- 配置文件：`/etc/nginx/sites-available/geo-system`
+- 本地参考：`config/nginx/geo-system.conf`
+
+### 关键路径映射
+
+**注意：服务器上前端文件直接放在 `/var/www/geo-system/client/`，不是 `client/dist/`！**
+
+| Nginx location | alias/root 路径 | 说明 |
+|----------------|-----------------|------|
+| `/` | `/var/www/geo-system/landing` | 落地页（营销页面） |
+| `/app` | `/var/www/geo-system/client` | 主前端应用 |
+| `/app/assets/` | `/var/www/geo-system/client/assets/` | 前端静态资源 |
+| `/api` | `proxy_pass http://127.0.0.1:3000` | 后端 API |
+| `/ws` | `proxy_pass http://127.0.0.1:3000` | WebSocket |
+| `/uploads/` | `/var/www/geo-system/uploads/` | 上传文件 |
+
+### 前端部署步骤（client）
+
+```bash
+# 1. 本地构建
+npm run client:build
+
+# 2. 上传静态资源到 /var/www/geo-system/client/assets/
+scp -i "私钥路径" -r client/dist/assets/* ubuntu@124.221.247.107:/var/www/geo-system/client/assets/
+
+# 3. 上传 index.html 到 /var/www/geo-system/client/
+scp -i "私钥路径" client/dist/index.html ubuntu@124.221.247.107:/var/www/geo-system/client/
+```
+
+### 常见 Nginx 配置错误
+
+| 错误 | 正确 |
+|------|------|
+| `alias /var/www/geo-system/client/dist;` | `alias /var/www/geo-system/client;` |
+| `alias /var/www/geo-system/client/dist/assets/;` | `alias /var/www/geo-system/client/assets/;` |
+| 上传到 `client/dist/` 目录 | 上传到 `client/` 目录（assets 和 index.html） |
+
+### 当前服务器 Nginx 关键配置
+
+```nginx
+# 前端应用静态资源
+location ^~ /app/assets/ {
+    alias /var/www/geo-system/client/assets/;
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+
+# 前端应用
+location /app {
+    alias /var/www/geo-system/client;
+    index index.html;
+    try_files $uri $uri/ /app/index.html;
+}
+
+# 落地页
+location / {
+    root /var/www/geo-system/landing;
+    try_files $uri $uri/ /index.html;
+}
+```
+
+### 修改 Nginx 配置后
+
+```bash
+# 测试配置
+sudo nginx -t
+
+# 重载配置
+sudo systemctl reload nginx
+```
+
+每次部署到服务器后，将本次部署之前的文件删除掉，只留最新一次文件，避免文件重复

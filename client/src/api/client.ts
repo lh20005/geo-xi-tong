@@ -1,11 +1,12 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { API_BASE_URL } from '../config/env';
 
 /**
  * 统一的 API 客户端
  * 所有 API 请求都应该通过这个客户端进行
  */
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
