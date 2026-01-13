@@ -369,14 +369,27 @@ export class SubscriptionService {
       endDate.setDate(endDate.getDate() + (durationDays || 30));
       endDate.setHours(23, 59, 59, 999); // 设置为当天结束时间
 
+      // 获取套餐当前的配额配置，保存为快照
+      const featuresResult = await client.query(
+        `SELECT feature_code, feature_value FROM plan_features WHERE plan_id = $1`,
+        [planId]
+      );
+      
+      const quotaSnapshot: Record<string, number> = {};
+      for (const feature of featuresResult.rows) {
+        quotaSnapshot[feature.feature_code] = feature.feature_value;
+      }
+
       const result = await client.query(
-        `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
-         VALUES ($1, $2, 'active', $3, $4)
+        `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, custom_quotas)
+         VALUES ($1, $2, 'active', $3, $4, $5)
          RETURNING *`,
-        [userId, planId, startDate, endDate]
+        [userId, planId, startDate, endDate, JSON.stringify(quotaSnapshot)]
       );
 
       const subscription = result.rows[0];
+      
+      console.log(`[SubscriptionService] ✅ 用户 ${userId} 订阅已创建，配额快照已保存:`, Object.keys(quotaSnapshot).length, '项');
       
       // 使用统一的配额初始化服务
       await QuotaInitializationService.initializeUserQuotas(userId, planId, { 
