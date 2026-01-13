@@ -124,12 +124,13 @@ CREATE OR REPLACE FUNCTION increment_image_reference(p_image_id INTEGER)
 RETURNS VOID AS $$
 BEGIN
   UPDATE images
-  SET reference_count = COALESCE(reference_count, 0) + 1
+  SET reference_count = COALESCE(reference_count, 0) + 1,
+      usage_count = COALESCE(usage_count, 0) + 1
   WHERE id = p_image_id;
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION increment_image_reference(INTEGER) IS '增加图片引用计数';
+COMMENT ON FUNCTION increment_image_reference(INTEGER) IS '增加图片引用计数和使用次数';
 
 -- ============================================
 -- 6. 创建减少引用计数的函数（并处理清理）
