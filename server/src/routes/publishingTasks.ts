@@ -143,17 +143,9 @@ router.post('/tasks', async (req, res) => {
     if (batch_id) {
       console.log(`✅ 批次任务 #${task.id} 已创建 (批次: ${batch_id}, 顺序: ${batch_order})`);
       
-      // 如果是批次中的第一个任务（batch_order = 0），触发批次执行
-      if (batch_order === 0) {
-        const { batchExecutor } = require('../services/BatchExecutor');
-        
-        // 异步执行批次，不阻塞响应
-        batchExecutor.executeBatch(batch_id).catch((error: any) => {
-          console.error(`批次 ${batch_id} 执行失败:`, error);
-        });
-        
-        console.log(`🚀 批次 ${batch_id} 已开始执行`);
-      }
+      // 注意：不再在这里触发批次执行
+      // 批次执行由前端在所有任务创建完成后调用 /batches/:batchId/start 触发
+      // 或者由 TaskScheduler 定时检查并执行
     } else if (!scheduledTime) {
       // 普通立即发布任务
       const { publishingExecutor } = require('../services/PublishingExecutor');
@@ -705,6 +697,69 @@ router.post('/tasks/delete-all', async (req, res) => {
     res.status(500).json({
       success: false,
       message: '删除所有任务失败'
+    });
+  }
+});
+
+/**
+ * 启动批次执行
+ * 在所有任务创建完成后调用此 API 来触发批次执行
+ */
+router.post('/batches/:batchId/start', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const { batchId } = req.params;
+    
+    // 验证批次所有权
+    const batchCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE batch_id = $1 AND user_id = $2 LIMIT 1',
+      [batchId, userId]
+    );
+    
+    if (batchCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '批次不存在或无权访问'
+      });
+    }
+    
+    // 检查是否有用户的其他任务正在执行
+    const runningTasksResult = await pool.query(
+      `SELECT COUNT(*) as count FROM publishing_tasks 
+       WHERE user_id = $1 AND status = 'running'`,
+      [userId]
+    );
+    const runningCount = parseInt(runningTasksResult.rows[0].count);
+    
+    if (runningCount > 0) {
+      // 有任务正在执行，批次会被 TaskScheduler 自动调度
+      console.log(`⏳ 用户 #${userId} 有 ${runningCount} 个任务正在执行，批次 ${batchId} 将排队等待`);
+      return res.json({
+        success: true,
+        message: `批次已创建，当前有 ${runningCount} 个任务正在执行，将在完成后自动开始`,
+        queued: true
+      });
+    }
+    
+    const { batchExecutor } = require('../services/BatchExecutor');
+    
+    // 异步执行批次，不阻塞响应
+    batchExecutor.executeBatch(batchId).catch((error: any) => {
+      console.error(`批次 ${batchId} 执行失败:`, error);
+    });
+    
+    console.log(`🚀 批次 ${batchId} 已开始执行`);
+    
+    res.json({
+      success: true,
+      message: '批次已开始执行',
+      queued: false
+    });
+  } catch (error) {
+    console.error('启动批次失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '启动批次失败'
     });
   }
 });

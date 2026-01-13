@@ -278,6 +278,46 @@ async function startServer() {
     
     scheduleOrphanImageCleanup();
     
+    // 安排每日清理旧发布任务（凌晨4点执行）
+    const schedulePublishingTaskCleanup = async () => {
+      const { publishingService } = await import('./services/PublishingService');
+      
+      const now = new Date();
+      const next4AM = new Date(now);
+      next4AM.setHours(4, 0, 0, 0);
+      
+      if (next4AM <= now) {
+        next4AM.setDate(next4AM.getDate() + 1);
+      }
+      
+      const timeUntilNext = next4AM.getTime() - now.getTime();
+      
+      setTimeout(async () => {
+        try {
+          console.log('[TaskCleanup] 开始每日发布任务清理...');
+          const deletedCount = await publishingService.cleanupOldTasks(10); // 保留10天
+          console.log(`[TaskCleanup] 清理完成: 删除 ${deletedCount} 个旧任务`);
+        } catch (error) {
+          console.error('[TaskCleanup] 发布任务清理失败:', error);
+        }
+        
+        // 安排下一次清理（24小时后）
+        setInterval(async () => {
+          try {
+            console.log('[TaskCleanup] 开始每日发布任务清理...');
+            const deletedCount = await publishingService.cleanupOldTasks(10);
+            console.log(`[TaskCleanup] 清理完成: 删除 ${deletedCount} 个旧任务`);
+          } catch (error) {
+            console.error('[TaskCleanup] 发布任务清理失败:', error);
+          }
+        }, 24 * 60 * 60 * 1000);
+      }, timeUntilNext);
+      
+      console.log(`✅ 发布任务清理已安排，下次运行时间: ${next4AM.toLocaleString('zh-CN')}`);
+    };
+    
+    schedulePublishingTaskCleanup();
+    
     // 创建HTTP服务器
     const server = createServer(app);
     

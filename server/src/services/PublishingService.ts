@@ -27,6 +27,11 @@ export interface PublishingTask {
   interval_minutes?: number;
   created_at: Date;
   updated_at: Date;
+  // 文章快照字段（创建任务时保存，确保原文章删除后仍可发布）
+  article_title?: string;
+  article_content?: string;
+  article_keyword?: string;
+  article_image_url?: string;
 }
 
 export interface CreateTaskInput {
@@ -61,6 +66,7 @@ export interface TaskFilters {
 export class PublishingService {
   /**
    * 创建发布任务
+   * 重要：创建任务时会保存文章快照，确保即使原文章被删除，任务仍可执行
    */
   async createTask(input: CreateTaskInput): Promise<PublishingTask> {
     // 调试日志：记录收到的输入
@@ -74,10 +80,23 @@ export class PublishingService {
       }
     }
 
+    // 获取文章内容用于快照
+    const articleResult = await pool.query(
+      'SELECT title, content, keyword, image_url FROM articles WHERE id = $1',
+      [input.article_id]
+    );
+    
+    if (articleResult.rows.length === 0) {
+      throw new Error('文章不存在');
+    }
+    
+    const article = articleResult.rows[0];
+
     const result = await pool.query(
       `INSERT INTO publishing_tasks 
-       (article_id, account_id, platform_id, user_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+       (article_id, account_id, platform_id, user_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes,
+        article_title, article_content, article_keyword, article_image_url) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
        RETURNING *`,
       [
         input.article_id,
@@ -89,12 +108,16 @@ export class PublishingService {
         input.scheduled_at ? 'pending' : 'pending',
         input.batch_id || null,
         input.batch_order || 0,
-        input.interval_minutes || 0
+        input.interval_minutes || 0,
+        article.title,
+        article.content,
+        article.keyword,
+        article.image_url
       ]
     );
 
     // 调试日志：记录插入结果
-    console.log(`📝 数据库插入结果: id=${result.rows[0].id}, article_id=${result.rows[0].article_id}`);
+    console.log(`📝 数据库插入结果: id=${result.rows[0].id}, article_id=${result.rows[0].article_id}, 快照已保存`);
 
     return this.formatTask(result.rows[0]);
   }
@@ -628,7 +651,12 @@ export class PublishingService {
       batch_order: row.batch_order,
       interval_minutes: row.interval_minutes,
       created_at: row.created_at,
-      updated_at: row.updated_at
+      updated_at: row.updated_at,
+      // 文章快照字段
+      article_title: row.article_title,
+      article_content: row.article_content,
+      article_keyword: row.article_keyword,
+      article_image_url: row.article_image_url
     };
 
     // 解密并提取真实用户名
@@ -647,6 +675,33 @@ export class PublishingService {
     }
 
     return task;
+  }
+
+  /**
+   * 清理旧的已完成任务
+   * 删除超过指定天数的 success/failed/cancelled/timeout 状态的任务
+   * @param daysToKeep 保留天数，默认30天
+   * @returns 删除的任务数量
+   */
+  async cleanupOldTasks(daysToKeep: number = 30): Promise<number> {
+    try {
+      const result = await pool.query(
+        `DELETE FROM publishing_tasks 
+         WHERE status IN ('success', 'failed', 'cancelled', 'timeout')
+         AND updated_at < NOW() - INTERVAL '1 day' * $1
+         RETURNING id`,
+        [daysToKeep]
+      );
+      
+      const deletedCount = result.rowCount || 0;
+      if (deletedCount > 0) {
+        console.log(`🧹 清理了 ${deletedCount} 个超过 ${daysToKeep} 天的旧发布任务`);
+      }
+      return deletedCount;
+    } catch (error) {
+      console.error('清理旧发布任务失败:', error);
+      return 0;
+    }
   }
 }
 

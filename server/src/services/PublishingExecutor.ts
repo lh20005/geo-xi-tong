@@ -14,6 +14,7 @@ import { normalizeCookies } from '../utils/cookieNormalizer';
 export class PublishingExecutor {
   /**
    * 创建发布记录（保存文章快照）并删除原文章
+   * 重要：支持原文章已被删除的情况，此时使用任务中的快照
    */
   private async createPublishingRecord(
     taskId: number,
@@ -25,7 +26,7 @@ export class PublishingExecutor {
     try {
       await client.query('BEGIN');
       
-      // 1. 获取文章完整信息（包括关联数据）用于快照
+      // 1. 尝试获取文章完整信息（包括关联数据）用于快照
       // 优先使用文章表的快照字段，确保即使蒸馏结果被删除也能获取数据
       const articleResult = await client.query(
         `SELECT 
@@ -43,11 +44,33 @@ export class PublishingExecutor {
         [task.article_id]
       );
       
-      if (articleResult.rows.length === 0) {
-        throw new Error('文章不存在');
-      }
+      let article;
+      let articleExists = false;
       
-      const article = articleResult.rows[0];
+      if (articleResult.rows.length > 0) {
+        // 文章存在，使用数据库中的数据
+        article = articleResult.rows[0];
+        articleExists = true;
+        console.log(`📄 使用数据库中的文章数据创建发布记录: "${article.title}"`);
+      } else if (task.article_title && task.article_content) {
+        // 文章已被删除，使用任务中的快照
+        article = {
+          id: task.article_id,
+          title: task.article_title,
+          content: task.article_content,
+          keyword: task.article_keyword,
+          image_url: task.article_image_url,
+          image_id: null,
+          distillation_id: null,
+          topic_question: null,
+          article_setting_name: null,
+          distillation_keyword: null
+        };
+        articleExists = false;
+        console.log(`📄 原文章已删除，使用任务快照创建发布记录: "${article.title}"`);
+      } else {
+        throw new Error('文章不存在且任务无快照');
+      }
       
       // 2. 创建发布记录（包含文章快照）
       await client.query(
@@ -74,46 +97,43 @@ export class PublishingExecutor {
         ]
       );
       
-      // 3. 更新蒸馏结果的 usage_count（减少引用计数）
-      if (article.distillation_id) {
-        await client.query(
-          'UPDATE distillations SET usage_count = GREATEST(usage_count - 1, 0) WHERE id = $1',
-          [article.distillation_id]
-        );
-      }
-      
-      // 4. 处理图片引用计数
-      if (article.image_id) {
-        const imageResult = await client.query(
-          'SELECT * FROM decrement_image_reference($1)',
-          [article.image_id]
-        );
-        // 注意：这里不删除图片文件，因为发布记录中保存了 image_url
-        // 图片文件会在用户手动删除发布记录时处理
+      // 只有当文章存在时才处理引用计数和删除
+      if (articleExists) {
+        // 3. 更新蒸馏结果的 usage_count（减少引用计数）
+        if (article.distillation_id) {
+          await client.query(
+            'UPDATE distillations SET usage_count = GREATEST(usage_count - 1, 0) WHERE id = $1',
+            [article.distillation_id]
+          );
+        }
+        
+        // 4. 处理图片引用计数
+        if (article.image_id) {
+          const imageResult = await client.query(
+            'SELECT * FROM decrement_image_reference($1)',
+            [article.image_id]
+          );
+          // 注意：这里不删除图片文件，因为发布记录中保存了 image_url
+          // 图片文件会在用户手动删除发布记录时处理
+        }
       }
       
       // 5. 检查是否还有其他待处理的发布任务
-      // 重要修复：使用 batch_id 而不是 article_id 来检查
-      // 因为 article_id 有外键约束 ON DELETE SET NULL，删除文章后其他任务的 article_id 会变成 NULL
-      let pendingCount = 0;
+      // 重要修复：无论是否有 batch_id，都要检查同一篇文章的所有待处理任务
+      // 因为同一篇文章可能被发布到多个平台（可能在不同批次中，或者没有批次）
+      
+      // 首先检查同一篇文章是否还有其他待处理任务（无论是否在同一批次）
+      const pendingTasksResult = await client.query(
+        `SELECT COUNT(*) as count FROM publishing_tasks 
+         WHERE article_id = $1 AND status IN ('pending', 'running') AND id != $2`,
+        [task.article_id, taskId]
+      );
+      const pendingCount = parseInt(pendingTasksResult.rows[0].count);
       
       if (task.batch_id) {
-        // 批次任务：检查同一批次中是否还有其他待处理任务
-        const pendingTasksResult = await client.query(
-          `SELECT COUNT(*) as count FROM publishing_tasks 
-           WHERE batch_id = $1 AND status IN ('pending', 'running') AND id != $2`,
-          [task.batch_id, taskId]
-        );
-        pendingCount = parseInt(pendingTasksResult.rows[0].count);
-        console.log(`📊 批次 ${task.batch_id} 中还有 ${pendingCount} 个待处理任务（不含当前任务 #${taskId}）`);
+        console.log(`📊 文章 #${task.article_id} 还有 ${pendingCount} 个待处理任务（批次: ${task.batch_id}，当前任务 #${taskId}）`);
       } else {
-        // 非批次任务：检查同一篇文章是否还有其他待处理任务
-        const pendingTasksResult = await client.query(
-          `SELECT COUNT(*) as count FROM publishing_tasks 
-           WHERE article_id = $1 AND status IN ('pending', 'running') AND id != $2`,
-          [task.article_id, taskId]
-        );
-        pendingCount = parseInt(pendingTasksResult.rows[0].count);
+        console.log(`📊 文章 #${task.article_id} 还有 ${pendingCount} 个待处理任务（非批次任务 #${taskId}）`);
       }
       
       if (pendingCount > 0) {
@@ -121,14 +141,18 @@ export class PublishingExecutor {
         console.log(`⏳ 文章 #${task.article_id} 还有 ${pendingCount} 个待发布任务，暂不删除`);
         await client.query('COMMIT');
         console.log(`✅ 文章 #${task.article_id} 发布记录已创建（保留原文章供其他平台发布）`);
-      } else {
-        // 所有平台都已发布完成，删除原文章
+      } else if (articleExists) {
+        // 所有平台都已发布完成，且文章存在，删除原文章
         await client.query(
           'DELETE FROM articles WHERE id = $1',
           [task.article_id]
         );
         await client.query('COMMIT');
         console.log(`✅ 文章 #${task.article_id} 已发布并移至发布记录（所有平台发布完成）`);
+      } else {
+        // 文章已被删除（可能被之前的任务删除了），直接提交
+        await client.query('COMMIT');
+        console.log(`✅ 文章 #${task.article_id} 发布记录已创建（原文章已被其他任务删除）`);
       }
     } catch (error) {
       await client.query('ROLLBACK');
@@ -242,17 +266,33 @@ export class PublishingExecutor {
         throw new Error('账号不存在或凭证无效');
       }
 
-      // 获取文章内容
-      const articleResult = await pool.query(
-        'SELECT id, title, content, keyword FROM articles WHERE id = $1',
-        [task.article_id]
-      );
+      // 获取文章内容（优先使用任务中的快照，确保即使原文章被删除也能发布）
+      let article;
+      
+      // 检查任务是否有文章快照
+      if (task.article_title && task.article_content) {
+        // 使用任务中保存的文章快照
+        article = {
+          id: task.article_id,
+          title: task.article_title,
+          content: task.article_content,
+          keyword: task.article_keyword
+        };
+        console.log(`📄 使用任务快照中的文章内容: "${article.title}"`);
+      } else {
+        // 回退到从数据库获取文章（兼容旧任务）
+        const articleResult = await pool.query(
+          'SELECT id, title, content, keyword FROM articles WHERE id = $1',
+          [task.article_id]
+        );
 
-      if (articleResult.rows.length === 0) {
-        throw new Error('文章不存在');
+        if (articleResult.rows.length === 0) {
+          throw new Error('文章不存在（原文章已删除且任务无快照）');
+        }
+
+        article = articleResult.rows[0];
+        console.log(`📄 从数据库获取文章内容: "${article.title}"`);
       }
-
-      const article = articleResult.rows[0];
 
       // 启动浏览器（根据任务配置决定是否显示浏览器窗口）
       const headlessMode = task.config?.headless !== false; // 默认为静默模式

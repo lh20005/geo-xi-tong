@@ -91,3 +91,46 @@ npm run status           # 检查服务状态
 - 5173：前端（Vite 开发服务器）
 - 5174：Windows 登录管理器（Vite 开发服务器）
 - 8080：落地页
+
+## 部署规则（强制）
+
+### 服务器目录结构
+
+**重要：服务器上的目录结构与本地不同！**
+
+| 本地路径 | 服务器路径 |
+|---------|-----------|
+| `server/dist/` | `/var/www/geo-system/server/` |
+| `server/dist/services/` | `/var/www/geo-system/server/services/` |
+| `server/dist/routes/` | `/var/www/geo-system/server/routes/` |
+| `client/dist/` | `/var/www/geo-system/client/dist/` |
+| `landing/dist/` | `/var/www/geo-system/landing/dist/` |
+
+### 后端部署步骤
+
+1. **本地编译**：`npm run server:build`
+2. **上传文件**：将 `server/dist/` 下的文件上传到 `/var/www/geo-system/server/`
+   ```bash
+   # 示例：部署单个服务文件
+   scp -i "私钥路径" server/dist/services/XXX.js ubuntu@124.221.247.107:/var/www/geo-system/server/services/
+   
+   # 示例：部署路由文件
+   scp -i "私钥路径" server/dist/routes/XXX.js ubuntu@124.221.247.107:/var/www/geo-system/server/routes/
+   ```
+3. **重启服务**：`pm2 restart geo-server`
+
+### 常见错误
+
+- ❌ 错误：上传到 `/var/www/geo-system/server/dist/services/`
+- ✅ 正确：上传到 `/var/www/geo-system/server/services/`
+
+### PM2 进程名称
+
+- 服务器上的 PM2 进程名是 `geo-server`（不是 `geo-api`）
+- 入口文件：`/var/www/geo-system/server/index.js`
+
+### 部署验证
+
+部署后必须验证：
+1. `pm2 status` 确认服务在线
+2. `curl http://localhost:3000/api/health` 确认健康检查通过
