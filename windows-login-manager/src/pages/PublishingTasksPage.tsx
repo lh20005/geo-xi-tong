@@ -1816,10 +1816,10 @@ export default function PublishingTasksPage() {
                     padding: '12px 16px',
                     background: '#fff',
                     borderRadius: 6,
+                    borderTop: '1px solid #e2e8f0',
+                    borderRight: '1px solid #e2e8f0',
+                    borderBottom: '1px solid #e2e8f0',
                     borderLeft: `4px solid ${color}`,
-                    border: '1px solid #e2e8f0',
-                    borderLeftWidth: '4px',
-                    borderLeftColor: color,
                     boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
                   }}
                 >
