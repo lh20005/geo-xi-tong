@@ -712,19 +712,19 @@ CREATE INDEX IF NOT EXISTS idx_publishing_records_publishing_status ON publishin
 -- 7. 插入平台配置数据
 -- ========================================
 
-INSERT INTO platforms_config (platform_id, platform_name, icon_url, adapter_class, required_fields) VALUES
-('wangyi', '网易号', '/icons/wangyi.png', 'WangyiAdapter', '["username", "password"]'),
-('souhu', '搜狐号', '/icons/souhu.png', 'SouhuAdapter', '["username", "password"]'),
-('baijiahao', '百家号', '/icons/baijiahao.png', 'BaijiahaoAdapter', '["username", "password"]'),
-('toutiao', '头条号', '/icons/toutiao.png', 'ToutiaoAdapter', '["username", "password"]'),
-('qie', '企鹅号', '/icons/qie.png', 'QieAdapter', '["username", "password"]'),
-('wechat', '微信公众号', '/icons/wechat.png', 'WechatAdapter', '[]'),
-('xiaohongshu', '小红书', '/icons/xiaohongshu.png', 'XiaohongshuAdapter', '["username", "password"]'),
-('douyin', '抖音号', '/icons/douyin.png', 'DouyinAdapter', '["username", "password"]'),
-('bilibili', '哔哩哔哩', '/icons/bilibili.png', 'BilibiliAdapter', '["username", "password"]'),
-('zhihu', '知乎', '/icons/zhihu.png', 'ZhihuAdapter', '["username", "password"]'),
-('jianshu', '简书', '/icons/jianshu.png', 'JianshuAdapter', '["username", "password"]'),
-('csdn', 'CSDN', '/icons/csdn.png', 'CSDNAdapter', '["username", "password"]')
+INSERT INTO platforms_config (platform_id, platform_name, icon_url, adapter_class, required_fields, login_url, home_url) VALUES
+('wangyi', '网易号', '/icons/wangyi.png', 'WangyiAdapter', '["username", "password"]', 'https://mp.163.com/', 'https://mp.163.com/'),
+('souhu', '搜狐号', '/icons/souhu.png', 'SouhuAdapter', '["username", "password"]', 'https://mp.sohu.com/', 'https://mp.sohu.com/'),
+('baijiahao', '百家号', '/icons/baijiahao.png', 'BaijiahaoAdapter', '["username", "password"]', 'https://baijiahao.baidu.com/', 'https://baijiahao.baidu.com/'),
+('toutiao', '头条号', '/icons/toutiao.png', 'ToutiaoAdapter', '["username", "password"]', 'https://mp.toutiao.com/', 'https://mp.toutiao.com/'),
+('qie', '企鹅号', '/icons/qie.png', 'QieAdapter', '["username", "password"]', 'https://om.qq.com/', 'https://om.qq.com/'),
+('wechat', '微信公众号', '/icons/wechat.png', 'WechatAdapter', '[]', 'https://mp.weixin.qq.com/', 'https://mp.weixin.qq.com/'),
+('xiaohongshu', '小红书', '/icons/xiaohongshu.png', 'XiaohongshuAdapter', '["username", "password"]', 'https://creator.xiaohongshu.com/', 'https://creator.xiaohongshu.com/'),
+('douyin', '抖音号', '/icons/douyin.png', 'DouyinAdapter', '["username", "password"]', 'https://creator.douyin.com/', 'https://creator.douyin.com/'),
+('bilibili', '哔哩哔哩', '/icons/bilibili.png', 'BilibiliAdapter', '["username", "password"]', 'https://passport.bilibili.com/login', 'https://member.bilibili.com/'),
+('zhihu', '知乎', '/icons/zhihu.png', 'ZhihuAdapter', '["username", "password"]', 'https://www.zhihu.com/signin', 'https://www.zhihu.com/'),
+('jianshu', '简书', '/icons/jianshu.png', 'JianshuAdapter', '["username", "password"]', 'https://www.jianshu.com/sign_in', 'https://www.jianshu.com/'),
+('csdn', 'CSDN', '/icons/csdn.png', 'CSDNAdapter', '["username", "password"]', 'https://passport.csdn.net/login', 'https://www.csdn.net/')
 ON CONFLICT (platform_id) DO NOTHING;
 
 -- ========================================
