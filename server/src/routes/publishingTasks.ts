@@ -262,8 +262,8 @@ router.get('/tasks', async (req, res) => {
         pt.error_message, pt.retry_count, pt.max_retries, pt.batch_id,
         pt.batch_order, pt.interval_minutes, pt.created_at, pt.updated_at,
         pt.article_title, pt.article_keyword,
-        pa.account_name,
-        pa.real_username
+        COALESCE(pt.account_name_snapshot, pa.account_name) as account_name,
+        COALESCE(pt.real_username_snapshot, pa.real_username) as real_username
        FROM publishing_tasks pt
        LEFT JOIN platform_accounts pa ON pt.account_id = pa.id
        ${whereClause} 

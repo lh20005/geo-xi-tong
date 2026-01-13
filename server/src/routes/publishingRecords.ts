@@ -80,7 +80,7 @@ router.get('/records', async (req, res) => {
         COALESCE(pr.distillation_keyword, a.distillation_keyword_snapshot, d.keyword) as distillation_keyword,
         pc.platform_name,
         pt.status as task_status,
-        pa.real_username
+        COALESCE(pr.real_username_snapshot, pa.real_username) as real_username
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
@@ -148,7 +148,7 @@ router.get('/records/:id', async (req, res) => {
         pc.platform_name,
         pt.status as task_status,
         pt.error_message as task_error,
-        pa.real_username
+        COALESCE(pr.real_username_snapshot, pa.real_username) as real_username
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
