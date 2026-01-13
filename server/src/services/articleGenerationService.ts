@@ -329,11 +329,12 @@ export class ArticleGenerationService {
     for (let i = 0; i < selectedTopics.length; i++) {
       const topic = selectedTopics[i];
       
-      // 将话题ID保存到selected_distillation_ids中（虽然字段名是distillation_ids，但我们用它来存储话题ID）
-      // 注意：这里需要修改数据结构，暂时先用一个特殊格式
+      // 将话题ID和话题问题保存到selected_distillation_ids中
+      // 包含 topic 字段作为快照，确保删除蒸馏结果后仍能显示
       const selectedIdsJson = JSON.stringify({
         distillationId: config.distillationId,
-        topicId: topic.topicId
+        topicId: topic.topicId,
+        topic: topic.question  // 快照：保存话题问题内容
       });
       
       // 创建独立任务
@@ -443,9 +444,22 @@ export class ArticleGenerationService {
 
     return {
       tasks: result.rows.map(row => {
-        // 直接使用SQL查询的distillation_result，不再进行额外处理
-        // 这样可以显示每篇文章对应的具体话题内容
-        const distillationResult = row.distillation_result || null;
+        // 优先从 selected_distillation_ids 的 topic 字段获取蒸馏结果（快照）
+        // 如果没有，则使用 SQL 子查询的结果
+        let distillationResult = row.distillation_result || null;
+        
+        // 尝试从 selected_distillation_ids 中提取 topic 作为快照
+        if (!distillationResult && row.selected_distillation_ids) {
+          try {
+            const selectedData = JSON.parse(row.selected_distillation_ids);
+            if (selectedData.topic) {
+              distillationResult = selectedData.topic;
+            }
+          } catch (e) {
+            // JSON 解析失败，忽略
+          }
+        }
+        
         const keyword = row.keyword;
         
         return {
@@ -500,6 +514,7 @@ export class ArticleGenerationService {
         gt.created_at, 
         gt.updated_at,
         gt.user_id,
+        gt.selected_distillation_ids,
         gt.conversion_target_name,
         gt.album_name,
         gt.knowledge_base_name,
@@ -524,6 +539,20 @@ export class ArticleGenerationService {
     }
 
     const row = result.rows[0];
+    
+    // 优先从 selected_distillation_ids 的 topic 字段获取蒸馏结果（快照）
+    let distillationResult = row.distillation_result || null;
+    if (!distillationResult && row.selected_distillation_ids) {
+      try {
+        const selectedData = JSON.parse(row.selected_distillation_ids);
+        if (selectedData.topic) {
+          distillationResult = selectedData.topic;
+        }
+      } catch (e) {
+        // JSON 解析失败，忽略
+      }
+    }
+    
     return {
       id: row.id,
       distillationId: row.distillation_id,
@@ -545,7 +574,7 @@ export class ArticleGenerationService {
       articleSettingName: row.article_setting_name || null,
       keyword: row.keyword,
       provider: row.provider,
-      distillationResult: row.distillation_result || null
+      distillationResult
     };
   }
 
