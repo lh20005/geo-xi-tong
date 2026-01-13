@@ -14,6 +14,13 @@ export interface QuotaInitOptions {
 
 export class QuotaInitializationService {
   /**
+   * 不应在套餐变更时重置的功能代码
+   * - platform_accounts: 平台账号数是实际资源，不应重置
+   * - storage_space: 存储空间使用量在 user_storage_usage 表中，不在此处理
+   */
+  private static readonly PRESERVE_ON_PLAN_CHANGE = ['platform_accounts'];
+
+  /**
    * 初始化用户配额
    * @param userId 用户ID
    * @param planId 套餐ID
@@ -48,9 +55,12 @@ export class QuotaInitializationService {
 
       for (const feature of featuresResult.rows) {
         const { periodStart, periodEnd } = this.calculatePeriod(feature.feature_code, now);
+        
+        // 判断是否应该保留使用量（平台账号数等不应重置）
+        const shouldPreserve = this.PRESERVE_ON_PLAN_CHANGE.includes(feature.feature_code);
 
-        if (resetUsage) {
-          // 套餐变更：重置使用量为 0
+        if (resetUsage && !shouldPreserve) {
+          // 套餐变更：重置使用量为 0（但保留 platform_accounts 等）
           await db.query(
             `INSERT INTO user_usage (
               user_id, feature_code, usage_count, period_start, period_end, last_reset_at
@@ -63,7 +73,7 @@ export class QuotaInitializationService {
             [userId, feature.feature_code, periodStart, periodEnd, periodStart]
           );
         } else {
-          // 续费：保留现有使用量
+          // 续费或需要保留的配额：保留现有使用量
           await db.query(
             `INSERT INTO user_usage (
               user_id, feature_code, usage_count, period_start, period_end, last_reset_at
@@ -85,19 +95,28 @@ export class QuotaInitializationService {
   }
 
   /**
-   * 清除用户所有配额记录
+   * 清除用户配额记录（保留不应重置的配额）
    * @param userId 用户ID
    * @param client 数据库客户端（用于事务）
+   * @param preserveFeatures 需要保留的功能代码列表（如平台账号数）
    */
-  static async clearUserQuotas(userId: number, client?: any): Promise<number> {
+  static async clearUserQuotas(
+    userId: number, 
+    client?: any,
+    preserveFeatures: string[] = ['platform_accounts']
+  ): Promise<number> {
     const db = client || pool;
 
+    // 只清除需要重置的配额，保留 platform_accounts 等不应重置的配额
     const result = await db.query(
-      'DELETE FROM user_usage WHERE user_id = $1 RETURNING feature_code',
-      [userId]
+      `DELETE FROM user_usage 
+       WHERE user_id = $1 
+       AND feature_code NOT IN (SELECT unnest($2::varchar[]))
+       RETURNING feature_code`,
+      [userId, preserveFeatures]
     );
 
-    console.log(`[QuotaInit] 清除了用户 ${userId} 的 ${result.rows.length} 条配额记录`);
+    console.log(`[QuotaInit] 清除了用户 ${userId} 的 ${result.rows.length} 条配额记录（保留: ${preserveFeatures.join(', ')}）`);
     return result.rows.length;
   }
 
