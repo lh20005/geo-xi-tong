@@ -1,6 +1,5 @@
 import express from 'express';
 import { pool } from '../db/database';
-import { encryptionService } from '../services/EncryptionService';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 
@@ -58,6 +57,7 @@ router.get('/records', async (req, res) => {
     const total = parseInt(countResult.rows[0].total);
 
     // 获取数据（优先使用快照字段，兼容旧数据）
+    // 优化：直接使用 pa.real_username 而不是查询整个 credentials（平均110KB/账号）再解密
     const offset = (parseInt(page as string) - 1) * parseInt(pageSize as string);
     const dataResult = await pool.query(
       `SELECT 
@@ -80,7 +80,7 @@ router.get('/records', async (req, res) => {
         COALESCE(pr.distillation_keyword, a.distillation_keyword_snapshot, d.keyword) as distillation_keyword,
         pc.platform_name,
         pt.status as task_status,
-        pa.credentials
+        pa.real_username
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
@@ -96,26 +96,7 @@ router.get('/records', async (req, res) => {
       [...params, parseInt(pageSize as string), offset]
     );
 
-    // 解密并提取真实用户名
-    const records = dataResult.rows.map(row => {
-      const record: any = { ...row };
-      delete record.credentials; // 不返回加密的凭证
-      
-      if (row.credentials) {
-        try {
-          const decryptedCredentials = encryptionService.decryptObject(row.credentials);
-          if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
-            record.real_username = decryptedCredentials.userInfo.username;
-          } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
-            record.real_username = decryptedCredentials.username;
-          }
-        } catch (error) {
-          console.error('解密账号凭证失败:', error);
-        }
-      }
-      
-      return record;
-    });
+    const records = dataResult.rows;
 
     res.json({
       success: true,
@@ -144,6 +125,7 @@ router.get('/records/:id', async (req, res) => {
     const userId = getCurrentTenantId(req);
     const recordId = parseInt(req.params.id);
 
+    // 优化：直接使用 pa.real_username 而不是查询整个 credentials 再解密
     const result = await pool.query(
       `SELECT 
         pr.id,
@@ -166,7 +148,7 @@ router.get('/records/:id', async (req, res) => {
         pc.platform_name,
         pt.status as task_status,
         pt.error_message as task_error,
-        pa.credentials
+        pa.real_username
        FROM publishing_records pr
        LEFT JOIN articles a ON pr.article_id = a.id
        LEFT JOIN topics t ON a.topic_id = t.id
@@ -187,26 +169,9 @@ router.get('/records/:id', async (req, res) => {
       });
     }
 
-    const record: any = { ...result.rows[0] };
-    delete record.credentials; // 不返回加密的凭证
-    
-    // 解密并提取真实用户名
-    if (result.rows[0].credentials) {
-      try {
-        const decryptedCredentials = encryptionService.decryptObject(result.rows[0].credentials);
-        if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
-          record.real_username = decryptedCredentials.userInfo.username;
-        } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
-          record.real_username = decryptedCredentials.username;
-        }
-      } catch (error) {
-        console.error('解密账号凭证失败:', error);
-      }
-    }
-
     res.json({
       success: true,
-      data: record
+      data: result.rows[0]
     });
   } catch (error: any) {
     console.error('获取发布记录详情失败:', error);

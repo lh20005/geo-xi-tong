@@ -1,6 +1,5 @@
 import { pool } from '../db/database';
 import { logBroadcaster } from './LogBroadcaster';
-import { encryptionService } from './EncryptionService';
 
 export interface PublishingTask {
   id: number;
@@ -217,6 +216,7 @@ export class PublishingService {
 
     // 获取数据 - 使用LEFT JOIN获取账号信息
     // 优化：排除 article_content 大字段，减少带宽
+    // 优化：直接使用 pa.real_username 而不是查询整个 credentials（平均110KB/账号）再解密
     const offset = (page - 1) * pageSize;
     const dataResult = await pool.query(
       `SELECT 
@@ -226,7 +226,7 @@ export class PublishingService {
         pt.batch_order, pt.interval_minutes, pt.created_at, pt.updated_at,
         pt.article_title, pt.article_keyword, pt.article_image_url,
         pa.account_name,
-        pa.credentials
+        pa.real_username
        FROM publishing_tasks pt
        LEFT JOIN platform_accounts pa ON pt.account_id = pa.id
        ${whereClause} 
@@ -713,23 +713,10 @@ export class PublishingService {
       article_title: row.article_title,
       // article_content 已从列表查询中排除，仅在执行任务时从数据库读取
       article_keyword: row.article_keyword,
-      article_image_url: row.article_image_url
+      article_image_url: row.article_image_url,
+      // 优化：直接使用 real_username 字段，不再从 credentials 解密（减少 ~110KB/账号 的数据传输）
+      real_username: row.real_username
     };
-
-    // 解密并提取真实用户名
-    if (row.credentials) {
-      try {
-        const decryptedCredentials = encryptionService.decryptObject(row.credentials);
-        if (decryptedCredentials.userInfo && decryptedCredentials.userInfo.username) {
-          task.real_username = decryptedCredentials.userInfo.username;
-        } else if (decryptedCredentials.username && decryptedCredentials.username !== 'browser_login') {
-          task.real_username = decryptedCredentials.username;
-        }
-      } catch (error) {
-        // 解密失败时忽略，使用 account_name 作为后备
-        console.error('解密账号凭证失败:', error);
-      }
-    }
 
     return task;
   }

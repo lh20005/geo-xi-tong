@@ -254,7 +254,7 @@ router.get('/tasks', async (req, res) => {
     // 参考 Google Cloud 最佳实践：只返回需要的字段
     // - 排除 article_content（每条约1-2KB，列表不需要）
     // - 排除 config（详情页才需要）
-    // - credentials 只用于提取 real_username
+    // - 直接使用 pa.real_username 而不是查询整个 credentials（平均110KB/账号）再解密
     const dataResult = await pool.query(
       `SELECT 
         pt.id, pt.user_id, pt.article_id, pt.account_id, pt.platform_id,
@@ -263,7 +263,7 @@ router.get('/tasks', async (req, res) => {
         pt.batch_order, pt.interval_minutes, pt.created_at, pt.updated_at,
         pt.article_title, pt.article_keyword,
         pa.account_name,
-        pa.credentials
+        pa.real_username
        FROM publishing_tasks pt
        LEFT JOIN platform_accounts pa ON pt.account_id = pa.id
        ${whereClause} 
