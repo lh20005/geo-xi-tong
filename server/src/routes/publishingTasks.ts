@@ -29,10 +29,31 @@ router.post('/tasks', async (req, res) => {
       interval_minutes
     } = req.body;
 
-    if (!article_id || !account_id || !platform_id) {
+    // 调试日志：记录收到的参数
+    console.log(`📝 创建发布任务请求: article_id=${article_id}, account_id=${account_id}, platform_id=${platform_id}, batch_id=${batch_id}, batch_order=${batch_order}`);
+
+    // 严格验证必需参数（使用更严格的检查）
+    if (article_id === undefined || article_id === null || article_id === '') {
+      console.error(`❌ 创建任务失败: article_id 无效 (${article_id})`);
       return res.status(400).json({
         success: false,
-        message: '缺少必需参数: article_id, account_id, platform_id'
+        message: '缺少必需参数: article_id'
+      });
+    }
+    
+    if (account_id === undefined || account_id === null || account_id === '') {
+      console.error(`❌ 创建任务失败: account_id 无效 (${account_id})`);
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需参数: account_id'
+      });
+    }
+    
+    if (!platform_id) {
+      console.error(`❌ 创建任务失败: platform_id 无效 (${platform_id})`);
+      return res.status(400).json({
+        success: false,
+        message: '缺少必需参数: platform_id'
       });
     }
 
@@ -81,6 +102,9 @@ router.post('/tasks', async (req, res) => {
     // 兼容前端的 scheduled_time 和 scheduled_at 两种参数名
     const scheduledTime = scheduled_time || scheduled_at;
 
+    // 调试日志：记录传递给 createTask 的参数
+    console.log(`📝 调用 createTask: article_id=${article_id} (type: ${typeof article_id}), account_id=${account_id}, platform_id=${platform_id}`);
+
     const task = await publishingService.createTask({
       article_id,
       account_id,
@@ -92,6 +116,10 @@ router.post('/tasks', async (req, res) => {
       batch_order,
       interval_minutes
     });
+
+    // 调试日志：记录创建的任务
+    console.log(`✅ 任务已创建: task.id=${task.id}, task.article_id=${task.article_id}`);
+
 
     // ========== 记录配额使用 ==========
     await usageTrackingService.recordUsage(

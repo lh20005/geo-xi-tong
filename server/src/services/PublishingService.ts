@@ -63,6 +63,9 @@ export class PublishingService {
    * 创建发布任务
    */
   async createTask(input: CreateTaskInput): Promise<PublishingTask> {
+    // 调试日志：记录收到的输入
+    console.log(`📝 PublishingService.createTask 收到: article_id=${input.article_id} (type: ${typeof input.article_id})`);
+    
     // 验证 scheduled_at 必须是未来时间
     if (input.scheduled_at) {
       const now = new Date();
@@ -89,6 +92,9 @@ export class PublishingService {
         input.interval_minutes || 0
       ]
     );
+
+    // 调试日志：记录插入结果
+    console.log(`📝 数据库插入结果: id=${result.rows[0].id}, article_id=${result.rows[0].article_id}`);
 
     return this.formatTask(result.rows[0]);
   }

@@ -5,7 +5,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
  * 所有 API 请求都应该通过这个客户端进行
  */
 export const apiClient: AxiosInstance = axios.create({
-  baseURL: '/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

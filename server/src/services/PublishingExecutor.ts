@@ -92,15 +92,44 @@ export class PublishingExecutor {
         // 图片文件会在用户手动删除发布记录时处理
       }
       
-      // 5. 删除原文章（发布记录已保存快照）
-      await client.query(
-        'DELETE FROM articles WHERE id = $1',
-        [task.article_id]
-      );
+      // 5. 检查是否还有其他待处理的发布任务
+      // 重要修复：使用 batch_id 而不是 article_id 来检查
+      // 因为 article_id 有外键约束 ON DELETE SET NULL，删除文章后其他任务的 article_id 会变成 NULL
+      let pendingCount = 0;
       
-      await client.query('COMMIT');
+      if (task.batch_id) {
+        // 批次任务：检查同一批次中是否还有其他待处理任务
+        const pendingTasksResult = await client.query(
+          `SELECT COUNT(*) as count FROM publishing_tasks 
+           WHERE batch_id = $1 AND status IN ('pending', 'running') AND id != $2`,
+          [task.batch_id, taskId]
+        );
+        pendingCount = parseInt(pendingTasksResult.rows[0].count);
+        console.log(`📊 批次 ${task.batch_id} 中还有 ${pendingCount} 个待处理任务（不含当前任务 #${taskId}）`);
+      } else {
+        // 非批次任务：检查同一篇文章是否还有其他待处理任务
+        const pendingTasksResult = await client.query(
+          `SELECT COUNT(*) as count FROM publishing_tasks 
+           WHERE article_id = $1 AND status IN ('pending', 'running') AND id != $2`,
+          [task.article_id, taskId]
+        );
+        pendingCount = parseInt(pendingTasksResult.rows[0].count);
+      }
       
-      console.log(`✅ 文章 #${task.article_id} 已发布并移至发布记录`);
+      if (pendingCount > 0) {
+        // 还有其他平台的发布任务，暂不删除文章
+        console.log(`⏳ 文章 #${task.article_id} 还有 ${pendingCount} 个待发布任务，暂不删除`);
+        await client.query('COMMIT');
+        console.log(`✅ 文章 #${task.article_id} 发布记录已创建（保留原文章供其他平台发布）`);
+      } else {
+        // 所有平台都已发布完成，删除原文章
+        await client.query(
+          'DELETE FROM articles WHERE id = $1',
+          [task.article_id]
+        );
+        await client.query('COMMIT');
+        console.log(`✅ 文章 #${task.article_id} 已发布并移至发布记录（所有平台发布完成）`);
+      }
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('创建发布记录失败:', error);
