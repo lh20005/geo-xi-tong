@@ -1,27 +1,11 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import axios from 'axios';
 import Header from '../components/Header';
 import PaymentModal from '../components/PaymentModal';
 import SEO from '../components/SEO';
 import { config } from '../config/env';
-import { useDiscountEligibility } from '../hooks/useDiscountEligibility';
-import { useUserSubscription } from '../hooks/useUserSubscription';
-
-interface Plan {
-  id: number;
-  plan_name: string;
-  plan_code: string;
-  price: string | number;
-  billing_cycle: string;
-  features: {
-    feature_code: string;
-    feature_name: string;
-    feature_value: number;
-    feature_unit: string;
-  }[];
-  description?: string;
-}
+import { useUserStatus } from '../hooks/useUserStatus';
+import { usePlans } from '../hooks/usePlans';
 
 export default function HomePage() {
   const [activeSection, setActiveSection] = useState('home');
@@ -35,14 +19,12 @@ export default function HomePage() {
     originalPrice?: number;
     isAgentDiscount?: boolean;
   } | null>(null);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [plansLoading, setPlansLoading] = useState(true);
   
-  // 折扣资格检查
-  const { getDiscountedPrice } = useDiscountEligibility();
+  // 使用优化后的套餐 Hook（立即显示缓存/静态数据，后台更新）
+  const { plans, loading: plansLoading, isStale } = usePlans();
   
-  // 用户订阅状态
-  const { hasAccessTo, isAddonPlan } = useUserSubscription();
+  // 用户状态（合并了折扣和订阅信息，减少 API 请求）
+  const { getDiscountedPrice, hasAccessTo, isAddonPlan } = useUserStatus();
 
   // 轮播图片列表
   const carouselImages = [
@@ -76,27 +58,7 @@ export default function HomePage() {
     setCurrentImageIndex(index);
   };
 
-  // 获取套餐列表
-  useEffect(() => {
-    const fetchPlans = async () => {
-      try {
-        setPlansLoading(true);
-        // 请求所有类型的套餐（包括 base 基础套餐和 booster 加量包）
-        const response = await axios.get(`${config.apiUrl}/subscription/plans?plan_type=all`);
-        if (response.data.success) {
-          setPlans(response.data.data || []);
-        }
-      } catch (error) {
-        console.error('获取套餐列表失败:', error);
-        // 失败时使用默认套餐数据
-        setPlans([]);
-      } finally {
-        setPlansLoading(false);
-      }
-    };
-
-    fetchPlans();
-  }, []);
+  // 套餐数据现在由 usePlans hook 管理，无需手动获取
 
   // 检查登录状态
   useEffect(() => {
@@ -407,16 +369,16 @@ export default function HomePage() {
             </h2>
           </div>
 
-          {plansLoading ? (
-            <div className="text-center py-20">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">加载套餐信息中...</p>
-            </div>
-          ) : plans.length === 0 ? (
-            <div className="text-center py-20">
-              <p className="text-gray-600">暂无套餐信息</p>
-            </div>
-          ) : (
+          {/* 立即显示套餐卡片，无需等待加载 */}
+          <div className="relative">
+            {/* 后台更新指示器（可选，仅在更新时短暂显示） */}
+            {plansLoading && isStale && (
+              <div className="absolute -top-8 right-0 text-xs text-gray-400 flex items-center gap-1">
+                <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                更新中...
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
               {plans.map((plan) => {
                 const badge = getPlanBadge(plan.plan_code);
@@ -574,7 +536,7 @@ export default function HomePage() {
                 );
               })}
             </div>
-          )}
+          </div>
         </div>
       </section>
 

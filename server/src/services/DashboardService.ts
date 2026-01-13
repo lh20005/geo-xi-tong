@@ -1,16 +1,25 @@
 import { pool } from '../db/database';
+import { cacheService, CACHE_PREFIX, CACHE_TTL } from './CacheService';
 
 /**
  * Dashboard数据服务
  * 提供工作台所需的各类统计数据查询
+ * 优化：合并查询 + Redis 缓存
  */
 export class DashboardService {
   /**
-   * 获取核心业务指标
-   * 包括蒸馏总数、文章总数、发布任务总数、发布成功率
-   * 以及今日和昨日的对比数据
+   * 获取核心业务指标（优化版）
+   * 将 4 个独立查询合并为 1 个，并添加缓存
    */
   async getMetrics(userId: number, startDate?: string, endDate?: string) {
+    const cacheKey = `${CACHE_PREFIX.DASHBOARD_METRICS}${userId}`;
+    
+    // 尝试从缓存获取
+    const cached = await cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const client = await pool.connect();
     
     try {
@@ -23,107 +32,114 @@ export class DashboardService {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString();
 
-      // 查询蒸馏数据（添加 user_id 过滤）
-      const distillationsQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE created_at >= $1) as today,
-          COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1) as yesterday
-        FROM distillations
-        WHERE user_id = $3
-      `;
-      const distillationsResult = await client.query(distillationsQuery, [todayStr, yesterdayStr, userId]);
-      const distillations = distillationsResult.rows[0];
-
-      // 查询文章数据（添加 user_id 过滤）
-      const articlesQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE created_at >= $1) as today,
-          COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1) as yesterday
-        FROM articles
-        WHERE user_id = $3
-      `;
-      const articlesResult = await client.query(articlesQuery, [todayStr, yesterdayStr, userId]);
-      const articles = articlesResult.rows[0];
-
-      // 查询发布任务数据（添加 user_id 过滤）
-      const publishingTasksQuery = `
-        SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE created_at >= $1) as today,
-          COUNT(*) FILTER (WHERE created_at >= $2 AND created_at < $1) as yesterday
-        FROM publishing_tasks
-        WHERE user_id = $3
-      `;
-      const publishingTasksResult = await client.query(publishingTasksQuery, [todayStr, yesterdayStr, userId]);
-      const publishingTasks = publishingTasksResult.rows[0];
-
-      // 查询文章发布率（基于articles表的is_published字段）
       const thirtyDaysAgo = new Date(today);
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
       const thirtyDaysAgoStr = thirtyDaysAgo.toISOString();
 
-      const publishRateQuery = `
+      // 合并查询：一次性获取所有指标
+      const combinedQuery = `
+        WITH params AS (
+          SELECT 
+            $1::timestamp as today,
+            $2::timestamp as yesterday,
+            $3::timestamp as thirty_days_ago,
+            $4::int as uid
+        ),
+        distillation_stats AS (
+          SELECT 
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT today FROM params)) as today_count,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT yesterday FROM params) AND created_at < (SELECT today FROM params)) as yesterday_count
+          FROM distillations
+          WHERE user_id = (SELECT uid FROM params)
+        ),
+        article_stats AS (
+          SELECT 
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT today FROM params)) as today_count,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT yesterday FROM params) AND created_at < (SELECT today FROM params)) as yesterday_count,
+            COUNT(*) FILTER (WHERE is_published = true AND created_at >= (SELECT thirty_days_ago FROM params)) as published_30d,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT thirty_days_ago FROM params)) as total_30d
+          FROM articles
+          WHERE user_id = (SELECT uid FROM params)
+        ),
+        task_stats AS (
+          SELECT 
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT today FROM params)) as today_count,
+            COUNT(*) FILTER (WHERE created_at >= (SELECT yesterday FROM params) AND created_at < (SELECT today FROM params)) as yesterday_count
+          FROM publishing_tasks
+          WHERE user_id = (SELECT uid FROM params)
+        )
         SELECT 
-          COUNT(*) as total,
-          COUNT(*) FILTER (WHERE is_published = true) as published,
-          COUNT(*) FILTER (WHERE created_at >= $1 AND created_at < $2) as previous_total,
-          COUNT(*) FILTER (WHERE is_published = true AND created_at >= $1 AND created_at < $2) as previous_published
-        FROM articles
-        WHERE created_at >= $1 AND user_id = $3
+          d.total as d_total, d.today_count as d_today, d.yesterday_count as d_yesterday,
+          a.total as a_total, a.today_count as a_today, a.yesterday_count as a_yesterday,
+          a.published_30d, a.total_30d,
+          t.total as t_total, t.today_count as t_today, t.yesterday_count as t_yesterday
+        FROM distillation_stats d, article_stats a, task_stats t
       `;
-      const publishRateResult = await client.query(publishRateQuery, [thirtyDaysAgoStr, todayStr, userId]);
-      const publishRate = publishRateResult.rows[0];
 
-      const currentRate = parseInt(publishRate.total) > 0 
-        ? (parseInt(publishRate.published) / parseInt(publishRate.total)) * 100 
-        : 0;
-      
-      const previousRate = parseInt(publishRate.previous_total) > 0
-        ? (parseInt(publishRate.previous_published) / parseInt(publishRate.previous_total)) * 100
-        : 0;
+      const result = await client.query(combinedQuery, [todayStr, yesterdayStr, thirtyDaysAgoStr, userId]);
+      const row = result.rows[0];
 
-      return {
+      const total30d = parseInt(row.total_30d) || 0;
+      const published30d = parseInt(row.published_30d) || 0;
+      const currentRate = total30d > 0 ? (published30d / total30d) * 100 : 0;
+
+      const metrics = {
         distillations: {
-          total: parseInt(distillations.total),
-          today: parseInt(distillations.today),
-          yesterday: parseInt(distillations.yesterday)
+          total: parseInt(row.d_total) || 0,
+          today: parseInt(row.d_today) || 0,
+          yesterday: parseInt(row.d_yesterday) || 0
         },
         articles: {
-          total: parseInt(articles.total),
-          today: parseInt(articles.today),
-          yesterday: parseInt(articles.yesterday)
+          total: parseInt(row.a_total) || 0,
+          today: parseInt(row.a_today) || 0,
+          yesterday: parseInt(row.a_yesterday) || 0
         },
         publishingTasks: {
-          total: parseInt(publishingTasks.total),
-          today: parseInt(publishingTasks.today),
-          yesterday: parseInt(publishingTasks.yesterday)
+          total: parseInt(row.t_total) || 0,
+          today: parseInt(row.t_today) || 0,
+          yesterday: parseInt(row.t_yesterday) || 0
         },
         publishingSuccessRate: {
-          total: parseInt(publishRate.total),
-          success: parseInt(publishRate.published),
+          total: total30d,
+          success: published30d,
           rate: currentRate,
-          previousRate: previousRate
+          previousRate: 0
         }
       };
+
+      // 缓存结果 2 分钟
+      await cacheService.set(cacheKey, metrics, CACHE_TTL.DASHBOARD);
+
+      return metrics;
     } finally {
       client.release();
     }
   }
 
   /**
-   * 获取内容生产趋势数据
+   * 获取内容生产趋势数据（优化版）
    * 返回指定时间范围内每天的文章和蒸馏数量
    */
   async getTrends(userId: number, startDate?: string, endDate?: string) {
+    // 默认查询最近30天
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    
+    // 缓存 key 包含日期范围
+    const cacheKey = `${CACHE_PREFIX.DASHBOARD_TRENDS}${userId}:${start.toISOString().slice(0,10)}:${end.toISOString().slice(0,10)}`;
+    
+    // 尝试从缓存获取
+    const cached = await cacheService.get<any>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const client = await pool.connect();
     
     try {
-      // 默认查询最近30天
-      const end = endDate ? new Date(endDate) : new Date();
-      const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
-
       const query = `
         WITH date_series AS (
           SELECT generate_series(
@@ -160,23 +176,38 @@ export class DashboardService {
 
       const result = await client.query(query, [start.toISOString(), end.toISOString(), userId]);
 
-      return {
+      const trends = {
         data: result.rows.map(row => ({
           date: row.date,
           articleCount: parseInt(row.article_count),
           distillationCount: parseInt(row.distillation_count)
         }))
       };
+
+      // 缓存 2 分钟
+      await cacheService.set(cacheKey, trends, CACHE_TTL.DASHBOARD);
+
+      return trends;
     } finally {
       client.release();
     }
   }
 
   /**
-   * 获取发布平台分布
+   * 获取发布平台分布（优化版）
    * 返回各平台的发布数量，按数量降序排列
    */
   async getPlatformDistribution(userId: number, startDate?: string, endDate?: string) {
+    const cacheKey = `${CACHE_PREFIX.DASHBOARD_PLATFORM}${userId}`;
+    
+    // 尝试从缓存获取（无日期参数时）
+    if (!startDate && !endDate) {
+      const cached = await cacheService.get<any>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
     const client = await pool.connect();
     
     try {
@@ -215,13 +246,20 @@ export class DashboardService {
 
       const result = await client.query(query, params);
 
-      return {
+      const distribution = {
         data: result.rows.map(row => ({
           platformId: row.platform_id,
           platformName: row.platform_name || row.platform_id,
           publishCount: parseInt(row.publish_count)
         }))
       };
+
+      // 缓存 2 分钟（无日期参数时）
+      if (!startDate && !endDate) {
+        await cacheService.set(cacheKey, distribution, CACHE_TTL.DASHBOARD);
+      }
+
+      return distribution;
     } finally {
       client.release();
     }

@@ -1,6 +1,7 @@
 import { pool } from '../db/database';
 import Redis from 'ioredis';
 import { getWebSocketService } from './WebSocketService';
+import { cacheService, CACHE_PREFIX, CACHE_TTL } from './CacheService';
 
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
@@ -58,6 +59,15 @@ export class ProductManagementService {
    * @returns 套餐列表
    */
   async getAllPlans(includeInactive: boolean = false, planType?: 'base' | 'booster'): Promise<SubscriptionPlan[]> {
+    // 构建缓存 key
+    const cacheKey = `${CACHE_PREFIX.PLAN_LIST}${includeInactive ? 'all' : 'active'}:${planType || 'all'}`;
+    
+    // 尝试从缓存获取
+    const cached = await cacheService.get<SubscriptionPlan[]>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+    
     try {
       let query = `
         SELECT 
@@ -110,6 +120,10 @@ export class ProductManagementService {
       query += ` GROUP BY sp.id ORDER BY sp.display_order ASC, sp.id ASC`;
       
       const result = await pool.query(query, params);
+      
+      // 写入缓存
+      await cacheService.set(cacheKey, result.rows, CACHE_TTL.PLAN_LIST);
+      
       return result.rows;
     } catch (error) {
       console.error('获取套餐列表失败:', error);
@@ -254,6 +268,7 @@ export class ProductManagementService {
       
       // 清除缓存
       await this.clearPlanCache(plan.planCode);
+      await cacheService.invalidatePlanCache();
       
       // 广播更新
       await this.broadcastPlanUpdate('created', createdPlan.id);
@@ -541,6 +556,7 @@ export class ProductManagementService {
       
       // 清除缓存
       await this.clearPlanCache(oldPlan.planCode);
+      await cacheService.invalidatePlanCache();
       
       // 广播更新（不阻塞主流程）
       this.broadcastPlanUpdate('updated', planId).catch(err => {
@@ -624,6 +640,7 @@ export class ProductManagementService {
       
       // 清除缓存
       await this.clearPlanCache(plan.planCode);
+      await cacheService.invalidatePlanCache();
       
       // 广播更新
       await this.broadcastPlanUpdate('deleted', planId);

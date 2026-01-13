@@ -1,4 +1,5 @@
 import { pool } from '../db/database';
+import { cacheService, CACHE_PREFIX, CACHE_TTL } from './CacheService';
 
 /**
  * 折扣资格检查结果
@@ -41,7 +42,7 @@ export interface OrderDiscountInfo {
  */
 export class DiscountService {
   /**
-   * 检查用户是否有资格享受代理商折扣
+   * 检查用户是否有资格享受代理商折扣（带缓存）
    * 条件：
    * 1. 用户通过代理商邀请码注册（invited_by_agent 不为空）
    * 2. 用户首次购买（无成功支付的订单）
@@ -51,18 +52,34 @@ export class DiscountService {
    * @returns 折扣资格信息
    */
   async checkDiscountEligibility(userId: number): Promise<DiscountEligibility> {
+    const cacheKey = `${CACHE_PREFIX.DISCOUNT_ELIGIBILITY}${userId}`;
+    
+    return cacheService.getOrSet<DiscountEligibility>(
+      cacheKey,
+      async () => {
+        return this._checkDiscountEligibilityFromDB(userId);
+      },
+      CACHE_TTL.DISCOUNT_ELIGIBILITY
+    );
+  }
+
+  /**
+   * 从数据库检查折扣资格（内部方法）
+   */
+  private async _checkDiscountEligibilityFromDB(userId: number): Promise<DiscountEligibility> {
     try {
-      // 查询用户信息
-      const userResult = await pool.query(
+      // 合并查询：一次查询获取用户信息和订单数量
+      const result = await pool.query(
         `SELECT 
-          invited_by_agent,
-          first_purchase_discount_used
-        FROM users 
-        WHERE id = $1`,
+          u.invited_by_agent,
+          u.first_purchase_discount_used,
+          (SELECT COUNT(*) FROM orders WHERE user_id = $1 AND status = 'paid') as paid_orders_count
+        FROM users u
+        WHERE u.id = $1`,
         [userId]
       );
 
-      if (userResult.rows.length === 0) {
+      if (result.rows.length === 0) {
         return {
           eligible: false,
           reason: 'not_invited_by_agent',
@@ -72,9 +89,10 @@ export class DiscountService {
         };
       }
 
-      const user = userResult.rows[0];
-      const invitedByAgent = user.invited_by_agent !== null;
-      const discountUsed = user.first_purchase_discount_used === true;
+      const row = result.rows[0];
+      const invitedByAgent = row.invited_by_agent !== null;
+      const discountUsed = row.first_purchase_discount_used === true;
+      const hasPaidOrders = parseInt(row.paid_orders_count) > 0;
 
       // 如果不是被代理商邀请的用户
       if (!invitedByAgent) {
@@ -82,7 +100,7 @@ export class DiscountService {
           eligible: false,
           reason: 'not_invited_by_agent',
           invitedByAgent: false,
-          isFirstPurchase: true,
+          isFirstPurchase: !hasPaidOrders,
           discountUsed: false
         };
       }
@@ -98,16 +116,7 @@ export class DiscountService {
         };
       }
 
-      // 检查是否有成功支付的订单
-      const orderResult = await pool.query(
-        `SELECT COUNT(*) as count 
-        FROM orders 
-        WHERE user_id = $1 AND status = 'paid'`,
-        [userId]
-      );
-
-      const hasPaidOrders = parseInt(orderResult.rows[0].count) > 0;
-
+      // 如果有已支付订单
       if (hasPaidOrders) {
         return {
           eligible: false,
@@ -186,12 +195,17 @@ export class DiscountService {
    * 
    * @param userId 用户ID
    * @param planIds 套餐ID列表（可选，不传则返回所有激活套餐）
+   * @param eligibility 已有的折扣资格信息（可选，避免重复查询）
    * @returns 套餐折扣信息列表
    */
-  async getUserDiscountPrices(userId: number, planIds?: number[]): Promise<PlanDiscountInfo[]> {
+  async getUserDiscountPrices(
+    userId: number, 
+    planIds?: number[],
+    eligibility?: DiscountEligibility
+  ): Promise<PlanDiscountInfo[]> {
     try {
-      // 检查用户折扣资格
-      const eligibility = await this.checkDiscountEligibility(userId);
+      // 如果没有传入 eligibility，则查询
+      const userEligibility = eligibility || await this.checkDiscountEligibility(userId);
 
       // 构建查询
       let query = `
@@ -220,9 +234,9 @@ export class DiscountService {
         const discountRate = parseInt(row.discountRate);
         
         // 只有符合资格的用户才能享受折扣
-        const effectiveDiscountRate = eligibility.eligible ? discountRate : 100;
+        const effectiveDiscountRate = userEligibility.eligible ? discountRate : 100;
         const discountedPrice = this.calculateDiscountedPrice(originalPrice, effectiveDiscountRate);
-        const hasDiscount = eligibility.eligible && discountRate < 100;
+        const hasDiscount = userEligibility.eligible && discountRate < 100;
 
         return {
           planId: row.planId,
@@ -254,10 +268,26 @@ export class DiscountService {
         WHERE id = $1`,
         [userId]
       );
+      
+      // 清除该用户的折扣缓存
+      await this.invalidateUserDiscountCache(userId);
+      
       console.log(`[DiscountService] 用户 ${userId} 已标记使用首次购买折扣`);
     } catch (error) {
       console.error('[DiscountService] 标记首次购买折扣失败:', error);
       throw error;
+    }
+  }
+
+  /**
+   * 清除用户折扣相关缓存
+   */
+  async invalidateUserDiscountCache(userId: number): Promise<void> {
+    try {
+      await cacheService.del(`${CACHE_PREFIX.DISCOUNT_ELIGIBILITY}${userId}`);
+      await cacheService.del(`${CACHE_PREFIX.USER_STATUS}${userId}`);
+    } catch (error) {
+      console.error('[DiscountService] 清除折扣缓存失败:', error);
     }
   }
 

@@ -65,6 +65,48 @@ router.get('/discount-check', authenticate, async (req, res) => {
 });
 
 /**
+ * 获取用户状态（合并接口，减少请求数）
+ * GET /api/subscription/user-status
+ * 返回用户订阅状态和折扣资格，一次请求获取所有信息
+ * 使用缓存优化性能
+ */
+router.get('/user-status', authenticate, async (req, res) => {
+  try {
+    const userId = (req as any).user.userId;
+    
+    // 先获取折扣资格（有缓存）
+    const eligibility = await discountService.checkDiscountEligibility(userId);
+    
+    // 并行获取订阅和折扣价格，传入已有的 eligibility 避免重复查询
+    const [subscription, discountPlans] = await Promise.all([
+      subscriptionService.getUserActiveSubscription(userId),
+      discountService.getUserDiscountPrices(userId, undefined, eligibility)
+    ]);
+    
+    res.json({
+      success: true,
+      data: {
+        subscription,
+        discount: {
+          eligible: eligibility.eligible,
+          reason: eligibility.reason,
+          invitedByAgent: eligibility.invitedByAgent,
+          isFirstPurchase: eligibility.isFirstPurchase,
+          discountUsed: eligibility.discountUsed,
+          plans: discountPlans
+        }
+      }
+    });
+  } catch (error: any) {
+    console.error('获取用户状态失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '获取用户状态失败'
+    });
+  }
+});
+
+/**
  * 获取用户当前订阅
  * GET /api/subscription/current
  */

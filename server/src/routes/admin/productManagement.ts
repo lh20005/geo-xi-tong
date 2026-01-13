@@ -2,6 +2,7 @@ import express from 'express';
 import { productManagementService } from '../../services/ProductManagementService';
 import { authenticate, requireAdmin } from '../../middleware/adminAuth';
 import { pool } from '../../db/database';
+import { cacheService, CACHE_PREFIX, CACHE_TTL } from '../../services/CacheService';
 
 const router = express.Router();
 
@@ -219,6 +220,15 @@ export default router;
  */
 router.get('/booster-stats', async (req, res) => {
   try {
+    // 尝试从缓存获取
+    const cached = await cacheService.get<any[]>(CACHE_PREFIX.BOOSTER_STATS);
+    if (cached) {
+      return res.json({
+        success: true,
+        data: cached
+      });
+    }
+    
     const result = await pool.query(`
       SELECT 
         sp.id as plan_id,
@@ -236,18 +246,23 @@ router.get('/booster-stats', async (req, res) => {
       ORDER BY sp.display_order ASC
     `);
 
+    const data = result.rows.map(row => ({
+      planId: row.plan_id,
+      planName: row.plan_name,
+      planCode: row.plan_code,
+      price: parseFloat(row.price),
+      totalSold: parseInt(row.total_sold),
+      activeCount: parseInt(row.active_count),
+      activeRevenue: parseFloat(row.active_revenue),
+      totalRevenue: parseFloat(row.total_revenue)
+    }));
+    
+    // 写入缓存
+    await cacheService.set(CACHE_PREFIX.BOOSTER_STATS, data, CACHE_TTL.BOOSTER_STATS);
+
     res.json({
       success: true,
-      data: result.rows.map(row => ({
-        planId: row.plan_id,
-        planName: row.plan_name,
-        planCode: row.plan_code,
-        price: parseFloat(row.price),
-        totalSold: parseInt(row.total_sold),
-        activeCount: parseInt(row.active_count),
-        activeRevenue: parseFloat(row.active_revenue),
-        totalRevenue: parseFloat(row.total_revenue)
-      }))
+      data
     });
   } catch (error: any) {
     console.error('获取加量包统计失败:', error);

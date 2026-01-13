@@ -5,8 +5,15 @@ import path from 'path';
 // 加载环境变量 - 从 server 目录读取
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
+// 优化的连接池配置
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // 连接池大小配置
+  max: parseInt(process.env.DB_POOL_MAX || '30'),           // 最大连接数
+  min: parseInt(process.env.DB_POOL_MIN || '5'),            // 最小连接数
+  // 超时配置
+  idleTimeoutMillis: 30000,                                  // 空闲连接超时 30秒
+  connectionTimeoutMillis: 5000,                             // 连接超时 5秒
 });
 
 // 测试数据库连接

@@ -1,104 +1,88 @@
 import { pool } from '../db/database';
 import { Plan, Subscription, UsageStats, UsageRecord } from '../types/subscription';
 import { FEATURE_DEFINITIONS, FeatureCode } from '../config/features';
-import Redis from 'ioredis';
 import { getWebSocketService } from './WebSocketService';
 import { QuotaInitializationService } from './QuotaInitializationService';
-
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
-  password: process.env.REDIS_PASSWORD,
-});
+import { cacheService, CACHE_PREFIX, CACHE_TTL } from './CacheService';
 
 export class SubscriptionService {
   /**
    * 获取套餐配置（带 Redis 缓存）
    */
   async getPlanConfig(planCode: string): Promise<Plan | null> {
-    const cacheKey = `plan:${planCode}`;
+    const cacheKey = `${CACHE_PREFIX.PLAN}${planCode}`;
     
-    try {
-      // 尝试从缓存获取
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        return JSON.parse(cached);
-      }
-    } catch (error) {
-      console.error('Redis 缓存读取失败，降级为数据库查询:', error);
-    }
+    return cacheService.getOrSet<Plan | null>(
+      cacheKey,
+      async () => {
+        const result = await pool.query(
+          `SELECT p.*, 
+            json_agg(
+              json_build_object(
+                'id', f.id,
+                'plan_id', f.plan_id,
+                'feature_code', f.feature_code,
+                'feature_name', f.feature_name,
+                'feature_value', f.feature_value,
+                'feature_unit', f.feature_unit
+              )
+            ) as features
+          FROM subscription_plans p
+          LEFT JOIN plan_features f ON p.id = f.plan_id
+          WHERE p.plan_code = $1
+          GROUP BY p.id`,
+          [planCode]
+        );
 
-    // 从数据库查询
-    const result = await pool.query(
-      `SELECT p.*, 
-        json_agg(
-          json_build_object(
-            'id', f.id,
-            'plan_id', f.plan_id,
-            'feature_code', f.feature_code,
-            'feature_name', f.feature_name,
-            'feature_value', f.feature_value,
-            'feature_unit', f.feature_unit
-          )
-        ) as features
-      FROM subscription_plans p
-      LEFT JOIN plan_features f ON p.id = f.plan_id
-      WHERE p.plan_code = $1
-      GROUP BY p.id`,
-      [planCode]
+        return result.rows.length > 0 ? result.rows[0] : null;
+      },
+      CACHE_TTL.PLAN
     );
-
-    if (result.rows.length === 0) {
-      return null;
-    }
-
-    const plan = result.rows[0];
-
-    try {
-      // 缓存 1 小时
-      await redis.setex(cacheKey, 3600, JSON.stringify(plan));
-    } catch (error) {
-      console.error('Redis 缓存写入失败:', error);
-    }
-
-    return plan;
   }
 
   /**
-   * 获取所有激活的套餐
+   * 获取所有激活的套餐（带缓存）
    * @param planType 可选的套餐类型筛选 ('base' | 'booster')，默认只返回基础套餐
    */
   async getAllActivePlans(planType?: 'base' | 'booster' | 'all'): Promise<Plan[]> {
-    let whereClause = 'WHERE p.is_active = true';
+    const cacheKey = `${CACHE_PREFIX.PLAN_LIST}${planType || 'base'}`;
     
-    // 默认只返回基础套餐（向后兼容）
-    if (!planType || planType === 'base') {
-      whereClause += ` AND COALESCE(p.plan_type, 'base') = 'base'`;
-    } else if (planType === 'booster') {
-      whereClause += ` AND p.plan_type = 'booster'`;
-    }
-    // planType === 'all' 时不添加额外筛选
-    
-    const result = await pool.query(
-      `SELECT p.*, 
-        json_agg(
-          json_build_object(
-            'id', f.id,
-            'plan_id', f.plan_id,
-            'feature_code', f.feature_code,
-            'feature_name', f.feature_name,
-            'feature_value', f.feature_value,
-            'feature_unit', f.feature_unit
-          )
-        ) as features
-      FROM subscription_plans p
-      LEFT JOIN plan_features f ON p.id = f.plan_id
-      ${whereClause}
-      GROUP BY p.id
-      ORDER BY p.display_order ASC`
-    );
+    return cacheService.getOrSet<Plan[]>(
+      cacheKey,
+      async () => {
+        let whereClause = 'WHERE p.is_active = true';
+        
+        // 默认只返回基础套餐（向后兼容）
+        if (!planType || planType === 'base') {
+          whereClause += ` AND COALESCE(p.plan_type, 'base') = 'base'`;
+        } else if (planType === 'booster') {
+          whereClause += ` AND p.plan_type = 'booster'`;
+        }
+        // planType === 'all' 时不添加额外筛选
+        
+        const result = await pool.query(
+          `SELECT p.*, 
+            json_agg(
+              json_build_object(
+                'id', f.id,
+                'plan_id', f.plan_id,
+                'feature_code', f.feature_code,
+                'feature_name', f.feature_name,
+                'feature_value', f.feature_value,
+                'feature_unit', f.feature_unit
+              )
+            ) as features
+          FROM subscription_plans p
+          LEFT JOIN plan_features f ON p.id = f.plan_id
+          ${whereClause}
+          GROUP BY p.id
+          ORDER BY p.display_order ASC`
+        );
 
-    return result.rows;
+        return result.rows;
+      },
+      CACHE_TTL.PLAN_LIST
+    );
   }
 
   /**
@@ -428,7 +412,9 @@ export class SubscriptionService {
    */
   async clearPlanCache(planCode: string): Promise<void> {
     try {
-      await redis.del(`plan:${planCode}`);
+      await cacheService.del(`${CACHE_PREFIX.PLAN}${planCode}`);
+      // 同时清除套餐列表缓存
+      await cacheService.invalidatePlanCache();
     } catch (error) {
       console.error('清除缓存失败:', error);
     }
