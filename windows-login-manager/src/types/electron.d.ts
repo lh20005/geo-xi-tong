@@ -71,6 +71,37 @@ export interface ElectronAPI {
     saveTokens: (tokens: { authToken: string; refreshToken: string }) => Promise<void>;
     clearTokens: () => Promise<void>;
   };
+
+  // 软件更新
+  updater: {
+    getVersion: () => Promise<string>;
+    getStatus: () => Promise<UpdateStatus>;
+    checkForUpdates: () => Promise<{ success: boolean; message: string; updateAvailable?: boolean }>;
+    downloadUpdate: () => Promise<{ success: boolean; message: string }>;
+    installUpdate: () => Promise<{ success: boolean; message: string }>;
+    getInfo: () => Promise<UpdateInfoResult>;
+    onStatusChanged: (callback: (status: UpdateStatus) => void) => () => void;
+  };
+}
+
+// 更新状态类型
+export interface UpdateStatus {
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  message: string;
+  progress?: number;
+  version?: string;
+  releaseNotes?: string;
+  releaseDate?: string;
+  error?: string;
+}
+
+// 更新信息类型
+export interface UpdateInfoResult {
+  currentVersion: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  releaseNotes?: string;
+  releaseDate?: string;
 }
 
 export interface LoginResult {

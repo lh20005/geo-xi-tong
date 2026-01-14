@@ -9,6 +9,7 @@ import { ContentSecurityPolicy } from './security/csp';
 import { wsManager, WebSocketManager } from './websocket/manager';
 import { userWsManager, UserWebSocketManager } from './websocket/userManager';
 import { storageManager } from './storage/manager';
+import { AutoUpdater } from './updater/auto-updater';
 
 // 初始化核心服务
 const logger = Logger.getInstance();
@@ -76,6 +77,9 @@ class ApplicationManager {
       
       // 初始化用户管理WebSocket连接
       await this.initializeUserWebSocket();
+      
+      // 初始化自动更新器
+      this.initializeAutoUpdater();
       
       // 处理应用激活（macOS）
       app.on('activate', () => {
@@ -450,6 +454,40 @@ class ApplicationManager {
    */
   private deriveWebSocketUrl(httpUrl: string): string {
     return WebSocketManager.deriveWebSocketUrl(httpUrl);
+  }
+
+  /**
+   * 初始化自动更新器
+   */
+  private initializeAutoUpdater(): void {
+    try {
+      logger.info('Initializing auto updater...');
+      
+      const autoUpdater = AutoUpdater.getInstance();
+      
+      // 设置主窗口引用
+      if (this.window) {
+        autoUpdater.setMainWindow(this.window);
+      }
+      
+      // 设置更新服务器 URL（腾讯云 COS）
+      // 注意：需要在 .env 或配置中设置 UPDATE_SERVER_URL
+      const updateServerUrl = process.env.UPDATE_SERVER_URL;
+      if (updateServerUrl) {
+        autoUpdater.setFeedURL(updateServerUrl);
+        logger.info(`Auto updater configured with URL: ${updateServerUrl}`);
+        
+        // 启动定期检查（每 24 小时）
+        autoUpdater.startPeriodicCheck(24);
+      } else {
+        logger.warn('UPDATE_SERVER_URL not configured, auto updater disabled');
+      }
+      
+      logger.info('Auto updater initialized');
+    } catch (error) {
+      logger.error('Failed to initialize auto updater:', error);
+      // 不抛出错误，允许应用继续运行
+    }
   }
 
   /**

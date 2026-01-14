@@ -148,7 +148,8 @@
     },
     "publish": {
       "provider": "generic",
-      "url": "https://your-update-server.com/updates"
+      "url": "${UPDATE_SERVER_URL}",
+      "useMultipleRangeRequest": false
     }
   }
 }

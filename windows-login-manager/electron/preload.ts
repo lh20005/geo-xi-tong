@@ -76,6 +76,23 @@ export interface ElectronAPI {
   
   // 事件监听
   onTokensSaved: (callback: (tokens: { authToken: string; refreshToken: string }) => void) => () => void;
+
+  // 软件更新
+  updater: {
+    getVersion: () => Promise<string>;
+    getStatus: () => Promise<any>;
+    checkForUpdates: () => Promise<{ success: boolean; message: string; updateAvailable?: boolean }>;
+    downloadUpdate: () => Promise<{ success: boolean; message: string }>;
+    installUpdate: () => Promise<{ success: boolean; message: string }>;
+    getInfo: () => Promise<{
+      currentVersion: string;
+      latestVersion?: string;
+      updateAvailable: boolean;
+      releaseNotes?: string;
+      releaseDate?: string;
+    }>;
+    onStatusChanged: (callback: (status: any) => void) => () => void;
+  };
 }
 
 // 创建 API 对象
@@ -183,6 +200,23 @@ const electronAPI = {
     return () => {
       ipcRenderer.removeListener('tokens-saved', listener);
     };
+  },
+
+  // 软件更新
+  updater: {
+    getVersion: () => ipcRenderer.invoke('updater:get-version'),
+    getStatus: () => ipcRenderer.invoke('updater:get-status'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+    installUpdate: () => ipcRenderer.invoke('updater:install'),
+    getInfo: () => ipcRenderer.invoke('updater:get-info'),
+    onStatusChanged: (callback: (status: any) => void) => {
+      const listener = (_event: any, status: any) => callback(status);
+      ipcRenderer.on('updater:status-changed', listener);
+      return () => {
+        ipcRenderer.removeListener('updater:status-changed', listener);
+      };
+    },
   },
 } as ElectronAPI;
 

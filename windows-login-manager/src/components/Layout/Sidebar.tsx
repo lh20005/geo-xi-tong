@@ -23,6 +23,7 @@ import {
   UserOutlined,
   LogoutOutlined,
   DollarOutlined,
+  CloudDownloadOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 
@@ -214,6 +215,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       key: '/user-center',
       icon: <UserOutlined />,
       label: '个人中心',
+    },
+    {
+      key: '/software-update',
+      icon: <CloudDownloadOutlined />,
+      label: '升级软件',
     },
     {
       key: 'logout',

@@ -45,6 +45,9 @@ const PaymentPage = lazy(() => import('../pages/PaymentPage'));
 // 登录管理器原有页面
 const Settings = lazy(() => import('../pages/Settings'));
 
+// 软件升级
+const SoftwareUpdatePage = lazy(() => import('../pages/SoftwareUpdatePage'));
+
 // 加载组件
 const LoadingFallback = () => (
   <div style={{ 
@@ -326,6 +329,16 @@ export const routes = [
     element: (
       <Suspense fallback={<LoadingFallback />}>
         <Settings />
+      </Suspense>
+    )
+  },
+  
+  // 软件升级
+  {
+    path: '/software-update',
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <SoftwareUpdatePage />
       </Suspense>
     )
   },
