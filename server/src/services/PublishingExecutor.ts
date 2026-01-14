@@ -4,6 +4,8 @@ import { accountService } from './AccountService';
 import { adapterRegistry } from './adapters/AdapterRegistry';
 import { pool } from '../db/database';
 import { TaskTimeoutError } from '../errors/TaskTimeoutError';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * 发布执行器
@@ -294,6 +296,9 @@ export class PublishingExecutor {
         console.log(`📄 从数据库获取文章内容: "${article.title}"`);
       }
 
+      // 预检查：验证文章中的图片是否存在（在启动浏览器前检查，节省资源）
+      await this.validateArticleImages(taskId, article.content);
+
       // 启动浏览器（根据任务配置决定是否显示浏览器窗口）
       const headlessMode = task.config?.headless !== false; // 默认为静默模式
       const modeText = headlessMode ? '静默模式' : '可视化模式';
@@ -514,6 +519,49 @@ export class PublishingExecutor {
       'UPDATE articles SET publishing_status = NULL WHERE id = $1',
       [articleId]
     );
+  }
+
+  /**
+   * 预检查：验证文章中的图片是否存在
+   * 在启动浏览器前检查，避免浪费资源
+   */
+  private async validateArticleImages(taskId: number, content: string): Promise<void> {
+    // 提取文章中的图片路径
+    const imageRegex = /!\[.*?\]\((\/uploads\/[^)]+)\)/g;
+    const matches = content.matchAll(imageRegex);
+    const imagePaths: string[] = [];
+    
+    for (const match of matches) {
+      imagePaths.push(match[1]);
+    }
+    
+    if (imagePaths.length === 0) {
+      await publishingService.logMessage(taskId, 'info', '📷 文章中没有图片，跳过图片检查');
+      return;
+    }
+    
+    await publishingService.logMessage(taskId, 'info', `📷 检查 ${imagePaths.length} 张图片是否存在...`);
+    
+    const missingImages: string[] = [];
+    const uploadsDir = path.join(process.cwd(), 'uploads');
+    
+    for (const imagePath of imagePaths) {
+      // 将 /uploads/xxx 转换为实际文件路径
+      const relativePath = imagePath.replace(/^\/uploads\//, '');
+      const fullPath = path.join(uploadsDir, relativePath);
+      
+      if (!fs.existsSync(fullPath)) {
+        missingImages.push(imagePath);
+      }
+    }
+    
+    if (missingImages.length > 0) {
+      const errorMsg = `图片文件不存在: ${missingImages.join(', ')}`;
+      await publishingService.logMessage(taskId, 'error', `❌ ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+    
+    await publishingService.logMessage(taskId, 'info', '✅ 所有图片文件检查通过');
   }
 
   /**

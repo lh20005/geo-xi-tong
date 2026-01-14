@@ -1844,31 +1844,6 @@ export class ArticleGenerationService {
   }
 
   /**
-   * 保存文章到数据库（旧方法，保留用于向后兼容）
-   * @deprecated 使用 saveArticleWithUsageTracking 代替
-   */
-  async saveArticle(
-    taskId: number,
-    distillationId: number,
-    keyword: string,
-    title: string,
-    content: string,
-    imageUrl: string,
-    provider: string,
-    userId: number
-  ): Promise<number> {
-    const result = await pool.query(
-      `INSERT INTO articles 
-       (title, keyword, distillation_id, task_id, content, image_url, provider, user_id) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
-       RETURNING id`,
-      [title, keyword, distillationId, taskId, content, imageUrl, provider, userId]
-    );
-
-    return result.rows[0].id;
-  }
-
-  /**
    * 重试失败的任务
    */
   async retryTask(taskId: number): Promise<void> {
