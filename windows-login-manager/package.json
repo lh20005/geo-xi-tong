@@ -148,7 +148,7 @@
     },
     "publish": {
       "provider": "generic",
-      "url": "${UPDATE_SERVER_URL}",
+      "url": "https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases",
       "useMultipleRangeRequest": false
     }
   }

@@ -162,11 +162,17 @@ class StorageManager {
 
   /**
    * 获取默认配置
-   * 优先使用环境变量，支持连接远程服务器
+   * 生产环境使用硬编码的服务器地址
    */
   private getDefaultConfig(): AppConfig {
-    // 优先使用环境变量（支持 Electron 主进程）
-    const serverUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    // 判断是否为生产环境
+    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+    
+    // 生产环境使用硬编码的服务器地址
+    const serverUrl = isDev 
+      ? (process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000')
+      : 'https://jzgeo.cc';
+    
     return {
       serverUrl,
       autoSync: true,

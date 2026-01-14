@@ -349,7 +349,7 @@ export class AutoUpdater {
   /**
    * 格式化发布说明
    */
-  private formatReleaseNotes(releaseNotes: string | Array<{ version: string; note: string }> | null | undefined): string {
+  private formatReleaseNotes(releaseNotes: string | Array<{ version: string; note: string | null }> | null | undefined): string {
     if (!releaseNotes) return '';
     
     if (typeof releaseNotes === 'string') {
@@ -357,7 +357,7 @@ export class AutoUpdater {
     }
     
     if (Array.isArray(releaseNotes)) {
-      return releaseNotes.map(item => `${item.version}: ${item.note}`).join('\n');
+      return releaseNotes.map(item => `${item.version}: ${item.note || ''}`).join('\n');
     }
     
     return '';

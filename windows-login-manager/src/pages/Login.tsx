@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ipcBridge } from '../services/ipc';
 import { config } from '../config/env';
+import logoImg from '/images/logo.png';
 import './Login.css';
 
 interface LoginProps {
@@ -73,7 +74,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       <div className="login-card">
         <div className="login-header">
           <div className="login-icon">
-            <img src="/images/logo.png" alt="GEO Logo" />
+            <img src={logoImg} alt="GEO Logo" />
           </div>
           <h1>GEO优化系统</h1>
           <p>Windows登录管理器</p>

@@ -26,6 +26,7 @@ import {
   CloudDownloadOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
+import logoImg from '/images/logo.png';
 
 const { Sider } = Layout;
 
@@ -263,7 +264,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         }}
       >
         <img 
-          src="/images/logo.png" 
+          src={logoImg} 
           alt="Logo" 
           style={{ 
             width: 32, 
