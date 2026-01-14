@@ -1291,34 +1291,16 @@ export default function PublishingTasksPage() {
               </Col>
             </Row>
 
-            {/* 发布模式切换 */}
+            {/* 发布模式显示（固定为静默发布） */}
             <Row gutter={16} align="middle" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
               <Col flex="auto">
                 <Space size="middle" align="center">
-                  {headlessMode ? (
-                    <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
-                  ) : (
-                    <EyeOutlined style={{ color: '#fff', fontSize: 20 }} />
-                  )}
+                  <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
                   <Text style={{ color: '#fff', fontSize: 14 }}>发布模式：</Text>
-                  <Switch
-                    checked={!headlessMode}
-                    onChange={(checked) => setHeadlessMode(!checked)}
-                    checkedChildren="可视化发布"
-                    unCheckedChildren="静默发布"
-                    style={{ minWidth: 100 }}
-                  />
-                  <Tooltip 
-                    title={
-                      headlessMode 
-                        ? "静默模式：浏览器在后台运行，不显示界面，速度更快" 
-                        : "可视化模式：打开浏览器窗口，可以实时观看自动操作过程"
-                    }
-                  >
-                    <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
-                      {headlessMode ? '🔇 静默模式：后台运行，不显示浏览器' : '👁️ 可视化模式：打开浏览器窗口观看操作'}
-                    </Text>
-                  </Tooltip>
+                  <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>静默发布</Tag>
+                  <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
+                    🔇 静默模式：后台运行，不显示浏览器
+                  </Text>
                 </Space>
               </Col>
             </Row>

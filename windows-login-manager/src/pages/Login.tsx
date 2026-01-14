@@ -77,7 +77,6 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             <img src={logoImg} alt="GEO Logo" />
           </div>
           <h1>GEO优化系统</h1>
-          <p>Windows登录管理器</p>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">

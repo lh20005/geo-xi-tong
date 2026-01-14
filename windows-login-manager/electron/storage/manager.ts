@@ -147,10 +147,16 @@ class StorageManager {
   async getConfig(): Promise<AppConfig | null> {
     try {
       const config = store.get('config') as AppConfig;
+      const defaultConfig = this.getDefaultConfig();
       
       if (!config) {
         log.info('No config found, returning default');
-        return this.getDefaultConfig();
+        return defaultConfig;
+      }
+
+      // 生产环境下，始终使用硬编码的服务器地址
+      if (app.isPackaged) {
+        return { ...config, serverUrl: defaultConfig.serverUrl };
       }
 
       return config;
