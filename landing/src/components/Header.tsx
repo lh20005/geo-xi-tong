@@ -219,7 +219,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
               
               {/* 下拉菜单 */}
               <div 
-                className={`absolute top-full left-1/2 -translate-x-1/2 mt-2 w-56 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-200 origin-top ${
+                className={`absolute top-full left-1/2 -translate-x-1/2 mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden transition-all duration-200 origin-top ${
                   downloadMenuOpen 
                     ? 'opacity-100 scale-100 visible' 
                     : 'opacity-0 scale-95 invisible'
@@ -283,6 +283,16 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                       <div className="text-xs text-gray-500">适用于 Intel 处理器</div>
                     </div>
                   </a>
+                  
+                  {/* Mac 安装说明 */}
+                  <div className="border-t border-gray-100 mt-2 pt-2 px-4 pb-2">
+                    <div className="flex items-start gap-2 text-xs text-gray-500">
+                      <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Mac 用户首次打开请右键点击应用，选择"打开"以允许运行</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -290,7 +300,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
             {/* 根据登录状态显示不同按钮 */}
             {isLoggedIn ? (
               <>
-                {/* 进入系统按钮 */}
+                {/* 进入网页版按钮 */}
                 <button
                   onClick={() => {
                     const token = localStorage.getItem('auth_token');
@@ -308,7 +318,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                   }}
                   className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all duration-300 transform hover:scale-105"
                 >
-                  进入系统
+                  进入网页版
                 </button>
                 
                 {/* 桌面端用户菜单 */}
@@ -335,7 +345,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                     : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:shadow-lg'
                 }`}
               >
-                立即登录
+                登录网页版
               </Link>
             )}
           </div>
@@ -464,6 +474,13 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                     </svg>
                     <span>Mac 版（Intel 芯片）</span>
                   </a>
+                  {/* Mac 安装说明 */}
+                  <div className="flex items-start gap-2 text-xs text-gray-500 mt-2 pt-2 border-t border-gray-100">
+                    <svg className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Mac 用户首次打开请右键点击应用，选择"打开"</span>
+                  </div>
                 </div>
               </div>
 
@@ -491,7 +508,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                     }}
                     className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all"
                   >
-                    进入系统
+                    进入网页版
                   </button>
                   
                   <MobileUserMenu 
@@ -509,7 +526,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                   onClick={() => setMobileMenuOpen(false)}
                   className="block w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white font-semibold rounded-lg hover:shadow-lg transition-all text-center"
                 >
-                  立即登录
+                  登录网页版
                 </Link>
               )}
             </div>
