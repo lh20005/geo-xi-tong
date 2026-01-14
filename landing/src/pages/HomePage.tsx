@@ -119,7 +119,8 @@ export default function HomePage() {
     const badges: { [key: string]: { text: string; color: string } } = {
       'free': { text: '入门首选', color: 'yellow' },
       'professional': { text: '最受欢迎', color: 'yellow' },
-      'enterprise': { text: '运营必备', color: 'yellow' }
+      'enterprise': { text: '运营必备', color: 'yellow' },
+      'qyb': { text: '高性价比', color: 'yellow' }
     };
     return badges[planCode] || { text: '随时加量', color: 'yellow' };
   };
