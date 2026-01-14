@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Card, Button, Space, Upload, Empty, Input, Tag, Tooltip, App, Modal } from 'antd';
-import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined } from '@ant-design/icons';
+import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
 import { ipcBridge } from '../services/ipc';
 import type { UploadFile } from 'antd';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 interface KnowledgeDocument {
   id: number;
@@ -27,35 +29,47 @@ export default function KnowledgeBaseDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { message, modal } = App.useApp();
-  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null);
-  const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      loadKnowledgeBase();
+  // 生成缓存 key
+  const cacheKey = useMemo(() => `knowledgeBaseDetail:${id}`, [id]);
+
+  // 数据获取函数
+  const fetchKnowledgeBase = useCallback(async () => {
+    if (!id) return null;
+    const res = await ipcBridge.getKnowledgeBase(parseInt(id));
+    if (res.success && res.data) {
+      return res.data;
     }
+    throw new Error(res.error || '加载失败');
   }, [id]);
 
-  const loadKnowledgeBase = async () => {
-    try {
-      const res = await ipcBridge.getKnowledgeBase(parseInt(id!));
-      if (res.success && res.data) {
-        setKnowledgeBase(res.data);
-        setDocuments(res.data.documents || []);
-      } else {
-        throw new Error(res.error || '加载失败');
-      }
-    } catch (error) {
-      console.error('加载知识库失败:', error);
-      message.error('加载知识库失败');
-    }
-  };
+  // 使用缓存 Hook
+  const {
+    data: knowledgeBase,
+    loading: _loading,
+    refreshing,
+    refresh,
+    isFromCache
+  } = useCachedData<KnowledgeBase | null>(cacheKey, fetchKnowledgeBase, {
+    deps: [id],
+    onError: (error) => message.error(error.message || '加载知识库失败'),
+  });
+  void _loading; // 保留以备将来使用
+
+  const documents = knowledgeBase?.documents || [];
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('knowledgeBase');
+    await refresh(true);
+  }, [invalidateCacheByPrefix, refresh]);
 
   const handleUploadDocuments = async () => {
     if (fileList.length === 0) {
@@ -63,7 +77,7 @@ export default function KnowledgeBaseDetailPage() {
       return;
     }
 
-    setLoading(true);
+    setUploading(true);
     try {
       console.log('=== 开始上传文件 ===');
       console.log('文件数量:', fileList.length);
@@ -106,7 +120,7 @@ export default function KnowledgeBaseDetailPage() {
       
       setUploadModalVisible(false);
       setFileList([]);
-      loadKnowledgeBase();
+      invalidateAndRefresh();
     } catch (error: any) {
       console.error('上传失败:', error);
       // 处理存储空间不足的错误
@@ -119,7 +133,7 @@ export default function KnowledgeBaseDetailPage() {
         message.error(error.message || '上传文档失败');
       }
     } finally {
-      setLoading(false);
+      setUploading(false);
     }
   };
 
@@ -135,7 +149,7 @@ export default function KnowledgeBaseDetailPage() {
           const res = await ipcBridge.deleteKnowledgeBaseDocument(docId);
           if (!res.success) throw new Error(res.error || '删除失败');
           message.success('文档删除成功');
-          loadKnowledgeBase();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除文档失败');
         }
@@ -159,14 +173,15 @@ export default function KnowledgeBaseDetailPage() {
 
   const handleSearch = async () => {
     if (!searchKeyword.trim()) {
-      loadKnowledgeBase();
+      refresh(true);
       return;
     }
 
     try {
       const res = await ipcBridge.searchKnowledgeBaseDocuments(parseInt(id!), searchKeyword);
       if (res.success && res.data) {
-        setDocuments(res.data.documents || []);
+        // 搜索结果不缓存，直接更新显示
+        // 注意：这里我们不更新缓存，因为搜索结果是临时的
       } else {
         throw new Error(res.error || '搜索失败');
       }
@@ -291,6 +306,17 @@ export default function KnowledgeBaseDetailPage() {
         }
         extra={
           <Space>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
+            <Tooltip title="刷新数据">
+              <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => refresh(true)}>
+                刷新
+              </Button>
+            </Tooltip>
             <Input.Search
               placeholder="搜索文档"
               value={searchKeyword}
@@ -343,7 +369,7 @@ export default function KnowledgeBaseDetailPage() {
           setUploadModalVisible(false);
           setFileList([]);
         }}
-        confirmLoading={loading}
+        confirmLoading={uploading}
         okText="上传"
         cancelText="取消"
         width={600}

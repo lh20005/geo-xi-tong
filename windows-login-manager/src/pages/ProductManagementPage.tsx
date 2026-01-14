@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { 
   Table, Button, Modal, Form, Input, InputNumber, Switch, 
   message, Card, Tag, Space, Timeline, Descriptions,
@@ -409,7 +409,7 @@ const ProductManagementPage = () => {
   return (
     <div style={{ padding: 24 }}>
       {/* 加量包统计卡片 */}
-      {(planTypeFilter === 'all' || planTypeFilter === 'booster') && boosterStats.length > 0 && (
+      {(planTypeFilter === 'all' || planTypeFilter === 'booster') && boosterStats && boosterStats.length > 0 && (
         <Card 
           title={
             <Space>
@@ -424,7 +424,7 @@ const ProductManagementPage = () => {
             <Col xs={24} sm={12} md={6}>
               <Statistic
                 title="总销售数量"
-                value={boosterStats.reduce((sum, s) => sum + s.totalSold, 0)}
+                value={(boosterStats || []).reduce((sum, s) => sum + s.totalSold, 0)}
                 prefix={<ShoppingOutlined />}
                 suffix="份"
               />
@@ -432,7 +432,7 @@ const ProductManagementPage = () => {
             <Col xs={24} sm={12} md={6}>
               <Statistic
                 title="活跃加量包"
-                value={boosterStats.reduce((sum, s) => sum + s.activeCount, 0)}
+                value={(boosterStats || []).reduce((sum, s) => sum + s.activeCount, 0)}
                 prefix={<UserOutlined />}
                 suffix="份"
                 valueStyle={{ color: '#52c41a' }}
@@ -441,7 +441,7 @@ const ProductManagementPage = () => {
             <Col xs={24} sm={12} md={6}>
               <Statistic
                 title="总收入"
-                value={boosterStats.reduce((sum, s) => sum + s.totalRevenue, 0)}
+                value={(boosterStats || []).reduce((sum, s) => sum + s.totalRevenue, 0)}
                 prefix={<DollarOutlined />}
                 precision={2}
                 suffix="元"
@@ -451,7 +451,7 @@ const ProductManagementPage = () => {
             <Col xs={24} sm={12} md={6}>
               <Statistic
                 title="活跃收入"
-                value={boosterStats.reduce((sum, s) => sum + s.activeRevenue, 0)}
+                value={(boosterStats || []).reduce((sum, s) => sum + s.activeRevenue, 0)}
                 prefix={<DollarOutlined />}
                 precision={2}
                 suffix="元"

@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Table, Button, Modal, Select, message, Space, Tag, Popconfirm } from 'antd';
-import { SafetyOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Card, Table, Button, Modal, Select, message, Space, Tag, Popconfirm, Tooltip } from 'antd';
+import { SafetyOutlined, PlusOutlined, DeleteOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import type { ColumnsType } from 'antd/es/table';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Option } = Select;
 
@@ -19,6 +21,9 @@ interface User {
   role: string;
 }
 
+// 类型别名用于 permissionsByCategory
+type PermissionsByCategory = Record<string, Permission[]>;
+
 interface UserPermission {
   id: number;
   user_id: number;
@@ -31,41 +36,57 @@ interface UserPermission {
 }
 
 const PermissionsPage: React.FC = () => {
-  const [permissions, setPermissions] = useState<Permission[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [userPermissions, setUserPermissions] = useState<UserPermission[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchData();
+  // 数据获取函数
+  const fetchData = useCallback(async () => {
+    const [permsRes, usersRes, userPermsRes] = await Promise.all([
+      apiClient.get('/security/permissions'),
+      apiClient.get('/admin/users?page=1&pageSize=1000'),
+      apiClient.get('/security/user-permissions')
+    ]);
+
+    const permissions = permsRes.data.success ? (permsRes.data.data || []) : (permsRes.data || []);
+    const users = usersRes.data?.data?.users || [];
+    const userPermissions = userPermsRes.data || [];
+
+    return { permissions, users, userPermissions };
   }, []);
 
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [permsRes, usersRes, userPermsRes] = await Promise.all([
-        apiClient.get('/security/permissions'),
-        apiClient.get('/admin/users?page=1&pageSize=1000'),
-        apiClient.get('/security/user-permissions')
-      ]);
+  // 使用缓存 Hook
+  const {
+    data,
+    loading,
+    refreshing,
+    refresh,
+    isFromCache
+  } = useCachedData('permissions:all', fetchData, {
+    onError: (error) => message.error(error.message || '获取数据失败'),
+  });
 
-      if (permsRes.data.success) {
-        setPermissions(permsRes.data.data || []);
-      } else {
-        setPermissions(permsRes.data || []);
+  const permissions = data?.permissions || [];
+  const users = data?.users || [];
+  const userPermissions = data?.userPermissions || [];
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('permissions:');
+    await refresh(true);
+  }, [invalidateCacheByPrefix, refresh]);
+
+  // 按类别分组权限
+  const permissionsByCategory = useMemo((): PermissionsByCategory => {
+    return permissions.reduce((acc: PermissionsByCategory, perm: Permission) => {
+      if (!acc[perm.category]) {
+        acc[perm.category] = [];
       }
-      setUsers(usersRes.data?.data?.users || []);
-      setUserPermissions(userPermsRes.data || []);
-    } catch (error: any) {
-      console.error('Failed to fetch data:', error);
-      message.error(error.response?.data?.message || '获取数据失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+      acc[perm.category].push(perm);
+      return acc;
+    }, {} as PermissionsByCategory);
+  }, [permissions]);
 
   const handleGrantPermission = async () => {
     if (!selectedUser || !selectedPermission) {
@@ -87,7 +108,7 @@ const PermissionsPage: React.FC = () => {
         setModalVisible(false);
         setSelectedUser(null);
         setSelectedPermission(null);
-        fetchData();
+        invalidateAndRefresh();
       } else {
         message.error(response.data.message || '授予权限失败');
       }
@@ -109,7 +130,7 @@ const PermissionsPage: React.FC = () => {
 
       if (response.data.success) {
         message.success(response.data.message || '权限撤销成功');
-        fetchData();
+        invalidateAndRefresh();
       } else {
         message.error(response.data.message || '撤销权限失败');
       }
@@ -166,23 +187,27 @@ const PermissionsPage: React.FC = () => {
     }
   ];
 
-  // 按类别分组权限
-  const permissionsByCategory = permissions.reduce((acc, perm) => {
-    if (!acc[perm.category]) {
-      acc[perm.category] = [];
-    }
-    acc[perm.category].push(perm);
-    return acc;
-  }, {} as Record<string, Permission[]>);
-
   return (
     <div style={{ padding: '24px' }}>
       <h1 style={{ marginBottom: '24px' }}>
         <SafetyOutlined /> 权限管理
+        <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
+          {isFromCache && !refreshing && (
+            <Tooltip title="数据来自缓存">
+              <Tag color="gold">缓存</Tag>
+            </Tooltip>
+          )}
+          {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
+        </Space>
       </h1>
 
       <Card style={{ marginBottom: '24px' }}>
         <Space>
+          <Tooltip title="刷新数据">
+            <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => refresh(true)}>
+              刷新
+            </Button>
+          </Tooltip>
           <Button
             type="primary"
             icon={<PlusOutlined />}
@@ -224,7 +249,7 @@ const PermissionsPage: React.FC = () => {
               value={selectedUser}
               onChange={setSelectedUser}
             >
-              {users.map(user => (
+              {users.map((user: User) => (
                 <Option key={user.id} value={user.id}>
                   {user.username} ({user.role})
                 </Option>
@@ -240,9 +265,9 @@ const PermissionsPage: React.FC = () => {
               value={selectedPermission}
               onChange={setSelectedPermission}
             >
-              {Object.entries(permissionsByCategory).map(([category, perms]) => (
+              {Object.entries(permissionsByCategory).map(([category, perms]: [string, Permission[]]) => (
                 <Select.OptGroup key={category} label={category}>
-                  {perms.map(perm => (
+                  {perms.map((perm: Permission) => (
                     <Option key={perm.name} value={perm.name}>
                       {perm.name} - {perm.description}
                     </Option>

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, App,
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
-  InputNumber, Switch, Table
+  InputNumber, Table, Switch
 } from 'antd';
 import {
   SendOutlined, ReloadOutlined, CheckCircleOutlined,
@@ -16,7 +16,7 @@ import {
   getArticles, getArticle, Article 
 } from '../api/articles';
 import { 
-  getPlatforms, getAccounts, Platform, Account,
+  getPlatforms, getAccounts, Account,
   createPublishingTask, getPublishingTasks, getTaskLogs,
   executeTask, cancelTask, terminateTask, deleteTask,
   batchDeleteTasks, deleteAllTasks, PublishingTask, PublishingLog,
@@ -25,6 +25,8 @@ import {
 } from '../api/publishing';
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Text } = Typography;
 
@@ -67,20 +69,15 @@ const getPlatformIcon = (platformId: string): string => {
 export default function PublishingTasksPage() {
   // 使用 App 组件的 hooks API
   const { message } = App.useApp();
+  const { invalidateCacheByPrefix } = useCacheStore();
   
   // 文章选择
-  const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
-  const [articlesLoading, setArticlesLoading] = useState(false);
   const [articlePage, setArticlePage] = useState(1);
   const [articlePageSize, setArticlePageSize] = useState(10);
-  const [articleTotal, setArticleTotal] = useState(0);
 
   // 平台选择
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<number>>(new Set());
-  const [, setPlatformsLoading] = useState(false);
 
   // 任务管理
   const [tasks, setTasks] = useState<PublishingTask[]>([]);
@@ -140,15 +137,64 @@ export default function PublishingTasksPage() {
     todayPublished: 0
   });
 
-  useEffect(() => {
-    loadDraftArticles();
-    loadPlatformsAndAccounts();
-    loadTasks();
+  // 草稿文章缓存 key
+  const articlesCacheKey = useMemo(() => 
+    `publishingTasks:articles:${articlePage}:${articlePageSize}`,
+    [articlePage, articlePageSize]
+  );
+
+  // 草稿文章数据获取函数
+  const fetchDraftArticles = useCallback(async () => {
+    const response = await getArticles(articlePage, articlePageSize, { publishStatus: 'unpublished' });
+    return response;
+  }, [articlePage, articlePageSize]);
+
+  // 使用缓存 Hook 获取草稿文章
+  const {
+    data: articlesData,
+    loading: articlesLoading,
+    refresh: refreshArticles
+  } = useCachedData(articlesCacheKey, fetchDraftArticles, {
+    deps: [articlePage, articlePageSize],
+    onError: () => message.error('加载草稿文章失败'),
+  });
+
+  const articles = articlesData?.articles || [];
+  const articleTotal = articlesData?.total || 0;
+
+  // 平台和账号数据获取函数
+  const fetchPlatformsAndAccounts = useCallback(async () => {
+    const [platformsData, accountsData] = await Promise.all([
+      getPlatforms(),
+      getAccounts()
+    ]);
+    return { platforms: platformsData, accounts: accountsData };
   }, []);
 
+  // 使用缓存 Hook 获取平台和账号
+  const {
+    data: platformData,
+    refresh: refreshPlatforms
+  } = useCachedData('publishingTasks:platforms', fetchPlatformsAndAccounts, {
+    onError: () => message.error('加载平台信息失败'),
+  });
+
+  const platforms = platformData?.platforms || [];
+  const accounts = (platformData?.accounts || []).filter((acc: Account) => acc.status === 'active');
+
+  // 更新统计数据
   useEffect(() => {
-    loadDraftArticles();
-  }, [articlePage, articlePageSize]);
+    if (articlesData) {
+      setStats(prev => ({ ...prev, draftArticles: articlesData.total || 0 }));
+    }
+  }, [articlesData]);
+
+  useEffect(() => {
+    if (platformData) {
+      const boundPlatforms = new Set(platformData.accounts?.map((acc: Account) => acc.platform_id) || []).size;
+      setStats(prev => ({ ...prev, boundPlatforms }));
+    }
+  }, [platformData]);
 
   useEffect(() => {
     loadTasks();
@@ -174,44 +220,7 @@ export default function PublishingTasksPage() {
     localStorage.setItem('publishHeadlessMode', headlessMode.toString());
   }, [headlessMode]);
 
-  // 加载草稿文章
-  const loadDraftArticles = async () => {
-    setArticlesLoading(true);
-    try {
-      const response = await getArticles(articlePage, articlePageSize, { publishStatus: 'unpublished' });
-      setArticles(response.articles || []);
-      setArticleTotal(response.total || 0);
-      setStats(prev => ({ ...prev, draftArticles: response.total || 0 }));
-    } catch (error: any) {
-      message.error('加载草稿文章失败');
-      console.error(error);
-    } finally {
-      setArticlesLoading(false);
-    }
-  };
-
-  // 加载平台和账号
-  const loadPlatformsAndAccounts = async () => {
-    setPlatformsLoading(true);
-    try {
-      const [platformsData, accountsData] = await Promise.all([
-        getPlatforms(),
-        getAccounts()
-      ]);
-      setPlatforms(platformsData);
-      setAccounts(accountsData.filter(acc => acc.status === 'active'));
-      
-      const boundPlatforms = new Set(accountsData.map(acc => acc.platform_id)).size;
-      setStats(prev => ({ ...prev, boundPlatforms }));
-    } catch (error: any) {
-      message.error('加载平台信息失败');
-      console.error(error);
-    } finally {
-      setPlatformsLoading(false);
-    }
-  };
-
-  // 加载任务列表
+  // 加载任务列表（任务需要实时更新，不使用缓存）
   const loadTasks = async () => {
     setTasksLoading(true);
     try {
@@ -261,12 +270,12 @@ export default function PublishingTasksPage() {
 
     // 按照文章在表格中的显示顺序排序（而不是用户点击选择的顺序）
     const articleIds = articles
-      .filter(a => selectedArticleIds.has(a.id))
-      .map(a => a.id);
+      .filter((a: Article) => selectedArticleIds.has(a.id))
+      .map((a: Article) => a.id);
     // 按照账号在列表中的显示顺序排序
     const accountIds = accounts
-      .filter(a => selectedAccounts.has(a.id))
-      .map(a => a.id);
+      .filter((a: Account) => selectedAccounts.has(a.id))
+      .map((a: Account) => a.id);
     const totalTasks = articleIds.length * accountIds.length;
     
     // 计算总耗时：总任务数减1，乘以间隔时间
@@ -291,7 +300,7 @@ export default function PublishingTasksPage() {
         setCreatingTasks(true);
         try {
           // 生成批次ID（使用时间戳 + 随机数）
-          const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const batchId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
           
           const tasks = [];
           let batchOrder = 0;
@@ -340,8 +349,10 @@ export default function PublishingTasksPage() {
           setSelectedAccounts(new Set());
           setPublishInterval(5); // 重置为默认值
           
-          // 刷新任务列表
+          // 刷新任务列表和文章列表（文章发布后状态会变化）
           loadTasks();
+          invalidateCacheByPrefix('publishingTasks:articles');
+          refreshArticles(true);
         } catch (error: any) {
           message.error(error.message || '创建任务失败');
         } finally {
@@ -692,7 +703,7 @@ export default function PublishingTasksPage() {
 
   const handleArticleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedArticleIds(new Set(articles.map(a => a.id)));
+      setSelectedArticleIds(new Set(articles.map((a: Article) => a.id)));
     } else {
       setSelectedArticleIds(new Set());
     }
@@ -1054,7 +1065,7 @@ export default function PublishingTasksPage() {
         extra={
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={loadDraftArticles}
+            onClick={() => refreshArticles(true)}
           >
             刷新
           </Button>
@@ -1107,7 +1118,7 @@ export default function PublishingTasksPage() {
         extra={
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={loadPlatformsAndAccounts}
+            onClick={() => refreshPlatforms(true)}
           >
             刷新
           </Button>
@@ -1291,15 +1302,30 @@ export default function PublishingTasksPage() {
               </Col>
             </Row>
 
-            {/* 发布模式显示（固定为静默发布） */}
+            {/* 发布模式切换 */}
             <Row gutter={16} align="middle" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
               <Col flex="auto">
                 <Space size="middle" align="center">
-                  <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  {headlessMode ? (
+                    <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  ) : (
+                    <EyeOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  )}
                   <Text style={{ color: '#fff', fontSize: 14 }}>发布模式：</Text>
-                  <Tag color="blue" style={{ fontSize: 14, padding: '4px 12px' }}>静默发布</Tag>
+                  <Switch
+                    checked={headlessMode}
+                    onChange={(checked) => setHeadlessMode(checked)}
+                    checkedChildren="静默发布"
+                    unCheckedChildren="可视化"
+                    style={{ 
+                      backgroundColor: headlessMode ? '#1890ff' : '#52c41a',
+                      minWidth: 90
+                    }}
+                  />
                   <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
-                    🔇 静默模式：后台运行，不显示浏览器
+                    {headlessMode 
+                      ? '🔇 静默模式：后台运行，不显示浏览器' 
+                      : '👁️ 可视化模式：显示浏览器窗口，可观察发布过程'}
                   </Text>
                 </Space>
               </Col>
