@@ -391,10 +391,12 @@ export class SubscriptionService {
       
       console.log(`[SubscriptionService] ✅ 用户 ${userId} 订阅已创建，配额快照已保存:`, Object.keys(quotaSnapshot).length, '项');
       
-      // 使用统一的配额初始化服务
+      // 使用统一的配额初始化服务（先清除旧记录，再初始化新配额）
+      await QuotaInitializationService.clearUserQuotas(userId, client);
       await QuotaInitializationService.initializeUserQuotas(userId, planId, { 
         resetUsage: true, 
-        client 
+        client,
+        subscriptionStartDate: startDate  // 传入订阅开始日期
       });
       await QuotaInitializationService.updateStorageQuota(userId, planId, client);
       
@@ -622,19 +624,34 @@ export class SubscriptionService {
         throw new Error('当前没有激活的订阅');
       }
 
-      // 更新订阅套餐（立即生效）
+      // 获取新套餐的配额配置，保存为快照
+      const featuresResult = await client.query(
+        `SELECT feature_code, feature_value FROM plan_features WHERE plan_id = $1`,
+        [newPlanId]
+      );
+      
+      const quotaSnapshot: Record<string, number> = {};
+      for (const feature of featuresResult.rows) {
+        quotaSnapshot[feature.feature_code] = feature.feature_value;
+      }
+
+      // 更新订阅套餐和配额快照（立即生效）
       await client.query(
         `UPDATE user_subscriptions 
-         SET plan_id = $1, updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [newPlanId, currentSub.id]
+         SET plan_id = $1, custom_quotas = $2, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [newPlanId, JSON.stringify(quotaSnapshot), currentSub.id]
       );
+      
+      console.log(`[SubscriptionService] ✅ 用户 ${userId} 套餐已升级，配额快照已更新:`, Object.keys(quotaSnapshot).length, '项');
 
-      // 清除使用量统计（升级后重置配额）
-      await client.query(
-        'DELETE FROM user_usage WHERE user_id = $1',
-        [userId]
-      );
+      // 使用统一的配额初始化服务重置使用量（先清除旧记录）
+      await QuotaInitializationService.clearUserQuotas(userId, client);
+      await QuotaInitializationService.initializeUserQuotas(userId, newPlanId, { 
+        resetUsage: true, 
+        client,
+        subscriptionStartDate: new Date(currentSub.start_date)  // 使用当前订阅的开始日期
+      });
 
       // 更新存储空间配额为新套餐的配额
       const storageFeatureResult = await client.query(

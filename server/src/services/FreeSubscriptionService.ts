@@ -60,10 +60,11 @@ export class FreeSubscriptionService {
       const subscriptionId = subscriptionResult.rows[0].id;
       console.log(`[FreeSubscription] ✅ 订阅创建成功 (ID: ${subscriptionId})`);
       
-      // 4. 使用统一的配额初始化服务
+      // 4. 使用统一的配额初始化服务（传入订阅开始日期）
       await QuotaInitializationService.initializeUserQuotas(userId, freePlan.id, {
         resetUsage: true,
-        client
+        client,
+        subscriptionStartDate: startDate  // 传入订阅开始日期
       });
       
       // 5. 初始化存储空间
@@ -150,7 +151,7 @@ export class FreeSubscriptionService {
           const subscriptionId = subscriptionResult.rows[0].id;
           
           // 使用统一的配额初始化服务（套餐变更，重置配额）
-          await QuotaInitializationService.handlePlanChange(user.id, freePlan.id, client);
+          await QuotaInitializationService.handlePlanChange(user.id, freePlan.id, client, startDate);
           
           await client.query('COMMIT');
           

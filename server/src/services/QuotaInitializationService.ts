@@ -10,6 +10,8 @@ export interface QuotaInitOptions {
   resetUsage?: boolean;
   /** 数据库客户端（用于事务） */
   client?: any;
+  /** 订阅开始日期（用于计算配额周期） */
+  subscriptionStartDate?: Date;
 }
 
 export class QuotaInitializationService {
@@ -31,7 +33,7 @@ export class QuotaInitializationService {
     planId: number,
     options: QuotaInitOptions = {}
   ): Promise<number> {
-    const { resetUsage = true, client } = options;
+    const { resetUsage = true, client, subscriptionStartDate } = options;
     const db = client || pool;
 
     console.log(`[QuotaInit] 初始化用户 ${userId} 的配额 (planId: ${planId}, resetUsage: ${resetUsage})`);
@@ -50,11 +52,27 @@ export class QuotaInitializationService {
         return 0;
       }
 
+      // 获取订阅开始日期（优先使用传入的，否则查询数据库）
+      let startDate = subscriptionStartDate;
+      if (!startDate) {
+        const subResult = await db.query(
+          `SELECT start_date FROM user_subscriptions 
+           WHERE user_id = $1 AND status = 'active' 
+           ORDER BY created_at DESC LIMIT 1`,
+          [userId]
+        );
+        if (subResult.rows.length > 0) {
+          startDate = new Date(subResult.rows[0].start_date);
+        } else {
+          startDate = new Date(); // 兜底使用当前时间
+        }
+      }
+
       const now = new Date();
       let initializedCount = 0;
 
       for (const feature of featuresResult.rows) {
-        const { periodStart, periodEnd } = this.calculatePeriod(feature.feature_code, now);
+        const { periodStart, periodEnd } = this.calculatePeriod(feature.feature_code, now, startDate);
         
         // 判断是否应该保留使用量（平台账号数等不应重置）
         const shouldPreserve = this.PRESERVE_ON_PLAN_CHANGE.includes(feature.feature_code);
@@ -86,7 +104,7 @@ export class QuotaInitializationService {
         initializedCount++;
       }
 
-      console.log(`[QuotaInit] ✅ 成功初始化 ${initializedCount} 项配额记录`);
+      console.log(`[QuotaInit] ✅ 成功初始化 ${initializedCount} 项配额记录 (周期起始: ${startDate.toISOString().split('T')[0]})`);
       return initializedCount;
     } catch (error) {
       console.error('[QuotaInit] 初始化配额失败:', error);
@@ -107,12 +125,13 @@ export class QuotaInitializationService {
   ): Promise<number> {
     const db = client || pool;
 
-    // 只清除需要重置的配额，保留 platform_accounts 等不应重置的配额
+    // 清除所有需要重置的配额记录（包括所有周期的记录）
+    // 保留 platform_accounts 等不应重置的配额
     const result = await db.query(
       `DELETE FROM user_usage 
        WHERE user_id = $1 
        AND feature_code NOT IN (SELECT unnest($2::varchar[]))
-       RETURNING feature_code`,
+       RETURNING feature_code, period_start`,
       [userId, preserveFeatures]
     );
 
@@ -195,8 +214,14 @@ export class QuotaInitializationService {
    * @param userId 用户ID
    * @param newPlanId 新套餐ID
    * @param client 数据库客户端（用于事务）
+   * @param subscriptionStartDate 订阅开始日期（可选，不传则从数据库查询）
    */
-  static async handlePlanChange(userId: number, newPlanId: number, client?: any): Promise<void> {
+  static async handlePlanChange(
+    userId: number, 
+    newPlanId: number, 
+    client?: any,
+    subscriptionStartDate?: Date
+  ): Promise<void> {
     const db = client || pool;
 
     console.log(`[QuotaInit] 处理用户 ${userId} 的套餐变更 (newPlanId: ${newPlanId})`);
@@ -204,8 +229,12 @@ export class QuotaInitializationService {
     // 1. 清除旧配额
     await this.clearUserQuotas(userId, db);
 
-    // 2. 初始化新配额（重置使用量）
-    await this.initializeUserQuotas(userId, newPlanId, { resetUsage: true, client: db });
+    // 2. 初始化新配额（重置使用量，传入订阅开始日期）
+    await this.initializeUserQuotas(userId, newPlanId, { 
+      resetUsage: true, 
+      client: db,
+      subscriptionStartDate 
+    });
 
     // 3. 更新存储配额
     await this.updateStorageQuota(userId, newPlanId, db);
@@ -214,22 +243,54 @@ export class QuotaInitializationService {
   }
 
   /**
-   * 计算配额周期
+   * 计算配额周期（基于订阅开始日期）
    * @param featureCode 功能代码
    * @param now 当前时间
+   * @param subscriptionStartDate 订阅开始日期
    */
-  private static calculatePeriod(featureCode: string, now: Date): { periodStart: Date; periodEnd: Date } {
+  private static calculatePeriod(
+    featureCode: string, 
+    now: Date,
+    subscriptionStartDate: Date
+  ): { periodStart: Date; periodEnd: Date } {
     let periodStart: Date;
     let periodEnd: Date;
 
     if (featureCode.includes('_per_day')) {
-      // 每日重置
+      // 每日重置：基于订阅开始日期的每日周期
       periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       periodEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
     } else if (featureCode.includes('_per_month') || featureCode === 'keyword_distillation') {
-      // 每月重置
-      periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
-      periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+      // 每月重置：基于订阅开始日期计算当前周期
+      // 例如：订阅开始日期是1月14日，则周期为 1/14-2/13, 2/14-3/13, ...
+      const startDay = subscriptionStartDate.getDate();
+      const startTime = subscriptionStartDate.getTime();
+      
+      // 计算从订阅开始到现在经过了多少个完整月
+      let monthsDiff = (now.getFullYear() - subscriptionStartDate.getFullYear()) * 12 
+                     + (now.getMonth() - subscriptionStartDate.getMonth());
+      
+      // 如果当前日期在本月周期开始日之前，说明还在上个周期
+      if (now.getDate() < startDay) {
+        monthsDiff--;
+      }
+      
+      // 确保不会计算到订阅开始之前
+      if (monthsDiff < 0) {
+        monthsDiff = 0;
+      }
+      
+      // 计算当前周期的开始日期
+      periodStart = new Date(subscriptionStartDate);
+      periodStart.setMonth(subscriptionStartDate.getMonth() + monthsDiff);
+      periodStart.setHours(0, 0, 0, 0);
+      
+      // 计算当前周期的结束日期（下个周期开始前一天）
+      periodEnd = new Date(periodStart);
+      periodEnd.setMonth(periodEnd.getMonth() + 1);
+      periodEnd.setDate(periodEnd.getDate() - 1);
+      periodEnd.setHours(23, 59, 59, 999);
+      
     } else {
       // 永不重置（如平台账号数、存储空间）
       periodStart = new Date(2000, 0, 1);

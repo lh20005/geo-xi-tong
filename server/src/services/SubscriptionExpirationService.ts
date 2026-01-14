@@ -129,6 +129,7 @@ export class SubscriptionExpirationService {
       const durationDays = freePlanResult.rows[0].duration_days || 36500; // 默认100年（永久）
 
       // 3. 创建免费版订阅（根据商品配置的有效期）
+      const freeSubscriptionStartDate = new Date();
       const newSubResult = await client.query(
         `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date, quota_reset_anchor, quota_cycle_type)
          VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + $3 * INTERVAL '1 day', CURRENT_TIMESTAMP, 'monthly')
@@ -139,7 +140,7 @@ export class SubscriptionExpirationService {
       console.log(`   - 已创建免费版订阅 (ID: ${newSubResult.rows[0].id})`);
 
       // 4. 使用统一服务处理配额变更（清除旧配额、初始化新配额、更新存储配额）
-      await QuotaInitializationService.handlePlanChange(user_id, freePlanId, client);
+      await QuotaInitializationService.handlePlanChange(user_id, freePlanId, client, freeSubscriptionStartDate);
 
       console.log(`   - 已初始化免费版配额`);
 

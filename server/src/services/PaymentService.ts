@@ -446,16 +446,19 @@ export class PaymentService {
           );
           
           // 创建订阅（根据套餐计费周期设置时长）
+          const subscriptionStartDate = new Date();
           await client.query(
             `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
              VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, (CURRENT_TIMESTAMP + INTERVAL '1 day' * $3)::timestamp + TIME '23:59:59')`,
             [order.user_id, order.plan_id, durationDays]
           );
           
-          // 使用统一的配额初始化服务
+          // 使用统一的配额初始化服务（先清除旧记录，再初始化新配额）
+          await QuotaInitializationService.clearUserQuotas(order.user_id, client);
           await QuotaInitializationService.initializeUserQuotas(order.user_id, order.plan_id, {
             resetUsage: true,
-            client
+            client,
+            subscriptionStartDate  // 传入订阅开始日期
           });
           await QuotaInitializationService.updateStorageQuota(order.user_id, order.plan_id, client);
         }

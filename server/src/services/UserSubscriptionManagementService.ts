@@ -160,7 +160,8 @@ class UserSubscriptionManagementService {
       );
 
       // 使用统一服务处理配额变更（清除旧配额、初始化新配额、更新存储配额）
-      await QuotaInitializationService.handlePlanChange(userId, newPlanId, client);
+      // 使用原订阅的开始日期作为配额周期基准
+      await QuotaInitializationService.handlePlanChange(userId, newPlanId, client, new Date(subscription.start_date));
 
       // 记录调整历史
       await client.query(
@@ -601,8 +602,12 @@ class UserSubscriptionManagementService {
         // 清除旧的配额使用记录
         await client.query('DELETE FROM user_usage WHERE user_id = $1', [userId]);
 
-        // 使用统一服务初始化免费版配额（重置使用量）
-        await QuotaInitializationService.initializeUserQuotas(userId, freePlan.id, { resetUsage: true, client });
+        // 使用统一服务初始化免费版配额（重置使用量，传入订阅开始日期）
+        await QuotaInitializationService.initializeUserQuotas(userId, freePlan.id, { 
+          resetUsage: true, 
+          client,
+          subscriptionStartDate: startDate
+        });
 
         // 使用统一服务更新存储空间配额
         await QuotaInitializationService.updateStorageQuota(userId, freePlan.id, client);
@@ -703,7 +708,7 @@ class UserSubscriptionManagementService {
       const subscriptionId = result.rows[0].id;
 
       // 使用统一服务处理配额变更（清除旧配额、初始化新配额、更新存储配额）
-      await QuotaInitializationService.handlePlanChange(userId, planId, client);
+      await QuotaInitializationService.handlePlanChange(userId, planId, client, startDate);
 
       // 记录调整历史
       await client.query(

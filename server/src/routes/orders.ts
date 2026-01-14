@@ -141,14 +141,19 @@ router.post('/', authenticate, async (req, res) => {
       }
       
       // 创建订阅
+      const subscriptionStartDate = new Date();
       await pool.query(
         `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
          VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, (CURRENT_TIMESTAMP + INTERVAL '1 day' * $3)::timestamp + TIME '23:59:59')`,
         [userId, plan_id, durationDays]
       );
       
-      // 初始化配额
-      await QuotaInitializationService.initializeUserQuotas(userId, plan_id, { resetUsage: true });
+      // 初始化配额（先清除旧记录，再初始化新配额）
+      await QuotaInitializationService.clearUserQuotas(userId);
+      await QuotaInitializationService.initializeUserQuotas(userId, plan_id, { 
+        resetUsage: true,
+        subscriptionStartDate  // 传入订阅开始日期
+      });
       await QuotaInitializationService.updateStorageQuota(userId, plan_id);
       
       return res.json({
