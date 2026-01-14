@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { config } from '../config/env';
 
@@ -18,23 +18,6 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
   const getInitials = (name: string) => {
     return name.charAt(0).toUpperCase();
   };
-
-  // 点击外部关闭菜单
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isOpen]);
 
   const handleLogoutClick = () => {
     setIsOpen(false);
@@ -70,10 +53,14 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
 
   return (
     <>
-      <div className="relative" ref={menuRef}>
+      <div 
+        className="relative" 
+        ref={menuRef}
+        onMouseEnter={() => setIsOpen(true)}
+        onMouseLeave={() => setIsOpen(false)}
+      >
         {/* 用户头像按钮 */}
         <button
-          onClick={() => setIsOpen(!isOpen)}
           className="flex items-center space-x-3 px-3 py-2 rounded-lg hover:bg-gray-100 transition-all duration-200 group"
         >
           {/* 头像 */}
@@ -100,8 +87,13 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
         </button>
 
         {/* 下拉菜单卡片 */}
-        {isOpen && (
-          <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-slideDown">
+        <div 
+          className={`absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden z-50 transition-all duration-200 origin-top ${
+            isOpen 
+              ? 'opacity-100 scale-100 visible' 
+              : 'opacity-0 scale-95 invisible'
+          }`}
+        >
             {/* 用户信息头部 */}
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 px-6 py-5 border-b border-gray-100">
               <div className="flex items-center space-x-4">
@@ -175,7 +167,6 @@ export default function UserMenu({ username, isAdmin, onLogout }: UserMenuProps)
               </p>
             </div>
           </div>
-        )}
       </div>
 
       {/* 退出确认对话框 */}

@@ -264,7 +264,7 @@ export default function Header({ activeSection = 'home' }: HeaderProps) {
                     </div>
                     <div>
                       <div className="font-medium">Mac 版（Apple 芯片）</div>
-                      <div className="text-xs text-gray-500">适用于 M1/M2/M3 芯片</div>
+                      <div className="text-xs text-gray-500">适用于 M1/M2/M3/M4 芯片</div>
                     </div>
                   </a>
                   
