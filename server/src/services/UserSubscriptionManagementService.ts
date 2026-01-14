@@ -96,7 +96,7 @@ class UserSubscriptionManagementService {
 
       // 获取当前订阅
       const currentSub = await client.query(
-        `SELECT id, plan_id, end_date, status 
+        `SELECT id, plan_id, start_date, end_date, status 
          FROM user_subscriptions 
          WHERE user_id = $1 AND status = 'active' AND end_date > CURRENT_TIMESTAMP
          ORDER BY end_date DESC LIMIT 1`,
