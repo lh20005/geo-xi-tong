@@ -158,7 +158,7 @@ CREATE INDEX IF NOT EXISTS idx_user_usage_feature ON user_usage(feature_code);
 -- 配置变更历史表
 CREATE TABLE IF NOT EXISTS product_config_history (
   id SERIAL PRIMARY KEY,
-  plan_id INTEGER REFERENCES subscription_plans(id),
+  plan_id INTEGER REFERENCES subscription_plans(id) ON DELETE SET NULL,
   changed_by INTEGER REFERENCES users(id),
   change_type VARCHAR(50) NOT NULL,
   old_value TEXT,
