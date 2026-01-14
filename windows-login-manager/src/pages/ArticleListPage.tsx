@@ -393,17 +393,17 @@ export default function ArticleListPage() {
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={8}>
           <Card size="small" hoverable onClick={() => handleStatsClick('all')} style={{ textAlign: 'center' }}>
-            <Statistic title="总文章数" value={stats.total} valueStyle={{ color: '#1890ff' }} />
+            <Statistic title="总文章数" value={stats?.total ?? 0} valueStyle={{ color: '#1890ff' }} />
           </Card>
         </Col>
         <Col span={8}>
           <Card size="small" hoverable onClick={() => handleStatsClick('published')} style={{ textAlign: 'center' }}>
-            <Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} />
+            <Statistic title="已发布" value={stats?.published ?? 0} valueStyle={{ color: '#52c41a' }} />
           </Card>
         </Col>
         <Col span={8}>
           <Card size="small" hoverable onClick={() => handleStatsClick('unpublished')} style={{ textAlign: 'center' }}>
-            <Statistic title="未发布" value={stats.unpublished} valueStyle={{ color: '#faad14' }} />
+            <Statistic title="未发布" value={stats?.unpublished ?? 0} valueStyle={{ color: '#faad14' }} />
           </Card>
         </Col>
       </Row>
