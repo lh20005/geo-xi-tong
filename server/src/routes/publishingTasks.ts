@@ -128,14 +128,8 @@ router.post('/tasks', async (req, res) => {
     console.log(`✅ 任务已创建: task.id=${task.id}, task.article_id=${task.article_id}`);
 
 
-    // ========== 记录配额使用 ==========
-    await usageTrackingService.recordUsage(
-      userId,
-      'publish_per_month',
-      'publish',
-      task.id,
-      1
-    );
+    // 注意：配额扣除已移至 PublishingService.updateTaskStatus 中
+    // 只有在发布成功后才扣除配额，避免任务失败或终止时也扣除配额
 
     // 标记文章为"发布中"状态（在文章列表中暂时隐藏）
     await pool.query(
