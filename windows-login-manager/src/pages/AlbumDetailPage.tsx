@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Card, Button, message, Space, Modal, Upload, Empty, Image, Row, Col, Input } from 'antd';
-import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, Button, message, Space, Modal, Upload, Empty, Image, Row, Col, Input, Tag, Tooltip } from 'antd';
+import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined, EditOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { API_BASE_URL } from '../config/env';
 import type { UploadFile } from 'antd';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 interface ImageData {
   id: number;
@@ -25,38 +27,63 @@ interface AlbumDetail {
 export default function AlbumDetailPage() {
   const navigate = useNavigate();
   const { albumId } = useParams<{ albumId: string }>();
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
-  const [loading, setLoading] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [uploading, setUploading] = useState(false);
 
-  useEffect(() => {
-    if (albumId) {
-      loadAlbumDetail(parseInt(albumId));
+  // 生成缓存 key
+  const cacheKey = useMemo(() => 
+    `albumDetail:${albumId}`,
+    [albumId]
+  );
+
+  // 数据获取函数
+  const fetchData = useCallback(async () => {
+    if (!albumId) return null;
+    const response = await apiClient.get(`/gallery/albums/${albumId}`);
+    const albumData = response.data;
+    
+    // 确保images属性存在
+    if (!albumData.images) {
+      albumData.images = [];
     }
+    
+    return albumData;
   }, [albumId]);
 
-  const loadAlbumDetail = async (id: number) => {
-    setLoading(true);
-    try {
-      const response = await apiClient.get(`/gallery/albums/${id}`);
-      const albumData = response.data;
-      
-      // 确保images属性存在
-      if (!albumData.images) {
-        albumData.images = [];
-      }
-      
-      setAlbum(albumData);
-    } catch (error: any) {
+  // 使用缓存 Hook
+  const {
+    data: cachedData,
+    loading,
+    refreshing,
+    refresh: refreshAlbum,
+    isFromCache
+  } = useCachedData<AlbumDetail | null>(cacheKey, fetchData, {
+    deps: [albumId],
+    autoFetch: !!albumId,
+    onError: (error) => {
       message.error(error.message || '加载相册失败');
       if (error.message?.includes('404') || error.message?.includes('不存在')) {
         navigate('/gallery');
       }
-    } finally {
-      setLoading(false);
+    },
+  });
+
+  // 处理缓存数据
+  useEffect(() => {
+    if (cachedData) {
+      setAlbum(cachedData);
     }
-  };
+  }, [cachedData]);
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('albumDetail:');
+    invalidateCacheByPrefix('gallery:');
+    await refreshAlbum(true);
+  }, [invalidateCacheByPrefix, refreshAlbum]);
 
   const handleUploadImages = async () => {
     if (fileList.length === 0) {
@@ -64,7 +91,7 @@ export default function AlbumDetailPage() {
       return;
     }
 
-    setLoading(true);
+    setUploading(true);
     try {
       // 计算总文件大小
       const totalSize = fileList.reduce((sum, file) => {
@@ -80,7 +107,7 @@ export default function AlbumDetailPage() {
 
         if (!quotaCheck.data.success || !quotaCheck.data.data?.allowed) {
           const errorMsg = quotaCheck.data.data?.reason || '存储空间不足，无法上传图片';
-          setLoading(false);
+          setUploading(false);
           Modal.error({
             title: '存储空间不足：请升级套餐',
             closable: true,
@@ -99,7 +126,7 @@ export default function AlbumDetailPage() {
         // 处理配额检查失败（403 表示配额不足）
         if (quotaError.response?.status === 403) {
           const errorData = quotaError.response.data;
-          setLoading(false);
+          setUploading(false);
           Modal.error({
             title: '存储空间不足：请升级套餐',
             closable: true,
@@ -135,7 +162,7 @@ export default function AlbumDetailPage() {
       message.success(`成功上传 ${fileList.length} 张图片！`);
       setUploadModalVisible(false);
       setFileList([]);
-      loadAlbumDetail(parseInt(albumId!));
+      invalidateAndRefresh();
     } catch (error: any) {
       // 处理存储空间不足的错误
       if (error.response?.status === 403 && error.response?.data?.needUpgrade) {
@@ -157,7 +184,7 @@ export default function AlbumDetailPage() {
         message.error(error.message || '上传图片失败');
       }
     } finally {
-      setLoading(false);
+      setUploading(false);
     }
   };
 
@@ -172,7 +199,7 @@ export default function AlbumDetailPage() {
         try {
           await apiClient.delete(`/gallery/images/${imageId}`);
           message.success('图片删除成功');
-          loadAlbumDetail(parseInt(albumId!));
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除图片失败');
         }
@@ -205,7 +232,7 @@ export default function AlbumDetailPage() {
         try {
           await apiClient.patch(`/gallery/albums/${albumId}`, { name: newName.trim() });
           message.success('相册名称更新成功');
-          loadAlbumDetail(parseInt(albumId!));
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '更新失败');
           return Promise.reject();
@@ -225,6 +252,7 @@ export default function AlbumDetailPage() {
         try {
           await apiClient.delete(`/gallery/albums/${albumId}`);
           message.success('相册删除成功');
+          invalidateCacheByPrefix('gallery:');
           navigate('/gallery');
         } catch (error: any) {
           message.error(error.message || '删除相册失败');
@@ -263,10 +291,25 @@ export default function AlbumDetailPage() {
               返回
             </Button>
             <span>{album?.name || '加载中...'}</span>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
           </Space>
         }
         extra={
           <Space>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => refreshAlbum(true)}
+              loading={refreshing}
+            >
+              刷新
+            </Button>
             <Button
               icon={<PlusOutlined />}
               onClick={() => setUploadModalVisible(true)}
@@ -307,7 +350,7 @@ export default function AlbumDetailPage() {
         ) : (
           <Image.PreviewGroup>
             <Row gutter={[16, 16]}>
-              {album?.images?.map((image) => (
+              {(album?.images || []).map((image) => (
                 <Col xs={12} sm={8} md={6} lg={4} key={image.id}>
                   <div style={{ position: 'relative' }}>
                     <Image
@@ -361,7 +404,7 @@ export default function AlbumDetailPage() {
           setUploadModalVisible(false);
           setFileList([]);
         }}
-        confirmLoading={loading}
+        confirmLoading={uploading}
         okText="上传"
         cancelText="取消"
         width={600}

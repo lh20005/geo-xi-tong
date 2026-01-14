@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
@@ -11,6 +11,7 @@ import {
   Input,
   Typography,
   Checkbox,
+  Tooltip,
 } from 'antd';
 import {
   EditOutlined,
@@ -18,8 +19,11 @@ import {
   FileTextOutlined,
   ArrowLeftOutlined,
   ReloadOutlined,
+  CloudSyncOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -27,36 +31,36 @@ const { TextArea } = Input;
 export default function TopicsPage() {
   const { distillationId } = useParams();
   const navigate = useNavigate();
-  const [topics, setTopics] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [editModal, setEditModal] = useState<any>(null);
   const [editValue, setEditValue] = useState('');
   const [selectedTopics, setSelectedTopics] = useState<number[]>([]);
 
-  useEffect(() => {
-    loadTopics();
-    
-    // 每10秒自动刷新一次，以同步最新的使用计数
-    const interval = setInterval(() => {
-      loadTopics();
-    }, 10000);
-    
-    return () => clearInterval(interval);
+  // 缓存 key
+  const cacheKey = `topics:distillation:${distillationId}`;
+
+  // 使用缓存加载话题
+  const fetchTopics = useCallback(async () => {
+    const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
+    return response.data.topics;
   }, [distillationId]);
 
-  const loadTopics = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
-      setTopics(response.data.topics);
-    } catch (error) {
-      if (!silent) {
-        message.error('加载话题失败');
-      }
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  };
+  const {
+    data: topics,
+    loading,
+    refreshing,
+    refresh: refreshTopics,
+    isFromCache
+  } = useCachedData(cacheKey, fetchTopics, {
+    deps: [distillationId],
+    onError: () => message.error('加载话题失败'),
+  });
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('topics:');
+    await refreshTopics(true);
+  }, [invalidateCacheByPrefix, refreshTopics]);
 
   const handleEdit = (topic: any) => {
     setEditModal(topic);
@@ -70,7 +74,7 @@ export default function TopicsPage() {
       });
       message.success('话题更新成功');
       setEditModal(null);
-      loadTopics();
+      invalidateAndRefresh();
     } catch (error) {
       message.error('更新失败');
     }
@@ -84,7 +88,7 @@ export default function TopicsPage() {
         try {
           await axios.delete(`/api/topics/${topicId}`);
           message.success('删除成功');
-          loadTopics();
+          invalidateAndRefresh();
         } catch (error) {
           message.error('删除失败');
         }
@@ -117,17 +121,25 @@ export default function TopicsPage() {
               onClick={() => navigate('/distillation')}
             />
             <span>话题管理</span>
-            {topics.length > 0 && (
-              <Tag color="blue">{topics[0]?.keyword}</Tag>
+            {(topics || []).length > 0 && (
+              <Tag color="blue">{(topics || [])[0]?.keyword}</Tag>
             )}
           </Space>
         }
         variant="borderless"
         extra={
           <Space>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
             <Button
               icon={<ReloadOutlined />}
-              onClick={() => loadTopics()}
+              onClick={() => refreshTopics(true)}
               loading={loading}
             >
               刷新
@@ -144,12 +156,12 @@ export default function TopicsPage() {
         }
       >
         <Title level={5} style={{ marginBottom: 16 }}>
-          共 {topics.length} 个话题
+          共 {(topics || []).length} 个话题
         </Title>
 
         <List
           loading={loading}
-          dataSource={topics}
+          dataSource={topics || []}
           renderItem={(topic) => (
             <List.Item
               style={{

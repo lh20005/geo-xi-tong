@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { Card, Table, Tag, DatePicker, Select, Button, Space, message } from 'antd';
-import { FileTextOutlined, DownloadOutlined, SearchOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, Table, Tag, DatePicker, Select, Button, Space, message, Tooltip } from 'antd';
+import { FileTextOutlined, DownloadOutlined, SearchOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import type { ColumnsType } from 'antd/es/table';
 import { Dayjs } from 'dayjs';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -22,9 +24,7 @@ interface AuditLog {
 }
 
 const AuditLogsPage: React.FC = () => {
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [total, setTotal] = useState(0);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [filters, setFilters] = useState<{
@@ -33,42 +33,56 @@ const AuditLogsPage: React.FC = () => {
     dateRange?: [Dayjs, Dayjs];
   }>({});
 
-  useEffect(() => {
-    fetchLogs();
+  // 构建缓存 key
+  const cacheKey = useMemo(() => {
+    const filterStr = JSON.stringify({
+      action: filters.action,
+      targetType: filters.targetType,
+      dateRange: filters.dateRange ? [
+        filters.dateRange[0].toISOString(),
+        filters.dateRange[1].toISOString()
+      ] : undefined
+    });
+    return `auditLogs:${page}:${pageSize}:${filterStr}`;
   }, [page, pageSize, filters]);
 
-  const fetchLogs = async () => {
-    setLoading(true);
-    try {
-      const params: any = {
-        page,
-        pageSize
-      };
+  // 数据获取函数
+  const fetchLogs = useCallback(async () => {
+    const params: any = {
+      page,
+      pageSize
+    };
 
-      if (filters.action) params.action = filters.action;
-      if (filters.targetType) params.targetType = filters.targetType;
-      if (filters.dateRange) {
-        params.startDate = filters.dateRange[0].toISOString();
-        params.endDate = filters.dateRange[1].toISOString();
-      }
-
-      const response = await apiClient.get('/security/audit-logs', {
-        params
-      });
-
-      if (response.data.success) {
-        setLogs(response.data.logs || []);
-        setTotal(response.data.total || 0);
-      } else {
-        message.error(response.data.message || '获取审计日志失败');
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch audit logs:', error);
-      message.error(error.response?.data?.message || '获取审计日志失败');
-    } finally {
-      setLoading(false);
+    if (filters.action) params.action = filters.action;
+    if (filters.targetType) params.targetType = filters.targetType;
+    if (filters.dateRange) {
+      params.startDate = filters.dateRange[0].toISOString();
+      params.endDate = filters.dateRange[1].toISOString();
     }
-  };
+
+    const response = await apiClient.get('/security/audit-logs', {
+      params
+    });
+
+    if (response.data.success) {
+      return {
+        logs: response.data.logs || [],
+        total: response.data.total || 0
+      };
+    } else {
+      throw new Error(response.data.message || '获取审计日志失败');
+    }
+  }, [page, pageSize, filters]);
+
+  // 使用缓存 hook
+  const { data, loading, refreshing, refresh, isFromCache } = useCachedData(
+    cacheKey,
+    fetchLogs,
+    { deps: [page, pageSize, filters] }
+  );
+
+  const logs = data?.logs || [];
+  const total = data?.total || 0;
 
   const handleExport = async (format: 'json' | 'csv') => {
     try {
@@ -156,6 +170,18 @@ const AuditLogsPage: React.FC = () => {
     <div style={{ padding: '24px' }}>
       <h1 style={{ marginBottom: '24px' }}>
         <FileTextOutlined /> 审计日志
+        <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
+          {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
+          {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
+          <Tooltip title="刷新数据">
+            <Button
+              type="text"
+              size="small"
+              icon={<ReloadOutlined spin={refreshing} />}
+              onClick={() => refresh(true)}
+            />
+          </Tooltip>
+        </Space>
       </h1>
 
       <Card style={{ marginBottom: '24px' }}>
@@ -198,7 +224,7 @@ const AuditLogsPage: React.FC = () => {
               }}
             />
 
-            <Button icon={<SearchOutlined />} type="primary" onClick={fetchLogs}>
+            <Button icon={<SearchOutlined />} type="primary" onClick={() => refresh(true)}>
               查询
             </Button>
           </Space>

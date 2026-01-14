@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Input, Button, Tag, Modal, Form, Select, Space, Card, Badge, App } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Input, Button, Tag, Modal, Form, Select, Space, Card, Badge, App, Tooltip } from 'antd';
+import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { config } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import ResizableTable from '../components/ResizableTable';
 import SubscriptionDetailDrawer from '../components/UserSubscription/SubscriptionDetailDrawer';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Search } = Input;
 
@@ -25,11 +27,9 @@ interface User {
 
 export default function UserManagementPage() {
   const { message, modal } = App.useApp();
-  const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [subscriptionFilter, setSubscriptionFilter] = useState<string>(''); // 新增：订阅套餐筛选
   const [onlineFilter, setOnlineFilter] = useState<string>(''); // 新增：在线状态筛选
@@ -54,10 +54,52 @@ export default function UserManagementPage() {
     return 'purple';
   };
 
-  useEffect(() => {
-    loadUsers();
-  }, [page, search, subscriptionFilter, onlineFilter, roleFilter]); // 添加 roleFilter 依赖
+  // 构建缓存 key
+  const cacheKey = useMemo(() => {
+    return `users:${page}:${pageSize}:${search}:${subscriptionFilter}:${onlineFilter}:${roleFilter}`;
+  }, [page, pageSize, search, subscriptionFilter, onlineFilter, roleFilter]);
 
+  // 数据获取函数
+  const loadUsers = useCallback(async () => {
+    const token = localStorage.getItem('auth_token');
+    const response = await axios.get(`${config.apiUrl}/admin/users`, {
+      params: { 
+        page, 
+        pageSize, 
+        search: search || undefined,
+        subscriptionPlan: subscriptionFilter || undefined,
+        onlineStatus: onlineFilter || undefined,
+        roleFilter: roleFilter || undefined
+      },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    
+    if (response.data.success) {
+      return {
+        users: response.data.data.users,
+        total: response.data.data.total
+      };
+    }
+    throw new Error('加载用户列表失败');
+  }, [page, pageSize, search, subscriptionFilter, onlineFilter, roleFilter]);
+
+  // 使用缓存 hook
+  const { data, loading, refreshing, refresh, isFromCache } = useCachedData(
+    cacheKey,
+    loadUsers,
+    { deps: [page, search, subscriptionFilter, onlineFilter, roleFilter] }
+  );
+
+  const users = data?.users || [];
+  const total = data?.total || 0;
+
+  // 刷新数据的辅助函数
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('users:');
+    await refresh(true);
+  }, [invalidateCacheByPrefix, refresh]);
+
+  // WebSocket 订阅
   useEffect(() => {
     // 连接 WebSocket
     const wsService = getUserWebSocketService();
@@ -68,12 +110,12 @@ export default function UserManagementPage() {
     // 订阅用户更新和删除事件
     const handleUserUpdated = () => {
       console.log('[UserManagement] User updated, refreshing list');
-      loadUsers();
+      invalidateAndRefresh();
     };
 
     const handleUserDeleted = () => {
       console.log('[UserManagement] User deleted, refreshing list');
-      loadUsers();
+      invalidateAndRefresh();
     };
 
     wsService.on('user:updated', handleUserUpdated);
@@ -84,35 +126,7 @@ export default function UserManagementPage() {
       wsService.off('user:updated', handleUserUpdated);
       wsService.off('user:deleted', handleUserDeleted);
     };
-  }, []);
-
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('auth_token');
-      const response = await axios.get(`${config.apiUrl}/admin/users`, {
-        params: { 
-          page, 
-          pageSize, 
-          search: search || undefined,
-          subscriptionPlan: subscriptionFilter || undefined, // 添加套餐筛选参数
-          onlineStatus: onlineFilter || undefined, // 添加在线状态筛选参数
-          roleFilter: roleFilter || undefined // 添加角色筛选参数
-        },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (response.data.success) {
-        setUsers(response.data.data.users);
-        setTotal(response.data.data.total);
-      }
-    } catch (error: any) {
-      console.error('[UserManagement] Load users error:', error);
-      message.error(error.response?.data?.message || '加载用户列表失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [invalidateAndRefresh]);
 
   const handleEdit = (user: User) => {
     setSelectedUser(user);
@@ -156,7 +170,7 @@ export default function UserManagementPage() {
       if (response.data.success) {
         message.success('用户信息更新成功');
         setEditModalVisible(false);
-        loadUsers();
+        invalidateAndRefresh();
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || '更新用户信息失败');
@@ -244,7 +258,7 @@ export default function UserManagementPage() {
 
           if (response.data.success) {
             message.success('用户删除成功');
-            loadUsers();
+            invalidateAndRefresh();
           }
         } catch (error: any) {
           message.error(error.response?.data?.message || '删除用户失败');
@@ -395,7 +409,21 @@ export default function UserManagementPage() {
     <div style={{ padding: 24 }}>
       <Card>
         <div style={{ marginBottom: 16 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>用户管理</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
+            用户管理
+            <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
+              {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
+              {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
+              <Tooltip title="刷新数据">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ReloadOutlined spin={refreshing} />}
+                  onClick={() => refresh(true)}
+                />
+              </Tooltip>
+            </Space>
+          </h2>
           <p style={{ color: '#666', marginBottom: 16 }}>管理系统中的所有用户</p>
           
           <Space size="middle" style={{ marginBottom: 16, width: '100%', flexWrap: 'wrap' }}>

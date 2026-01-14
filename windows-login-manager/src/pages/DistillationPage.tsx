@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Card, Input, Button, message, Space, Typography, Tag, Modal, Empty } from 'antd';
-import { ThunderboltOutlined, FileTextOutlined, EyeOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, Input, Button, message, Space, Typography, Tag, Modal, Empty, Tooltip } from 'antd';
+import { ThunderboltOutlined, FileTextOutlined, EyeOutlined, DeleteOutlined, EditOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import ResizableTable from '../components/ResizableTable';
@@ -9,28 +9,40 @@ import {
   loadResultFromLocalStorage, 
   clearResultFromLocalStorage 
 } from '../utils/distillationStorage';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Title, Paragraph } = Typography;
 
 export default function DistillationPage() {
   const navigate = useNavigate();
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [history, setHistory] = useState<any[]>([]);
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
 
-  // 加载历史记录
-  const loadHistory = async () => {
-    try {
-      const response = await apiClient.get('/distillation/history');
-      const data = response.data.data || response.data;
-      // 确保数据是数组
-      setHistory(Array.isArray(data) ? data : []);
-    } catch (error) {
-      console.error('加载历史失败:', error);
-      setHistory([]); // 出错时设置为空数组
-    }
-  };
+  // 使用缓存加载历史记录
+  const fetchHistory = useCallback(async () => {
+    const response = await apiClient.get('/distillation/history');
+    const data = response.data.data || response.data;
+    return Array.isArray(data) ? data : [];
+  }, []);
+
+  const {
+    data: history,
+    loading: historyLoading,
+    refreshing,
+    refresh: refreshHistory,
+    isFromCache
+  } = useCachedData('distillation:history', fetchHistory, {
+    onError: (error) => console.error('加载历史失败:', error),
+  });
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('distillation:');
+    await refreshHistory(true);
+  }, [invalidateCacheByPrefix, refreshHistory]);
 
   // 查看历史记录详情
   const handleViewHistory = async (record: any) => {
@@ -70,7 +82,7 @@ export default function DistillationPage() {
             setSelectedRecordId(null);
             clearResultFromLocalStorage();
           }
-          loadHistory();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除失败');
         }
@@ -112,7 +124,7 @@ export default function DistillationPage() {
               saveResultToLocalStorage(updatedResult);
             }
           }
-          loadHistory();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '更新失败');
           return Promise.reject();
@@ -133,9 +145,9 @@ export default function DistillationPage() {
         try {
           const response = await apiClient.delete('/distillation/all/records');
           message.success(`成功删除 ${response.data.deletedCount} 条记录`);
-          setHistory([]);
           setSelectedRecordId(null);
           clearResultFromLocalStorage();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除失败');
         }
@@ -143,9 +155,8 @@ export default function DistillationPage() {
     });
   };
 
-  // 组件挂载时加载历史记录和选中的记录
+  // 组件挂载时加载选中的记录
   useEffect(() => {
-    loadHistory();
     const savedResult = loadResultFromLocalStorage();
     if (savedResult) {
       setSelectedRecordId(savedResult.distillationId);
@@ -176,7 +187,7 @@ export default function DistillationPage() {
       setKeyword('');
       
       // 刷新历史列表
-      loadHistory();
+      invalidateAndRefresh();
       
       // 自动导航到结果页面
       navigate('/distillation-results');
@@ -291,12 +302,20 @@ export default function DistillationPage() {
           <Space>
             <FileTextOutlined style={{ color: '#0ea5e9' }} />
             <span>蒸馏历史</span>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
           </Space>
         }
         extra={
           <Space>
-            <Button onClick={loadHistory}>刷新</Button>
-            {history.length > 0 && (
+            <Button onClick={() => refreshHistory(true)} icon={<ReloadOutlined />}>刷新</Button>
+            {(history || []).length > 0 && (
               <Button 
                 danger 
                 icon={<DeleteOutlined />}
@@ -312,8 +331,9 @@ export default function DistillationPage() {
         <ResizableTable
           tableId="distillation-page-list"
           columns={columns}
-          dataSource={history}
+          dataSource={history || []}
           rowKey="id"
+          loading={historyLoading}
           scroll={{ x: 800 }}
           pagination={{
             pageSize: 10,

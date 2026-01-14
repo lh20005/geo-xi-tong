@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Card, Tag, Button, Space, Modal, Typography, message, 
   Row, Col, Statistic, Select, Tooltip, Empty, Popconfirm 
 } from 'antd';
 import { 
   ReloadOutlined, EyeOutlined, CopyOutlined, DeleteOutlined,
-  CheckCircleOutlined, CalendarOutlined, ExclamationCircleOutlined
+  CheckCircleOutlined, CalendarOutlined, ExclamationCircleOutlined,
+  CloudSyncOutlined
 } from '@ant-design/icons';
 import { 
   getPublishingRecords,
@@ -21,68 +22,77 @@ import {
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Text } = Typography;
 const { Option } = Select;
 
 export default function PublishingRecordsPage() {
-  const [records, setRecords] = useState<PublishingRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [viewModal, setViewModal] = useState<PublishingRecord | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
-  const [stats, setStats] = useState<PublishingStats>({
-    total: 0, today: 0, week: 0, month: 0, byPlatform: []
-  });
 
-  useEffect(() => {
-    loadRecords();
-    loadStats();
+  // 缓存 key
+  const recordsCacheKey = useMemo(() => 
+    `publishingRecords:list:${platformFilter}:${page}:${pageSize}`,
+    [platformFilter, page, pageSize]
+  );
+
+  // 获取发布记录
+  const fetchRecords = useCallback(async () => {
+    const filters: any = {};
+    if (platformFilter !== 'all') {
+      filters.platform_id = platformFilter;
+    }
+    const response = await getPublishingRecords(page, pageSize, filters);
+    setTotal(response.total || 0);
+    return response.records || [];
   }, [page, pageSize, platformFilter]);
 
-  useEffect(() => {
-    loadPlatforms();
+  // 获取统计数据
+  const fetchStats = useCallback(async () => {
+    return await getPublishingStats();
   }, []);
 
+  // 获取平台列表
+  const fetchPlatforms = useCallback(async () => {
+    return await getPlatforms();
+  }, []);
 
-  const loadRecords = async () => {
-    setLoading(true);
-    try {
-      const filters: any = {};
-      if (platformFilter !== 'all') {
-        filters.platform_id = platformFilter;
-      }
-      const response = await getPublishingRecords(page, pageSize, filters);
-      setRecords(response.records || []);
-      setTotal(response.total || 0);
-    } catch (error: any) {
-      message.error(error.message || '加载发布记录失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 使用缓存
+  const {
+    data: records,
+    loading,
+    refreshing,
+    refresh: refreshRecords,
+    isFromCache
+  } = useCachedData<PublishingRecord[]>(recordsCacheKey, fetchRecords, {
+    deps: [page, pageSize, platformFilter],
+    onError: (error) => message.error(error.message || '加载发布记录失败'),
+  });
 
-  const loadStats = async () => {
-    try {
-      const statsData = await getPublishingStats();
-      setStats(statsData);
-    } catch (error: any) {
-      console.error('加载统计数据失败:', error);
-    }
-  };
+  const { data: stats, refresh: refreshStats } = useCachedData<PublishingStats>(
+    'publishingRecords:stats',
+    fetchStats,
+    { onError: (error) => console.error('加载统计数据失败:', error) }
+  );
 
-  const loadPlatforms = async () => {
-    try {
-      const platformsData = await getPlatforms();
-      setPlatforms(platformsData);
-    } catch (error: any) {
-      console.error('加载平台列表失败:', error);
-    }
-  };
+  const { data: platforms } = useCachedData<Platform[]>(
+    'publishingRecords:platforms',
+    fetchPlatforms,
+    { onError: (error) => console.error('加载平台列表失败:', error) }
+  );
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('publishingRecords:');
+    await Promise.all([refreshRecords(true), refreshStats(true)]);
+  }, [invalidateCacheByPrefix, refreshRecords, refreshStats]);
 
   const handleView = async (record: PublishingRecord) => {
     try {
@@ -103,8 +113,7 @@ export default function PublishingRecordsPage() {
     try {
       await deletePublishingRecord(id);
       message.success('删除成功');
-      loadRecords();
-      loadStats();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.message || '删除失败');
     }
@@ -119,8 +128,7 @@ export default function PublishingRecordsPage() {
       await batchDeletePublishingRecords(selectedRowKeys);
       message.success(`已删除 ${selectedRowKeys.length} 条记录`);
       setSelectedRowKeys([]);
-      loadRecords();
-      loadStats();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.message || '批量删除失败');
     }
@@ -236,22 +244,22 @@ export default function PublishingRecordsPage() {
       <Row gutter={16} style={{ marginBottom: 24 }}>
         <Col span={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <Statistic title="总发布次数" value={stats.total} valueStyle={{ color: '#1890ff' }} prefix={<CheckCircleOutlined />} />
+            <Statistic title="总发布次数" value={stats?.total || 0} valueStyle={{ color: '#1890ff' }} prefix={<CheckCircleOutlined />} />
           </Card>
         </Col>
         <Col span={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <Statistic title="今日发布" value={stats.today} valueStyle={{ color: '#52c41a' }} prefix={<CalendarOutlined />} />
+            <Statistic title="今日发布" value={stats?.today || 0} valueStyle={{ color: '#52c41a' }} prefix={<CalendarOutlined />} />
           </Card>
         </Col>
         <Col span={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <Statistic title="本周发布" value={stats.week} valueStyle={{ color: '#722ed1' }} prefix={<CalendarOutlined />} />
+            <Statistic title="本周发布" value={stats?.week || 0} valueStyle={{ color: '#722ed1' }} prefix={<CalendarOutlined />} />
           </Card>
         </Col>
         <Col span={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
-            <Statistic title="本月发布" value={stats.month} valueStyle={{ color: '#faad14' }} prefix={<CalendarOutlined />} />
+            <Statistic title="本月发布" value={stats?.month || 0} valueStyle={{ color: '#faad14' }} prefix={<CalendarOutlined />} />
           </Card>
         </Col>
       </Row>
@@ -262,6 +270,14 @@ export default function PublishingRecordsPage() {
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <span>发布记录</span>
             <Text type="secondary" style={{ fontSize: 14, fontWeight: 'normal' }}>（文章发布成功后自动归档到此处）</Text>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
           </Space>
         }
         variant="borderless"
@@ -280,19 +296,19 @@ export default function PublishingRecordsPage() {
             )}
             <Select value={platformFilter} onChange={setPlatformFilter} style={{ width: 180 }} placeholder="筛选平台">
               <Option value="all">全部平台</Option>
-              {platforms.map(p => (<Option key={p.platform_id} value={p.platform_id}>{p.platform_name}</Option>))}
+              {(platforms || []).map(p => (<Option key={p.platform_id} value={p.platform_id}>{p.platform_name}</Option>))}
             </Select>
-            <Button onClick={loadRecords} icon={<ReloadOutlined />}>刷新</Button>
+            <Button onClick={() => invalidateAndRefresh()} icon={<ReloadOutlined />}>刷新</Button>
           </Space>
         }
       >
-        {records.length === 0 && !loading ? (
+        {(records || []).length === 0 && !loading ? (
           <Empty description="暂无发布记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <ResizableTable<PublishingRecord>
             tableId="publishing-records-list"
             columns={columns} 
-            dataSource={records} 
+            dataSource={records || []} 
             rowKey="id" 
             loading={loading}
             rowSelection={rowSelection}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, Button, Tag, Progress, message, Space, Modal, Popconfirm, 
   Tooltip, Select, Input, Row, Col, Statistic, Alert 
@@ -12,7 +12,8 @@ import {
   FilterOutlined,
   SearchOutlined,
   CheckCircleOutlined,
-  SyncOutlined
+  SyncOutlined,
+  CloudSyncOutlined
 } from '@ant-design/icons';
 import TaskConfigModal from '../components/TaskConfigModal';
 import ResizableTable from '../components/ResizableTable';
@@ -25,6 +26,8 @@ import {
   cancelTask
 } from '../api/articleGenerationApi';
 import type { GenerationTask, TaskConfig } from '../types/articleGeneration';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -41,8 +44,8 @@ interface TaskStatistics {
 }
 
 export default function ArticleGenerationPage() {
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [tasks, setTasks] = useState<GenerationTask[]>([]);
-  const [loading, setLoading] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -85,24 +88,39 @@ export default function ArticleGenerationPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  useEffect(() => {
-    loadTasks();
-    // 每10秒刷新一次任务状态
-    const interval = setInterval(() => {
-      loadTasks(true);
-    }, 10000);
-    return () => clearInterval(interval);
+  // 生成缓存 key
+  const cacheKey = useMemo(() => 
+    `articleGeneration:list:${currentPage}:${pageSize}:${filterStatus}:${filterKeyword}:${filterConversionTarget}:${searchText}`,
+    [currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText]
+  );
+
+  // 数据获取函数
+  const fetchData = useCallback(async () => {
+    // 如果有筛选条件，获取所有数据进行前端筛选
+    const hasFilters = filterStatus || filterKeyword || filterConversionTarget || searchText;
+    const data = hasFilters 
+      ? await fetchTasks(1, 1000) // 有筛选时获取所有数据
+      : await fetchTasks(currentPage, pageSize);
+    
+    return { data, hasFilters };
   }, [currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText]);
 
-  const loadTasks = async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      // 如果有筛选条件，获取所有数据进行前端筛选
-      const hasFilters = filterStatus || filterKeyword || filterConversionTarget || searchText;
-      const data = hasFilters 
-        ? await fetchTasks(1, 1000) // 有筛选时获取所有数据
-        : await fetchTasks(currentPage, pageSize);
-      
+  // 使用缓存 Hook
+  const {
+    data: cachedData,
+    loading,
+    refreshing,
+    refresh: refreshTasks,
+    isFromCache
+  } = useCachedData(cacheKey, fetchData, {
+    deps: [currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText],
+    onError: () => message.error('加载任务列表失败'),
+  });
+
+  // 处理缓存数据
+  useEffect(() => {
+    if (cachedData) {
+      const { data, hasFilters } = cachedData;
       let filteredTasks = data.tasks;
       
       // 应用筛选
@@ -157,21 +175,32 @@ export default function ArticleGenerationPage() {
       )) as string[];
       setAvailableKeywords(keywords);
       setAvailableConversionTargets(targets);
-      
-    } catch (error: any) {
-      if (!silent) {
-        message.error('加载任务列表失败');
-      }
-    } finally {
-      if (!silent) setLoading(false);
     }
-  };
+  }, [cachedData, currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText]);
+
+  // 每10秒刷新一次任务状态
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshTasks(true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [refreshTasks]);
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('articleGeneration:');
+    await refreshTasks(true);
+  }, [invalidateCacheByPrefix, refreshTasks]);
+
+  const loadTasks = useCallback(async () => {
+    await refreshTasks(true);
+  }, [refreshTasks]);
 
   const handleCreateTask = async (config: TaskConfig) => {
     await createTask(config);
     setModalVisible(false);
     handleClearFilters(); // 清除筛选以显示新任务
-    loadTasks();
+    invalidateAndRefresh();
   };
 
   // 清除所有筛选
@@ -205,7 +234,7 @@ export default function ArticleGenerationPage() {
       setDeleting(true);
       await cancelTask(taskId);
       message.success('任务已终止');
-      loadTasks();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.response?.data?.error || '终止任务失败');
     } finally {
@@ -221,7 +250,7 @@ export default function ArticleGenerationPage() {
       await deleteTask(taskId);
       message.success('任务已删除');
       setSelectedRowKeys(selectedRowKeys.filter(key => key !== taskId));
-      loadTasks();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.response?.data?.error || '删除任务失败');
     } finally {
@@ -257,7 +286,7 @@ export default function ArticleGenerationPage() {
           const result = await batchDeleteTasks(selectedRowKeys as number[]);
           message.success(result.message);
           setSelectedRowKeys([]);
-          loadTasks();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.response?.data?.error || '批量删除失败');
         } finally {
@@ -304,7 +333,7 @@ export default function ArticleGenerationPage() {
           const result = await deleteAllTasks();
           message.success(result.message);
           setSelectedRowKeys([]);
-          loadTasks();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.response?.data?.error || '删除所有任务失败');
         } finally {
@@ -522,6 +551,14 @@ export default function ArticleGenerationPage() {
             {selectedRowKeys.length > 0 && (
               <Tag color="cyan">已选择 {selectedRowKeys.length} 个</Tag>
             )}
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
           </Space>
         }
         extra={
@@ -529,7 +566,7 @@ export default function ArticleGenerationPage() {
             <Button
               icon={<ReloadOutlined />}
               onClick={() => loadTasks()}
-              loading={loading}
+              loading={loading || refreshing}
             >
               刷新
             </Button>

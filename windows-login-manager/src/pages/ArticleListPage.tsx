@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Card, Button, Space, Tag, Modal, Typography, message, 
-  Row, Col, Statistic, Select, Input, Checkbox 
+  Row, Col, Statistic, Select, Input, Checkbox, Tooltip
 } from 'antd';
 import { 
   EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined,
-  SearchOutlined, ReloadOutlined 
+  SearchOutlined, ReloadOutlined, CloudSyncOutlined
 } from '@ant-design/icons';
 import { 
   getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
@@ -17,6 +17,8 @@ import ArticlePreview from '../components/ArticlePreview';
 import ArticleEditorModal from '../components/ArticleEditorModal';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Paragraph, Text } = Typography;
 const { Option } = Select;
@@ -30,9 +32,9 @@ interface FilterState {
 export default function ArticleListPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { invalidateCacheByPrefix } = useCacheStore();
   
   const [articles, setArticles] = useState<Article[]>([]);
-  const [stats, setStats] = useState<ArticleStats>({ total: 0, published: 0, unpublished: 0 });
   const [keywords, setKeywords] = useState<KeywordStats[]>([]);
   const [filters, setFilters] = useState<FilterState>({
     publishStatus: 'all',
@@ -40,7 +42,6 @@ export default function ArticleListPage() {
     searchKeyword: ''
   });
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
@@ -48,6 +49,74 @@ export default function ArticleListPage() {
   const [editModal, setEditModal] = useState<any>(null);
   const [editorVisible, setEditorVisible] = useState(false);
 
+  // 生成缓存 key
+  const cacheKey = useMemo(() => 
+    `articles:list:${filters.publishStatus}:${filters.keyword}:${filters.searchKeyword}:${page}:${pageSize}`,
+    [filters, page, pageSize]
+  );
+
+  // 文章列表数据获取函数
+  const fetchArticles = useCallback(async () => {
+    const apiFilters: any = {
+      publishStatus: filters.publishStatus
+    };
+    if (filters.keyword) {
+      apiFilters.keyword = filters.keyword;
+    }
+    if (filters.searchKeyword && filters.searchKeyword.trim()) {
+      apiFilters.keyword = filters.searchKeyword.trim();
+    }
+    const response = await getArticles(page, pageSize, apiFilters);
+    return response;
+  }, [filters, page, pageSize]);
+
+  // 使用缓存 Hook 获取文章列表
+  const {
+    data: articlesData,
+    loading,
+    refreshing,
+    refresh: refreshArticles,
+    isFromCache
+  } = useCachedData(cacheKey, fetchArticles, {
+    deps: [filters, page, pageSize],
+    onError: (error) => message.error(error.message || '加载文章列表失败'),
+  });
+
+  // 统计数据缓存
+  const {
+    data: stats,
+    refresh: refreshStats
+  } = useCachedData<ArticleStats>(
+    'articles:stats',
+    getArticleStats,
+    { onError: () => console.error('加载统计数据失败') }
+  );
+
+  // 关键词列表缓存
+  const { data: keywordsData } = useCachedData(
+    'articles:keywords',
+    async () => {
+      const response = await getKeywordStats();
+      return response.keywords || [];
+    },
+    { onError: () => console.error('加载关键词列表失败') }
+  );
+
+  // 更新本地状态
+  useEffect(() => {
+    if (articlesData) {
+      setArticles(articlesData.articles || []);
+      setTotal(articlesData.total || 0);
+    }
+  }, [articlesData]);
+
+  useEffect(() => {
+    if (keywordsData) {
+      setKeywords(keywordsData);
+    }
+  }, [keywordsData]);
+
+  // URL 参数同步
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const status = params.get('status') as 'all' | 'published' | 'unpublished' | null;
@@ -80,62 +149,19 @@ export default function ArticleListPage() {
   }, [filters, page]);
 
   useEffect(() => {
-    loadArticles();
-    loadStats();
-  }, [filters, page]);
-
-  useEffect(() => {
-    loadKeywords();
-  }, []);
-
-  useEffect(() => {
     setSelectedIds(new Set());
   }, [filters]);
 
-  const loadArticles = async () => {
-    setLoading(true);
-    try {
-      const apiFilters: any = {
-        publishStatus: filters.publishStatus
-      };
-      
-      // 关键词筛选
-      if (filters.keyword) {
-        apiFilters.keyword = filters.keyword;
-      }
-      
-      // 搜索关键词（模糊搜索）
-      if (filters.searchKeyword && filters.searchKeyword.trim()) {
-        apiFilters.keyword = filters.searchKeyword.trim();
-      }
-      
-      const response = await getArticles(page, pageSize, apiFilters);
-      setArticles(response.articles || []);
-      setTotal(response.total || 0);
-    } catch (error: any) {
-      message.error(error.message || '加载文章列表失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 刷新所有数据
+  const loadArticles = useCallback(async () => {
+    await Promise.all([refreshArticles(true), refreshStats(true)]);
+  }, [refreshArticles, refreshStats]);
 
-  const loadStats = async () => {
-    try {
-      const statsData = await getArticleStats();
-      setStats(statsData);
-    } catch (error: any) {
-      console.error('加载统计数据失败:', error);
-    }
-  };
-
-  const loadKeywords = async () => {
-    try {
-      const response = await getKeywordStats();
-      setKeywords(response.keywords || []);
-    } catch (error: any) {
-      console.error('加载关键词列表失败:', error);
-    }
-  };
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('articles:');
+    await loadArticles();
+  }, [invalidateCacheByPrefix, loadArticles]);
 
   const handleView = async (id: number) => {
     try {
@@ -162,8 +188,7 @@ export default function ArticleListPage() {
   };
 
   const handleEditorSave = () => {
-    loadArticles();
-    loadStats();
+    invalidateAndRefresh();
   };
 
   const handleDelete = async (id: number) => {
@@ -174,8 +199,7 @@ export default function ArticleListPage() {
         try {
           await apiClient.delete(`/articles/${id}`);
           message.success('删除成功');
-          loadArticles();
-          loadStats();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除失败');
         }
@@ -194,8 +218,7 @@ export default function ArticleListPage() {
           await batchDeleteArticles(Array.from(selectedIds));
           message.success(`成功删除 ${selectedIds.size} 篇文章`);
           setSelectedIds(new Set());
-          loadArticles();
-          loadStats();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '批量删除失败');
         }
@@ -214,8 +237,7 @@ export default function ArticleListPage() {
           const result = await deleteAllArticles();
           message.success(`成功删除 ${result.deletedCount} 篇文章`);
           setSelectedIds(new Set());
-          loadArticles();
-          loadStats();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除所有失败');
         }
@@ -494,7 +516,20 @@ export default function ArticleListPage() {
         </Space>
       </Card>
 
-      <Card title="文章管理" variant="borderless" extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
+      <Card title="文章管理" variant="borderless" extra={
+        <Space>
+          {isFromCache && !refreshing && (
+            <Tooltip title="数据来自缓存">
+              <Tag color="gold">缓存</Tag>
+            </Tooltip>
+          )}
+          {refreshing && (
+            <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+          )}
+          <Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button>
+          <Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button>
+        </Space>
+      }>
         <ResizableTable<Article>
           tableId="article-list"
           columns={columns} 

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Card, Table, Tag, Button, Modal, Form, Input, Select, DatePicker, Statistic, Row, Col, message, Space } from 'antd';
-import { DollarOutlined, ShoppingOutlined, ClockCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Card, Table, Tag, Button, Modal, Form, Input, Select, DatePicker, Statistic, Row, Col, message, Space, Tooltip } from 'antd';
+import { DollarOutlined, ShoppingOutlined, ClockCircleOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import dayjs from 'dayjs';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -30,65 +32,81 @@ interface OrderStats {
 }
 
 const OrderManagementPage = () => {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [stats, setStats] = useState<OrderStats | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [pagination, setPagination] = useState({ current: 1, pageSize: 10, total: 0 });
   const [filters, setFilters] = useState<{ status?: string; dateRange?: [string, string] }>({});
   const [handleModalVisible, setHandleModalVisible] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [form] = Form.useForm();
 
-  useEffect(() => {
-    fetchOrders();
-    fetchStats();
+  // 构建缓存 key
+  const ordersCacheKey = useMemo(() => {
+    return `orders:${pagination.current}:${pagination.pageSize}:${filters.status || ''}:${filters.dateRange?.join('-') || ''}`;
   }, [pagination.current, pagination.pageSize, filters]);
 
-  const fetchOrders = async () => {
-    setLoading(true);
-    try {
-      const params: any = {
-        page: pagination.current,
-        limit: pagination.pageSize,
+  // 订单数据获取函数
+  const fetchOrders = useCallback(async () => {
+    const params: any = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+    };
+
+    if (filters.status) {
+      params.status = filters.status;
+    }
+
+    if (filters.dateRange) {
+      params.startDate = filters.dateRange[0];
+      params.endDate = filters.dateRange[1];
+    }
+
+    const response = await apiClient.get('/admin/orders', { params });
+
+    if (response.data.success) {
+      return {
+        orders: response.data.data,
+        total: response.data.pagination.total
       };
-
-      if (filters.status) {
-        params.status = filters.status;
-      }
-
-      if (filters.dateRange) {
-        params.startDate = filters.dateRange[0];
-        params.endDate = filters.dateRange[1];
-      }
-
-      const response = await apiClient.get('/admin/orders', { params });
-
-      if (response.data.success) {
-        setOrders(response.data.data);
-        setPagination((prev) => ({
-          ...prev,
-          total: response.data.pagination.total,
-        }));
-      }
-    } catch (error: any) {
-      message.error('获取订单列表失败');
-      console.error('获取订单列表失败:', error);
-    } finally {
-      setLoading(false);
     }
-  };
+    throw new Error('获取订单列表失败');
+  }, [pagination.current, pagination.pageSize, filters]);
 
-  const fetchStats = async () => {
-    try {
-      const response = await apiClient.get('/admin/orders/stats/summary');
-
-      if (response.data.success) {
-        setStats(response.data.data);
-      }
-    } catch (error: any) {
-      console.error('获取订单统计失败:', error);
+  // 统计数据获取函数
+  const fetchStats = useCallback(async () => {
+    const response = await apiClient.get('/admin/orders/stats/summary');
+    if (response.data.success) {
+      return response.data.data as OrderStats;
     }
-  };
+    throw new Error('获取订单统计失败');
+  }, []);
+
+  // 使用缓存 hook
+  const { data: ordersData, loading, refreshing, refresh, isFromCache } = useCachedData(
+    ordersCacheKey,
+    fetchOrders,
+    { deps: [pagination.current, pagination.pageSize, filters] }
+  );
+
+  const { data: stats, refreshing: statsRefreshing, refresh: refreshStats } = useCachedData(
+    'orders:stats',
+    fetchStats,
+    { deps: [] }
+  );
+
+  const orders = ordersData?.orders || [];
+
+  // 同步 total 到 pagination
+  useEffect(() => {
+    if (ordersData?.total !== undefined) {
+      setPagination(prev => ({ ...prev, total: ordersData.total }));
+    }
+  }, [ordersData?.total]);
+
+  // 刷新数据的辅助函数
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('orders:');
+    await Promise.all([refresh(true), refreshStats(true)]);
+  }, [invalidateCacheByPrefix, refresh, refreshStats]);
 
   const handleStatusChange = (value: string) => {
     setFilters((prev) => ({ ...prev, status: value || undefined }));
@@ -124,8 +142,7 @@ const OrderManagementPage = () => {
 
       message.success('处理成功');
       setHandleModalVisible(false);
-      fetchOrders();
-      fetchStats();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.response?.data?.message || '处理失败');
     }
@@ -209,7 +226,21 @@ const OrderManagementPage = () => {
 
   return (
     <div style={{ padding: '24px' }}>
-      <h1>订单管理</h1>
+      <h1>
+        订单管理
+        <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
+          {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
+          {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
+          <Tooltip title="刷新数据">
+            <Button
+              type="text"
+              size="small"
+              icon={<ReloadOutlined spin={refreshing} />}
+              onClick={() => invalidateAndRefresh()}
+            />
+          </Tooltip>
+        </Space>
+      </h1>
 
       {/* 统计卡片 */}
       {stats && (
@@ -275,7 +306,7 @@ const OrderManagementPage = () => {
 
           <RangePicker onChange={handleDateRangeChange} />
 
-          <Button icon={<ReloadOutlined />} onClick={fetchOrders}>
+          <Button icon={<ReloadOutlined />} onClick={() => refresh(true)}>
             刷新
           </Button>
         </Space>

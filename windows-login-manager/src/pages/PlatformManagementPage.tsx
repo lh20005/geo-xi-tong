@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
-import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, WifiOutlined, LockOutlined, CrownOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge, Tooltip } from 'antd';
+import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, LockOutlined, CrownOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { getPlatforms, getAccounts, Platform, Account, deleteAccount } from '../api/publishing';
 import ResizableTable from '../components/ResizableTable';
 import AccountBindingModal from '../components/Publishing/AccountBindingModal';
@@ -8,6 +8,8 @@ import AccountManagementModal from '../components/Publishing/AccountManagementMo
 import { getWebSocketClient, initializeWebSocket } from '../services/websocket';
 import ipcBridge from '../services/ipc';
 import { apiClient } from '../api/client';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 // const { Title } = Typography;
 
@@ -69,9 +71,9 @@ const isPlatformAvailableForFree = (platformId: string): boolean => {
 };
 
 export default function PlatformManagementPage() {
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
   const [managementModalVisible, setManagementModalVisible] = useState(false);
   const [selectedPlatform] = useState<Platform | null>(null);
@@ -80,8 +82,72 @@ export default function PlatformManagementPage() {
   const [pageSize, setPageSize] = useState(10);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
 
+  // 数据获取函数
+  const fetchPlatformsAndAccounts = useCallback(async () => {
+    const [platformsData, accountsData] = await Promise.all([
+      getPlatforms(),
+      getAccounts()
+    ]);
+    
+    // 定义平台显示顺序
+    const platformOrder = [
+      'douyin',      // 抖音
+      'toutiao',     // 头条号
+      'xiaohongshu', // 小红书
+      'souhu',       // 搜狐号
+      'wangyi',      // 网易号
+      'zhihu',       // 知乎
+      'qie',         // 企鹅号
+      'baijiahao',   // 百家号
+      'wechat',      // 微信公众号
+      'bilibili',    // 哔哩哔哩
+      'jianshu',     // 简书
+      'csdn'         // CSDN
+    ];
+    
+    // 按照指定顺序排序平台
+    const sortedPlatforms = platformsData.sort((a, b) => {
+      const indexA = platformOrder.indexOf(a.platform_id);
+      const indexB = platformOrder.indexOf(b.platform_id);
+      
+      // 如果平台不在排序列表中，放到最后
+      if (indexA === -1 && indexB === -1) return 0;
+      if (indexA === -1) return 1;
+      if (indexB === -1) return -1;
+      
+      return indexA - indexB;
+    });
+    
+    return { platforms: sortedPlatforms, accounts: accountsData };
+  }, []);
+
+  // 使用缓存 Hook 获取平台和账号数据
+  const {
+    data: platformData,
+    loading,
+    refreshing,
+    refresh: refreshPlatformData,
+    isFromCache
+  } = useCachedData(
+    'platforms:list',
+    fetchPlatformsAndAccounts,
+    {
+      onError: (error) => {
+        message.error('加载数据失败');
+        console.error('加载数据失败:', error);
+      }
+    }
+  );
+
+  // 更新本地状态
   useEffect(() => {
-    loadData();
+    if (platformData) {
+      setPlatforms(platformData.platforms || []);
+      setAccounts(platformData.accounts || []);
+    }
+  }, [platformData]);
+
+  useEffect(() => {
     fetchSubscription();
     initializeWebSocketConnection();
 
@@ -160,19 +226,19 @@ export default function PlatformManagementPage() {
       wsClient.on('account.created', (data) => {
         console.log('[WebSocket] 收到账号创建事件:', data);
         message.success('检测到新账号创建');
-        loadData(); // Refresh account list
+        invalidateAndRefresh(); // Refresh account list
       });
 
       wsClient.on('account.updated', (data) => {
         console.log('[WebSocket] 收到账号更新事件:', data);
         message.info('账号信息已更新');
-        loadData(); // Refresh account list
+        invalidateAndRefresh(); // Refresh account list
       });
 
       wsClient.on('account.deleted', (data) => {
         console.log('[WebSocket] 收到账号删除事件:', data);
         message.warning('账号已被删除');
-        loadData(); // Refresh account list
+        invalidateAndRefresh(); // Refresh account list
       });
 
       wsClient.on('error', (error) => {
@@ -191,52 +257,16 @@ export default function PlatformManagementPage() {
     }
   };
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const [platformsData, accountsData] = await Promise.all([
-        getPlatforms(),
-        getAccounts()
-      ]);
-      
-      // 定义平台显示顺序
-      const platformOrder = [
-        'douyin',      // 抖音
-        'toutiao',     // 头条号
-        'xiaohongshu', // 小红书
-        'souhu',       // 搜狐号
-        'wangyi',      // 网易号
-        'zhihu',       // 知乎
-        'qie',         // 企鹅号
-        'baijiahao',   // 百家号
-        'wechat',      // 微信公众号
-        'bilibili',    // 哔哩哔哩
-        'jianshu',     // 简书
-        'csdn'         // CSDN
-      ];
-      
-      // 按照指定顺序排序平台
-      const sortedPlatforms = platformsData.sort((a, b) => {
-        const indexA = platformOrder.indexOf(a.platform_id);
-        const indexB = platformOrder.indexOf(b.platform_id);
-        
-        // 如果平台不在排序列表中，放到最后
-        if (indexA === -1 && indexB === -1) return 0;
-        if (indexA === -1) return 1;
-        if (indexB === -1) return -1;
-        
-        return indexA - indexB;
-      });
-      
-      setPlatforms(sortedPlatforms);
-      setAccounts(accountsData);
-    } catch (error) {
-      message.error('加载数据失败');
-      console.error('加载数据失败:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('platforms:');
+    await refreshPlatformData(true);
+  }, [invalidateCacheByPrefix, refreshPlatformData]);
+
+  // 加载数据（用于手动刷新）
+  const loadData = useCallback(async () => {
+    await refreshPlatformData(true);
+  }, [refreshPlatformData]);
 
   const handlePlatformClick = async (platform: Platform) => {
     console.log('========== 平台登录调试开始 ==========');
@@ -274,7 +304,7 @@ export default function PlatformManagementPage() {
       if (result.success) {
         console.log('[调试] 登录成功');
         message.success('登录成功，Cookie已保存');
-        loadData(); // 重新加载数据
+        invalidateAndRefresh(); // 重新加载数据
       } else {
         console.log('[调试] 登录失败，message:', result.message, ', error:', result.error);
         message.error(result.message || '登录失败');
@@ -304,8 +334,8 @@ export default function PlatformManagementPage() {
       await deleteAccount(accountId);
       message.success('账号删除成功');
       
-      // 重新加载数据
-      await loadData();
+      // 使缓存失效并重新加载数据
+      await invalidateAndRefresh();
       
       // 检查删除后当前页是否还有数据
       // 如果当前页是最后一页且删除后没有数据了，跳到上一页
@@ -352,12 +382,12 @@ export default function PlatformManagementPage() {
 
   const handleBindingSuccess = () => {
     setBindingModalVisible(false);
-    loadData();
+    invalidateAndRefresh();
     message.success('账号绑定成功');
   };
 
   const handleManagementSuccess = () => {
-    loadData();
+    invalidateAndRefresh();
   };
 
   const getPlatformAccounts = (platformId: string) => {
@@ -542,12 +572,22 @@ export default function PlatformManagementPage() {
           </Space>
         }
         extra={
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={loadData}
-          >
-            刷新
-          </Button>
+          <Space>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={loadData}
+            >
+              刷新
+            </Button>
+          </Space>
         }
         variant="borderless"
         style={{ marginBottom: 24 }}
@@ -700,12 +740,22 @@ export default function PlatformManagementPage() {
           </Space>
         }
         extra={
-          <Button 
-            icon={<ReloadOutlined />} 
-            onClick={loadData}
-          >
-            刷新
-          </Button>
+          <Space>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
+            <Button 
+              icon={<ReloadOutlined />} 
+              onClick={loadData}
+            >
+              刷新
+            </Button>
+          </Space>
         }
         variant="borderless"
       >

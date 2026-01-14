@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, Button, message, Space, Tag, Modal, Empty, 
   Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Form, Popconfirm 
@@ -6,7 +6,7 @@ import {
 import { 
   FileTextOutlined, DeleteOutlined, ThunderboltOutlined, 
   SearchOutlined, FilterOutlined, ReloadOutlined, PlusOutlined,
-  ExclamationCircleOutlined 
+  ExclamationCircleOutlined, CloudSyncOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
@@ -18,13 +18,15 @@ import {
   deleteTopicsByKeyword
 } from '../api/distillationResultsApi';
 import { TopicWithReference, Statistics } from '../types/distillationResults';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Search } = Input;
 const { Option } = Select;
 
 export default function DistillationResultsPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [data, setData] = useState<TopicWithReference[]>([]);
   const [total, setTotal] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -48,21 +50,79 @@ export default function DistillationResultsPage() {
   const [manualForm] = Form.useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // 独立加载所有关键词
-  const loadAllKeywords = async () => {
-    try {
-      const result = await fetchAllKeywords();
-      setAllKeywords(result.keywords);
-    } catch (error: any) {
-      console.error('加载关键词列表失败:', error);
-      // 不阻止其他功能使用，只记录错误
-    }
-  };
+  // 生成缓存 key
+  const cacheKey = useMemo(() => 
+    `distillationResults:list:${filterKeyword}:${searchText}:${currentPage}:${pageSize}`,
+    [filterKeyword, searchText, currentPage, pageSize]
+  );
 
-  // 组件挂载时加载关键词列表
+  // 数据获取函数
+  const fetchData = useCallback(async () => {
+    const result = await fetchResultsWithReferences({
+      keyword: filterKeyword || undefined,
+      search: searchText || undefined,
+      page: currentPage,
+      pageSize
+    });
+    return result;
+  }, [filterKeyword, searchText, currentPage, pageSize]);
+
+  // 使用缓存 Hook 获取蒸馏结果列表
+  const {
+    data: resultsData,
+    loading,
+    refreshing,
+    refresh: refreshResults,
+    isFromCache
+  } = useCachedData(
+    cacheKey,
+    fetchData,
+    {
+      deps: [filterKeyword, searchText, currentPage, pageSize],
+      onError: (error) => message.error(error.message || '加载数据失败')
+    }
+  );
+
+  // 关键词列表缓存
+  const { 
+    data: keywordsData,
+    refresh: refreshKeywords 
+  } = useCachedData(
+    'distillationResults:keywords',
+    fetchAllKeywords,
+    { onError: () => console.error('加载关键词列表失败') }
+  );
+
+  // 更新本地状态
   useEffect(() => {
-    loadAllKeywords();
-  }, []);
+    if (resultsData) {
+      setData(resultsData.data || []);
+      setTotal(resultsData.total || 0);
+      setStatistics(resultsData.statistics || { totalTopics: 0, totalKeywords: 0, totalReferences: 0 });
+    }
+  }, [resultsData]);
+
+  useEffect(() => {
+    if (keywordsData) {
+      setAllKeywords(keywordsData.keywords || []);
+    }
+  }, [keywordsData]);
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('distillationResults:');
+    await Promise.all([refreshResults(true), refreshKeywords(true)]);
+  }, [invalidateCacheByPrefix, refreshResults, refreshKeywords]);
+
+  // 加载数据（用于手动刷新）
+  const loadData = useCallback(async () => {
+    await refreshResults(true);
+  }, [refreshResults]);
+
+  // 加载所有关键词
+  const loadAllKeywords = useCallback(async () => {
+    await refreshKeywords(true);
+  }, [refreshKeywords]);
 
   // 搜索防抖 - 300ms延迟
   useEffect(() => {
@@ -80,41 +140,6 @@ export default function DistillationResultsPage() {
 
     return () => clearTimeout(timer);
   }, [searchInput]);
-
-  // 加载数据
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const result = await fetchResultsWithReferences({
-        keyword: filterKeyword || undefined,
-        search: searchText || undefined,
-        page: currentPage,
-        pageSize
-      });
-      
-      setData(result.data);
-      setTotal(result.total);
-      setStatistics(result.statistics);
-    } catch (error: any) {
-      message.error(error.message || '加载数据失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 组件挂载时加载数据，以及当筛选条件改变时重新加载
-  useEffect(() => {
-    loadData();
-  }, [currentPage, pageSize, filterKeyword, searchText]);
-
-  // 添加自动刷新功能，每15秒刷新一次以同步最新的引用计数
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadData();
-    }, 15000); // 15秒刷新一次
-    
-    return () => clearInterval(interval);
-  }, [currentPage, pageSize, filterKeyword, searchText]);
 
   // 处理关键词筛选改变
   const handleKeywordChange = (value: string) => {
@@ -158,8 +183,7 @@ export default function DistillationResultsPage() {
           const result = await deleteTopics(topicIds);
           message.success(`成功删除 ${result.deletedCount} 个话题`);
           setSelectedRowKeys([]);
-          loadData();
-          loadAllKeywords(); // 删除后重新加载关键词列表
+          invalidateAndRefresh();
         } catch (error: any) {
           console.error('删除话题失败:', error);
           // 解析后端返回的详细错误信息
@@ -178,7 +202,7 @@ export default function DistillationResultsPage() {
         }
       }
     });
-  }, [selectedRowKeys, loadData, loadAllKeywords]);
+  }, [selectedRowKeys, invalidateAndRefresh]);
 
   // 清除筛选 - 使用useCallback优化性能
   const handleClearFilters = useCallback(() => {
@@ -226,8 +250,7 @@ export default function DistillationResultsPage() {
       
       message.success(`成功保存 ${result.count} 个蒸馏结果`);
       handleCloseManualModal();
-      loadData();
-      loadAllKeywords();
+      invalidateAndRefresh();
     } catch (error: any) {
       console.error('保存失败:', error);
       if (error.response?.data?.error) {
@@ -245,8 +268,7 @@ export default function DistillationResultsPage() {
     try {
       await deleteTopics([topicId]);
       message.success('删除成功');
-      loadData();
-      loadAllKeywords();
+      invalidateAndRefresh();
     } catch (error: any) {
       console.error('删除失败:', error);
       message.error(error.response?.data?.error || '删除失败');
@@ -278,8 +300,7 @@ export default function DistillationResultsPage() {
           message.success(`成功删除 ${result.deletedCount} 个蒸馏结果`);
           setFilterKeyword('');
           setSelectedRowKeys([]);
-          loadData();
-          loadAllKeywords();
+          invalidateAndRefresh();
         } catch (error: any) {
           console.error('删除失败:', error);
           message.error(error.response?.data?.error || '删除失败');
@@ -411,6 +432,14 @@ export default function DistillationResultsPage() {
           }
           extra={
             <Space>
+              {isFromCache && !refreshing && (
+                <Tooltip title="数据来自缓存">
+                  <Tag color="gold">缓存</Tag>
+                </Tooltip>
+              )}
+              {refreshing && (
+                <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+              )}
               <Button
                 type="primary"
                 icon={<PlusOutlined />}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Button,
   Card,
@@ -8,6 +8,7 @@ import {
   Modal,
   Space,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -15,6 +16,7 @@ import type { TablePaginationConfig } from 'antd/es/table';
 import type { FilterValue, SorterResult } from 'antd/es/table/interface';
 import {
   AimOutlined,
+  CloudSyncOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
@@ -23,6 +25,8 @@ import {
 } from '@ant-design/icons';
 import { ipcBridge } from '../services/ipc';
 import ResizableTable from '../components/ResizableTable';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { TextArea } = Input;
 const { Text } = Typography;
@@ -40,8 +44,8 @@ type ConversionTarget = {
 };
 
 export default function ConversionTargets() {
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [targets, setTargets] = useState<ConversionTarget[]>([]);
-  const [loading, setLoading] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -66,28 +70,54 @@ export default function ConversionTargets() {
     } as const;
   }, [currentPage, pageSize, searchKeyword, sortField, sortOrder]);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const res = await ipcBridge.getConversionTargets(queryParams);
-      if (!res.success) throw new Error(res.error || '加载失败');
+  // 生成缓存 key
+  const cacheKey = useMemo(() => 
+    `conversionTargets:list:${currentPage}:${pageSize}:${searchKeyword}:${sortField}:${sortOrder}`,
+    [currentPage, pageSize, searchKeyword, sortField, sortOrder]
+  );
 
-      const payload = res.data;
-      if (!payload?.success) throw new Error(payload?.error || '加载失败');
+  // 数据获取函数
+  const fetchData = useCallback(async () => {
+    const res = await ipcBridge.getConversionTargets(queryParams);
+    if (!res.success) throw new Error(res.error || '加载失败');
 
-      setTargets(payload.data.targets || []);
-      setTotal(payload.data.total || 0);
-    } catch (e: any) {
+    const payload = res.data;
+    if (!payload?.success) throw new Error(payload?.error || '加载失败');
+
+    return {
+      targets: payload.data.targets || [],
+      total: payload.data.total || 0
+    };
+  }, [queryParams]);
+
+  // 使用缓存 Hook
+  const {
+    data: cachedData,
+    loading,
+    refreshing,
+    refresh: refreshTargets,
+    isFromCache
+  } = useCachedData(cacheKey, fetchData, {
+    deps: [currentPage, pageSize, searchKeyword, sortField, sortOrder],
+    onError: (e) => {
       console.error('加载转化目标失败:', e);
       message.error(e?.message || '加载转化目标失败');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
+  // 处理缓存数据
   useEffect(() => {
-    load();
-  }, [currentPage, pageSize, searchKeyword, sortField, sortOrder]);
+    if (cachedData) {
+      setTargets(cachedData.targets || []);
+      setTotal(cachedData.total || 0);
+    }
+  }, [cachedData]);
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('conversionTargets:');
+    await refreshTargets(true);
+  }, [invalidateCacheByPrefix, refreshTargets]);
 
   const columns: any = [
     {
@@ -215,7 +245,7 @@ export default function ConversionTargets() {
   const onDelete = (record: ConversionTarget) => {
     Modal.confirm({
       title: '确认删除',
-      content: `确定要删除转化目标“${record.company_name}”吗？`,
+      content: `确定要删除转化目标"${record.company_name}"吗？`,
       okText: '确定',
       cancelText: '取消',
       okType: 'danger',
@@ -226,7 +256,7 @@ export default function ConversionTargets() {
           const payload = res.data;
           if (!payload?.success) throw new Error(payload?.error || '删除失败');
           message.success('删除成功');
-          load();
+          invalidateAndRefresh();
         } catch (e: any) {
           console.error('删除失败:', e);
           message.error(e?.message || '删除失败');
@@ -257,7 +287,7 @@ export default function ConversionTargets() {
         if (!apiPayload?.success) throw new Error(apiPayload?.error || '创建失败');
         message.success('创建成功');
         setModalVisible(false);
-        load();
+        invalidateAndRefresh();
       }
 
       if (modalMode === 'edit' && selectedTarget) {
@@ -267,7 +297,7 @@ export default function ConversionTargets() {
         if (!apiPayload?.success) throw new Error(apiPayload?.error || '更新失败');
         message.success('更新成功');
         setModalVisible(false);
-        load();
+        invalidateAndRefresh();
       }
     } catch (e: any) {
       if (e?.errorFields) return;
@@ -283,6 +313,14 @@ export default function ConversionTargets() {
           <Space>
             <AimOutlined />
             <span>转化目标管理</span>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
           </Space>
         }
         extra={
@@ -303,7 +341,7 @@ export default function ConversionTargets() {
         <ResizableTable<ConversionTarget>
           tableId="conversion-target-list"
           columns={columns}
-          dataSource={targets}
+          dataSource={targets || []}
           rowKey="id"
           loading={loading}
           pagination={{

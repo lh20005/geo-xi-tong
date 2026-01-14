@@ -3,10 +3,12 @@
  * 从 client/src/pages/AgentManagementPage.tsx 迁移
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Input, Button, Tag, Modal, Form, InputNumber, message, Space, Card, Statistic, Row, Col, Tooltip, Select, Table } from 'antd';
-import { SearchOutlined, StopOutlined, CheckCircleOutlined, DeleteOutlined, DollarOutlined, TeamOutlined, UserOutlined, WalletOutlined } from '@ant-design/icons';
+import { SearchOutlined, StopOutlined, CheckCircleOutlined, DeleteOutlined, DollarOutlined, TeamOutlined, UserOutlined, WalletOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 
 const { Search } = Input;
 
@@ -48,14 +50,11 @@ interface CommissionRecord {
 }
 
 export default function AgentManagementPage() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [stats, setStats] = useState<AgentStats | null>(null);
   
   // 详情弹窗
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -67,45 +66,61 @@ export default function AgentManagementPage() {
   const [rateModalVisible, setRateModalVisible] = useState(false);
   const [rateForm] = Form.useForm();
 
-  const loadAgents = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await apiClient.get('/admin/agents', {
-        params: { 
-          page, 
-          pageSize, 
-          search: search || undefined,
-          status: statusFilter || undefined
-        }
-      });
-      
-      if (response.data.success) {
-        setAgents(response.data.data.agents);
-        setTotal(response.data.data.total);
-      }
-    } catch (error: any) {
-      message.error(error.response?.data?.message || '加载代理商列表失败');
-    } finally {
-      setLoading(false);
-    }
+  // 构建缓存 key
+  const agentsCacheKey = useMemo(() => {
+    return `agents:${page}:${pageSize}:${search}:${statusFilter}`;
   }, [page, pageSize, search, statusFilter]);
 
-  const loadStats = useCallback(async () => {
-    try {
-      const response = await apiClient.get('/admin/agents/stats');
-      
-      if (response.data.success) {
-        setStats(response.data.data);
+  // 代理商列表获取函数
+  const loadAgents = useCallback(async () => {
+    const response = await apiClient.get('/admin/agents', {
+      params: { 
+        page, 
+        pageSize, 
+        search: search || undefined,
+        status: statusFilter || undefined
       }
-    } catch (error) {
-      console.error('加载统计数据失败:', error);
+    });
+    
+    if (response.data.success) {
+      return {
+        agents: response.data.data.agents,
+        total: response.data.data.total
+      };
     }
+    throw new Error('加载代理商列表失败');
+  }, [page, pageSize, search, statusFilter]);
+
+  // 统计数据获取函数
+  const loadStats = useCallback(async () => {
+    const response = await apiClient.get('/admin/agents/stats');
+    if (response.data.success) {
+      return response.data.data as AgentStats;
+    }
+    throw new Error('加载统计数据失败');
   }, []);
 
-  useEffect(() => {
-    loadAgents();
-    loadStats();
-  }, [loadAgents, loadStats]);
+  // 使用缓存 hook
+  const { data: agentsData, loading, refreshing, refresh, isFromCache } = useCachedData(
+    agentsCacheKey,
+    loadAgents,
+    { deps: [page, search, statusFilter] }
+  );
+
+  const { data: stats, refresh: refreshStats } = useCachedData(
+    'agents:stats',
+    loadStats,
+    { deps: [] }
+  );
+
+  const agents = agentsData?.agents || [];
+  const total = agentsData?.total || 0;
+
+  // 刷新数据的辅助函数
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('agents:');
+    await Promise.all([refresh(true), refreshStats(true)]);
+  }, [invalidateCacheByPrefix, refresh, refreshStats]);
 
   const handleViewDetail = async (agent: Agent) => {
     setSelectedAgent(agent);
@@ -138,7 +153,7 @@ export default function AgentManagementPage() {
         try {
           await apiClient.put(`/admin/agents/${agent.id}/status`, { status: newStatus });
           message.success(`代理商已${actionText}`);
-          loadAgents();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.response?.data?.message || `${actionText}失败`);
         }
@@ -162,7 +177,7 @@ export default function AgentManagementPage() {
       
       message.success('佣金比例已调整');
       setRateModalVisible(false);
-      loadAgents();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.response?.data?.message || '调整佣金比例失败');
     }
@@ -186,8 +201,7 @@ export default function AgentManagementPage() {
         try {
           await apiClient.delete(`/admin/agents/${agent.id}`);
           message.success('代理商已删除');
-          loadAgents();
-          loadStats();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.response?.data?.message || '删除失败');
         }
@@ -445,7 +459,21 @@ export default function AgentManagementPage() {
 
       <Card>
         <div style={{ marginBottom: 16 }}>
-          <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>代理商管理</h2>
+          <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
+            代理商管理
+            <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
+              {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
+              {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
+              <Tooltip title="刷新数据">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ReloadOutlined spin={refreshing} />}
+                  onClick={() => invalidateAndRefresh()}
+                />
+              </Tooltip>
+            </Space>
+          </h2>
           <p style={{ color: '#666', marginBottom: 16 }}>管理系统中的所有代理商和佣金分成</p>
           
           <Space size="middle" style={{ marginBottom: 16 }}>

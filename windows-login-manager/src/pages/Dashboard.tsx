@@ -1,10 +1,14 @@
 /**
  * 工作台页面
  * 重新设计的专业数据仪表盘，包含代理商视图、核心指标、数据分析等
+ * 
+ * 优化：使用 useCachedData Hook 实现 Stale-While-Revalidate 缓存策略
+ * - 首次访问：显示 loading，获取数据后缓存
+ * - 再次访问：立即显示缓存数据（无 loading），后台静默刷新
  */
 
-import { useState, useEffect, useCallback } from 'react';
-import { Row, Col, Typography, Button, Space, message, DatePicker, Select, Card, Divider } from 'antd';
+import { useState, useCallback, useMemo } from 'react';
+import { Row, Col, Typography, Button, Space, message, DatePicker, Select, Card, Divider, Tooltip } from 'antd';
 import { 
   ReloadOutlined, 
   ThunderboltOutlined, 
@@ -12,7 +16,8 @@ import {
   RocketOutlined,
   BarChartOutlined,
   DashboardOutlined,
-  SettingOutlined
+  SettingOutlined,
+  CloudSyncOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs, { Dayjs } from 'dayjs';
@@ -31,6 +36,7 @@ import MonthlyComparisonChart from '../components/Dashboard/MonthlyComparisonCha
 import HourlyActivityChart from '../components/Dashboard/HourlyActivityChart';
 
 import { getAllDashboardData } from '../api/dashboard';
+import { useCachedData } from '../hooks/useCachedData';
 import type { TimeRange } from '../types/dashboard';
 
 const { Title, Text } = Typography;
@@ -43,33 +49,48 @@ export default function Dashboard() {
     endDate: dayjs().format('YYYY-MM-DD'),
     preset: '30d'
   });
-  const [loading, setLoading] = useState(true);
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [dashboardData, setDashboardData] = useState<any>(null);
 
-  // 加载数据
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    
-    try {
-      const data = await getAllDashboardData({
-        startDate: timeRange.startDate,
-        endDate: timeRange.endDate
-      });
+  // 生成缓存 key（包含时间范围，确保不同时间范围有不同缓存）
+  const cacheKey = useMemo(() => 
+    `dashboard:main:${timeRange.startDate}:${timeRange.endDate}`,
+    [timeRange.startDate, timeRange.endDate]
+  );
 
-      setDashboardData(data);
-      setLastUpdate(new Date());
-      setLoading(false);
-    } catch (error) {
-      console.error('加载Dashboard数据失败:', error);
-      setLoading(false);
-      message.error('加载数据失败');
+  // 数据获取函数
+  const fetcher = useCallback(() => 
+    getAllDashboardData({
+      startDate: timeRange.startDate,
+      endDate: timeRange.endDate
+    }),
+    [timeRange.startDate, timeRange.endDate]
+  );
+
+  // 使用缓存 Hook
+  const {
+    data: dashboardData,
+    loading,
+    refreshing,
+    error,
+    refresh,
+    isFromCache,
+    isStale
+  } = useCachedData(cacheKey, fetcher, {
+    deps: [timeRange.startDate, timeRange.endDate],
+    onError: () => message.error('加载数据失败'),
+  });
+
+  // 最后更新时间（从缓存或当前时间）
+  const lastUpdate = useMemo(() => {
+    if (dashboardData) {
+      return new Date();
     }
-  }, [timeRange]);
+    return null;
+  }, [dashboardData]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // 手动刷新
+  const loadData = useCallback(async () => {
+    await refresh(true);
+  }, [refresh]);
 
   // 时间范围变更
   const handleTimeRangeChange = (preset: '7d' | '30d' | '90d' | 'custom', dates?: [Dayjs, Dayjs]) => {
@@ -143,6 +164,18 @@ export default function Dashboard() {
                     ● 最后更新: {dayjs(lastUpdate).format('HH:mm:ss')}
                   </span>
                 )}
+                {isFromCache && !refreshing && (
+                  <Tooltip title="数据来自缓存，点击刷新获取最新数据">
+                    <span style={{ marginLeft: 8, color: '#faad14' }}>
+                      (缓存)
+                    </span>
+                  </Tooltip>
+                )}
+                {refreshing && (
+                  <span style={{ marginLeft: 8, color: '#1890ff' }}>
+                    <CloudSyncOutlined spin /> 后台更新中...
+                  </span>
+                )}
               </Text>
             </div>
           </div>
@@ -175,12 +208,12 @@ export default function Dashboard() {
             
             <Button
               type="primary"
-              icon={<ReloadOutlined />}
+              icon={<ReloadOutlined spin={refreshing} />}
               onClick={loadData}
               loading={loading}
               size="large"
             >
-              刷新数据
+              {refreshing ? '刷新中' : '刷新数据'}
             </Button>
           </Space>
         </div>

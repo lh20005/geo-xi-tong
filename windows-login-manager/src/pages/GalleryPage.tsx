@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag } from 'antd';
-import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag, Tooltip } from 'antd';
+import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { API_BASE_URL } from '../config/env';
+import { useCachedData } from '../hooks/useCachedData';
+import { useCacheStore } from '../stores/cacheStore';
 import type { UploadFile } from 'antd';
 
 interface Album {
@@ -16,26 +18,54 @@ interface Album {
 
 export default function GalleryPage() {
   const navigate = useNavigate();
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [albums, setAlbums] = useState<Album[]>([]);
-  const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [albumName, setAlbumName] = useState('');
   const [fileList, setFileList] = useState<UploadFile[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadAlbums();
+  // 数据获取函数
+  const fetchAlbums = useCallback(async () => {
+    const response = await apiClient.get('/gallery/albums');
+    return Array.isArray(response.data.albums) ? response.data.albums : [];
   }, []);
 
-  const loadAlbums = async () => {
-    try {
-      const response = await apiClient.get('/gallery/albums');
-      setAlbums(Array.isArray(response.data.albums) ? response.data.albums : []);
-    } catch (error) {
-      console.error('加载相册失败:', error);
-      message.error('加载相册失败');
-      setAlbums([]);
+  // 使用缓存 Hook 获取相册列表
+  const {
+    data: albumsData,
+    loading,
+    refreshing,
+    refresh: refreshAlbums,
+    isFromCache
+  } = useCachedData<Album[]>(
+    'gallery:albums',
+    fetchAlbums,
+    {
+      onError: (error) => {
+        console.error('加载相册失败:', error);
+        message.error('加载相册失败');
+      }
     }
-  };
+  );
+
+  // 更新本地状态
+  useEffect(() => {
+    if (albumsData) {
+      setAlbums(albumsData);
+    }
+  }, [albumsData]);
+
+  // 使缓存失效并刷新
+  const invalidateAndRefresh = useCallback(async () => {
+    invalidateCacheByPrefix('gallery:');
+    await refreshAlbums(true);
+  }, [invalidateCacheByPrefix, refreshAlbums]);
+
+  // 加载数据（用于手动刷新）
+  const loadAlbums = useCallback(async () => {
+    await refreshAlbums(true);
+  }, [refreshAlbums]);
 
   const handleCreateAlbum = async () => {
     if (!albumName.trim()) {
@@ -43,7 +73,7 @@ export default function GalleryPage() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const formData = new FormData();
       formData.append('name', albumName.trim());
@@ -65,11 +95,11 @@ export default function GalleryPage() {
       setCreateModalVisible(false);
       setAlbumName('');
       setFileList([]);
-      loadAlbums();
+      invalidateAndRefresh();
     } catch (error: any) {
       message.error(error.message || '创建相册失败');
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -84,7 +114,7 @@ export default function GalleryPage() {
         try {
           await apiClient.delete(`/gallery/albums/${id}`);
           message.success('相册删除成功');
-          loadAlbums();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除相册失败');
         }
@@ -118,7 +148,7 @@ export default function GalleryPage() {
         try {
           await apiClient.patch(`/gallery/albums/${id}`, { name: newName.trim() });
           message.success('相册名称更新成功');
-          loadAlbums();
+          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '更新失败');
           return Promise.reject();
@@ -151,13 +181,30 @@ export default function GalleryPage() {
           </Space>
         }
         extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setCreateModalVisible(true)}
-          >
-            创建相册
-          </Button>
+          <Space>
+            {isFromCache && !refreshing && (
+              <Tooltip title="数据来自缓存">
+                <Tag color="gold">缓存</Tag>
+              </Tooltip>
+            )}
+            {refreshing && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            )}
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={loadAlbums}
+              loading={loading}
+            >
+              刷新
+            </Button>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setCreateModalVisible(true)}
+            >
+              创建相册
+            </Button>
+          </Space>
         }
         variant="borderless"
       >
@@ -272,7 +319,7 @@ export default function GalleryPage() {
           setAlbumName('');
           setFileList([]);
         }}
-        confirmLoading={loading}
+        confirmLoading={submitting}
         okText="创建"
         cancelText="取消"
       >
