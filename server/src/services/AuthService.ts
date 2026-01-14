@@ -253,21 +253,25 @@ export class AuthService {
 
   /**
    * 初始化默认管理员账号
+   * 只有在系统中没有任何管理员时才创建默认管理员
    */
   async initializeDefaultAdmin(): Promise<void> {
     try {
+      // 检查是否已存在任何管理员
+      const existingAdmins = await pool.query(
+        `SELECT id FROM users WHERE role = 'admin' LIMIT 1`
+      );
+      
+      if (existingAdmins.rows.length > 0) {
+        console.log('[Auth] 已存在管理员账号，跳过默认管理员创建');
+        return;
+      }
+      
+      // 只有在没有任何管理员时才创建默认管理员
       const adminUsername = process.env.ADMIN_USERNAME || 'admin';
       const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
-      
-      // 检查管理员是否已存在
-      const existingAdmin = await this.getUserByUsername(adminUsername);
-      
-      if (!existingAdmin) {
-        await this.createUser(adminUsername, adminPassword, undefined, 'admin');
-        console.log(`[Auth] 默认管理员账号已创建: ${adminUsername}`);
-      } else {
-        console.log(`[Auth] 默认管理员账号已存在: ${adminUsername}`);
-      }
+      await this.createUser(adminUsername, adminPassword, undefined, 'admin');
+      console.log(`[Auth] 默认管理员账号已创建: ${adminUsername}`);
     } catch (error) {
       console.error('[Auth] 初始化默认管理员失败:', error);
       throw error;
