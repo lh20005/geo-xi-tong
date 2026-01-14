@@ -24,7 +24,7 @@ export default function HomePage() {
   const { plans, loading: plansLoading } = usePlans();
   
   // 用户状态（合并了折扣和订阅信息，减少 API 请求）
-  const { getDiscountedPrice, hasAccessTo, isAddonPlan } = useUserStatus();
+  const { getDiscountedPrice } = useUserStatus();
 
   // 轮播图片列表
   const carouselImages = [
@@ -442,15 +442,9 @@ export default function HomePage() {
                         )}
                       </div>
                       {(() => {
-                        // 判断是否为加量包
-                        const isPlanAddon = isAddonPlan(plan.plan_code);
-                        // 判断用户是否已拥有该套餐等级或更高
-                        const userHasAccess = hasAccessTo(plan.plan_code);
-                        
                         // 按钮显示逻辑：
-                        // 1. 加量包：已登录用户始终显示"立即升级"
-                        // 2. 基础套餐：用户已拥有该等级或更高 -> "进入GEO系统"
-                        // 3. 基础套餐：用户未拥有 -> "立即升级"（或未登录显示"免费使用"/"立即购买"）
+                        // 1. 未登录用户：免费版显示"免费使用"，付费版显示"立即购买"
+                        // 2. 已登录用户：免费版显示"进入GEO系统"，其他套餐显示"立即升级"（可重复购买）
                         
                         if (!isLoggedIn) {
                           // 未登录用户
@@ -476,24 +470,8 @@ export default function HomePage() {
                         }
                         
                         // 已登录用户
-                        if (isPlanAddon) {
-                          // 加量包：始终显示"立即升级"
-                          return (
-                            <button
-                              onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
-                              className={`block w-full py-2.5 font-semibold rounded-lg transition-colors text-sm ${
-                                hasDiscount 
-                                  ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-300' 
-                                  : 'bg-white text-blue-600 hover:bg-gray-50'
-                              }`}
-                            >
-                              立即升级
-                            </button>
-                          );
-                        }
-                        
-                        if (userHasAccess) {
-                          // 用户已拥有该套餐等级或更高：显示"进入GEO系统"
+                        if (isFree) {
+                          // 免费版：显示"进入GEO系统"（用户注册后默认就是免费版）
                           return (
                             <button
                               onClick={handleEnterSystem}
@@ -504,7 +482,7 @@ export default function HomePage() {
                           );
                         }
                         
-                        // 用户未拥有该套餐：显示"立即升级"
+                        // 其他套餐（专业版、企业版、加量包等）：显示"立即升级"，用户可随意购买
                         return (
                           <button
                             onClick={() => handlePurchase(plan.id, plan.plan_name, displayPrice, hasDiscount ? originalPrice : undefined, hasDiscount)}
