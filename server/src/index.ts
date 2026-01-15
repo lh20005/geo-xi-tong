@@ -10,7 +10,7 @@ import { apiRouter } from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { sanitizeResponse } from './middleware/sanitizeResponse';
 import { encryptionService } from './services/EncryptionService';
-import { taskScheduler } from './services/TaskScheduler';
+// [已迁移到 Windows 端] import { taskScheduler } from './services/TaskScheduler';
 import { getWebSocketService } from './services/WebSocketService';
 import { rateLimitService } from './services/RateLimitService';
 import { tokenService } from './services/TokenService';
