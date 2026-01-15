@@ -1,75 +1,60 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Space, Upload, Empty, Input, Tag, Tooltip, App, Modal } from 'antd';
-import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
+import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
-import { ipcBridge } from '../services/ipc';
+import { useKnowledgeStore } from '../stores/knowledgeStore';
 import type { UploadFile } from 'antd';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
-
-interface KnowledgeDocument {
-  id: number;
-  filename: string;
-  file_type: string;
-  file_size: number;
-  content_preview: string;
-  created_at: string;
-}
-
-interface KnowledgeBase {
-  id: number;
-  name: string;
-  description: string;
-  document_count: number;
-  documents: KnowledgeDocument[];
-}
 
 export default function KnowledgeBaseDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { message, modal } = App.useApp();
-  const { invalidateCacheByPrefix } = useCacheStore();
+  
+  const {
+    currentKnowledgeBase,
+    documents,
+    currentDocument,
+    loading,
+    uploading,
+    error,
+    fetchKnowledgeBase,
+    fetchDocuments,
+    fetchDocument,
+    uploadDocuments,
+    deleteDocument,
+    searchDocuments,
+    clearError
+  } = useKnowledgeStore();
+  
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [viewModalVisible, setViewModalVisible] = useState(false);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [uploading, setUploading] = useState(false);
 
-  // 生成缓存 key
-  const cacheKey = useMemo(() => `knowledgeBaseDetail:${id}`, [id]);
-
-  // 数据获取函数
-  const fetchKnowledgeBase = useCallback(async () => {
-    if (!id) return null;
-    const res = await ipcBridge.getKnowledgeBase(parseInt(id));
-    if (res.success && res.data) {
-      return res.data;
+  // 初始加载
+  useEffect(() => {
+    if (id) {
+      fetchKnowledgeBase(id);
+      fetchDocuments(id);
     }
-    throw new Error(res.error || '加载失败');
-  }, [id]);
+  }, [id, fetchKnowledgeBase, fetchDocuments]);
 
-  // 使用缓存 Hook
-  const {
-    data: knowledgeBase,
-    loading: _loading,
-    refreshing,
-    refresh,
-    isFromCache
-  } = useCachedData<KnowledgeBase | null>(cacheKey, fetchKnowledgeBase, {
-    deps: [id],
-    onError: (error) => message.error(error.message || '加载知识库失败'),
-  });
-  void _loading; // 保留以备将来使用
+  // 错误处理
+  useEffect(() => {
+    if (error) {
+      message.error(error);
+      clearError();
+    }
+  }, [error, clearError, message]);
 
-  const documents = knowledgeBase?.documents || [];
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('knowledgeBase');
-    await refresh(true);
-  }, [invalidateCacheByPrefix, refresh]);
+  // 刷新数据
+  const handleRefresh = useCallback(async () => {
+    if (id) {
+      await fetchKnowledgeBase(id);
+      await fetchDocuments(id);
+    }
+  }, [id, fetchKnowledgeBase, fetchDocuments]);
 
   const handleUploadDocuments = async () => {
     if (fileList.length === 0) {
@@ -77,22 +62,11 @@ export default function KnowledgeBaseDetailPage() {
       return;
     }
 
-    setUploading(true);
     try {
-      console.log('=== 开始上传文件 ===');
-      console.log('文件数量:', fileList.length);
-      
       // 使用文件路径传输（Electron 环境下 File 对象有 path 属性）
       const filesData = fileList.map((file) => {
         if (file.originFileObj) {
           const fileObj = file.originFileObj as any;
-          console.log('文件信息:', {
-            name: file.name,
-            type: file.type,
-            size: file.size,
-            hasPath: !!fileObj.path
-          });
-          
           return {
             name: file.name,
             type: file.type || 'application/octet-stream',
@@ -103,41 +77,19 @@ export default function KnowledgeBaseDetailPage() {
         return null;
       }).filter(f => f !== null);
 
-      console.log('准备上传的文件:', filesData);
+      const success = await uploadDocuments(id!, filesData);
       
-      const res = await ipcBridge.uploadKnowledgeBaseDocuments(parseInt(id!), filesData);
-      
-      console.log('上传响应:', res);
-      
-      if (!res.success) throw new Error(res.error || '上传失败');
-
-      message.success(`成功上传 ${res.data?.uploadedCount || 0} 个文档！`);
-      if (res.data?.errors && res.data.errors.length > 0) {
-        res.data.errors.forEach((err: any) => {
-          message.error(`${err.filename}: ${err.error}`);
-        });
+      if (success) {
+        message.success('文档上传成功！');
+        setUploadModalVisible(false);
+        setFileList([]);
       }
-      
-      setUploadModalVisible(false);
-      setFileList([]);
-      invalidateAndRefresh();
     } catch (error: any) {
-      console.error('上传失败:', error);
-      // 处理存储空间不足的错误
-      if (error.message && (error.message.includes('存储空间') || error.message.includes('配额'))) {
-        message.error({
-          content: `${error.message}。请前往个人中心购买存储空间。`,
-          duration: 5
-        });
-      } else {
-        message.error(error.message || '上传文档失败');
-      }
-    } finally {
-      setUploading(false);
+      message.error(error.message || '上传文档失败');
     }
   };
 
-  const handleDeleteDocument = (docId: number, filename: string) => {
+  const handleDeleteDocument = (docId: string, filename: string) => {
     modal.confirm({
       title: '确认删除',
       content: `确定要删除文档"${filename}"吗？此操作不可恢复。`,
@@ -145,48 +97,29 @@ export default function KnowledgeBaseDetailPage() {
       cancelText: '取消',
       okType: 'danger',
       onOk: async () => {
-        try {
-          const res = await ipcBridge.deleteKnowledgeBaseDocument(docId);
-          if (!res.success) throw new Error(res.error || '删除失败');
+        const success = await deleteDocument(docId);
+        if (success) {
           message.success('文档删除成功');
-          invalidateAndRefresh();
-        } catch (error: any) {
-          message.error(error.message || '删除文档失败');
         }
       }
     });
   };
 
-  const handleViewDocument = async (docId: number) => {
-    try {
-      const res = await ipcBridge.getKnowledgeBaseDocument(docId);
-      if (res.success && res.data) {
-        setSelectedDoc(res.data);
-        setViewModalVisible(true);
-      } else {
-        throw new Error(res.error || '获取失败');
-      }
-    } catch (error: any) {
-      message.error(error.message || '获取文档详情失败');
-    }
+  const handleViewDocument = async (docId: string) => {
+    await fetchDocument(docId);
+    setViewModalVisible(true);
   };
 
   const handleSearch = async () => {
     if (!searchKeyword.trim()) {
-      refresh(true);
+      if (id) {
+        await fetchDocuments(id);
+      }
       return;
     }
 
-    try {
-      const res = await ipcBridge.searchKnowledgeBaseDocuments(parseInt(id!), searchKeyword);
-      if (res.success && res.data) {
-        // 搜索结果不缓存，直接更新显示
-        // 注意：这里我们不更新缓存，因为搜索结果是临时的
-      } else {
-        throw new Error(res.error || '搜索失败');
-      }
-    } catch (error: any) {
-      message.error(error.message || '搜索失败');
+    if (id) {
+      await searchDocuments(id, searchKeyword);
     }
   };
 
@@ -221,7 +154,7 @@ export default function KnowledgeBaseDetailPage() {
       key: 'filename',
       width: 250,
       align: 'center' as const,
-      render: (text: string, record: KnowledgeDocument) => (
+      render: (text: string, record: any) => (
         <Space>
           <FileTextOutlined style={{ color: '#1890ff' }} />
           <span>{text}</span>
@@ -263,7 +196,7 @@ export default function KnowledgeBaseDetailPage() {
       key: 'action',
       width: 150,
       align: 'center' as const,
-      render: (_: any, record: KnowledgeDocument) => (
+      render: (_: any, record: any) => (
         <Space size="small">
           <Button
             size="small"
@@ -296,24 +229,19 @@ export default function KnowledgeBaseDetailPage() {
               onClick={() => navigate('/knowledge-base')}
             />
             <BookOutlined style={{ color: '#1890ff' }} />
-            <span>{knowledgeBase?.name || '知识库详情'}</span>
-            {knowledgeBase?.description && (
+            <span>{currentKnowledgeBase?.name || '知识库详情'}</span>
+            <Tag color="green">本地存储</Tag>
+            {currentKnowledgeBase?.description && (
               <span style={{ fontSize: 14, color: '#666', fontWeight: 'normal' }}>
-                - {knowledgeBase.description}
+                - {currentKnowledgeBase.description}
               </span>
             )}
           </Space>
         }
         extra={
           <Space>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
             <Tooltip title="刷新数据">
-              <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => refresh(true)}>
+              <Button icon={<ReloadOutlined spin={loading} />} onClick={handleRefresh} loading={loading}>
                 刷新
               </Button>
             </Tooltip>
@@ -346,7 +274,7 @@ export default function KnowledgeBaseDetailPage() {
             </p>
           </Empty>
         ) : (
-          <ResizableTable<KnowledgeDocument>
+          <ResizableTable
             tableId="knowledge-base-documents"
             columns={columns}
             dataSource={documents}
@@ -397,11 +325,10 @@ export default function KnowledgeBaseDetailPage() {
         open={viewModalVisible}
         onCancel={() => {
           setViewModalVisible(false);
-          setSelectedDoc(null);
         }}
         footer={[
           <Button key="copy" onClick={() => {
-            navigator.clipboard.writeText(selectedDoc?.content || '');
+            navigator.clipboard.writeText(currentDocument?.content || '');
             message.success('内容已复制到剪贴板');
           }}>
             复制内容
@@ -412,19 +339,19 @@ export default function KnowledgeBaseDetailPage() {
         ]}
         width={800}
       >
-        {selectedDoc && (
+        {currentDocument && (
           <Space direction="vertical" style={{ width: '100%' }}>
             <div>
-              <strong>文件名:</strong> {selectedDoc.filename}
+              <strong>文件名:</strong> {currentDocument.filename}
             </div>
             <div>
-              <strong>文件类型:</strong> {selectedDoc.file_type}
+              <strong>文件类型:</strong> {currentDocument.file_type}
             </div>
             <div>
-              <strong>文件大小:</strong> {formatFileSize(selectedDoc.file_size)}
+              <strong>文件大小:</strong> {formatFileSize(currentDocument.file_size)}
             </div>
             <div>
-              <strong>上传时间:</strong> {new Date(selectedDoc.created_at).toLocaleString('zh-CN')}
+              <strong>上传时间:</strong> {new Date(currentDocument.created_at).toLocaleString('zh-CN')}
             </div>
             <div>
               <strong>文档内容:</strong>
@@ -438,7 +365,7 @@ export default function KnowledgeBaseDetailPage() {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word'
               }}>
-                {selectedDoc.content}
+                {currentDocument.content}
               </div>
             </div>
           </Space>

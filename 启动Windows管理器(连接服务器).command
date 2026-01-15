@@ -2,6 +2,10 @@
 
 # Windows登录管理器 - 连接远程服务器版
 # 用于本地调试，连接到生产服务器 jzgeo.cc
+#
+# 架构说明（改造后）：
+# - 本地执行：发布任务、浏览器自动化、文章/知识库/图库/账号存储
+# - 服务器执行：用户认证、配额验证、AI生成、订阅管理、数据同步
 
 cd "$(dirname "$0")"
 echo -ne "\033]0;Windows管理器(服务器)\007"
@@ -71,6 +75,15 @@ echo "📋 连接信息:"
 echo "   • 后端API:    https://jzgeo.cc/api"
 echo "   • WebSocket:  wss://jzgeo.cc/ws"
 echo "   • 本地端口:   http://localhost:5174"
+echo ""
+echo "📦 本地执行（改造后）:"
+echo "   • 发布任务:   本地 Playwright 执行"
+echo "   • 数据存储:   本地 SQLite 数据库"
+echo "   • 浏览器:     本地 Chrome/Chromium"
+echo ""
+echo "☁️  服务器功能:"
+echo "   • 用户认证、配额验证、AI生成"
+echo "   • 订阅管理、数据同步"
 echo ""
 echo "⚠️  操作提示:"
 echo "   • 保持此窗口打开以查看日志"

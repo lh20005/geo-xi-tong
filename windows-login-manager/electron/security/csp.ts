@@ -59,7 +59,7 @@ export class ContentSecurityPolicy {
         "default-src 'self' http://localhost:* ws://localhost:*",
         "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*",
         "style-src 'self' 'unsafe-inline' http://localhost:*",
-        "img-src 'self' data: https: http: http://localhost:*",
+        "img-src 'self' data: https: http: http://localhost:* local-file:",
         "font-src 'self' data: http://localhost:*",
         "connect-src 'self' http://localhost:* ws://localhost:* https:",
         "frame-src 'none'",
@@ -70,12 +70,12 @@ export class ContentSecurityPolicy {
       ];
       return policy.join('; ');
     } else {
-      // 生产环境：严格的 CSP
+      // 生产环境：严格的 CSP，但允许 local-file 协议加载本地图片
       const policy = [
         "default-src 'self'",
         "script-src 'self' 'unsafe-inline'",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: https:",
+        "img-src 'self' data: https: local-file:",
         "font-src 'self' data:",
         "connect-src 'self' https:",
         "frame-src 'none'",

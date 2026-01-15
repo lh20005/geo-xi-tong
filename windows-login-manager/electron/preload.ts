@@ -1,5 +1,25 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+// 本地文件协议名称
+const LOCAL_FILE_PROTOCOL = 'local-file';
+
+/**
+ * 将本地文件路径转换为协议 URL
+ * @param filePath 本地文件路径
+ * @returns 协议 URL
+ */
+function getLocalFileUrl(filePath: string): string {
+  if (!filePath) return '';
+  // 确保路径使用正斜杠
+  let normalizedPath = filePath.replace(/\\/g, '/');
+  // 确保路径以斜杠开头（对于绝对路径）
+  // URL 格式应该是 local-file:///path/to/file（三个斜杠）
+  if (!normalizedPath.startsWith('/')) {
+    normalizedPath = '/' + normalizedPath;
+  }
+  return `${LOCAL_FILE_PROTOCOL}://${normalizedPath}`;
+}
+
 // 定义暴露给渲染进程的API类型
 export interface ElectronAPI {
   // 系统登录
@@ -223,6 +243,11 @@ export interface ElectronAPI {
     exportLocal: (exportPath?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     importLocal: (importPath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     getLocalStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 工具函数
+  utils: {
+    getLocalFileUrl: (filePath: string) => string;
   };
 }
 
@@ -479,6 +504,11 @@ const electronAPI = {
     exportLocal: (exportPath?: string) => ipcRenderer.invoke('sync:exportLocal', exportPath),
     importLocal: (importPath: string) => ipcRenderer.invoke('sync:importLocal', importPath),
     getLocalStats: () => ipcRenderer.invoke('sync:getLocalStats'),
+  },
+
+  // 工具函数
+  utils: {
+    getLocalFileUrl: (filePath: string) => getLocalFileUrl(filePath),
   },
 } as ElectronAPI;
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag, Tooltip } from 'antd';
+import { Card, Button, Space, Modal, Input, Upload, Empty, Row, Col, Tag, App } from 'antd';
 import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useGalleryStore } from '../stores/galleryStore';
@@ -7,6 +7,7 @@ import type { UploadFile } from 'antd';
 
 export default function GalleryPage() {
   const navigate = useNavigate();
+  const { message, modal } = App.useApp();
   const { 
     albums, 
     loading, 
@@ -35,7 +36,7 @@ export default function GalleryPage() {
       message.error(error);
       clearError();
     }
-  }, [error, clearError]);
+  }, [error, clearError, message]);
 
   // 刷新数据
   const loadAlbums = useCallback(async () => {
@@ -57,8 +58,25 @@ export default function GalleryPage() {
         // 如果有图片，上传图片
         if (fileList.length > 0) {
           const { uploadImages } = useGalleryStore.getState();
-          const files = fileList.map(f => f.originFileObj).filter(Boolean);
-          await uploadImages(album.id, files);
+          // 提取可序列化的文件数据（Electron 环境下 File 对象有 path 属性）
+          const filesData: Array<{ name: string; type: string; size: number; path: string }> = [];
+          for (const file of fileList) {
+            if (file.originFileObj) {
+              const fileObj = file.originFileObj as any;
+              const filePath = fileObj.path;
+              if (filePath) {
+                filesData.push({
+                  name: file.name || fileObj.name,
+                  type: file.type || fileObj.type || 'image/jpeg',
+                  size: file.size || fileObj.size || 0,
+                  path: filePath
+                });
+              }
+            }
+          }
+          if (filesData.length > 0) {
+            await uploadImages(album.id, filesData);
+          }
         }
         
         message.success('相册创建成功！');
@@ -74,7 +92,7 @@ export default function GalleryPage() {
   };
 
   const handleDeleteAlbum = (id: string) => {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: '确定要删除这个相册吗？相册中的所有图片也会被删除，此操作不可恢复。',
       okText: '确定',
@@ -92,7 +110,7 @@ export default function GalleryPage() {
   const handleEditAlbum = (id: string, currentName: string) => {
     let newName = currentName;
     
-    Modal.confirm({
+    modal.confirm({
       title: '编辑相册名称',
       content: (
         <Input
@@ -197,7 +215,7 @@ export default function GalleryPage() {
                       >
                         <img
                           alt={album.name}
-                          src={album.coverImage}
+                          src={window.electronAPI?.utils?.getLocalFileUrl?.(album.coverImage) || album.coverImage}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       </div>
@@ -225,7 +243,12 @@ export default function GalleryPage() {
                           <Tag color="blue">{album.imageCount || 0} 张图片</Tag>
                         </div>
                         <div style={{ fontSize: 12, color: '#999' }}>
-                          {new Date(album.createdAt).toLocaleString('zh-CN')}
+                          {(() => {
+                            const dateStr = album.createdAt || album.created_at;
+                            if (!dateStr) return '未知时间';
+                            const date = new Date(dateStr);
+                            return isNaN(date.getTime()) ? '未知时间' : date.toLocaleString('zh-CN');
+                          })()}
                         </div>
                         <Space>
                           <Button

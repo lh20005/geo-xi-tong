@@ -12,6 +12,7 @@ import { userWsManager, UserWebSocketManager } from './websocket/userManager';
 import { storageManager } from './storage/manager';
 import { AutoUpdater } from './updater/auto-updater';
 import { sqliteManager } from './database/sqlite';
+import { registerLocalFileProtocol } from './protocol/localFile';
 
 // 初始化核心服务
 const logger = Logger.getInstance();
@@ -55,6 +56,9 @@ class ApplicationManager {
       // 等待应用准备就绪
       await app.whenReady();
       logger.info('App is ready');
+      
+      // 注册本地文件协议（必须在 app ready 之后）
+      registerLocalFileProtocol();
       
       // 初始化安全功能（需要在app ready之后）
       certificateValidator.initialize();
