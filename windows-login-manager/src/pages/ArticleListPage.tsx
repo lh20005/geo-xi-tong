@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Card, Button, Space, Tag, Modal, Typography, message, 
@@ -8,17 +8,11 @@ import {
   EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined,
   SearchOutlined, ReloadOutlined, CloudSyncOutlined
 } from '@ant-design/icons';
-import { 
-  getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
-  Article, ArticleStats, getKeywordStats, KeywordStats 
-} from '../api/articles';
-import { apiClient } from '../api/client';
+import { useArticleStore } from '../stores/articleStore';
 import ArticlePreview from '../components/ArticlePreview';
 import ArticleEditorModal from '../components/ArticleEditorModal';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { Paragraph, Text } = Typography;
 const { Option } = Select;
@@ -32,89 +26,51 @@ interface FilterState {
 export default function ArticleListPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { invalidateCacheByPrefix } = useCacheStore();
   
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [keywords, setKeywords] = useState<KeywordStats[]>([]);
+  // 使用本地 Store
+  const {
+    articles,
+    stats,
+    keywordStats,
+    total,
+    page,
+    pageSize,
+    loading,
+    error,
+    fetchArticles,
+    fetchArticle,
+    fetchStats,
+    fetchKeywordStats,
+    deleteArticle,
+    deleteBatch,
+    deleteAll,
+    searchArticles,
+    clearError,
+  } = useArticleStore();
+  
   const [filters, setFilters] = useState<FilterState>({
     publishStatus: 'all',
     keyword: '',
     searchKeyword: ''
   });
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
-  const [total, setTotal] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [viewModal, setViewModal] = useState<any>(null);
   const [editModal, setEditModal] = useState<any>(null);
   const [editorVisible, setEditorVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // 生成缓存 key
-  const cacheKey = useMemo(() => 
-    `articles:list:${filters.publishStatus}:${filters.keyword}:${filters.searchKeyword}:${page}:${pageSize}`,
-    [filters, page, pageSize]
-  );
-
-  // 文章列表数据获取函数
-  const fetchArticles = useCallback(async () => {
-    const apiFilters: any = {
-      publishStatus: filters.publishStatus
-    };
-    if (filters.keyword) {
-      apiFilters.keyword = filters.keyword;
-    }
-    if (filters.searchKeyword && filters.searchKeyword.trim()) {
-      apiFilters.keyword = filters.searchKeyword.trim();
-    }
-    const response = await getArticles(page, pageSize, apiFilters);
-    return response;
-  }, [filters, page, pageSize]);
-
-  // 使用缓存 Hook 获取文章列表
-  const {
-    data: articlesData,
-    loading,
-    refreshing,
-    refresh: refreshArticles,
-    isFromCache
-  } = useCachedData(cacheKey, fetchArticles, {
-    deps: [filters, page, pageSize],
-    onError: (error) => message.error(error.message || '加载文章列表失败'),
-  });
-
-  // 统计数据缓存
-  const {
-    data: stats,
-    refresh: refreshStats
-  } = useCachedData<ArticleStats>(
-    'articles:stats',
-    getArticleStats,
-    { onError: () => console.error('加载统计数据失败') }
-  );
-
-  // 关键词列表缓存
-  const { data: keywordsData } = useCachedData(
-    'articles:keywords',
-    async () => {
-      const response = await getKeywordStats();
-      return response.keywords || [];
-    },
-    { onError: () => console.error('加载关键词列表失败') }
-  );
-
-  // 更新本地状态
+  // 初始加载
   useEffect(() => {
-    if (articlesData) {
-      setArticles(articlesData.articles || []);
-      setTotal(articlesData.total || 0);
-    }
-  }, [articlesData]);
+    loadData();
+  }, []);
 
+  // 错误处理
   useEffect(() => {
-    if (keywordsData) {
-      setKeywords(keywordsData);
+    if (error) {
+      message.error(error);
+      clearError();
     }
-  }, [keywordsData]);
+  }, [error, clearError]);
 
   // URL 参数同步
   useEffect(() => {
@@ -124,17 +80,20 @@ export default function ArticleListPage() {
     const search = params.get('search');
     const pageParam = params.get('page');
 
-    setFilters({
+    const newFilters = {
       publishStatus: status || 'all',
       keyword: keyword || '',
       searchKeyword: search || ''
-    });
+    };
+    
+    setFilters(newFilters);
 
-    if (pageParam) {
-      setPage(parseInt(pageParam));
-    }
+    // 根据筛选条件加载数据
+    const pageNum = pageParam ? parseInt(pageParam) : 1;
+    loadArticlesWithFilters(newFilters, pageNum);
   }, [location.search]);
 
+  // 更新 URL
   useEffect(() => {
     const params = new URLSearchParams();
     if (filters.publishStatus !== 'all') params.set('status', filters.publishStatus);
@@ -148,37 +107,66 @@ export default function ArticleListPage() {
     }
   }, [filters, page]);
 
+  // 清空选择
   useEffect(() => {
     setSelectedIds(new Set());
   }, [filters]);
 
-  // 刷新所有数据
-  const loadArticles = useCallback(async () => {
-    await Promise.all([refreshArticles(true), refreshStats(true)]);
-  }, [refreshArticles, refreshStats]);
+  // 加载数据
+  const loadData = async () => {
+    await Promise.all([
+      fetchStats(),
+      fetchKeywordStats(),
+    ]);
+  };
 
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('articles:');
-    await loadArticles();
-  }, [invalidateCacheByPrefix, loadArticles]);
-
-  const handleView = async (id: number) => {
-    try {
-      const response = await apiClient.get(`/articles/${id}`);
-      setViewModal(response.data);
-    } catch (error: any) {
-      message.error(error.message || '加载文章详情失败');
+  // 根据筛选条件加载文章
+  const loadArticlesWithFilters = async (filterState: FilterState, pageNum: number = 1) => {
+    const isPublished = filterState.publishStatus === 'all' 
+      ? undefined 
+      : filterState.publishStatus === 'published';
+    
+    if (filterState.keyword || filterState.searchKeyword) {
+      await searchArticles({
+        keyword: filterState.keyword || filterState.searchKeyword,
+        isPublished,
+        page: pageNum,
+        pageSize,
+      });
+    } else {
+      await fetchArticles({
+        page: pageNum,
+        pageSize,
+        isPublished,
+      });
     }
   };
 
-  const handleEdit = async (id: number) => {
-    try {
-      const response = await apiClient.get(`/articles/${id}`);
-      setEditModal(response.data);
+  // 刷新所有数据
+  const loadArticles = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      loadArticlesWithFilters(filters, page),
+      fetchStats(),
+      fetchKeywordStats(),
+    ]);
+    setRefreshing(false);
+  }, [filters, page, pageSize]);
+
+  const handleView = async (id: string) => {
+    await fetchArticle(id);
+    const { currentArticle } = useArticleStore.getState();
+    if (currentArticle) {
+      setViewModal(currentArticle);
+    }
+  };
+
+  const handleEdit = async (id: string) => {
+    await fetchArticle(id);
+    const { currentArticle } = useArticleStore.getState();
+    if (currentArticle) {
+      setEditModal(currentArticle);
       setEditorVisible(true);
-    } catch (error: any) {
-      message.error(error.message || '加载文章详情失败');
     }
   };
 
@@ -188,20 +176,18 @@ export default function ArticleListPage() {
   };
 
   const handleEditorSave = () => {
-    invalidateAndRefresh();
+    loadArticles();
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string) => {
     Modal.confirm({
       title: '确认删除',
       content: '确定要删除这篇文章吗？',
       onOk: async () => {
-        try {
-          await apiClient.delete(`/articles/${id}`);
+        const success = await deleteArticle(id);
+        if (success) {
           message.success('删除成功');
-          invalidateAndRefresh();
-        } catch (error: any) {
-          message.error(error.message || '删除失败');
+          await fetchStats();
         }
       },
     });
@@ -214,13 +200,11 @@ export default function ArticleListPage() {
       title: '确认批量删除',
       content: `确定要删除选中的 ${selectedIds.size} 篇文章吗？`,
       onOk: async () => {
-        try {
-          await batchDeleteArticles(Array.from(selectedIds));
-          message.success(`成功删除 ${selectedIds.size} 篇文章`);
+        const result = await deleteBatch(Array.from(selectedIds));
+        if (result.success) {
+          message.success(`成功删除 ${result.deletedCount} 篇文章`);
           setSelectedIds(new Set());
-          invalidateAndRefresh();
-        } catch (error: any) {
-          message.error(error.message || '批量删除失败');
+          await fetchStats();
         }
       },
     });
@@ -233,13 +217,10 @@ export default function ArticleListPage() {
       okText: '确认删除',
       okType: 'danger',
       onOk: async () => {
-        try {
-          const result = await deleteAllArticles();
+        const result = await deleteAll();
+        if (result.success) {
           message.success(`成功删除 ${result.deletedCount} 篇文章`);
           setSelectedIds(new Set());
-          invalidateAndRefresh();
-        } catch (error: any) {
-          message.error(error.message || '删除所有失败');
         }
       },
     });
@@ -261,7 +242,7 @@ export default function ArticleListPage() {
     }
   };
 
-  const handleSelectOne = (id: number, checked: boolean) => {
+  const handleSelectOne = (id: string, checked: boolean) => {
     const newSelected = new Set(selectedIds);
     if (checked) {
       newSelected.add(id);
@@ -272,21 +253,28 @@ export default function ArticleListPage() {
   };
 
   const handleFilterChange = (key: keyof FilterState, value: any) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-    setPage(1);
+    const newFilters = { ...filters, [key]: value };
+    setFilters(newFilters);
+    loadArticlesWithFilters(newFilters, 1);
   };
 
   const handleClearFilters = () => {
-    setFilters({
-      publishStatus: 'all',
+    const newFilters = {
+      publishStatus: 'all' as const,
       keyword: '',
       searchKeyword: ''
-    });
-    setPage(1);
+    };
+    setFilters(newFilters);
+    loadArticlesWithFilters(newFilters, 1);
   };
 
   const handleStatsClick = (status: 'all' | 'published' | 'unpublished') => {
     handleFilterChange('publishStatus', status);
+  };
+
+  const handlePageChange = (newPage: number, newPageSize?: number) => {
+    const size = newPageSize || pageSize;
+    loadArticlesWithFilters(filters, newPage);
   };
 
   const isAllSelected = articles.length > 0 && articles.every(a => selectedIds.has(a.id));
@@ -304,7 +292,7 @@ export default function ArticleListPage() {
       key: 'checkbox',
       width: 50,
       align: 'center' as const,
-      render: (_: any, record: Article) => (
+      render: (_: any, record: any) => (
         <Checkbox
           checked={selectedIds.has(record.id)}
           onChange={(e) => handleSelectOne(record.id, e.target.checked)}
@@ -408,7 +396,7 @@ export default function ArticleListPage() {
         </Col>
       </Row>
 
-      {/* 筛选工具栏 - 与生成文章页面风格一致 */}
+      {/* 筛选工具栏 */}
       <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
         <Row gutter={16}>
           <Col span={5}>
@@ -445,7 +433,7 @@ export default function ArticleListPage() {
               value={filters.keyword || undefined} 
               onChange={(value) => handleFilterChange('keyword', value || '')}
             >
-              {keywords.map(k => (
+              {keywordStats.map(k => (
                 <Option key={k.keyword} value={k.keyword}>
                   {k.keyword} ({k.count})
                 </Option>
@@ -464,8 +452,8 @@ export default function ArticleListPage() {
               style={{ width: '100%' }} 
               placeholder="输入关键词搜索" 
               value={filters.searchKeyword} 
-              onChange={(e) => handleFilterChange('searchKeyword', e.target.value)}
-              onPressEnter={() => setPage(1)}
+              onChange={(e) => setFilters(prev => ({ ...prev, searchKeyword: e.target.value }))}
+              onPressEnter={() => loadArticlesWithFilters(filters, 1)}
               allowClear
               suffix={<SearchOutlined style={{ color: '#94a3b8' }} />}
             />
@@ -518,11 +506,6 @@ export default function ArticleListPage() {
 
       <Card title="文章管理" variant="borderless" extra={
         <Space>
-          {isFromCache && !refreshing && (
-            <Tooltip title="数据来自缓存">
-              <Tag color="gold">缓存</Tag>
-            </Tooltip>
-          )}
           {refreshing && (
             <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
           )}
@@ -530,7 +513,7 @@ export default function ArticleListPage() {
           <Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button>
         </Space>
       }>
-        <ResizableTable<Article>
+        <ResizableTable
           tableId="article-list"
           columns={columns} 
           dataSource={articles} 
@@ -541,13 +524,7 @@ export default function ArticleListPage() {
             current: page, 
             pageSize, 
             total, 
-            onChange: (newPage, newPageSize) => {
-              setPage(newPage);
-              if (newPageSize && newPageSize !== pageSize) {
-                setPageSize(newPageSize);
-                setPage(1);
-              }
-            }, 
+            onChange: handlePageChange, 
             showSizeChanger: true,
             showQuickJumper: true,
             showTotal: (total) => `共 ${total} 条记录`,
@@ -568,7 +545,7 @@ export default function ArticleListPage() {
         onCancel={() => setViewModal(null)} 
         width={900} 
         footer={[
-          <Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content, viewModal.imageUrl || viewModal.image_url)}>
+          <Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content, viewModal.imageUrl)}>
             复制文章
           </Button>, 
           <Button key="close" type="primary" onClick={() => setViewModal(null)}>
@@ -580,10 +557,10 @@ export default function ArticleListPage() {
           <div style={{ maxHeight: 600, overflow: 'auto' }}>
             <Card size="small" style={{ marginBottom: 16 }}>
               <Paragraph style={{ color: '#64748b', marginBottom: 0 }}>
-                创建时间: {new Date(viewModal.createdAt || viewModal.created_at).toLocaleString('zh-CN')}
+                创建时间: {new Date(viewModal.createdAt).toLocaleString('zh-CN')}
                 {viewModal.updatedAt && viewModal.updatedAt !== viewModal.createdAt && (
                   <Text style={{ marginLeft: 16 }}>
-                    更新时间: {new Date(viewModal.updatedAt || viewModal.updated_at).toLocaleString('zh-CN')}
+                    更新时间: {new Date(viewModal.updatedAt).toLocaleString('zh-CN')}
                   </Text>
                 )}
               </Paragraph>
@@ -591,7 +568,7 @@ export default function ArticleListPage() {
             <ArticlePreview 
               content={viewModal.content} 
               title={viewModal.title}
-              imageUrl={viewModal.imageUrl || viewModal.image_url}
+              imageUrl={viewModal.imageUrl}
             />
           </div>
         )}

@@ -168,16 +168,12 @@ class StorageManager {
 
   /**
    * 获取默认配置
-   * 生产环境使用硬编码的服务器地址
+   * 开发和生产环境都使用生产服务器地址（用于测试改造后的架构）
    */
   private getDefaultConfig(): AppConfig {
-    // 判断是否为生产环境
-    const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
-    
-    // 生产环境使用硬编码的服务器地址
-    const serverUrl = isDev 
-      ? (process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000')
-      : 'https://jzgeo.cc';
+    // 统一使用生产服务器地址
+    // 改造后：本地数据存储在 SQLite，远程 API 用于认证、配额、AI 生成等
+    const serverUrl = 'https://jzgeo.cc';
     
     return {
       serverUrl,

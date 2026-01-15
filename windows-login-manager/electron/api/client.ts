@@ -619,6 +619,302 @@ class APIClient {
     return response.data;
   }
 
+  // ==================== 配额预扣减 API ====================
+
+  /**
+   * 预扣减配额
+   * Requirements: 改造方案 - 配额预扣减机制
+   */
+  async reserveQuota(params: {
+    quotaType: 'article_generation' | 'publish' | 'knowledge_upload' | 'image_upload';
+    amount?: number;
+    clientId?: string;
+    taskInfo?: object;
+  }): Promise<{
+    success: boolean;
+    reservationId?: string;
+    expiresAt?: string;
+    remainingQuota?: number;
+    error?: string;
+    errorCode?: string;
+    currentQuota?: number;
+  }> {
+    try {
+      const response = await this.axiosInstance.post('/api/quota/reserve', params);
+      log.info(`Quota reserved: ${params.quotaType}, reservationId: ${response.data.reservationId}`);
+      return response.data;
+    } catch (error: any) {
+      log.error('Failed to reserve quota:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 确认消费配额
+   * Requirements: 改造方案 - 配额预扣减机制
+   */
+  async confirmQuota(params: {
+    reservationId: string;
+    result?: object;
+  }): Promise<{
+    success: boolean;
+    consumed?: number;
+    remainingQuota?: number;
+    error?: string;
+    errorCode?: string;
+  }> {
+    try {
+      const response = await this.axiosInstance.post('/api/quota/confirm', params);
+      log.info(`Quota confirmed: ${params.reservationId}`);
+      return response.data;
+    } catch (error: any) {
+      log.error('Failed to confirm quota:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 释放预留配额
+   * Requirements: 改造方案 - 配额预扣减机制
+   */
+  async releaseQuota(params: {
+    reservationId: string;
+    reason?: string;
+    errorCode?: string;
+  }): Promise<{
+    success: boolean;
+    released?: number;
+    remainingQuota?: number;
+    error?: string;
+  }> {
+    try {
+      const response = await this.axiosInstance.post('/api/quota/release', params);
+      log.info(`Quota released: ${params.reservationId}`);
+      return response.data;
+    } catch (error: any) {
+      log.error('Failed to release quota:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 获取配额信息（包含预留）
+   * Requirements: 改造方案 - 配额预扣减机制
+   */
+  async getQuotaInfo(): Promise<{
+    quotas: {
+      [key: string]: {
+        used: number;
+        limit: number;
+        reserved: number;
+        available: number;
+      };
+    };
+  }> {
+    try {
+      const response = await this.axiosInstance.get('/api/quota/info');
+      return response.data;
+    } catch (error) {
+      log.error('Failed to get quota info:', error);
+      throw error;
+    }
+  }
+
+  // ==================== 分析上报 API ====================
+
+  /**
+   * 上报发布结果
+   * Requirements: 改造方案 - 分析上报功能
+   */
+  async reportPublish(report: {
+    taskId: string;
+    platform: string;
+    status: 'success' | 'failed';
+    duration: number;
+    errorCode?: string;
+    errorMessage?: string;
+    metadata?: {
+      articleLength?: number;
+      imageCount?: number;
+      retryCount?: number;
+    };
+  }): Promise<{ success: boolean }> {
+    try {
+      const response = await this.axiosInstance.post('/api/analytics/publish-report', report);
+      log.debug(`Publish report sent: ${report.taskId}`);
+      return response.data;
+    } catch (error) {
+      log.error('Failed to report publish:', error);
+      // 不抛出错误，分析上报失败不应影响主流程
+      return { success: false };
+    }
+  }
+
+  /**
+   * 批量上报发布结果
+   * Requirements: 改造方案 - 分析上报功能（离线队列）
+   */
+  async reportPublishBatch(reports: Array<{
+    taskId: string;
+    platform: string;
+    status: 'success' | 'failed';
+    duration: number;
+    errorCode?: string;
+    errorMessage?: string;
+    metadata?: object;
+  }>): Promise<{ success: boolean; processed?: number }> {
+    try {
+      const response = await this.axiosInstance.post('/api/analytics/publish-report/batch', { reports });
+      log.info(`Batch publish report sent: ${reports.length} reports`);
+      return response.data;
+    } catch (error) {
+      log.error('Failed to batch report publish:', error);
+      return { success: false };
+    }
+  }
+
+  // ==================== 数据同步 API ====================
+
+  /**
+   * 上传数据快照
+   * Requirements: 改造方案 - 数据同步功能
+   */
+  async uploadSnapshot(file: Buffer, checksum: string, metadata: object): Promise<{
+    success: boolean;
+    snapshotId?: string;
+    uploadedAt?: string;
+    deletedOldSnapshots?: number;
+    remainingSnapshots?: number;
+    error?: string;
+  }> {
+    try {
+      const FormData = require('form-data');
+      const formData = new FormData();
+      formData.append('snapshot', file, { filename: 'snapshot.db' });
+      formData.append('checksum', checksum);
+      formData.append('metadata', JSON.stringify(metadata));
+
+      const response = await this.axiosInstance.post('/api/sync/upload', formData, {
+        headers: formData.getHeaders(),
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity
+      });
+      log.info('Snapshot uploaded successfully');
+      return response.data;
+    } catch (error: any) {
+      log.error('Failed to upload snapshot:', error);
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * 获取快照列表
+   * Requirements: 改造方案 - 数据同步功能
+   */
+  async getSnapshots(): Promise<{
+    snapshots: Array<{
+      id: string;
+      metadata: object;
+      uploadedAt: string;
+      lastDownloadedAt?: string;
+      expiresAt: string;
+      size: number;
+    }>;
+    maxSnapshots: number;
+    maxSizeBytes: number;
+  }> {
+    try {
+      const response = await this.axiosInstance.get('/api/sync/snapshots');
+      return response.data;
+    } catch (error) {
+      log.error('Failed to get snapshots:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 下载快照
+   * Requirements: 改造方案 - 数据同步功能
+   */
+  async downloadSnapshot(snapshotId: string): Promise<Buffer> {
+    try {
+      const response = await this.axiosInstance.get(`/api/sync/download/${snapshotId}`, {
+        responseType: 'arraybuffer'
+      });
+      log.info(`Snapshot downloaded: ${snapshotId}`);
+      return Buffer.from(response.data);
+    } catch (error) {
+      log.error('Failed to download snapshot:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 删除快照
+   * Requirements: 改造方案 - 数据同步功能
+   */
+  async deleteSnapshot(snapshotId: string): Promise<{ success: boolean }> {
+    try {
+      const response = await this.axiosInstance.delete(`/api/sync/snapshots/${snapshotId}`);
+      log.info(`Snapshot deleted: ${snapshotId}`);
+      return response.data;
+    } catch (error) {
+      log.error('Failed to delete snapshot:', error);
+      throw error;
+    }
+  }
+
+  // ==================== 适配器版本 API ====================
+
+  /**
+   * 获取适配器版本列表
+   * Requirements: 改造方案 - 适配器热更新
+   */
+  async getAdapterVersions(): Promise<{
+    adapters: {
+      [platform: string]: {
+        version: string;
+        updatedAt: string;
+      };
+    };
+    minClientVersion: string;
+  }> {
+    try {
+      const response = await this.axiosInstance.get('/api/adapters/versions');
+      return response.data;
+    } catch (error) {
+      log.error('Failed to get adapter versions:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 下载适配器代码
+   * Requirements: 改造方案 - 适配器热更新
+   */
+  async downloadAdapter(platform: string): Promise<string> {
+    try {
+      const response = await this.axiosInstance.get(`/api/adapters/${platform}/download`);
+      log.info(`Adapter downloaded: ${platform}`);
+      return response.data.code;
+    } catch (error) {
+      log.error('Failed to download adapter:', error);
+      throw error;
+    }
+  }
+
   /**
    * 带重试的请求
    * Requirements: 4.4

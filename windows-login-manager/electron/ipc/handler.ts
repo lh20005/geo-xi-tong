@@ -102,15 +102,15 @@ class IPCHandler {
         await apiClient.setBaseURL(config.serverUrl);
         log.info(`API client initialized with baseURL: ${config.serverUrl}`);
       } else {
-        // 使用环境变量或默认配置
-        const defaultUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
+        // 统一使用生产服务器地址
+        const defaultUrl = 'https://jzgeo.cc';
         await apiClient.setBaseURL(defaultUrl);
         log.info(`API client initialized with default baseURL: ${defaultUrl}`);
       }
     } catch (error) {
       log.error('Failed to initialize API client:', error);
-      // 使用环境变量或默认配置作为后备
-      const fallbackUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      // 使用生产服务器作为后备
+      const fallbackUrl = 'https://jzgeo.cc';
       await apiClient.setBaseURL(fallbackUrl);
     }
   }

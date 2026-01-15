@@ -1,3 +1,13 @@
+/**
+ * 发布任务页面
+ * 
+ * 改造后：使用本地 Store 和 IPC 调用替代 HTTP API
+ * - 文章数据：useArticleStore（本地 SQLite）
+ * - 账号数据：useAccountStore（本地 SQLite）
+ * - 任务数据：useTaskStore（本地 SQLite）
+ * - 平台配置：ipcBridge.getPlatforms()
+ */
+
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, App,
@@ -12,27 +22,28 @@ import {
   StopOutlined, ExclamationCircleOutlined, FieldTimeOutlined,
   EyeInvisibleOutlined, DownOutlined, RightOutlined
 } from '@ant-design/icons';
-import { 
-  getArticles, getArticle, Article 
-} from '../api/articles';
-import { 
-  getPlatforms, getAccounts, Account,
-  createPublishingTask, getPublishingTasks, getTaskLogs,
-  executeTask, cancelTask, terminateTask, deleteTask,
-  batchDeleteTasks, deleteAllTasks, PublishingTask, PublishingLog,
-  stopBatch, deleteBatch,
-  subscribeToTaskLogs
-} from '../api/publishing';
+// 改造：使用本地 Store 替代 HTTP API
+import { useArticleStore } from '../stores/articleStore';
+import { useAccountStore } from '../stores/accountStore';
+import { useTaskStore } from '../stores/taskStore';
+import { localArticleApi, localTaskApi, type LocalArticle } from '../api/local';
+import { ipcBridge } from '../services/ipc';
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
+
+// 平台配置类型
+interface Platform {
+  id: number;
+  platform_id: string;
+  platform_name: string;
+  icon_url?: string;
+  is_enabled: boolean;
+}
 
 const { Text } = Typography;
 
 // 平台图标映射 - 与平台管理页面保持一致
 const getPlatformIcon = (platformId: string): string => {
-  // 特殊平台使用指定路径
   const specialIcons: Record<string, string> = {
     'baijiahao': '/images/baijiahao.png',
     'baidu': '/images/baijiahao.png',
@@ -61,31 +72,106 @@ const getPlatformIcon = (platformId: string): string => {
   if (specialIcons[platformId]) {
     return specialIcons[platformId];
   }
-  
-  // 其他平台使用默认路径
   return `/platform-icons/${platformId}.png`;
 };
 
+// 本地账号类型（与 Store 中的类型兼容）
+interface LocalAccountDisplay {
+  id: string;
+  platform_id: string;
+  account_name: string;
+  real_username?: string;
+  status: string;
+  is_default?: boolean;
+}
+
+// 本地任务显示类型（扩展状态以兼容服务器端状态名称）
+interface LocalTaskDisplay {
+  id: string;
+  userId: number;
+  articleId?: string;
+  accountId: string;
+  platformId: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'success';
+  config: string;
+  scheduledAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  errorMessage?: string;
+  retryCount: number;
+  maxRetries: number;
+  batchId?: string;
+  batchOrder?: number;
+  intervalMinutes?: number;
+  articleTitle?: string;
+  articleContent?: string;
+  articleKeyword?: string;
+  articleImageUrl?: string;
+  createdAt: string;
+  updatedAt: string;
+  platform_name?: string;
+  account_name?: string;
+  real_username?: string;
+}
+
+// 任务日志类型
+interface TaskLog {
+  id: number;
+  taskId: string;
+  level: 'info' | 'warn' | 'warning' | 'error';
+  message: string;
+  details?: string;
+  timestamp?: string;
+  created_at?: string;
+  createdAt?: string;
+}
+
 export default function PublishingTasksPage() {
-  // 使用 App 组件的 hooks API
   const { message } = App.useApp();
-  const { invalidateCacheByPrefix } = useCacheStore();
+  
+  // 使用本地 Store
+  const { 
+    articles, 
+    total: articleTotal, 
+    loading: articlesLoading,
+    fetchArticles
+  } = useArticleStore();
+  
+  const {
+    accounts: storeAccounts,
+    fetchAccounts
+  } = useAccountStore();
+  
+  const {
+    tasks: storeTasks,
+    total: taskTotal,
+    loading: tasksLoading,
+    fetchTasks,
+    createTask,
+    cancelTask: cancelTaskStore,
+    deleteTask: deleteTaskStore,
+    deleteBatch: deleteBatchStore,
+    stopBatch: stopBatchStore,
+    executeSingle,
+    fetchLogs,
+    logs: taskLogs
+  } = useTaskStore();
+  
+  // 平台配置（从 IPC 获取）
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   
   // 文章选择
-  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [articlePage, setArticlePage] = useState(1);
   const [articlePageSize, setArticlePageSize] = useState(10);
 
   // 平台选择
-  const [selectedAccounts, setSelectedAccounts] = useState<Set<number>>(new Set());
+  const [selectedAccounts, setSelectedAccounts] = useState<Set<string>>(new Set());
 
   // 任务管理
-  const [tasks, setTasks] = useState<PublishingTask[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
   const [taskPage, setTaskPage] = useState(1);
   const [taskPageSize, setTaskPageSize] = useState(10);
-  const [taskTotal, setTaskTotal] = useState(0);
-  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   
   // 批次选择
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
@@ -105,9 +191,9 @@ export default function PublishingTasksPage() {
   // 日志查看
   const [logsModal, setLogsModal] = useState<{ 
     visible: boolean; 
-    taskId: number | null; 
-    logs: PublishingLog[];
-    isLive: boolean; // 添加实时更新标志
+    taskId: string | null; 
+    logs: TaskLog[];
+    isLive: boolean;
   }>({
     visible: false,
     taskId: null,
@@ -118,10 +204,10 @@ export default function PublishingTasksPage() {
   // 日志容器 ref
   const logsContainerRef = useRef<HTMLDivElement>(null);
 
-  // 静默发布模式（默认开启静默模式）
+  // 文章预览
   const [previewModal, setPreviewModal] = useState<{
     visible: boolean;
-    article: Article | null;
+    article: LocalArticle | null;
     loading: boolean;
   }>({
     visible: false,
@@ -137,119 +223,117 @@ export default function PublishingTasksPage() {
     todayPublished: 0
   });
 
-  // 草稿文章缓存 key
-  const articlesCacheKey = useMemo(() => 
-    `publishingTasks:articles:${articlePage}:${articlePageSize}`,
-    [articlePage, articlePageSize]
-  );
+  // 转换 Store 账号为显示格式
+  const accounts: LocalAccountDisplay[] = useMemo(() => {
+    return storeAccounts
+      .filter(acc => acc.status === 'active')
+      .map(acc => ({
+        id: acc.id,
+        platform_id: acc.platformId || acc.platform,
+        account_name: acc.accountName || '',
+        real_username: acc.realUsername,
+        status: acc.status,
+        is_default: acc.isDefault
+      }));
+  }, [storeAccounts]);
 
-  // 草稿文章数据获取函数
-  const fetchDraftArticles = useCallback(async () => {
-    const response = await getArticles(articlePage, articlePageSize, { publishStatus: 'unpublished' });
-    return response;
-  }, [articlePage, articlePageSize]);
+  // 转换 Store 任务为显示格式
+  const tasks: LocalTaskDisplay[] = useMemo(() => {
+    return storeTasks.map(task => {
+      const platform = platforms.find(p => p.platform_id === task.platformId);
+      const account = storeAccounts.find(a => a.id === task.accountId);
+      // 将 completed 状态映射为 success（兼容显示）
+      const displayStatus = task.status === 'completed' ? 'success' : task.status;
+      return {
+        ...task,
+        status: displayStatus as LocalTaskDisplay['status'],
+        platform_name: platform?.platform_name || task.platformId,
+        account_name: account?.accountName || '',
+        real_username: account?.realUsername
+      };
+    });
+  }, [storeTasks, platforms, storeAccounts]);
 
-  // 使用缓存 Hook 获取草稿文章
-  const {
-    data: articlesData,
-    loading: articlesLoading,
-    refresh: refreshArticles
-  } = useCachedData(articlesCacheKey, fetchDraftArticles, {
-    deps: [articlePage, articlePageSize],
-    onError: () => message.error('加载草稿文章失败'),
-  });
-
-  const articles = articlesData?.articles || [];
-  const articleTotal = articlesData?.total || 0;
-
-  // 平台和账号数据获取函数
-  const fetchPlatformsAndAccounts = useCallback(async () => {
-    const [platformsData, accountsData] = await Promise.all([
-      getPlatforms(),
-      getAccounts()
-    ]);
-    return { platforms: platformsData, accounts: accountsData };
-  }, []);
-
-  // 使用缓存 Hook 获取平台和账号
-  const {
-    data: platformData,
-    refresh: refreshPlatforms
-  } = useCachedData('publishingTasks:platforms', fetchPlatformsAndAccounts, {
-    onError: () => message.error('加载平台信息失败'),
-  });
-
-  const platforms = platformData?.platforms || [];
-  const accounts = (platformData?.accounts || []).filter((acc: Account) => acc.status === 'active');
-
-  // 更新统计数据
-  useEffect(() => {
-    if (articlesData) {
-      setStats(prev => ({ ...prev, draftArticles: articlesData.total || 0 }));
+  // 加载平台配置
+  const loadPlatforms = useCallback(async () => {
+    try {
+      const platformsData = await ipcBridge.getPlatforms();
+      const platformOrder = ['douyin', 'toutiao', 'xiaohongshu', 'souhu', 'wangyi', 'zhihu', 'qie', 'baijiahao', 'wechat', 'bilibili', 'jianshu', 'csdn'];
+      const sortedPlatforms = (platformsData || []).sort((a: Platform, b: Platform) => {
+        const indexA = platformOrder.indexOf(a.platform_id);
+        const indexB = platformOrder.indexOf(b.platform_id);
+        if (indexA === -1 && indexB === -1) return 0;
+        if (indexA === -1) return 1;
+        if (indexB === -1) return -1;
+        return indexA - indexB;
+      });
+      setPlatforms(sortedPlatforms);
+    } catch (error: any) {
+      message.error('加载平台配置失败');
+      console.error(error);
     }
-  }, [articlesData]);
+  }, [message]);
 
-  useEffect(() => {
-    if (platformData) {
-      const boundPlatforms = new Set(platformData.accounts?.map((acc: Account) => acc.platform_id) || []).size;
-      setStats(prev => ({ ...prev, boundPlatforms }));
-    }
-  }, [platformData]);
+  // 加载草稿文章
+  const loadDraftArticles = useCallback(async () => {
+    await fetchArticles({ page: articlePage, pageSize: articlePageSize, isPublished: false });
+  }, [fetchArticles, articlePage, articlePageSize]);
 
+  // 加载任务列表
+  const loadTasks = useCallback(async () => {
+    await fetchTasks({ page: 1, pageSize: 100 });
+  }, [fetchTasks]);
+
+  // 初始化加载
   useEffect(() => {
+    loadPlatforms();
+    fetchAccounts();
+    loadDraftArticles();
     loadTasks();
   }, []);
 
-  // 自动刷新任务列表（优化：从5秒改为15秒，减少带宽占用）
+  // 文章分页变化时重新加载
+  useEffect(() => {
+    loadDraftArticles();
+  }, [articlePage, articlePageSize]);
+
+  // 更新统计数据
+  useEffect(() => {
+    setStats(prev => ({ ...prev, draftArticles: articleTotal || 0 }));
+  }, [articleTotal]);
+
+  useEffect(() => {
+    const boundPlatforms = new Set(accounts.map(acc => acc.platform_id)).size;
+    setStats(prev => ({ ...prev, boundPlatforms }));
+  }, [accounts]);
+
+  useEffect(() => {
+    const runningTasks = tasks.filter(t => t.status === 'running' || t.status === 'pending').length;
+    const today = new Date().toDateString();
+    const todayPublished = tasks.filter(
+      t => t.status === 'completed' && 
+      new Date(t.completedAt || '').toDateString() === today
+    ).length;
+    setStats(prev => ({ ...prev, runningTasks, todayPublished }));
+  }, [tasks]);
+
+  // 自动刷新任务列表
   useEffect(() => {
     const intervalId = setInterval(() => {
-      // 只在有运行中或等待中的任务时才刷新
       if (tasks.length > 0) {
         const hasActiveTasks = tasks.some(t => t.status === 'running' || t.status === 'pending');
         if (hasActiveTasks) {
           loadTasks();
         }
       }
-    }, 15000); // 优化：15秒刷新一次（原5秒），减少67%请求
-
+    }, 15000);
     return () => clearInterval(intervalId);
-  }, [tasks]); // 依赖tasks，当tasks变化时重新设置定时器
+  }, [tasks, loadTasks]);
 
-  // 保存静默模式设置到 localStorage
+  // 保存静默模式设置
   useEffect(() => {
     localStorage.setItem('publishHeadlessMode', headlessMode.toString());
   }, [headlessMode]);
-
-  // 加载任务列表（任务需要实时更新，不使用缓存）
-  const loadTasks = async () => {
-    setTasksLoading(true);
-    try {
-      // 优化：限制单次请求数量为100条（原1000条），减少90%数据传输
-      // 批次分组显示只需要最近的任务，不需要全部历史
-      const response = await getPublishingTasks(1, 100);
-      setTasks(response.tasks || []);
-      setTaskTotal(response.total || 0);
-
-      // 统计运行中的任务和今日发布数
-      const runningTasks = (response.tasks || []).filter(
-        (t: PublishingTask) => t.status === 'running' || t.status === 'pending'
-      ).length;
-      
-      const today = new Date().toDateString();
-      const todayPublished = (response.tasks || []).filter(
-        (t: PublishingTask) => 
-          t.status === 'success' && 
-          new Date(t.executed_at || '').toDateString() === today
-      ).length;
-
-      setStats(prev => ({ ...prev, runningTasks, todayPublished }));
-    } catch (error: any) {
-      message.error('加载任务列表失败');
-      console.error(error);
-    } finally {
-      setTasksLoading(false);
-    }
-  };
 
   // 创建发布任务
   const handleCreateTasks = async () => {
@@ -262,23 +346,22 @@ export default function PublishingTasksPage() {
       return;
     }
     
-    // 防止重复提交
     if (creatingTasks) {
       message.warning('正在创建任务，请稍候...');
       return;
     }
 
-    // 按照文章在表格中的显示顺序排序（而不是用户点击选择的顺序）
+    // 按照文章在表格中的显示顺序排序
     const articleIds = articles
-      .filter((a: Article) => selectedArticleIds.has(a.id))
-      .map((a: Article) => a.id);
+      .filter(a => selectedArticleIds.has(a.id))
+      .map(a => a.id);
     // 按照账号在列表中的显示顺序排序
     const accountIds = accounts
-      .filter((a: Account) => selectedAccounts.has(a.id))
-      .map((a: Account) => a.id);
+      .filter(a => selectedAccounts.has(a.id))
+      .map(a => a.id);
     const totalTasks = articleIds.length * accountIds.length;
     
-    // 计算总耗时：总任务数减1，乘以间隔时间
+    // 计算总耗时
     const totalMinutes = (totalTasks - 1) * publishInterval;
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
@@ -299,60 +382,54 @@ export default function PublishingTasksPage() {
       onOk: async () => {
         setCreatingTasks(true);
         try {
-          // 生成批次ID（使用时间戳 + 随机数）
           const batchId = `batch_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-          
-          const tasks = [];
+          const taskPromises = [];
           let batchOrder = 0;
           
-          // 为每篇文章创建任务
-          // 所有任务都是 pending 状态，由批次执行器按顺序执行
+          // 获取用户ID（从 localStorage）
+          const userStr = localStorage.getItem('user');
+          const userId = userStr ? JSON.parse(userStr).id : 1;
+          
           for (let i = 0; i < articleIds.length; i++) {
             const articleId = articleIds[i];
+            const article = articles.find(a => a.id === articleId);
             
             for (const accountId of accountIds) {
               const account = accounts.find(a => a.id === accountId);
-              if (account) {
-                // 判断是否是最后一个任务
+              if (account && article) {
                 const isLastTask = (i === articleIds.length - 1) && (accountId === accountIds[accountIds.length - 1]);
-                
-                // 除了最后一个任务，其他任务都设置间隔
                 const intervalMinutes = isLastTask ? 0 : publishInterval;
                 
-                tasks.push(
-                  createPublishingTask({
-                    article_id: articleId,
-                    platform_id: account.platform_id,
-                    account_id: accountId,
-                    scheduled_time: null, // 不使用定时，由批次执行器控制
-                    batch_id: batchId,
-                    batch_order: batchOrder,
-                    batch_total: articleIds.length * accountIds.length, // 批次总任务数
-                    interval_minutes: intervalMinutes,
-                    config: {
-                      headless: headlessMode
-                    }
+                taskPromises.push(
+                  createTask({
+                    userId,
+                    articleId,
+                    accountId,
+                    platformId: account.platform_id,
+                    config: { headless: headlessMode },
+                    batchId,
+                    batchOrder,
+                    intervalMinutes,
+                    articleTitle: article.title,
+                    articleContent: article.content,
+                    articleKeyword: article.keyword,
+                    articleImageUrl: article.imageUrl
                   })
                 );
-                
-                // 每创建一个任务就增加 batch_order，确保所有任务按顺序执行
                 batchOrder++;
               }
             }
           }
 
-          await Promise.all(tasks);
-          message.success(`成功创建 ${tasks.length} 个发布任务，批次已开始执行`);
+          await Promise.all(taskPromises);
+          message.success(`成功创建 ${taskPromises.length} 个发布任务，批次已开始执行`);
           
-          // 清空选择
           setSelectedArticleIds(new Set());
           setSelectedAccounts(new Set());
-          setPublishInterval(5); // 重置为默认值
+          setPublishInterval(5);
           
-          // 刷新任务列表和文章列表（文章发布后状态会变化）
           loadTasks();
-          invalidateCacheByPrefix('publishingTasks:articles');
-          refreshArticles(true);
+          loadDraftArticles();
         } catch (error: any) {
           message.error(error.message || '创建任务失败');
         } finally {
@@ -362,16 +439,15 @@ export default function PublishingTasksPage() {
     });
   };
 
-  // 查看任务日志（历史日志 + 实时更新）
-  const handleViewLogs = async (taskId: number, taskStatus: string) => {
+  // 查看任务日志
+  const handleViewLogs = async (taskId: string, taskStatus: string) => {
     try {
-      const logs = await getTaskLogs(taskId);
-      // 只有 pending 和 running 状态的任务才开启实时更新
+      await fetchLogs(taskId);
       const shouldLive = taskStatus === 'pending' || taskStatus === 'running';
       setLogsModal({
         visible: true,
         taskId,
-        logs,
+        logs: taskLogs as TaskLog[],
         isLive: shouldLive
       });
     } catch (error: any) {
@@ -379,35 +455,16 @@ export default function PublishingTasksPage() {
     }
   };
 
-  // 订阅实时日志（用于历史日志窗口）
+  // 更新日志模态框中的日志
   useEffect(() => {
-    if (!logsModal.visible || !logsModal.taskId || !logsModal.isLive) {
-      return;
+    if (logsModal.visible && logsModal.taskId) {
+      setLogsModal(prev => ({ ...prev, logs: taskLogs as TaskLog[] }));
     }
-
-    const unsubscribe = subscribeToTaskLogs(
-      logsModal.taskId,
-      (log) => {
-        setLogsModal(prev => ({
-          ...prev,
-          logs: [...prev.logs, log]
-        }));
-      },
-      () => {
-        message.error('日志流连接失败');
-        setLogsModal(prev => ({ ...prev, isLive: false }));
-      }
-    );
-
-    return () => {
-      unsubscribe();
-    };
-  }, [logsModal.visible, logsModal.taskId, logsModal.isLive]);
+  }, [taskLogs, logsModal.visible, logsModal.taskId]);
 
   // 自动滚动到日志底部
   useEffect(() => {
     if (logsModal.visible && logsModal.logs.length > 0 && logsContainerRef.current) {
-      // 使用 requestAnimationFrame 确保 DOM 已更新
       requestAnimationFrame(() => {
         if (logsContainerRef.current) {
           logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
@@ -416,44 +473,37 @@ export default function PublishingTasksPage() {
     }
   }, [logsModal.logs.length, logsModal.visible]);
 
-
-
   // 预览文章
-  const handlePreviewArticle = async (article: Article) => {
+  const handlePreviewArticle = async (article: LocalArticle) => {
     try {
-      // 先显示模态框，显示加载状态
-      setPreviewModal({
-        visible: true,
-        article: article,
-        loading: true
-      });
-      
-      // 获取完整的文章详情（包含content）
-      const fullArticle = await getArticle(article.id);
-      
-      // 更新模态框内容
-      setPreviewModal({
-        visible: true,
-        article: fullArticle,
-        loading: false
-      });
+      setPreviewModal({ visible: true, article, loading: true });
+      const result = await localArticleApi.findById(article.id);
+      if (result.success) {
+        setPreviewModal({ visible: true, article: result.data, loading: false });
+      } else {
+        message.error('加载文章详情失败');
+        setPreviewModal({ visible: false, article: null, loading: false });
+      }
     } catch (error: any) {
       message.error('加载文章详情失败');
-      console.error(error);
       setPreviewModal({ visible: false, article: null, loading: false });
     }
   };
 
   // 立即执行任务
-  const handleExecuteTask = async (taskId: number) => {
+  const handleExecuteTask = async (taskId: string) => {
     Modal.confirm({
       title: '确认立即执行',
       content: '确定要立即执行这个发布任务吗？',
       onOk: async () => {
         try {
-          await executeTask(taskId);
-          message.success('任务已开始执行');
-          loadTasks();
+          const success = await executeSingle(taskId);
+          if (success) {
+            message.success('任务已开始执行');
+            loadTasks();
+          } else {
+            message.error('执行失败');
+          }
         } catch (error: any) {
           message.error(error.message || '执行失败');
         }
@@ -462,15 +512,19 @@ export default function PublishingTasksPage() {
   };
 
   // 取消任务
-  const handleCancelTask = async (taskId: number) => {
+  const handleCancelTask = async (taskId: string) => {
     Modal.confirm({
       title: '确认取消任务',
       content: '确定要取消这个发布任务吗？',
       onOk: async () => {
         try {
-          await cancelTask(taskId);
-          message.success('任务已取消');
-          loadTasks();
+          const success = await cancelTaskStore(taskId);
+          if (success) {
+            message.success('任务已取消');
+            loadTasks();
+          } else {
+            message.error('取消失败');
+          }
         } catch (error: any) {
           message.error(error.message || '取消失败');
         }
@@ -478,8 +532,8 @@ export default function PublishingTasksPage() {
     });
   };
 
-  // 终止任务
-  const handleTerminateTask = async (taskId: number) => {
+  // 终止任务（本地实现：直接取消）
+  const handleTerminateTask = async (taskId: string) => {
     Modal.confirm({
       title: '确认终止任务',
       content: '确定要强制终止这个正在执行的任务吗？任务将被标记为失败。',
@@ -488,7 +542,7 @@ export default function PublishingTasksPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await terminateTask(taskId);
+          await localTaskApi.updateStatus(taskId, 'failed', '用户手动终止');
           message.success('任务已终止');
           loadTasks();
         } catch (error: any) {
@@ -499,7 +553,7 @@ export default function PublishingTasksPage() {
   };
 
   // 删除任务
-  const handleDeleteTask = async (taskId: number) => {
+  const handleDeleteTask = async (taskId: string) => {
     Modal.confirm({
       title: '确认删除任务',
       content: '确定要删除这个任务吗？此操作不可恢复。',
@@ -508,14 +562,18 @@ export default function PublishingTasksPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await deleteTask(taskId);
-          message.success('任务已删除');
-          setSelectedTaskIds(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(taskId);
-            return newSet;
-          });
-          loadTasks();
+          const success = await deleteTaskStore(taskId);
+          if (success) {
+            message.success('任务已删除');
+            setSelectedTaskIds(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(taskId);
+              return newSet;
+            });
+            loadTasks();
+          } else {
+            message.error('删除失败');
+          }
         } catch (error: any) {
           message.error(error.message || '删除失败');
         }
@@ -538,12 +596,13 @@ export default function PublishingTasksPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const result = await batchDeleteTasks(Array.from(selectedTaskIds));
-          if (result.successCount > 0) {
-            message.success(`成功删除 ${result.successCount} 个任务`);
+          let successCount = 0;
+          for (const taskId of selectedTaskIds) {
+            const success = await deleteTaskStore(taskId);
+            if (success) successCount++;
           }
-          if (result.failCount > 0) {
-            message.warning(`${result.failCount} 个任务删除失败`);
+          if (successCount > 0) {
+            message.success(`成功删除 ${successCount} 个任务`);
           }
           setSelectedTaskIds(new Set());
           loadTasks();
@@ -564,8 +623,12 @@ export default function PublishingTasksPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const result = await deleteAllTasks();
-          message.success(`成功删除 ${result.deletedCount} 个任务`);
+          let deletedCount = 0;
+          for (const task of tasks) {
+            const success = await deleteTaskStore(task.id);
+            if (success) deletedCount++;
+          }
+          message.success(`成功删除 ${deletedCount} 个任务`);
           setSelectedTaskIds(new Set());
           loadTasks();
         } catch (error: any) {
@@ -585,16 +648,13 @@ export default function PublishingTasksPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const result = await stopBatch(batchId);
-          const messages = [];
-          if (result.cancelledCount > 0) {
-            messages.push(`取消了 ${result.cancelledCount} 个待处理任务`);
+          const success = await stopBatchStore(batchId);
+          if (success) {
+            message.success('成功停止批次');
+            loadTasks();
+          } else {
+            message.error('停止批次失败');
           }
-          if (result.terminatedCount > 0) {
-            messages.push(`终止了 ${result.terminatedCount} 个运行中任务`);
-          }
-          message.success(`成功停止批次${messages.length > 0 ? '，' + messages.join('，') : ''}`);
-          loadTasks();
         } catch (error: any) {
           message.error(error.message || '停止批次失败');
         }
@@ -612,9 +672,13 @@ export default function PublishingTasksPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const result = await deleteBatch(batchId);
-          message.success(`成功删除批次，删除了 ${result.deletedCount} 个任务`);
-          loadTasks();
+          const result = await deleteBatchStore(batchId);
+          if (result.success) {
+            message.success(`成功删除批次，删除了 ${result.deletedCount} 个任务`);
+            loadTasks();
+          } else {
+            message.error('删除批次失败');
+          }
         } catch (error: any) {
           message.error(error.message || '删除批次失败');
         }
@@ -658,8 +722,10 @@ export default function PublishingTasksPage() {
         try {
           let totalDeleted = 0;
           for (const batchId of selectedBatchIds) {
-            const result = await deleteBatch(batchId);
-            totalDeleted += result.deletedCount;
+            const result = await deleteBatchStore(batchId);
+            if (result.success) {
+              totalDeleted += result.deletedCount;
+            }
           }
           message.success(`成功删除 ${selectedBatchIds.size} 个批次，共删除了 ${totalDeleted} 个任务`);
           setSelectedBatchIds(new Set());
@@ -672,7 +738,7 @@ export default function PublishingTasksPage() {
   };
 
   // 任务选择处理
-  const handleTaskSelect = (taskId: number, checked: boolean) => {
+  const handleTaskSelect = (taskId: string, checked: boolean) => {
     const newSelected = new Set(selectedTaskIds);
     if (checked) {
       newSelected.add(taskId);
@@ -691,7 +757,7 @@ export default function PublishingTasksPage() {
   };
 
   // 文章选择处理
-  const handleArticleSelect = (articleId: number, checked: boolean) => {
+  const handleArticleSelect = (articleId: string, checked: boolean) => {
     const newSelected = new Set(selectedArticleIds);
     if (checked) {
       newSelected.add(articleId);
@@ -703,14 +769,14 @@ export default function PublishingTasksPage() {
 
   const handleArticleSelectAll = (checked: boolean) => {
     if (checked) {
-      setSelectedArticleIds(new Set(articles.map((a: Article) => a.id)));
+      setSelectedArticleIds(new Set(articles.map(a => a.id)));
     } else {
       setSelectedArticleIds(new Set());
     }
   };
 
   // 平台选择处理
-  const handleAccountSelect = (accountId: number) => {
+  const handleAccountSelect = (accountId: string) => {
     const newSelected = new Set(selectedAccounts);
     if (newSelected.has(accountId)) {
       newSelected.delete(accountId);
@@ -722,7 +788,6 @@ export default function PublishingTasksPage() {
 
   // 获取状态标签
   const getStatusTag = (status: string, errorMessage?: string) => {
-    // 如果是 failed 状态，检查是否是用户终止的
     if (status === 'failed' && errorMessage) {
       if (errorMessage.includes('用户终止') || errorMessage.includes('用户手动终止')) {
         return (
@@ -736,6 +801,7 @@ export default function PublishingTasksPage() {
     const statusConfig: Record<string, { color: string; icon: any; text: string }> = {
       pending: { color: 'default', icon: <ClockCircleOutlined />, text: '等待中' },
       running: { color: 'processing', icon: <SyncOutlined spin />, text: '执行中' },
+      completed: { color: 'success', icon: <CheckCircleOutlined />, text: '成功' },
       success: { color: 'success', icon: <CheckCircleOutlined />, text: '成功' },
       failed: { color: 'error', icon: <CloseCircleOutlined />, text: '失败' },
       cancelled: { color: 'default', icon: <StopOutlined />, text: '已取消' },
@@ -758,35 +824,35 @@ export default function PublishingTasksPage() {
 
   // 按批次分组任务
   const groupTasksByBatch = () => {
-    const batches: { [key: string]: PublishingTask[] } = {};
-    const noBatchTasks: PublishingTask[] = [];
+    const batches: { [key: string]: LocalTaskDisplay[] } = {};
+    const noBatchTasks: LocalTaskDisplay[] = [];
 
     tasks.forEach(task => {
-      if (task.batch_id) {
-        if (!batches[task.batch_id]) {
-          batches[task.batch_id] = [];
+      if (task.batchId) {
+        if (!batches[task.batchId]) {
+          batches[task.batchId] = [];
         }
-        batches[task.batch_id].push(task);
+        batches[task.batchId].push(task);
       } else {
         noBatchTasks.push(task);
       }
     });
 
-    // 按 batch_order 排序每个批次的任务
+    // 按 batchOrder 排序每个批次的任务
     Object.keys(batches).forEach(batchId => {
-      batches[batchId].sort((a, b) => (a.batch_order || 0) - (b.batch_order || 0));
+      batches[batchId].sort((a, b) => (a.batchOrder || 0) - (b.batchOrder || 0));
     });
 
     return { batches, noBatchTasks };
   };
 
   // 获取批次统计信息
-  const getBatchStats = (batchTasks: PublishingTask[]) => {
+  const getBatchStats = (batchTasks: LocalTaskDisplay[]) => {
     return {
       total: batchTasks.length,
       pending: batchTasks.filter(t => t.status === 'pending').length,
       running: batchTasks.filter(t => t.status === 'running').length,
-      success: batchTasks.filter(t => t.status === 'success').length,
+      success: batchTasks.filter(t => t.status === 'completed' || t.status === 'success').length,
       failed: batchTasks.filter(t => t.status === 'failed').length,
       cancelled: batchTasks.filter(t => t.status === 'cancelled').length,
     };
@@ -805,7 +871,7 @@ export default function PublishingTasksPage() {
       key: 'checkbox',
       width: 48,
       align: 'center' as const,
-      render: (_: any, record: Article) => (
+      render: (_: any, record: LocalArticle) => (
         <Checkbox
           checked={selectedArticleIds.has(record.id)}
           onChange={(e) => handleArticleSelect(record.id, e.target.checked)}
@@ -816,8 +882,9 @@ export default function PublishingTasksPage() {
       title: 'ID',
       dataIndex: 'id',
       key: 'id',
-      width: 50,
+      width: 80,
       align: 'center' as const,
+      render: (id: string) => <span title={id}>{id.substring(0, 8)}...</span>,
     },
     {
       title: '关键词',
@@ -828,17 +895,9 @@ export default function PublishingTasksPage() {
       render: (text: string) => <Tag color="blue">{text}</Tag>,
     },
     {
-      title: '文章设置',
-      dataIndex: 'articleSettingName',
-      key: 'articleSettingName',
-      width: 120,
-      align: 'center' as const,
-      render: (text: string) => text ? <Tag color="purple">{text}</Tag> : <Text type="secondary">-</Text>,
-    },
-    {
       title: '蒸馏结果',
-      dataIndex: 'topicQuestion',
-      key: 'topicQuestion',
+      dataIndex: 'topicQuestionSnapshot',
+      key: 'topicQuestionSnapshot',
       width: 200,
       align: 'center' as const,
       render: (text: string) => text ? <Tag color="green">{text}</Tag> : <Text type="secondary">-</Text>,
@@ -857,7 +916,7 @@ export default function PublishingTasksPage() {
       key: 'preview',
       width: 80,
       align: 'center' as const,
-      render: (_: any, record: Article) => (
+      render: (_: any, record: LocalArticle) => (
         <Tooltip title="预览文章">
           <Button
             type="link"
@@ -893,7 +952,7 @@ export default function PublishingTasksPage() {
       key: 'checkbox',
       width: 50,
       align: 'center' as const,
-      render: (_: any, record: PublishingTask) => (
+      render: (_: any, record: LocalTaskDisplay) => (
         <Checkbox
           checked={selectedTaskIds.has(record.id)}
           onChange={(e) => handleTaskSelect(record.id, e.target.checked)}
@@ -902,8 +961,8 @@ export default function PublishingTasksPage() {
     },
     {
       title: '平台',
-      dataIndex: 'platform_id',
-      key: 'platform_id',
+      dataIndex: 'platformId',
+      key: 'platformId',
       width: 120,
       align: 'center' as const,
       render: (platformId: string) => <Tag color="blue">{getPlatformName(platformId)}</Tag>,
@@ -914,7 +973,7 @@ export default function PublishingTasksPage() {
       key: 'real_username',
       width: 150,
       align: 'center' as const,
-      render: (text: string, record: PublishingTask) => (
+      render: (text: string, record: LocalTaskDisplay) => (
         <span style={{ fontSize: 14 }}>
           {text || record.account_name || '-'}
         </span>
@@ -926,7 +985,7 @@ export default function PublishingTasksPage() {
       key: 'status',
       width: 120,
       align: 'center' as const,
-      render: (status: string, record: PublishingTask) => getStatusTag(status, record.error_message),
+      render: (status: string, record: LocalTaskDisplay) => getStatusTag(status, record.errorMessage),
     },
     {
       title: '操作',
@@ -934,7 +993,7 @@ export default function PublishingTasksPage() {
       width: 280,
       align: 'center' as const,
       fixed: 'right' as const,
-      render: (_: any, record: PublishingTask) => (
+      render: (_: any, record: LocalTaskDisplay) => (
         <Space size="small">
           <Tooltip title="查看日志">
             <Button 
@@ -987,7 +1046,7 @@ export default function PublishingTasksPage() {
             </Tooltip>
           )}
 
-          {(record.status === 'success' || record.status === 'failed' || record.status === 'cancelled') && (
+          {(record.status === 'completed' || record.status === 'success' || record.status === 'failed' || record.status === 'cancelled') && (
             <Tooltip title="删除任务">
               <Button 
                 type="link" 
@@ -1065,7 +1124,7 @@ export default function PublishingTasksPage() {
         extra={
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={() => refreshArticles(true)}
+            onClick={loadDraftArticles}
           >
             刷新
           </Button>
@@ -1076,7 +1135,7 @@ export default function PublishingTasksPage() {
         {articles.length === 0 ? (
           <Empty description="暂无草稿文章" />
         ) : (
-          <ResizableTable<Article>
+          <ResizableTable<LocalArticle>
             tableId="publishing-article-select"
             columns={articleColumns}
             dataSource={articles}
@@ -1118,7 +1177,7 @@ export default function PublishingTasksPage() {
         extra={
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={() => refreshPlatforms(true)}
+            onClick={() => { loadPlatforms(); fetchAccounts(); }}
           >
             刷新
           </Button>
@@ -1152,39 +1211,26 @@ export default function PublishingTasksPage() {
                     styles={{ body: { padding: '12px 8px' } }}
                   >
                     {isSelected && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 4,
-                          right: 4
-                        }}
-                      >
+                      <div style={{ position: 'absolute', top: 4, right: 4 }}>
                         <CheckCircleOutlined style={{ fontSize: 14, color: '#52c41a' }} />
                       </div>
                     )}
                     
-                    <div
-                      style={{
-                        width: 48,
-                        height: 48,
-                        margin: '0 auto 8px',
-                        borderRadius: 8,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden'
-                      }}
-                    >
+                    <div style={{
+                      width: 48,
+                      height: 48,
+                      margin: '0 auto 8px',
+                      borderRadius: 8,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      overflow: 'hidden'
+                    }}>
                       <img 
                         src={getPlatformIcon(account.platform_id)} 
                         alt={platform?.platform_name || account.platform_id}
-                        style={{ 
-                          width: '100%', 
-                          height: '100%', 
-                          objectFit: 'contain'
-                        }}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                         onError={(e) => {
-                          // 图标加载失败，显示首字母
                           const target = e.target as HTMLImageElement;
                           target.style.display = 'none';
                           const parent = target.parentElement;
@@ -1360,15 +1406,13 @@ export default function PublishingTasksPage() {
               </Button>
             )}
             {selectedTaskIds.size > 0 && (
-              <>
-                <Button 
-                  danger
-                  icon={<DeleteOutlined />} 
-                  onClick={handleBatchDelete}
-                >
-                  批量删除任务 ({selectedTaskIds.size})
-                </Button>
-              </>
+              <Button 
+                danger
+                icon={<DeleteOutlined />} 
+                onClick={handleBatchDelete}
+              >
+                批量删除任务 ({selectedTaskIds.size})
+              </Button>
             )}
             {taskTotal > 0 && (
               <Button 
@@ -1402,8 +1446,8 @@ export default function PublishingTasksPage() {
             const batchTasks = batches[batchId];
             const stats = getBatchStats(batchTasks);
             const shortId = batchId.split('_').pop()?.substring(0, 8) || batchId;
-            const intervalMinutes = batchTasks[0]?.interval_minutes || 0;
-            const createdAt = batchTasks[0]?.created_at || '';
+            const intervalMinutes = batchTasks[0]?.intervalMinutes || 0;
+            const createdAt = batchTasks[0]?.createdAt || '';
             
             return {
               key: batchId,
@@ -1420,7 +1464,7 @@ export default function PublishingTasksPage() {
               tasks: batchTasks
             };
           });
-          
+
           // 批次表格列定义
           const batchColumns = [
             {
@@ -1452,7 +1496,6 @@ export default function PublishingTasksPage() {
                 
                 return (
                   <div style={{ padding: '8px 0' }}>
-                    {/* 进度条 */}
                     <div style={{ marginBottom: 8 }}>
                       <div style={{ 
                         display: 'flex', 
@@ -1476,59 +1519,36 @@ export default function PublishingTasksPage() {
                         <div style={{
                           height: '100%',
                           width: `${progressPercent}%`,
-                          background: record.failed > 0 
-                            ? '#ff4d4f' // 使用 danger 红色
-                            : '#1890ff', // 使用 primary 蓝色
+                          background: record.failed > 0 ? '#ff4d4f' : '#1890ff',
                           transition: 'width 0.3s ease',
                           borderRadius: 4
                         }} />
                       </div>
                     </div>
                     
-                    {/* 状态标签 */}
                     <Space size={6} wrap>
                       {record.running > 0 && (
-                        <Tag 
-                          color="processing" 
-                          icon={<SyncOutlined spin />}
-                          style={{ margin: 0, fontSize: 12 }}
-                        >
+                        <Tag color="processing" icon={<SyncOutlined spin />} style={{ margin: 0, fontSize: 12 }}>
                           执行中 {record.running}
                         </Tag>
                       )}
                       {record.pending > 0 && (
-                        <Tag 
-                          color="default"
-                          icon={<ClockCircleOutlined />}
-                          style={{ margin: 0, fontSize: 12 }}
-                        >
+                        <Tag color="default" icon={<ClockCircleOutlined />} style={{ margin: 0, fontSize: 12 }}>
                           等待 {record.pending}
                         </Tag>
                       )}
                       {record.success > 0 && (
-                        <Tag 
-                          color="success"
-                          icon={<CheckCircleOutlined />}
-                          style={{ margin: 0, fontSize: 12 }}
-                        >
+                        <Tag color="success" icon={<CheckCircleOutlined />} style={{ margin: 0, fontSize: 12 }}>
                           成功 {record.success}
                         </Tag>
                       )}
                       {record.failed > 0 && (
-                        <Tag 
-                          color="error"
-                          icon={<CloseCircleOutlined />}
-                          style={{ margin: 0, fontSize: 12 }}
-                        >
+                        <Tag color="error" icon={<CloseCircleOutlined />} style={{ margin: 0, fontSize: 12 }}>
                           失败 {record.failed}
                         </Tag>
                       )}
                       {record.cancelled > 0 && (
-                        <Tag 
-                          color="warning"
-                          icon={<StopOutlined />}
-                          style={{ margin: 0, fontSize: 12 }}
-                        >
+                        <Tag color="warning" icon={<StopOutlined />} style={{ margin: 0, fontSize: 12 }}>
                           已取消 {record.cancelled}
                         </Tag>
                       )}
@@ -1593,7 +1613,7 @@ export default function PublishingTasksPage() {
               )
             }
           ];
-          
+
           // 展开行渲染子任务
           const expandedRowRender = (record: any) => (
             <div style={{ 
@@ -1603,7 +1623,6 @@ export default function PublishingTasksPage() {
               margin: '0 -16px',
               position: 'relative'
             }}>
-              {/* 装饰线 */}
               <div style={{
                 position: 'absolute',
                 left: 0,
@@ -1614,7 +1633,6 @@ export default function PublishingTasksPage() {
                 boxShadow: '2px 0 8px rgba(24, 144, 255, 0.3)'
               }} />
               
-              {/* 子任务表格 */}
               <div style={{
                 background: '#fff',
                 borderRadius: 8,
@@ -1622,7 +1640,7 @@ export default function PublishingTasksPage() {
                 overflow: 'hidden',
                 boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
               }}>
-                <ResizableTable<PublishingTask>
+                <ResizableTable<LocalTaskDisplay>
                   tableId={`publishing-tasks-batch-${record.key}`}
                   columns={taskColumns}
                   dataSource={record.tasks}
@@ -1631,9 +1649,8 @@ export default function PublishingTasksPage() {
                   pagination={false}
                   scroll={{ x: 800 }}
                   rowClassName={(task, index) => {
-                    // 为不同状态的行添加不同的背景色
                     if (task.status === 'running') return 'task-row-running';
-                    if (task.status === 'success') return 'task-row-success';
+                    if (task.status === 'completed' || task.status === 'success') return 'task-row-success';
                     if (task.status === 'failed') return 'task-row-failed';
                     return index % 2 === 0 ? 'task-row-even' : 'task-row-odd';
                   }}
@@ -1646,33 +1663,15 @@ export default function PublishingTasksPage() {
             <>
               <style>
                 {`
-                  .task-row-running {
-                    background: #e6f7ff !important;
-                  }
-                  .task-row-success {
-                    background: #f6ffed !important;
-                  }
-                  .task-row-failed {
-                    background: #fff1f0 !important;
-                  }
-                  .task-row-even {
-                    background: #fafafa !important;
-                  }
-                  .task-row-odd {
-                    background: #ffffff !important;
-                  }
-                  .batch-expand-icon {
-                    transition: all 0.3s ease;
-                  }
-                  .batch-expand-icon:hover {
-                    transform: translateX(4px);
-                  }
-                  .batch-row {
-                    transition: all 0.2s ease;
-                  }
-                  .batch-row:hover {
-                    background: #fafafa !important;
-                  }
+                  .task-row-running { background: #e6f7ff !important; }
+                  .task-row-success { background: #f6ffed !important; }
+                  .task-row-failed { background: #fff1f0 !important; }
+                  .task-row-even { background: #fafafa !important; }
+                  .task-row-odd { background: #ffffff !important; }
+                  .batch-expand-icon { transition: all 0.3s ease; }
+                  .batch-expand-icon:hover { transform: translateX(4px); }
+                  .batch-row { transition: all 0.2s ease; }
+                  .batch-row:hover { background: #fafafa !important; }
                 `}
               </style>
               <ResizableTable
@@ -1743,7 +1742,7 @@ export default function PublishingTasksPage() {
         title={
           <Space>
             <SyncOutlined spin={logsModal.isLive} style={{ color: logsModal.isLive ? '#52c41a' : '#999' }} />
-            <span>任务日志 #{logsModal.taskId}</span>
+            <span>任务日志 #{logsModal.taskId?.substring(0, 8)}</span>
             {logsModal.isLive ? (
               <Tag color="success" icon={<SyncOutlined spin />}>实时更新中</Tag>
             ) : (
@@ -1761,9 +1760,7 @@ export default function PublishingTasksPage() {
             onClick={async () => {
               if (logsModal.taskId) {
                 try {
-                  const logs = await getTaskLogs(logsModal.taskId);
-                  setLogsModal(prev => ({ ...prev, logs }));
-                  // 刷新后滚动到底部
+                  await fetchLogs(logsModal.taskId);
                   requestAnimationFrame(() => {
                     if (logsContainerRef.current) {
                       logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
@@ -1799,11 +1796,7 @@ export default function PublishingTasksPage() {
           }}
         >
           {logsModal.logs.length === 0 ? (
-            <div style={{ 
-              padding: 40, 
-              textAlign: 'center',
-              color: '#64748b'
-            }}>
+            <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
               <SyncOutlined spin={logsModal.isLive} style={{ fontSize: 32, marginBottom: 16 }} />
               <div>{logsModal.isLive ? '等待日志...' : '暂无日志'}</div>
             </div>
@@ -1811,6 +1804,7 @@ export default function PublishingTasksPage() {
             logsModal.logs.map((log, index) => {
               const levelColors: Record<string, string> = {
                 info: '#52c41a',
+                warn: '#faad14',
                 warning: '#faad14',
                 error: '#ff4d4f'
               };
@@ -1832,26 +1826,17 @@ export default function PublishingTasksPage() {
                   }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <span style={{ 
-                      color: '#64748b',
-                      fontSize: 12,
-                      fontFamily: 'monospace'
-                    }}>
-                      {new Date(log.timestamp || log.created_at).toLocaleString('zh-CN')}
+                    <span style={{ color: '#64748b', fontSize: 12, fontFamily: 'monospace' }}>
+                      {new Date(log.timestamp || log.created_at || log.createdAt || '').toLocaleString('zh-CN')}
                     </span>
                     <Tag 
-                      color={log.level === 'info' ? 'success' : log.level === 'warning' ? 'warning' : 'error'}
+                      color={log.level === 'info' ? 'success' : log.level === 'warn' || log.level === 'warning' ? 'warning' : 'error'}
                       style={{ margin: 0, fontSize: 11, fontWeight: 600 }}
                     >
                       {log.level.toUpperCase()}
                     </Tag>
                   </div>
-                  <div style={{ 
-                    color: '#1e293b',
-                    fontSize: 14,
-                    lineHeight: 1.6,
-                    fontWeight: 500
-                  }}>
+                  <div style={{ color: '#1e293b', fontSize: 14, lineHeight: 1.6, fontWeight: 500 }}>
                     {log.message}
                   </div>
                   {log.details && (
@@ -1866,7 +1851,7 @@ export default function PublishingTasksPage() {
                       border: '1px solid #e2e8f0',
                       fontFamily: 'Monaco, Consolas, "Courier New", monospace'
                     }}>
-                      {JSON.stringify(log.details, null, 2)}
+                      {typeof log.details === 'string' ? log.details : JSON.stringify(log.details, null, 2)}
                     </pre>
                   )}
                 </div>
@@ -1883,7 +1868,7 @@ export default function PublishingTasksPage() {
             <EyeOutlined style={{ color: '#1890ff' }} />
             <span>文章预览</span>
             {previewModal.article && (
-              <Tag color="blue">ID: {previewModal.article.id}</Tag>
+              <Tag color="blue">ID: {previewModal.article.id.substring(0, 8)}...</Tag>
             )}
           </Space>
         }
@@ -1912,8 +1897,8 @@ export default function PublishingTasksPage() {
                 </Col>
                 <Col span={12}>
                   <Text type="secondary">蒸馏结果：</Text>
-                  {previewModal.article.topicQuestion ? (
-                    <Tag color="green">{previewModal.article.topicQuestion}</Tag>
+                  {previewModal.article.topicQuestionSnapshot ? (
+                    <Tag color="green">{previewModal.article.topicQuestionSnapshot}</Tag>
                   ) : (
                     <Text type="secondary">-</Text>
                   )}

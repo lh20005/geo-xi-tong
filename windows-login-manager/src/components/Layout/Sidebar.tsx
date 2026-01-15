@@ -24,6 +24,7 @@ import {
   LogoutOutlined,
   DollarOutlined,
   CloudDownloadOutlined,
+  CloudSyncOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 import logoImg from '/images/logo.png';
@@ -221,6 +222,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       key: '/software-update',
       icon: <CloudDownloadOutlined />,
       label: '升级软件',
+    },
+    {
+      key: '/data-sync',
+      icon: <CloudSyncOutlined />,
+      label: '数据同步',
     },
     {
       key: 'logout',

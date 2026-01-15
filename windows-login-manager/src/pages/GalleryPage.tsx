@@ -2,70 +2,45 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag, Tooltip } from 'antd';
 import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '../api/client';
-import { API_BASE_URL } from '../config/env';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
+import { useGalleryStore } from '../stores/galleryStore';
 import type { UploadFile } from 'antd';
-
-interface Album {
-  id: number;
-  name: string;
-  image_count: number;
-  cover_image: string | null;
-  created_at: string;
-}
 
 export default function GalleryPage() {
   const navigate = useNavigate();
-  const { invalidateCacheByPrefix } = useCacheStore();
-  const [albums, setAlbums] = useState<Album[]>([]);
+  const { 
+    albums, 
+    loading, 
+    uploading,
+    error,
+    fetchAlbums, 
+    createAlbum, 
+    updateAlbum,
+    deleteAlbum,
+    clearError 
+  } = useGalleryStore();
+  
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [albumName, setAlbumName] = useState('');
   const [fileList, setFileList] = useState<UploadFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
-  // 数据获取函数
-  const fetchAlbums = useCallback(async () => {
-    const response = await apiClient.get('/gallery/albums');
-    return Array.isArray(response.data.albums) ? response.data.albums : [];
-  }, []);
-
-  // 使用缓存 Hook 获取相册列表
-  const {
-    data: albumsData,
-    loading,
-    refreshing,
-    refresh: refreshAlbums,
-    isFromCache
-  } = useCachedData<Album[]>(
-    'gallery:albums',
-    fetchAlbums,
-    {
-      onError: (error) => {
-        console.error('加载相册失败:', error);
-        message.error('加载相册失败');
-      }
-    }
-  );
-
-  // 更新本地状态
+  // 初始加载
   useEffect(() => {
-    if (albumsData) {
-      setAlbums(albumsData);
+    fetchAlbums();
+  }, [fetchAlbums]);
+
+  // 错误处理
+  useEffect(() => {
+    if (error) {
+      message.error(error);
+      clearError();
     }
-  }, [albumsData]);
+  }, [error, clearError]);
 
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('gallery:');
-    await refreshAlbums(true);
-  }, [invalidateCacheByPrefix, refreshAlbums]);
-
-  // 加载数据（用于手动刷新）
+  // 刷新数据
   const loadAlbums = useCallback(async () => {
-    await refreshAlbums(true);
-  }, [refreshAlbums]);
+    await fetchAlbums();
+  }, [fetchAlbums]);
 
   const handleCreateAlbum = async () => {
     if (!albumName.trim()) {
@@ -75,27 +50,22 @@ export default function GalleryPage() {
 
     setSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append('name', albumName.trim());
+      // 创建相册
+      const album = await createAlbum({ name: albumName.trim() });
       
-      // 添加图片文件
-      fileList.forEach((file) => {
-        if (file.originFileObj) {
-          formData.append('images', file.originFileObj);
+      if (album) {
+        // 如果有图片，上传图片
+        if (fileList.length > 0) {
+          const { uploadImages } = useGalleryStore.getState();
+          const files = fileList.map(f => f.originFileObj).filter(Boolean);
+          await uploadImages(album.id, files);
         }
-      });
-
-      await apiClient.post('/gallery/albums', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      message.success('相册创建成功！');
-      setCreateModalVisible(false);
-      setAlbumName('');
-      setFileList([]);
-      invalidateAndRefresh();
+        
+        message.success('相册创建成功！');
+        setCreateModalVisible(false);
+        setAlbumName('');
+        setFileList([]);
+      }
     } catch (error: any) {
       message.error(error.message || '创建相册失败');
     } finally {
@@ -103,7 +73,7 @@ export default function GalleryPage() {
     }
   };
 
-  const handleDeleteAlbum = (id: number) => {
+  const handleDeleteAlbum = (id: string) => {
     Modal.confirm({
       title: '确认删除',
       content: '确定要删除这个相册吗？相册中的所有图片也会被删除，此操作不可恢复。',
@@ -111,18 +81,15 @@ export default function GalleryPage() {
       cancelText: '取消',
       okType: 'danger',
       onOk: async () => {
-        try {
-          await apiClient.delete(`/gallery/albums/${id}`);
+        const success = await deleteAlbum(id);
+        if (success) {
           message.success('相册删除成功');
-          invalidateAndRefresh();
-        } catch (error: any) {
-          message.error(error.message || '删除相册失败');
         }
       }
     });
   };
 
-  const handleEditAlbum = (id: number, currentName: string) => {
+  const handleEditAlbum = (id: string, currentName: string) => {
     let newName = currentName;
     
     Modal.confirm({
@@ -145,12 +112,10 @@ export default function GalleryPage() {
           return Promise.reject();
         }
         
-        try {
-          await apiClient.patch(`/gallery/albums/${id}`, { name: newName.trim() });
+        const success = await updateAlbum(id, { name: newName.trim() });
+        if (success) {
           message.success('相册名称更新成功');
-          invalidateAndRefresh();
-        } catch (error: any) {
-          message.error(error.message || '更新失败');
+        } else {
           return Promise.reject();
         }
       }
@@ -182,13 +147,8 @@ export default function GalleryPage() {
         }
         extra={
           <Space>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && (
-              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
+            {uploading && (
+              <Tag icon={<CloudSyncOutlined spin />} color="processing">上传中</Tag>
             )}
             <Button
               icon={<ReloadOutlined />}
@@ -224,7 +184,7 @@ export default function GalleryPage() {
                 <Card
                   hoverable
                   cover={
-                    album.cover_image ? (
+                    album.coverImage ? (
                       <div
                         style={{
                           height: 200,
@@ -237,7 +197,7 @@ export default function GalleryPage() {
                       >
                         <img
                           alt={album.name}
-                          src={`${API_BASE_URL}/uploads/gallery/${album.cover_image}`}
+                          src={album.coverImage}
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       </div>
@@ -262,10 +222,10 @@ export default function GalleryPage() {
                     description={
                       <Space direction="vertical" style={{ width: '100%' }} align="center">
                         <div>
-                          <Tag color="blue">{album.image_count} 张图片</Tag>
+                          <Tag color="blue">{album.imageCount || 0} 张图片</Tag>
                         </div>
                         <div style={{ fontSize: 12, color: '#999' }}>
-                          {new Date(album.created_at).toLocaleString('zh-CN')}
+                          {new Date(album.createdAt).toLocaleString('zh-CN')}
                         </div>
                         <Space>
                           <Button

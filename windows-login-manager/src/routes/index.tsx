@@ -48,6 +48,9 @@ const Settings = lazy(() => import('../pages/Settings'));
 // 软件升级
 const SoftwareUpdatePage = lazy(() => import('../pages/SoftwareUpdatePage'));
 
+// 数据同步
+const DataSyncPage = lazy(() => import('../pages/DataSyncPage'));
+
 // 加载组件
 const LoadingFallback = () => (
   <div style={{ 
@@ -339,6 +342,16 @@ export const routes = [
     element: (
       <Suspense fallback={<LoadingFallback />}>
         <SoftwareUpdatePage />
+      </Suspense>
+    )
+  },
+  
+  // 数据同步
+  {
+    path: '/data-sync',
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <DataSyncPage />
       </Suspense>
     )
   },

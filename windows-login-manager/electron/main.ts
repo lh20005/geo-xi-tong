@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
 import { ipcHandler } from './ipc/handler';
+import { registerAllLocalHandlers, cleanupAllLocalHandlers } from './ipc/handlers';
 import { Logger } from './logger/logger';
 import { ErrorHandler } from './error/handler';
 import { CrashRecovery } from './crash/recovery';
@@ -10,6 +11,7 @@ import { wsManager, WebSocketManager } from './websocket/manager';
 import { userWsManager, UserWebSocketManager } from './websocket/userManager';
 import { storageManager } from './storage/manager';
 import { AutoUpdater } from './updater/auto-updater';
+import { sqliteManager } from './database/sqlite';
 
 // 初始化核心服务
 const logger = Logger.getInstance();
@@ -60,6 +62,14 @@ class ApplicationManager {
       
       // 注册IPC处理器
       await ipcHandler.registerHandlers();
+      
+      // 初始化本地 SQLite 数据库（Phase 2）
+      await sqliteManager.initialize();
+      logger.info('SQLite database initialized');
+      
+      // 注册本地数据相关的 IPC 处理器（Phase 6）
+      registerAllLocalHandlers();
+      logger.info('Local IPC handlers registered');
       
       // 设置应用菜单
       this.setupApplicationMenu();
@@ -333,6 +343,19 @@ class ApplicationManager {
    */
   handleAppQuit(): void {
     logger.info('Application quitting...');
+    
+    // 清理本地数据相关资源（Phase 6）
+    cleanupAllLocalHandlers().catch(err => {
+      logger.error('Failed to cleanup local handlers:', err);
+    });
+    
+    // 关闭 SQLite 数据库连接（Phase 2）
+    try {
+      sqliteManager.close();
+      logger.info('SQLite database closed');
+    } catch (error) {
+      logger.error('Failed to close SQLite database:', error);
+    }
     
     // 断开WebSocket连接
     try {

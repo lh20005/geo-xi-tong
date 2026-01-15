@@ -162,8 +162,10 @@ async function startServer() {
     // EncryptionService已在导入时初始化，无需调用initialize
     console.log('✅ 加密服务初始化成功');
     
-    // 启动任务调度器
-    taskScheduler.start();
+    // 🔴 [架构改造] 停止服务器端 TaskScheduler
+    // 发布任务执行已迁移到 Windows 端，服务器不再需要调度发布任务
+    // taskScheduler.start();
+    console.log('⚠️  TaskScheduler 已禁用（发布任务已迁移到 Windows 端）');
     
     // 启动订阅系统定时任务
     schedulerService.start();
@@ -339,7 +341,8 @@ async function startServer() {
 // 优雅关闭
 process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
-  taskScheduler.stop();
+  // 🔴 [架构改造] TaskScheduler 已禁用
+  // taskScheduler.stop();
   schedulerService.stop();
   
   // 停止订阅到期检查服务
@@ -357,7 +360,8 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', () => {
   console.log('收到 SIGINT 信号，正在关闭服务器...');
-  taskScheduler.stop();
+  // 🔴 [架构改造] TaskScheduler 已禁用
+  // taskScheduler.stop();
   schedulerService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();

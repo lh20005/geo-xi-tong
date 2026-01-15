@@ -5,6 +5,8 @@ import { pool } from '../db/database';
 import { commissionService } from './CommissionService';
 import { profitSharingService } from './ProfitSharingService';
 import { agentService } from './AgentService';
+import { quotaReservationService } from './QuotaReservationService';
+import { syncService } from './SyncService';
 
 /**
  * 定时任务调度服务
@@ -35,6 +37,12 @@ export class SchedulerService {
 
     // 6. 代理商异常检测任务（每6小时执行）
     this.scheduleAgentAnomalyDetectionTask();
+
+    // 7. 配额预留清理任务（每分钟执行）
+    this.scheduleQuotaReservationCleanupTask();
+
+    // 8. 同步快照过期清理任务（每天凌晨3点执行）
+    this.scheduleSyncSnapshotCleanupTask();
 
     console.log('✅ 定时任务调度器已启动');
   }
@@ -418,6 +426,49 @@ export class SchedulerService {
 
     this.tasks.push(task);
     console.log('✅ 代理商异常检测任务已安排（每6小时执行）');
+  }
+
+  /**
+   * 配额预留清理任务
+   * 每分钟执行，清理过期的配额预留记录
+   */
+  private scheduleQuotaReservationCleanupTask() {
+    const task = cron.schedule('* * * * *', async () => {
+      try {
+        const cleanedCount = await quotaReservationService.cleanupExpiredReservations();
+        if (cleanedCount > 0) {
+          console.log(`[定时任务] 已清理 ${cleanedCount} 条过期的配额预留记录`);
+        }
+      } catch (error) {
+        console.error('[定时任务] 配额预留清理任务失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 配额预留清理任务已安排（每分钟执行）');
+  }
+
+  /**
+   * 同步快照过期清理任务
+   * 每天凌晨3点执行，清理过期的数据同步快照
+   */
+  private scheduleSyncSnapshotCleanupTask() {
+    const task = cron.schedule('0 3 * * *', async () => {
+      try {
+        console.log('[定时任务] 开始执行同步快照过期清理...');
+        const cleanedCount = await syncService.cleanupExpiredSnapshots();
+        if (cleanedCount > 0) {
+          console.log(`[定时任务] 已清理 ${cleanedCount} 个过期的同步快照`);
+        } else {
+          console.log('[定时任务] 没有过期的同步快照需要清理');
+        }
+      } catch (error) {
+        console.error('[定时任务] 同步快照过期清理任务失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 同步快照过期清理任务已安排（每天03:00执行）');
   }
 }
 

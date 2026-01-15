@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ArticleGenerationService } from '../services/articleGenerationService';
+import { articleGenerationCacheService } from '../services/ArticleGenerationCacheService';
 import { pool } from '../db/database';
 import { authenticate } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
@@ -483,5 +484,131 @@ articleGenerationRouter.delete('/tasks', async (req, res) => {
   } catch (error: any) {
     console.error('删除所有任务错误:', error);
     res.status(500).json({ error: '删除所有任务失败', details: error.message });
+  }
+});
+
+// ==================== AI 生成确认机制 ====================
+// 用于解决 AI 生成文章后网络中断导致用户丢失已生成文章的问题
+
+/**
+ * 确认收到生成结果
+ * POST /api/article-generation/confirm
+ * 
+ * 客户端确认已成功保存文章后调用，删除服务器缓存
+ */
+articleGenerationRouter.post('/confirm', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const { generationId } = req.body;
+
+    if (!generationId || typeof generationId !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'INVALID_GENERATION_ID',
+        message: '缺少有效的 generationId' 
+      });
+    }
+
+    const success = await articleGenerationCacheService.confirmReceived(generationId, userId);
+
+    if (success) {
+      res.json({
+        success: true,
+        message: '确认成功'
+      });
+    } else {
+      res.status(403).json({
+        success: false,
+        error: 'CONFIRM_FAILED',
+        message: '确认失败，可能是权限不足或 generationId 无效'
+      });
+    }
+  } catch (error: any) {
+    console.error('确认生成结果错误:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'INTERNAL_ERROR',
+      message: '确认失败',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * 重新获取生成结果
+ * GET /api/article-generation/retrieve/:generationId
+ * 
+ * 用于网络恢复后重新获取之前生成的文章
+ */
+articleGenerationRouter.get('/retrieve/:generationId', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const { generationId } = req.params;
+
+    if (!generationId || typeof generationId !== 'string') {
+      return res.status(400).json({ 
+        success: false,
+        error: 'INVALID_GENERATION_ID',
+        message: '缺少有效的 generationId' 
+      });
+    }
+
+    const article = await articleGenerationCacheService.retrieveGeneration(generationId, userId);
+
+    if (article) {
+      // 获取剩余过期时间
+      const ttl = await articleGenerationCacheService.getTTL(generationId);
+      const expiresAt = ttl > 0 
+        ? new Date(Date.now() + ttl * 1000).toISOString()
+        : null;
+
+      res.json({
+        success: true,
+        article,
+        expiresAt
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'GENERATION_EXPIRED',
+        message: '生成结果已过期或不存在'
+      });
+    }
+  } catch (error: any) {
+    console.error('获取生成结果错误:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'INTERNAL_ERROR',
+      message: '获取失败',
+      details: error.message 
+    });
+  }
+});
+
+/**
+ * 获取用户未确认的生成结果列表
+ * GET /api/article-generation/pending
+ * 
+ * 用于客户端启动时检查是否有未确认的生成结果
+ */
+articleGenerationRouter.get('/pending', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+
+    const pendingGenerations = await articleGenerationCacheService.getUserPendingGenerations(userId);
+
+    res.json({
+      success: true,
+      count: pendingGenerations.length,
+      generations: pendingGenerations
+    });
+  } catch (error: any) {
+    console.error('获取未确认生成结果错误:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'INTERNAL_ERROR',
+      message: '获取失败',
+      details: error.message 
+    });
   }
 });

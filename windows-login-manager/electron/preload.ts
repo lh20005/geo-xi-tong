@@ -29,7 +29,7 @@ export interface ElectronAPI {
   deleteConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
   getConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
   
-  // 知识库管理
+  // 知识库管理（服务器端）
   getKnowledgeBases: () => Promise<{ success: boolean; data?: any; error?: string }>;
   getKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
   createKnowledgeBase: (payload: { name: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
@@ -40,7 +40,7 @@ export interface ElectronAPI {
   deleteKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
   searchKnowledgeBaseDocuments: (id: number, query: string) => Promise<{ success: boolean; data?: any; error?: string }>;
   
-  // 账号管理
+  // 账号管理（服务器端）
   getAccounts: () => Promise<any[]>;
   deleteAccount: (accountId: number) => Promise<any>;
   setDefaultAccount: (platformId: string, accountId: number) => Promise<any>;
@@ -93,6 +93,137 @@ export interface ElectronAPI {
     }>;
     onStatusChanged: (callback: (status: any) => void) => () => void;
   };
+
+  // ========== Phase 6: 本地数据 API ==========
+  
+  // 文章管理（本地 SQLite）
+  article: {
+    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    update: (id: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    delete: (id: string) => Promise<{ success: boolean; error?: string }>;
+    search: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteBatch: (ids: string[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteAll: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getKeywordStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    markAsPublished: (id: string, publishedAt?: string) => Promise<{ success: boolean; error?: string }>;
+    findUnpublished: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 任务管理（本地 SQLite）
+  task: {
+    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    updateStatus: (id: string, status: string, errorMessage?: string) => Promise<{ success: boolean; error?: string }>;
+    cancel: (id: string) => Promise<{ success: boolean; error?: string }>;
+    delete: (id: string) => Promise<{ success: boolean; error?: string }>;
+    findPending: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    findByBatchId: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    cancelBatch: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteBatch: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getBatchStats: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getLogs: (taskId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    createRecord: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    updateRecord: (id: string, params: any) => Promise<{ success: boolean; error?: string }>;
+  };
+
+  // 发布执行（本地 Playwright）
+  publish: {
+    executeSingle: (taskId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    executeBatch: (batchId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
+    stopBatch: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getBatchStatus: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    startScheduler: () => Promise<{ success: boolean; message?: string; error?: string }>;
+    stopScheduler: () => Promise<{ success: boolean; message?: string; error?: string }>;
+    getSchedulerStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    reserveQuota: (quotaType: string, amount?: number, taskInfo?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
+    confirmQuota: (reservationId: string, result?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
+    releaseQuota: (reservationId: string, reason?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getQuotaInfo: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    reportResult: (report: any) => Promise<{ success: boolean; message?: string; error?: string }>;
+    flushPendingAnalytics: () => Promise<{ success: boolean; error?: string }>;
+  };
+
+  // 浏览器自动化（本地 Playwright）
+  browser: {
+    launch: (options?: { headless?: boolean; userDataDir?: string }) => Promise<{ success: boolean; message?: string; error?: string }>;
+    close: () => Promise<{ success: boolean; message?: string; error?: string }>;
+    screenshot: (options?: { fullPage?: boolean; path?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+    navigateTo: (url: string, options?: { waitUntil?: string; timeout?: number }) => Promise<{ success: boolean; error?: string }>;
+    getCurrentUrl: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getPageContent: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    evaluate: (script: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    setCookies: (cookies: any[], url?: string) => Promise<{ success: boolean; error?: string }>;
+    getCookies: (url?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    checkLoginStatus: (accountId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    checkAllLoginStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 本地账号管理（本地 SQLite + 加密）
+  localAccount: {
+    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAll: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findByPlatform: (platformId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    update: (id: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    delete: (id: string) => Promise<{ success: boolean; error?: string }>;
+    setDefault: (platformId: string, accountId: string) => Promise<{ success: boolean; error?: string }>;
+    getDefault: (platformId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    updateLoginStatus: (id: string, status: string, errorMessage?: string) => Promise<{ success: boolean; error?: string }>;
+    saveCookies: (id: string, cookies: any[]) => Promise<{ success: boolean; error?: string }>;
+    getCookies: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    exists: (platformId: string, platformUserId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 本地知识库管理（本地文件系统）
+  localKnowledge: {
+    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAll: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    update: (id: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    delete: (id: string) => Promise<{ success: boolean; error?: string }>;
+    upload: (kbId: string, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getDocuments: (kbId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getDocument: (docId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteDocument: (docId: string) => Promise<{ success: boolean; error?: string }>;
+    search: (kbId: string, query: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    parse: (filePath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 本地图库管理（本地文件系统）
+  gallery: {
+    createAlbum: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAlbums: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getAlbum: (albumId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    updateAlbum: (albumId: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteAlbum: (albumId: string) => Promise<{ success: boolean; error?: string }>;
+    uploadImage: (albumId: string, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findImages: (albumId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getImage: (imageId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteImage: (imageId: string) => Promise<{ success: boolean; error?: string }>;
+    deleteImages: (imageIds: string[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    moveImage: (imageId: string, targetAlbumId: string) => Promise<{ success: boolean; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    readImageFile: (imageId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 数据同步（与服务器同步）
+  dataSync: {
+    backup: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    restore: (snapshotId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getSnapshots: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteSnapshot: (snapshotId: string) => Promise<{ success: boolean; error?: string }>;
+    exportLocal: (exportPath?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    importLocal: (importPath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getLocalStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
 }
 
 // 创建 API 对象
@@ -131,7 +262,7 @@ const electronAPI = {
   deleteConversionTarget: (id: number) => ipcRenderer.invoke('conversion-targets:delete', id),
   getConversionTarget: (id: number) => ipcRenderer.invoke('conversion-targets:get', id),
   
-  // 知识库管理
+  // 知识库管理（服务器端）
   getKnowledgeBases: () => ipcRenderer.invoke('knowledge-base:list'),
   getKnowledgeBase: (id: number) => ipcRenderer.invoke('knowledge-base:get', id),
   createKnowledgeBase: (payload: { name: string; description?: string }) =>
@@ -148,7 +279,7 @@ const electronAPI = {
   searchKnowledgeBaseDocuments: (id: number, query: string) =>
     ipcRenderer.invoke('knowledge-base:search-documents', id, query),
   
-  // 账号管理
+  // 账号管理（服务器端）
   getAccounts: () => ipcRenderer.invoke('get-accounts'),
   deleteAccount: (accountId: number) =>
     ipcRenderer.invoke('delete-account', accountId),
@@ -217,6 +348,137 @@ const electronAPI = {
         ipcRenderer.removeListener('updater:status-changed', listener);
       };
     },
+  },
+
+  // ========== Phase 6: 本地数据 API ==========
+
+  // 文章管理（本地 SQLite）
+  article: {
+    create: (params: any) => ipcRenderer.invoke('article:create', params),
+    findAll: (params?: any) => ipcRenderer.invoke('article:findAll', params),
+    findById: (id: string) => ipcRenderer.invoke('article:findById', id),
+    update: (id: string, params: any) => ipcRenderer.invoke('article:update', id, params),
+    delete: (id: string) => ipcRenderer.invoke('article:delete', id),
+    search: (params: any) => ipcRenderer.invoke('article:search', params),
+    deleteBatch: (ids: string[]) => ipcRenderer.invoke('article:deleteBatch', ids),
+    deleteAll: () => ipcRenderer.invoke('article:deleteAll'),
+    getStats: () => ipcRenderer.invoke('article:getStats'),
+    getKeywordStats: () => ipcRenderer.invoke('article:getKeywordStats'),
+    markAsPublished: (id: string, publishedAt?: string) => ipcRenderer.invoke('article:markAsPublished', id, publishedAt),
+    findUnpublished: () => ipcRenderer.invoke('article:findUnpublished'),
+  },
+
+  // 任务管理（本地 SQLite）
+  task: {
+    create: (params: any) => ipcRenderer.invoke('task:create', params),
+    findAll: (params?: any) => ipcRenderer.invoke('task:findAll', params),
+    findById: (id: string) => ipcRenderer.invoke('task:findById', id),
+    updateStatus: (id: string, status: string, errorMessage?: string) => ipcRenderer.invoke('task:updateStatus', id, status, errorMessage),
+    cancel: (id: string) => ipcRenderer.invoke('task:cancel', id),
+    delete: (id: string) => ipcRenderer.invoke('task:delete', id),
+    findPending: () => ipcRenderer.invoke('task:findPending'),
+    findByBatchId: (batchId: string) => ipcRenderer.invoke('task:findByBatchId', batchId),
+    cancelBatch: (batchId: string) => ipcRenderer.invoke('task:cancelBatch', batchId),
+    deleteBatch: (batchId: string) => ipcRenderer.invoke('task:deleteBatch', batchId),
+    getBatchStats: (batchId: string) => ipcRenderer.invoke('task:getBatchStats', batchId),
+    getStats: () => ipcRenderer.invoke('task:getStats'),
+    getLogs: (taskId: string) => ipcRenderer.invoke('task:getLogs', taskId),
+    createRecord: (params: any) => ipcRenderer.invoke('task:createRecord', params),
+    updateRecord: (id: string, params: any) => ipcRenderer.invoke('task:updateRecord', id, params),
+  },
+
+  // 发布执行（本地 Playwright）
+  publish: {
+    executeSingle: (taskId: string) => ipcRenderer.invoke('publish:executeSingle', taskId),
+    executeBatch: (batchId: string) => ipcRenderer.invoke('publish:executeBatch', batchId),
+    stopBatch: (batchId: string) => ipcRenderer.invoke('publish:stopBatch', batchId),
+    getBatchStatus: (batchId: string) => ipcRenderer.invoke('publish:getBatchStatus', batchId),
+    startScheduler: () => ipcRenderer.invoke('publish:startScheduler'),
+    stopScheduler: () => ipcRenderer.invoke('publish:stopScheduler'),
+    getSchedulerStatus: () => ipcRenderer.invoke('publish:getSchedulerStatus'),
+    reserveQuota: (quotaType: string, amount?: number, taskInfo?: object) => ipcRenderer.invoke('publish:reserveQuota', quotaType, amount, taskInfo),
+    confirmQuota: (reservationId: string, result?: object) => ipcRenderer.invoke('publish:confirmQuota', reservationId, result),
+    releaseQuota: (reservationId: string, reason?: string) => ipcRenderer.invoke('publish:releaseQuota', reservationId, reason),
+    getQuotaInfo: () => ipcRenderer.invoke('publish:getQuotaInfo'),
+    reportResult: (report: any) => ipcRenderer.invoke('publish:reportResult', report),
+    flushPendingAnalytics: () => ipcRenderer.invoke('publish:flushPendingAnalytics'),
+  },
+
+  // 浏览器自动化（本地 Playwright）
+  browser: {
+    launch: (options?: { headless?: boolean; userDataDir?: string }) => ipcRenderer.invoke('browser:launch', options),
+    close: () => ipcRenderer.invoke('browser:close'),
+    screenshot: (options?: { fullPage?: boolean; path?: string }) => ipcRenderer.invoke('browser:screenshot', options),
+    navigateTo: (url: string, options?: { waitUntil?: string; timeout?: number }) => ipcRenderer.invoke('browser:navigateTo', url, options),
+    getCurrentUrl: () => ipcRenderer.invoke('browser:getCurrentUrl'),
+    getPageContent: () => ipcRenderer.invoke('browser:getPageContent'),
+    evaluate: (script: string) => ipcRenderer.invoke('browser:evaluate', script),
+    setCookies: (cookies: any[], url?: string) => ipcRenderer.invoke('browser:setCookies', cookies, url),
+    getCookies: (url?: string) => ipcRenderer.invoke('browser:getCookies', url),
+    checkLoginStatus: (accountId: string) => ipcRenderer.invoke('browser:checkLoginStatus', accountId),
+    checkAllLoginStatus: () => ipcRenderer.invoke('browser:checkAllLoginStatus'),
+    getStatus: () => ipcRenderer.invoke('browser:getStatus'),
+  },
+
+  // 本地账号管理（本地 SQLite + 加密）
+  localAccount: {
+    create: (params: any) => ipcRenderer.invoke('account:local:create', params),
+    findAll: () => ipcRenderer.invoke('account:local:findAll'),
+    findById: (id: string) => ipcRenderer.invoke('account:local:findById', id),
+    findByPlatform: (platformId: string) => ipcRenderer.invoke('account:local:findByPlatform', platformId),
+    update: (id: string, params: any) => ipcRenderer.invoke('account:local:update', id, params),
+    delete: (id: string) => ipcRenderer.invoke('account:local:delete', id),
+    setDefault: (platformId: string, accountId: string) => ipcRenderer.invoke('account:local:setDefault', platformId, accountId),
+    getDefault: (platformId: string) => ipcRenderer.invoke('account:local:getDefault', platformId),
+    updateLoginStatus: (id: string, status: string, errorMessage?: string) => ipcRenderer.invoke('account:local:updateLoginStatus', id, status, errorMessage),
+    saveCookies: (id: string, cookies: any[]) => ipcRenderer.invoke('account:local:saveCookies', id, cookies),
+    getCookies: (id: string) => ipcRenderer.invoke('account:local:getCookies', id),
+    getStats: () => ipcRenderer.invoke('account:local:getStats'),
+    exists: (platformId: string, platformUserId: string) => ipcRenderer.invoke('account:local:exists', platformId, platformUserId),
+  },
+
+  // 本地知识库管理（本地文件系统）
+  localKnowledge: {
+    create: (params: any) => ipcRenderer.invoke('knowledge:local:create', params),
+    findAll: () => ipcRenderer.invoke('knowledge:local:findAll'),
+    findById: (id: string) => ipcRenderer.invoke('knowledge:local:findById', id),
+    update: (id: string, params: any) => ipcRenderer.invoke('knowledge:local:update', id, params),
+    delete: (id: string) => ipcRenderer.invoke('knowledge:local:delete', id),
+    upload: (kbId: string, files: any[]) => ipcRenderer.invoke('knowledge:local:upload', kbId, files),
+    getDocuments: (kbId: string) => ipcRenderer.invoke('knowledge:local:getDocuments', kbId),
+    getDocument: (docId: string) => ipcRenderer.invoke('knowledge:local:getDocument', docId),
+    deleteDocument: (docId: string) => ipcRenderer.invoke('knowledge:local:deleteDocument', docId),
+    search: (kbId: string, query: string) => ipcRenderer.invoke('knowledge:local:search', kbId, query),
+    parse: (filePath: string) => ipcRenderer.invoke('knowledge:local:parse', filePath),
+    getStats: () => ipcRenderer.invoke('knowledge:local:getStats'),
+  },
+
+  // 本地图库管理（本地文件系统）
+  gallery: {
+    createAlbum: (params: any) => ipcRenderer.invoke('gallery:createAlbum', params),
+    findAlbums: () => ipcRenderer.invoke('gallery:findAlbums'),
+    getAlbum: (albumId: string) => ipcRenderer.invoke('gallery:getAlbum', albumId),
+    updateAlbum: (albumId: string, params: any) => ipcRenderer.invoke('gallery:updateAlbum', albumId, params),
+    deleteAlbum: (albumId: string) => ipcRenderer.invoke('gallery:deleteAlbum', albumId),
+    uploadImage: (albumId: string, files: any[]) => ipcRenderer.invoke('gallery:uploadImage', albumId, files),
+    findImages: (albumId: string) => ipcRenderer.invoke('gallery:findImages', albumId),
+    getImage: (imageId: string) => ipcRenderer.invoke('gallery:getImage', imageId),
+    deleteImage: (imageId: string) => ipcRenderer.invoke('gallery:deleteImage', imageId),
+    deleteImages: (imageIds: string[]) => ipcRenderer.invoke('gallery:deleteImages', imageIds),
+    moveImage: (imageId: string, targetAlbumId: string) => ipcRenderer.invoke('gallery:moveImage', imageId, targetAlbumId),
+    getStats: () => ipcRenderer.invoke('gallery:getStats'),
+    readImageFile: (imageId: string) => ipcRenderer.invoke('gallery:readImageFile', imageId),
+  },
+
+  // 数据同步（与服务器同步）
+  dataSync: {
+    backup: () => ipcRenderer.invoke('sync:backup'),
+    restore: (snapshotId: string) => ipcRenderer.invoke('sync:restore', snapshotId),
+    getSnapshots: () => ipcRenderer.invoke('sync:getSnapshots'),
+    deleteSnapshot: (snapshotId: string) => ipcRenderer.invoke('sync:deleteSnapshot', snapshotId),
+    exportLocal: (exportPath?: string) => ipcRenderer.invoke('sync:exportLocal', exportPath),
+    importLocal: (importPath: string) => ipcRenderer.invoke('sync:importLocal', importPath),
+    getLocalStats: () => ipcRenderer.invoke('sync:getLocalStats'),
   },
 } as ElectronAPI;
 

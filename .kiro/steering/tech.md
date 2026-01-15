@@ -285,3 +285,462 @@ sudo systemctl reload nginx
 ```
 
 保留当前 `index.html` 引用的文件，删除其他带 hash 的 js/css 文件即可。
+
+---
+
+## 架构改造开发规则（强制遵守）
+
+> 以下规则来自 `改造方案-最终版.md`，在进行系统改造时必须严格遵守。
+
+### 改造核心原则
+
+**改造前架构：**
+```
+Windows 端（界面） → 服务器（执行所有操作） → 返回结果
+```
+
+**改造后架构：**
+```
+Windows 端（界面 + 执行操作） → 服务器（仅验证配额） → 返回验证结果
+```
+
+**关键点：**
+- ❌ 不是新增功能，所有功能都已实现
+- ✅ 只是改变执行位置
+- ✅ 用户体验完全不变
+以上关键点原则必须遵守！
+### 功能分类规则
+
+#### 🟢 保留在服务器的功能
+
+| 功能 | 说明 |
+|------|------|
+| 用户认证 | JWT 登录、注册、刷新 |
+| 配额验证 | 验证用户是否有配额 |
+| 配额预扣减 | 预扣减 + 确认/释放机制 |
+| 订阅管理 | 套餐、订单、支付 |
+| AI 生成 | DeepSeek/Gemini API 调用 |
+| 用户管理 | 用户 CRUD |
+| 代理商管理 | 代理商系统 |
+| 安全审计 | 安全日志、审计 |
+| 数据同步 | 云端数据同步 |
+| 分析上报 | 发布统计、错误追踪 |
+| 适配器版本 | 适配器热更新支持 |
+
+#### 🔴 迁移到 Windows 端的功能
+
+| 功能 | 说明 |
+|------|------|
+| 文章存储 | SQLite 本地存储 |
+| 知识库存储 | 本地文件系统 |
+| 图库存储 | 本地文件系统 |
+| 平台账号存储 | Cookie 本地加密 |
+| 浏览器自动化 | Playwright 本地执行 |
+| 发布执行 | 发布任务本地执行 |
+| 平台适配器 | 12+ 平台适配器 |
+| 文档解析 | mammoth/pdf-parse |
+| 图片处理 | 图片压缩/格式转换 |
+
+---
+
+## 数据库 ID 格式统一规范（强制）
+
+### 问题背景
+
+服务器（PostgreSQL）和 Windows 端（SQLite）使用不同数据库，ID 格式必须统一才能互相引用。
+
+### 解决方案：统一使用 UUID v4 格式
+
+| 场景 | 服务器（PostgreSQL） | Windows 端（SQLite） | 示例 |
+|------|---------------------|---------------------|------|
+| 配额预留 ID | `UUID` 类型 | `TEXT` 存储 | `550e8400-e29b-41d4-a716-446655440000` |
+| 文章 ID | `SERIAL` (数字) | `TEXT` (UUID) | Windows 端生成 UUID |
+| 任务 ID | - | `TEXT` (UUID) | Windows 端生成 UUID |
+| 用户 ID | `SERIAL` (数字) | `INTEGER` | 服务器返回，Windows 端存储 |
+
+### 关键规则
+
+1. **服务器生成的 ID**（如 `reservationId`）
+   - 服务器：UUID 类型
+   - Windows 端：TEXT 存储
+   - 示例：`reservationId: '550e8400-e29b-41d4-a716-446655440000'`
+
+2. **Windows 端生成的 ID**（如文章、任务）
+   - 使用 `uuid` 包生成 v4 UUID
+   - 存储为 TEXT
+   - 示例：`articleId: uuid.v4()`
+
+3. **用户 ID**（特殊情况）
+   - 服务器：SERIAL（数字，如 `123`）
+   - Windows 端：INTEGER 存储
+   - 从服务器 JWT token 中获取
+
+### 代码示例
+
+```typescript
+// Windows 端生成 UUID
+import { v4 as uuidv4 } from 'uuid';
+
+// 创建文章
+const articleId = uuidv4();  // '550e8400-e29b-41d4-a716-446655440000'
+db.prepare('INSERT INTO articles (id, ...) VALUES (?, ...)').run(articleId, ...);
+
+// 关联服务器的预留 ID
+const { reservationId } = await apiClient.post('/api/quota/reserve', { ... });
+db.prepare('UPDATE publishing_tasks SET reservation_id = ? WHERE id = ?')
+  .run(reservationId, taskId);
+```
+
+### UUID 格式验证
+
+```typescript
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function isValidUUID(id: string): boolean {
+  return UUID_REGEX.test(id);
+}
+```
+
+---
+
+## 数据库迁移规则（强制）
+
+### PostgreSQL 迁移文件规范
+
+1. **文件命名**：`XXX_描述.sql`（XXX 为三位数字序号）
+2. **必须包含 UP 和 DOWN 部分**
+3. **必须添加索引和注释**
+
+### 迁移文件模板
+
+```sql
+-- 迁移文件: XXX_功能描述.sql
+
+-- ==================== UP ====================
+
+CREATE TABLE IF NOT EXISTS table_name (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- 其他字段...
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 索引
+CREATE INDEX idx_table_name_user ON table_name(user_id);
+
+-- 注释
+COMMENT ON TABLE table_name IS '表说明';
+COMMENT ON COLUMN table_name.column_name IS '字段说明';
+
+-- ==================== DOWN ====================
+DROP TABLE IF EXISTS table_name;
+```
+
+### SQLite 与 PostgreSQL 字段对照
+
+| PostgreSQL | SQLite | 说明 |
+|------------|--------|------|
+| `SERIAL` | `INTEGER PRIMARY KEY AUTOINCREMENT` | 自增主键 |
+| `UUID` | `TEXT` | UUID 存为字符串 |
+| `BOOLEAN` | `INTEGER` | 0/1 代替 true/false |
+| `TIMESTAMP` | `TEXT` | ISO 8601 格式字符串 |
+| `JSONB` | `TEXT` | JSON 字符串 |
+| `VARCHAR(n)` | `TEXT` | SQLite 无长度限制 |
+| `DECIMAL(m,n)` | `REAL` | 浮点数 |
+
+### 迁移必须完整
+
+- ❌ 禁止：只创建表不创建索引
+- ❌ 禁止：遗漏外键约束
+- ❌ 禁止：缺少 DOWN 回滚语句
+- ✅ 必须：包含所有相关表的完整迁移
+- ✅ 必须：添加表和字段注释
+
+---
+
+## 配额预扣减机制（强制）
+
+### 问题分析
+
+原方案「先验证 → 执行 → 再扣减」存在竞态条件，可能导致配额超扣。
+
+### 解决方案：预扣减模式
+
+```
+1. Windows 端发起预扣减请求
+2. 服务器锁定配额，返回 reservationId
+3. Windows 端本地执行任务
+4a. 成功：调用确认接口，扣减配额
+4b. 失败：调用释放接口，恢复配额
+```
+
+### API 规范
+
+```typescript
+// 1. 预扣减配额
+POST /api/quota/reserve
+Request: {
+  quotaType: 'article_generation' | 'publish' | 'knowledge_upload' | 'image_upload',
+  amount: number,
+  clientId?: string,
+  taskInfo?: object
+}
+Response: {
+  success: true,
+  reservationId: 'uuid-xxx',
+  expiresAt: '2025-01-14T12:10:00Z',
+  remainingQuota: 99
+}
+
+// 2. 确认消费
+POST /api/quota/confirm
+Request: { reservationId: 'uuid-xxx', result?: object }
+
+// 3. 释放配额
+POST /api/quota/release
+Request: { reservationId: 'uuid-xxx', reason?: string }
+```
+
+### Windows 端调用模板
+
+```typescript
+async executeWithQuota<T>(
+  quotaType: string,
+  taskFn: () => Promise<T>,
+  taskInfo?: object
+): Promise<T> {
+  // 1. 预扣减
+  const { reservationId } = await this.reserve(quotaType, 1, taskInfo);
+  
+  try {
+    // 2. 执行任务
+    const result = await taskFn();
+    
+    // 3. 确认消费
+    await this.confirm(reservationId, { status: 'success' });
+    
+    return result;
+  } catch (error) {
+    // 4. 释放配额
+    await this.release(reservationId, error.message);
+    throw error;
+  }
+}
+```
+
+---
+
+## AI 生成确认机制（强制）
+
+### 问题分析
+
+AI 生成文章后，如果网络中断，用户可能丢失已生成的文章。
+
+### 解决方案：服务器临时缓存
+
+```
+1. 服务器生成文章后缓存到 Redis（10 分钟）
+2. 返回 generationId + 文章内容
+3. Windows 端保存到本地后调用确认接口
+4. 服务器删除缓存
+5. 网络恢复后可通过 generationId 重新获取
+```
+
+### API 规范
+
+```typescript
+// 1. 生成文章
+POST /api/article-generation/generate
+Response: {
+  generationId: 'gen-uuid-xxx',
+  article: { title, content, ... },
+  expiresAt: '2025-01-14T12:10:00Z'
+}
+
+// 2. 确认收到
+POST /api/article-generation/confirm
+Request: { generationId: 'gen-uuid-xxx' }
+
+// 3. 重新获取（网络恢复后）
+GET /api/article-generation/retrieve/:generationId
+```
+
+---
+
+## 数据同步快照管理规则
+
+### 快照限制
+
+| 规则 | 说明 |
+|------|------|
+| 最大快照数 | 每用户最多 **3 个** |
+| 自动清理 | 上传新快照时自动删除最旧的 |
+| 过期清理 | 90 天未下载的快照自动删除 |
+| 存储限制 | 单个快照最大 100MB |
+
+### API 规范
+
+```typescript
+// 上传快照（自动清理旧快照）
+POST /api/sync/upload
+Response: {
+  snapshotId: 'snap-xxx',
+  deletedOldSnapshots: 1,
+  remainingSnapshots: 3
+}
+
+// 获取快照列表
+GET /api/sync/snapshots
+
+// 下载快照（更新过期时间）
+GET /api/sync/download/:snapshotId
+
+// 删除快照
+DELETE /api/sync/snapshots/:snapshotId
+```
+
+---
+
+## Windows 端 SQLite 规范
+
+### 数据库初始化
+
+```typescript
+// 启用外键约束
+this.db.pragma('foreign_keys = ON');
+
+// 启用 WAL 模式（提高并发性能）
+this.db.pragma('journal_mode = WAL');
+```
+
+### 数据库存储位置
+
+```typescript
+const userDataPath = app.getPath('userData');
+const dbPath = path.join(userDataPath, 'geo-data.db');
+```
+
+### Cookie 加密存储
+
+```typescript
+// 基于机器码的加密
+import { machineIdSync } from 'node-machine-id';
+import CryptoJS from 'crypto-js';
+
+const machineKey = machineIdSync();
+
+function encrypt(data: string): string {
+  return CryptoJS.AES.encrypt(data, machineKey).toString();
+}
+
+function decrypt(encrypted: string): string {
+  return CryptoJS.AES.decrypt(encrypted, machineKey).toString(CryptoJS.enc.Utf8);
+}
+```
+
+---
+
+## IPC 通道命名规范
+
+### 命名格式
+
+`模块:操作`
+
+### 标准通道列表
+
+```typescript
+// 文章
+'article:create', 'article:findAll', 'article:findById', 'article:update', 'article:delete', 'article:search'
+
+// 知识库
+'knowledge:upload', 'knowledge:findAll', 'knowledge:findById', 'knowledge:delete', 'knowledge:parse'
+
+// 图库
+'gallery:createAlbum', 'gallery:findAlbums', 'gallery:uploadImage', 'gallery:findImages', 'gallery:deleteImage'
+
+// 平台账号
+'account:create', 'account:findAll', 'account:findById', 'account:update', 'account:delete', 'account:checkLogin'
+
+// 发布任务
+'task:create', 'task:execute', 'task:findAll', 'task:findById', 'task:cancel'
+
+// 浏览器
+'browser:launch', 'browser:close', 'browser:screenshot'
+
+// 数据同步
+'sync:backup', 'sync:restore', 'sync:getSnapshots'
+```
+
+---
+
+## 分析上报规范
+
+### 上报时机
+
+- 发布成功/失败后立即上报
+- 网络失败时保存到本地队列
+- 定时重试上报
+
+### 上报数据结构
+
+```typescript
+interface PublishReport {
+  taskId: string;
+  platform: string;
+  status: 'success' | 'failed';
+  duration: number;  // 毫秒
+  errorCode?: string;
+  errorMessage?: string;
+  metadata?: {
+    articleLength?: number;
+    imageCount?: number;
+    retryCount?: number;
+  };
+}
+```
+
+### 离线上报队列
+
+```typescript
+// 网络失败时保存到本地
+this.pendingReports.push(report);
+await this.savePendingReports();
+
+// 定时重试
+async flushPendingReports(): Promise<void> {
+  if (this.pendingReports.length === 0) return;
+  
+  try {
+    await apiClient.post('/api/analytics/publish-report/batch', {
+      reports: this.pendingReports
+    });
+    this.pendingReports = [];
+  } catch (error) {
+    // 继续保留，下次重试
+  }
+}
+```
+
+---
+
+## 禁止事项清单
+
+### ❌ 绝对禁止
+
+1. 在服务器端执行浏览器自动化（改造后）
+2. 在服务器端存储用户文章/知识库/图片（改造后）
+3. 在服务器端存储平台 Cookie
+4. 使用不一致的 ID 格式
+5. 跳过配额预扣减直接执行任务
+6. 创建不完整的数据库迁移
+7. 在 Windows 端明文存储敏感数据
+
+### ✅ 必须遵守
+
+1. 所有消耗配额的操作必须使用预扣减机制
+2. AI 生成必须使用确认机制
+3. 数据库迁移必须包含完整的 UP/DOWN
+4. Windows 端 ID 必须使用 UUID v4
+5. Cookie 必须加密存储
+6. 分析数据必须上报（支持离线队列）

@@ -33,6 +33,9 @@ import adminStorageRouter from './admin/storage';
 import storageProductsRouter from './storageProducts';
 import userSubscriptionsRouter from './admin/userSubscriptions';
 import agentRouter from './agent';
+import { syncRouter } from './sync';
+import { analyticsRouter } from './analytics';
+import { adaptersRouter } from './adapters';
 
 export const apiRouter = Router();
 
@@ -71,6 +74,9 @@ apiRouter.use('/publishing', platformAccountsRouter);
 apiRouter.use('/publishing', publishingTasksRouter);
 apiRouter.use('/publishing', publishingRecordsRouter);
 apiRouter.use('/dashboard', dashboardRouter);
+apiRouter.use('/sync', syncRouter);  // 数据同步API
+apiRouter.use('/analytics', analyticsRouter);  // 发布分析API
+apiRouter.use('/adapters', adaptersRouter);  // 适配器版本API
 
 apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'GEO优化系统运行正常（多租户模式）' });
