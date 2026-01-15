@@ -144,6 +144,16 @@ const UserCenterPage = () => {
 
     loadAllData();
 
+    // 页面可见性变化时刷新配额数据（解决 WebSocket 断开时数据不同步问题）
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[UserCenter] 页面变为可见，刷新配额数据');
+        fetchUsageStats();
+        fetchStorageData();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // Setup WebSocket for real-time updates (非阻塞)
     const wsService = getUserWebSocketService();
     
@@ -152,6 +162,13 @@ const UserCenterPage = () => {
       console.warn('[UserCenter] WebSocket 连接失败，将使用轮询模式:', error);
       // WebSocket 失败不影响页面功能，只是无法实时更新
     });
+
+    // WebSocket 重连后刷新数据
+    const handleReconnected = () => {
+      console.log('[UserCenter] WebSocket 重连成功，刷新配额数据');
+      fetchUsageStats();
+      fetchStorageData();
+    };
 
     // Subscribe to quota updates
     const handleQuotaUpdate = (data: any) => {
@@ -206,6 +223,7 @@ const UserCenterPage = () => {
       fetchStorageData();
     };
 
+    wsService.on('reconnected', handleReconnected);
     wsService.on('quota_updated', handleQuotaUpdate);
     wsService.on('subscription_updated', handleSubscriptionUpdate);
     wsService.on('order_status_changed', handleOrderStatusChange);
@@ -215,6 +233,8 @@ const UserCenterPage = () => {
 
     // Cleanup on unmount
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      wsService.off('reconnected', handleReconnected);
       wsService.off('quota_updated', handleQuotaUpdate);
       wsService.off('subscription_updated', handleSubscriptionUpdate);
       wsService.off('order_status_changed', handleOrderStatusChange);

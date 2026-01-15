@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic, Badge } from 'antd';
 import { CheckCircleOutlined, DeleteOutlined, LoginOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined, LockOutlined, CrownOutlined } from '@ant-design/icons';
 import { useAccountStore } from '../stores/accountStore';
@@ -61,13 +61,32 @@ export default function PlatformManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  
+  // 用于跟踪组件是否已卸载，避免 React StrictMode 双重渲染问题
+  const isMountedRef = useRef(true);
+  const wsInitializedRef = useRef(false);
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadData();
     fetchSubscription();
-    initializeWebSocketConnection();
+    
+    // 延迟初始化 WebSocket，避免 StrictMode 双重渲染问题
+    const wsTimer = setTimeout(() => {
+      if (isMountedRef.current && !wsInitializedRef.current) {
+        wsInitializedRef.current = true;
+        initializeWebSocketConnection();
+      }
+    }, 100);
+    
     return () => {
-      try { getWebSocketClient().disconnect(); } catch (e) {}
+      isMountedRef.current = false;
+      clearTimeout(wsTimer);
+      // 只有在 WebSocket 已初始化时才断开
+      if (wsInitializedRef.current) {
+        try { getWebSocketClient().disconnect(); } catch (e) {}
+        wsInitializedRef.current = false;
+      }
     };
   }, []);
 
@@ -116,17 +135,19 @@ export default function PlatformManagementPage() {
   };
 
   const initializeWebSocketConnection = () => {
+    if (!isMountedRef.current) return;
+    
     try {
       const wsFullUrl = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:3000/ws';
       const token = localStorage.getItem('auth_token');
       if (!token) return;
       const wsClient = initializeWebSocket(wsFullUrl);
-      wsClient.on('connected', () => setWsConnected(true));
-      wsClient.on('disconnected', () => setWsConnected(false));
+      wsClient.on('connected', () => { if (isMountedRef.current) setWsConnected(true); });
+      wsClient.on('disconnected', () => { if (isMountedRef.current) setWsConnected(false); });
       wsClient.on('authenticated', () => wsClient.subscribe(['accounts']));
-      wsClient.on('account.created', () => { message.success('检测到新账号创建'); fetchAccounts(); });
-      wsClient.on('account.updated', () => { message.info('账号信息已更新'); fetchAccounts(); });
-      wsClient.on('account.deleted', () => { message.warning('账号已被删除'); fetchAccounts(); });
+      wsClient.on('account.created', () => { if (isMountedRef.current) { message.success('检测到新账号创建'); fetchAccounts(); } });
+      wsClient.on('account.updated', () => { if (isMountedRef.current) { message.info('账号信息已更新'); fetchAccounts(); } });
+      wsClient.on('account.deleted', () => { if (isMountedRef.current) { message.warning('账号已被删除'); fetchAccounts(); } });
       wsClient.connect(token);
     } catch (e) {}
   };

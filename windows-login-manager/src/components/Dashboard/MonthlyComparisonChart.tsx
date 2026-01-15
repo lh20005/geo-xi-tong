@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import SafeECharts from '../SafeECharts';
 import { Card, Empty, Spin } from 'antd';
 import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
 
@@ -123,7 +123,7 @@ export default function MonthlyComparisonChart({ data, loading }: MonthlyCompari
       title={<span style={cardTitleStyle}>月度数据对比</span>}
       style={cardStyle}
     >
-      <ReactECharts option={option} style={{ height: '350px' }} />
+      <SafeECharts option={option} style={{ height: '350px' }} />
     </Card>
   );
 }

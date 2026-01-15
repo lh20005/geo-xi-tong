@@ -173,7 +173,7 @@ class StorageManager {
   private getDefaultConfig(): AppConfig {
     // 统一使用生产服务器地址
     // 改造后：本地数据存储在 SQLite，远程 API 用于认证、配额、AI 生成等
-    const serverUrl = 'https://jzgeo.cc';
+    const serverUrl = 'https://www.jzgeo.cc';
     
     return {
       serverUrl,

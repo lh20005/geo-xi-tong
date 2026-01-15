@@ -11,6 +11,43 @@ router.use(setTenantContext);
 router.use(requireTenantContext);
 
 /**
+ * 获取所有平台配置
+ * 用于发布记录页面的平台筛选
+ */
+router.get('/platforms', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM platforms_config WHERE is_enabled = true ORDER BY platform_name'
+    );
+
+    const platforms = result.rows.map(row => ({
+      id: row.id,
+      platform_id: row.platform_id,
+      platform_name: row.platform_name,
+      icon_url: row.icon_url,
+      is_enabled: row.is_enabled,
+      adapter_class: row.adapter_class,
+      required_fields: row.required_fields || [],
+      config_schema: row.config_schema,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    }));
+
+    res.json({
+      success: true,
+      data: platforms
+    });
+  } catch (error: any) {
+    console.error('获取平台配置失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取平台配置失败',
+      error: error.message
+    });
+  }
+});
+
+/**
  * 获取发布记录列表（优先使用快照数据）
  */
 router.get('/records', async (req, res) => {

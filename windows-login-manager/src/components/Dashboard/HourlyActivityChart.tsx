@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import SafeECharts from '../SafeECharts';
 import { Card, Empty, Spin } from 'antd';
 import { cardStyle, cardTitleStyle, colors, axisStyle } from './chartStyles';
 
@@ -129,7 +129,7 @@ export default function HourlyActivityChart({ data, loading }: HourlyActivityCha
       title={<span style={cardTitleStyle}>24小时活动热力图</span>}
       style={cardStyle}
     >
-      <ReactECharts option={option} style={{ height: '320px' }} />
+      <SafeECharts option={option} style={{ height: '320px' }} />
     </Card>
   );
 }

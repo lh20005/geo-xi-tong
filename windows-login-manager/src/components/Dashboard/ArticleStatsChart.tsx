@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import SafeECharts from '../SafeECharts';
 import { Card, Empty, Spin } from 'antd';
 import { cardStyle, cardTitleStyle, colors } from './chartStyles';
 
@@ -119,7 +119,7 @@ export default function ArticleStatsChart({ data, loading }: ArticleStatsChartPr
         </div>
       }
     >
-      <ReactECharts option={option} style={{ height: '320px' }} notMerge={true} />
+      <SafeECharts option={option} style={{ height: '320px' }} notMerge={true} />
     </Card>
   );
 }

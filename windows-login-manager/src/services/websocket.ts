@@ -48,15 +48,17 @@ export class WebSocketClient {
     this.token = token;
 
     try {
+      // 将 token 作为 URL 参数传递，服务器端在连接时验证
+      const urlWithToken = `${this.url}?token=${encodeURIComponent(token)}`;
       console.log(`Connecting to WebSocket: ${this.url}`);
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(urlWithToken);
 
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.reconnectAttempts = 0;
         
-        // Authenticate
-        this.authenticate();
+        // Token 已在 URL 中传递，服务器会自动验证
+        // 不需要再发送 auth 消息
         
         // Start heartbeat
         this.startHeartbeat();
@@ -193,21 +195,6 @@ export class WebSocketClient {
   }
 
   /**
-   * Authenticate with server
-   */
-  private authenticate(): void {
-    if (!this.token) {
-      console.warn('No token available for authentication');
-      return;
-    }
-
-    this.send({
-      type: 'auth',
-      data: { token: this.token }
-    });
-  }
-
-  /**
    * Handle incoming message
    */
   private handleMessage(message: WebSocketMessage): void {
@@ -215,10 +202,13 @@ export class WebSocketClient {
 
     switch (message.type) {
       case 'connected':
-        console.log('WebSocket connection confirmed');
+        // 服务器确认连接成功（已通过 URL token 认证）
+        console.log('WebSocket connection confirmed and authenticated');
+        this.emit('authenticated', message.data);
         break;
 
       case 'auth_success':
+        // 兼容旧的认证成功消息
         console.log('WebSocket authentication successful');
         this.emit('authenticated', message.data);
         break;

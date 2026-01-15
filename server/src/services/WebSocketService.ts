@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 interface AuthenticatedWebSocket extends WebSocket {
   userId?: number;
   username?: string;
+  isAlive?: boolean;
+  lastActivity?: number;
 }
 
 interface WebSocketMessage {
@@ -58,6 +60,10 @@ export class WebSocketService {
 
         // 订阅用户
         this.subscribe(decoded.userId, ws);
+        
+        // 初始化连接状态
+        ws.isAlive = true;
+        ws.lastActivity = Date.now();
 
         // 发送连接成功消息
         this.sendToClient(ws, {
@@ -71,6 +77,10 @@ export class WebSocketService {
         // 处理客户端消息
         ws.on('message', (message: Buffer) => {
           try {
+            // 更新活动时间
+            ws.isAlive = true;
+            ws.lastActivity = Date.now();
+            
             const data = JSON.parse(message.toString());
             this.handleClientMessage(ws, data);
           } catch (error) {
@@ -94,9 +104,10 @@ export class WebSocketService {
           }
         });
 
-        // 心跳检测
+        // 心跳检测 - 协议级别 pong 响应
         ws.on('pong', () => {
-          // 客户端响应了 ping
+          ws.isAlive = true;
+          ws.lastActivity = Date.now();
         });
 
       } catch (error) {
@@ -105,19 +116,51 @@ export class WebSocketService {
       }
     });
 
-    // 定期清理死连接
+    // 定期检查连接健康状态（每 30 秒）
     setInterval(() => {
+      const now = Date.now();
       this.wss?.clients.forEach((ws: WebSocket) => {
         const authWs = ws as AuthenticatedWebSocket;
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.ping();
-        } else if (authWs.userId) {
-          this.unsubscribe(authWs.userId, authWs);
+        
+        if (ws.readyState !== WebSocket.OPEN) {
+          // 连接已关闭，清理
+          if (authWs.userId) {
+            this.unsubscribe(authWs.userId, authWs);
+          }
+          return;
         }
+        
+        // 检查是否超过 90 秒没有活动（客户端应该每 25 秒发送 ping）
+        const lastActivity = authWs.lastActivity || 0;
+        const inactiveTime = now - lastActivity;
+        
+        if (inactiveTime > 90000) {
+          // 超过 90 秒没有活动，认为连接已死
+          console.log(`[WebSocket] Connection for user ${authWs.userId} inactive for ${Math.round(inactiveTime/1000)}s, terminating`);
+          ws.terminate();
+          if (authWs.userId) {
+            this.unsubscribe(authWs.userId, authWs);
+          }
+          return;
+        }
+        
+        // 发送协议级别 ping（作为备用检测）
+        if (!authWs.isAlive) {
+          // 上次 ping 没有收到 pong，终止连接
+          console.log(`[WebSocket] No pong received from user ${authWs.userId}, terminating`);
+          ws.terminate();
+          if (authWs.userId) {
+            this.unsubscribe(authWs.userId, authWs);
+          }
+          return;
+        }
+        
+        authWs.isAlive = false;
+        ws.ping();
       });
-    }, 30000); // 每30秒检查一次
+    }, 30000);
 
-    console.log('[WebSocket] Server initialized');
+    console.log('[WebSocket] Server initialized with enhanced heartbeat detection');
   }
 
   /**

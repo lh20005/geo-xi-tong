@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import SafeECharts from '../SafeECharts';
 import { Card, Empty, Spin } from 'antd';
 import type { TrendsData } from '../../types/dashboard';
 
@@ -166,7 +166,7 @@ export default function TrendsChart({ data, loading }: TrendsChartProps) {
         height: '100%'
       }}
     >
-      <ReactECharts option={option} style={{ height: '350px' }} />
+      <SafeECharts option={option} style={{ height: '350px' }} />
     </Card>
   );
 }

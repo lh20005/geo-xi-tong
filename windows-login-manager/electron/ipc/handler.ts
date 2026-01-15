@@ -103,14 +103,14 @@ class IPCHandler {
         log.info(`API client initialized with baseURL: ${config.serverUrl}`);
       } else {
         // 统一使用生产服务器地址
-        const defaultUrl = 'https://jzgeo.cc';
+        const defaultUrl = 'https://www.jzgeo.cc';
         await apiClient.setBaseURL(defaultUrl);
         log.info(`API client initialized with default baseURL: ${defaultUrl}`);
       }
     } catch (error) {
       log.error('Failed to initialize API client:', error);
       // 使用生产服务器作为后备
-      const fallbackUrl = 'https://jzgeo.cc';
+      const fallbackUrl = 'https://www.jzgeo.cc';
       await apiClient.setBaseURL(fallbackUrl);
     }
   }

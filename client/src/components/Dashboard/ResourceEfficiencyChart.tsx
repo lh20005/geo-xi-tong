@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import SafeECharts from '../SafeECharts';
 import { Card, Empty, Spin } from 'antd';
 import type { ResourceUsageData } from '../../types/dashboard';
 import { cardStyle, cardTitleStyle, colors } from './chartStyles';
@@ -156,7 +156,7 @@ export default function ResourceEfficiencyChart({ data, loading }: ResourceEffic
       title={<span style={cardTitleStyle}>资源使用效率</span>}
       style={cardStyle}
     >
-      <ReactECharts option={option} style={{ height: '280px' }} />
+      <SafeECharts option={option} style={{ height: '280px' }} />
     </Card>
   );
 }

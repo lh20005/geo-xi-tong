@@ -23,6 +23,8 @@ export class UserWebSocketService {
   private isConnecting = false;
   private shouldReconnect = true;
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private lastPongTime: number = Date.now();
+  private connectionCheckInterval: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Connect to WebSocket server
@@ -63,16 +65,29 @@ export class UserWebSocketService {
         this.ws.onopen = () => {
           console.log('[UserWebSocket] ✅ Connected successfully');
           this.isConnecting = false;
+          const wasReconnect = this.reconnectAttempts > 0;
           this.reconnectAttempts = 0;
           this.reconnectDelay = 1000;
           this.startHeartbeat();
+          
+          // 如果是重连，触发 reconnected 事件让页面刷新数据
+          if (wasReconnect) {
+            this.handleMessage({ type: 'reconnected', data: {} });
+          }
+          
           resolve();
         };
 
         this.ws.onmessage = (event) => {
           try {
             const message: WebSocketMessage = JSON.parse(event.data);
-            console.log('[UserWebSocket] Received message:', message.type);
+            // 收到任何消息都更新 lastPongTime（表示连接活跃）
+            this.lastPongTime = Date.now();
+            
+            // 只记录非心跳消息
+            if (message.type !== 'pong') {
+              console.log('[UserWebSocket] Received message:', message.type);
+            }
             this.handleMessage(message);
           } catch (error) {
             console.error('[UserWebSocket] Error parsing message:', error);
@@ -221,13 +236,28 @@ export class UserWebSocketService {
   }
 
   /**
-   * Start heartbeat
+   * Start heartbeat - 发送应用层 ping 保持连接活跃
    */
   private startHeartbeat(): void {
     this.stopHeartbeat();
+    this.lastPongTime = Date.now();
+    
+    // 每 25 秒发送一次心跳（短于 Nginx 的 60s 默认超时）
     this.heartbeatInterval = setInterval(() => {
-      this.send('ping', { timestamp: Date.now() });
-    }, 30000); // Every 30 seconds
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.send('ping', { timestamp: Date.now() });
+      }
+    }, 25000);
+    
+    // 每 35 秒检查一次连接健康状态
+    this.connectionCheckInterval = setInterval(() => {
+      const timeSinceLastPong = Date.now() - this.lastPongTime;
+      // 如果超过 60 秒没有收到任何消息，认为连接已死，主动关闭并重连
+      if (timeSinceLastPong > 60000) {
+        console.warn('[UserWebSocket] Connection appears dead (no response for 60s), reconnecting...');
+        this.ws?.close();
+      }
+    }, 35000);
   }
 
   /**
@@ -237,6 +267,10 @@ export class UserWebSocketService {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+    if (this.connectionCheckInterval) {
+      clearInterval(this.connectionCheckInterval);
+      this.connectionCheckInterval = null;
     }
   }
 

@@ -1,4 +1,4 @@
-import ReactECharts from 'echarts-for-react';
+import SafeECharts from '../SafeECharts';
 import { Card, Empty, Spin } from 'antd';
 import type { PublishingStatusData } from '../../types/dashboard';
 import { cardStyle, cardTitleStyle, colors } from './chartStyles';
@@ -115,7 +115,7 @@ export default function PublishingStatusChart({ data, loading }: PublishingStatu
       title={<span style={cardTitleStyle}>发布任务状态分布</span>}
       style={cardStyle}
     >
-      <ReactECharts option={option} style={{ height: '320px' }} />
+      <SafeECharts option={option} style={{ height: '320px' }} />
     </Card>
   );
 }
