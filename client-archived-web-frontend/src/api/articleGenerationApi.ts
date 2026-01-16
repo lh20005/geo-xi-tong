@@ -15,7 +15,27 @@ import type {
  * 创建文章生成任务
  */
 export async function createTask(config: TaskConfig): Promise<CreateTaskResponse> {
-  const response = await apiClient.post('/article-generation/tasks', config);
+  // 确保所有 ID 字段都是数字类型（最后一道防线）
+  const sanitizedConfig = {
+    distillationId: Number(config.distillationId),
+    albumId: Number(config.albumId),
+    knowledgeBaseId: Number(config.knowledgeBaseId),
+    articleSettingId: Number(config.articleSettingId),
+    conversionTargetId: config.conversionTargetId ? Number(config.conversionTargetId) : undefined,
+    articleCount: Number(config.articleCount)
+  };
+  
+  console.log('🚀 API层发送数据:', sanitizedConfig);
+  console.log('🚀 API层数据类型:', {
+    distillationId: typeof sanitizedConfig.distillationId,
+    albumId: typeof sanitizedConfig.albumId,
+    knowledgeBaseId: typeof sanitizedConfig.knowledgeBaseId,
+    articleSettingId: typeof sanitizedConfig.articleSettingId,
+    conversionTargetId: typeof sanitizedConfig.conversionTargetId,
+    articleCount: typeof sanitizedConfig.articleCount
+  });
+  
+  const response = await apiClient.post('/article-generation/tasks', sanitizedConfig);
   return response.data;
 }
 
@@ -49,16 +69,16 @@ export async function fetchDistillations(): Promise<DistillationHistory[]> {
  * 获取相册列表
  */
 export async function fetchAlbums(): Promise<Album[]> {
-  const response = await apiClient.get('/gallery/albums');
-  return response.data.albums || [];
+  const response = await apiClient.get('/article-generation/albums');
+  return response.data || [];
 }
 
 /**
  * 获取知识库列表
  */
 export async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
-  const response = await apiClient.get('/knowledge-bases');
-  return response.data.knowledgeBases || [];
+  const response = await apiClient.get('/article-generation/knowledge-bases');
+  return response.data || [];
 }
 
 /**

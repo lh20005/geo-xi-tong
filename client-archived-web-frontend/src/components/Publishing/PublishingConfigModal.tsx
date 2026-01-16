@@ -4,11 +4,15 @@ import { ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { 
   getPlatforms, 
-  getAccounts, 
-  createPublishingTask,
-  Platform, 
-  Account 
+  Platform
 } from '../../api/publishing';
+import {
+  getAccounts,
+  Account
+} from '../../api/accounts';
+import {
+  createPublishingTask
+} from '../../api/publishingTasks';
 import { getArticles, Article } from '../../api/articles';
 
 const { Option } = Select;

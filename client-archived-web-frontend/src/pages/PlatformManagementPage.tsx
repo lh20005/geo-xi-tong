@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Card, Row, Col, Spin, message, Space, Button, Popconfirm, Tag, Statistic } from 'antd';
 import { DeleteOutlined, StarFilled, ReloadOutlined, CloudUploadOutlined } from '@ant-design/icons';
-import { getPlatforms, getAccounts, Platform, Account, deleteAccount } from '../api/publishing';
+import { getPlatforms, Platform } from '../api/publishing';
+import { getAccounts, Account, deleteAccount } from '../api/accounts';
 import ResizableTable from '../components/ResizableTable';
 
 // const { Title } = Typography;

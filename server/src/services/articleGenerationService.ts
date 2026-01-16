@@ -107,8 +107,8 @@ export const taskQueueExecutor = TaskQueueExecutor.getInstance();
 
 export interface TaskConfig {
   distillationId: number;
-  albumId: number;
-  knowledgeBaseId: number;
+  albumId: number | string; // 支持数字ID（Web端）和UUID（Windows端）
+  knowledgeBaseId: number | string; // 支持数字ID（Web端）和UUID（Windows端）
   articleSettingId: number;
   conversionTargetId?: number;
   articleCount: number;

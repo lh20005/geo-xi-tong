@@ -110,14 +110,37 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
       const values = await form.validateFields();
       setSubmitting(true);
 
-      await onSubmit({
-        distillationId: values.distillationId,
-        albumId: values.albumId,
-        knowledgeBaseId: values.knowledgeBaseId,
-        articleSettingId: values.articleSettingId,
-        conversionTargetId: values.conversionTargetId,
-        articleCount: values.articleCount
+      console.log('🔍 表单原始值:', values);
+      console.log('🔍 各字段类型:', {
+        distillationId: typeof values.distillationId,
+        albumId: typeof values.albumId,
+        knowledgeBaseId: typeof values.knowledgeBaseId,
+        articleSettingId: typeof values.articleSettingId,
+        conversionTargetId: typeof values.conversionTargetId,
+        articleCount: typeof values.articleCount
       });
+
+      // 构建请求数据，确保类型正确
+      const requestData = {
+        distillationId: Number(values.distillationId),
+        albumId: Number(values.albumId),
+        knowledgeBaseId: Number(values.knowledgeBaseId),
+        articleSettingId: Number(values.articleSettingId),
+        conversionTargetId: values.conversionTargetId ? Number(values.conversionTargetId) : undefined,
+        articleCount: Number(values.articleCount)
+      };
+
+      console.log('📤 创建任务请求数据:', requestData);
+      console.log('📤 请求数据类型:', {
+        distillationId: typeof requestData.distillationId,
+        albumId: typeof requestData.albumId,
+        knowledgeBaseId: typeof requestData.knowledgeBaseId,
+        articleSettingId: typeof requestData.articleSettingId,
+        conversionTargetId: typeof requestData.conversionTargetId,
+        articleCount: typeof requestData.articleCount
+      });
+
+      await onSubmit(requestData);
 
       form.resetFields();
       message.success('任务创建成功！');
@@ -126,7 +149,19 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
         // 表单验证错误
         return;
       }
-      message.error('创建任务失败: ' + (error.response?.data?.error || error.message));
+      // 显示详细的错误信息
+      const errorMsg = error.response?.data?.error || error.message;
+      const errorDetails = error.response?.data?.details;
+      
+      console.error('❌ 创建任务失败:', { errorMsg, errorDetails, fullError: error.response?.data });
+      
+      if (errorDetails && Array.isArray(errorDetails)) {
+        // Zod 验证错误，显示详细信息
+        const detailMsg = errorDetails.map((d: any) => `${d.path?.join('.')}: ${d.message}`).join('; ');
+        message.error(`创建任务失败: ${errorMsg} (${detailMsg})`);
+      } else {
+        message.error('创建任务失败: ' + errorMsg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -158,6 +193,7 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
             name="distillationId"
             label="选择蒸馏历史"
             rules={[{ required: true, message: '请选择蒸馏历史' }]}
+            normalize={(value) => Number(value)}
           >
             <Select
               placeholder="请选择蒸馏历史"
@@ -202,6 +238,7 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
             name="conversionTargetId"
             label="选择转化目标"
             rules={[{ required: true, message: '请选择转化目标' }]}
+            normalize={(value) => value ? Number(value) : undefined}
           >
             <Select
               placeholder="请选择转化目标"
@@ -221,6 +258,7 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
             name="albumId"
             label="选择企业图库"
             rules={[{ required: true, message: '请选择企业图库' }]}
+            normalize={(value) => Number(value)}
           >
             <Select placeholder="请选择企业图库">
               {albums.map(item => (
@@ -235,6 +273,7 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
             name="knowledgeBaseId"
             label="选择企业知识库"
             rules={[{ required: true, message: '请选择企业知识库' }]}
+            normalize={(value) => Number(value)}
           >
             <Select placeholder="请选择企业知识库">
               {knowledgeBases.map(item => (
@@ -249,6 +288,7 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
             name="articleSettingId"
             label="选择文章设置"
             rules={[{ required: true, message: '请选择文章设置' }]}
+            normalize={(value) => Number(value)}
           >
             <Select placeholder="请选择文章设置">
               {articleSettings.map(item => (

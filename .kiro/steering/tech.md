@@ -2,32 +2,35 @@
 
 ## 语言与框架
 
-### 前端 (client/)
-- **React 18** + TypeScript
-- **Vite** 构建工具
+### Windows 桌面客户端 (windows-login-manager/) ⭐ 当前使用
+- **Electron** 桌面应用
+- React 18 + TypeScript + Vite
 - **Ant Design 5** UI 组件库
 - **Tailwind CSS** 样式框架
 - **React Router v6** 路由
 - **Zustand** 状态管理
 - **ECharts** 数据可视化
+- **SQLite** 本地数据库
+- **Playwright** 本地浏览器自动化
+- 包含完整的用户界面和本地功能执行
 
 ### 后端 (server/)
 - **Node.js** + Express
 - **TypeScript**（编译为 CommonJS）
 - **PostgreSQL** 主数据库
 - **Redis** 缓存和会话
-- **Playwright** 浏览器自动化（用于发布）
-- **WebSocket (ws)** 实时同步
+- 仅负责：用户认证、配额管理、订阅系统、AI 生成、数据同步
 
 ### 落地页 (landing/)
 - React + TypeScript + Vite
 - Tailwind CSS
 - 运行端口：8080
+- 营销页面，部署到服务器
 
-### Windows 登录管理器 (windows-login-manager/)
-- **Electron** 桌面应用
-- React + TypeScript + Vite
-- 用于平台账号登录管理
+### 🗄️ 归档的 Web 前端 (client-archived-web-frontend/)
+- **已废弃，仅作备份参考**
+- 不要在此目录开发
+- 所有前端功能已迁移到 Windows 桌面客户端
 
 ## 关键依赖
 
@@ -42,16 +45,21 @@
 
 ```bash
 # 开发
-npm run dev              # 启动前端 + 后端
-npm run dev:all          # 启动所有服务（前端、后端、落地页、Windows应用）
-npm run client:dev       # 仅前端（端口 5173）
-npm run server:dev       # 仅后端（端口 3000）
-npm run landing:dev      # 落地页（端口 8080）
+npm run server:dev       # 启动后端（端口 3000）
+npm run landing:dev      # 启动落地页（端口 8080）
+
+# Windows 桌面客户端开发
+cd windows-login-manager
+npm run dev              # 启动 Electron 应用（开发模式）
 
 # 构建
-npm run build            # 构建全部（前端、后端、落地页）
-npm run client:build     # 构建前端
 npm run server:build     # 构建后端（tsc）
+npm run landing:build    # 构建落地页
+
+# Windows 桌面客户端构建
+cd windows-login-manager
+npm run build            # 构建 Electron 应用
+npm run build:win        # 构建 Windows 安装包
 
 # 数据库
 cd server
@@ -88,39 +96,42 @@ npm run status           # 检查服务状态
 ## 端口分配
 
 - 3000：后端 API
-- 5173：前端（Vite 开发服务器）
-- 5174：Windows 登录管理器（Vite 开发服务器）
+- 5174：Windows 桌面客户端（Electron Vite 开发服务器）
 - 8080：落地页
 
-## 前端 API 配置规范（重要）
+**注意**：服务器不再部署 Web 前端，所有系统功能通过 Windows 桌面客户端访问。
+
+## Windows 桌面客户端 API 配置规范（重要）
 
 ### 配置文件说明
 
-前端 API URL 配置涉及两个文件，必须保持一致：
+Windows 桌面客户端的 API URL 配置：
 
-1. **`client/.env.production`** - 环境变量
+1. **`windows-login-manager/.env`** - 环境变量
    ```bash
-   # 不要在 VITE_API_URL 后面加 /api，env.ts 会自动添加
+   # 开发环境
+   VITE_API_URL=http://localhost:3000
+   VITE_WS_URL=ws://localhost:3000/ws
+   
+   # 生产环境
    VITE_API_URL=https://www.jzgeo.cc
    VITE_WS_URL=wss://www.jzgeo.cc/ws
-   VITE_LANDING_URL=https://www.jzgeo.cc
    ```
 
-2. **`client/src/config/env.ts`** - 统一配置中心
+2. **`windows-login-manager/src/config/env.ts`** - 统一配置中心
    ```typescript
    // 自动在 VITE_API_URL 后面添加 /api
    apiUrl: import.meta.env.VITE_API_URL 
      ? `${import.meta.env.VITE_API_URL}/api`
-     : (isProduction ? '/api' : 'http://localhost:3000/api'),
+     : 'http://localhost:3000/api',
    ```
 
-3. **`client/src/api/client.ts`** - API 客户端
+3. **`windows-login-manager/src/api/client.ts`** - API 客户端
    ```typescript
    // 必须使用 API_BASE_URL，不要直接使用 VITE_API_URL
    import { API_BASE_URL } from '../config/env';
    export const apiClient = axios.create({
      baseURL: API_BASE_URL,  // 正确：使用统一配置
-     // baseURL: import.meta.env.VITE_API_URL,  // 错误：会缺少 /api
    });
    ```
 
@@ -135,20 +146,65 @@ npm run status           # 检查服务状态
 
 构建后检查请求路径应该是：`https://www.jzgeo.cc/api/xxx`
 
+---
+
+## 🗄️ 归档的 Web 前端 API 配置（仅供参考）
+
+**注意：此配置已废弃，仅作历史参考。**
+
+<details>
+<summary>点击查看归档的配置说明</summary>
+
+### 配置文件说明
+
+前端 API URL 配置涉及两个文件，必须保持一致：
+
+1. **`client-archived-web-frontend/.env.production`** - 环境变量
+   ```bash
+   # 不要在 VITE_API_URL 后面加 /api，env.ts 会自动添加
+   VITE_API_URL=https://www.jzgeo.cc
+   VITE_WS_URL=wss://www.jzgeo.cc/ws
+   VITE_LANDING_URL=https://www.jzgeo.cc
+   ```
+
+2. **`client-archived-web-frontend/src/config/env.ts`** - 统一配置中心
+   ```typescript
+   // 自动在 VITE_API_URL 后面添加 /api
+   apiUrl: import.meta.env.VITE_API_URL 
+     ? `${import.meta.env.VITE_API_URL}/api`
+     : (isProduction ? '/api' : 'http://localhost:3000/api'),
+   ```
+
+3. **`client-archived-web-frontend/src/api/client.ts`** - API 客户端
+   ```typescript
+   // 必须使用 API_BASE_URL，不要直接使用 VITE_API_URL
+   import { API_BASE_URL } from '../config/env';
+   export const apiClient = axios.create({
+     baseURL: API_BASE_URL,  // 正确：使用统一配置
+     // baseURL: import.meta.env.VITE_API_URL,  // 错误：会缺少 /api
+   });
+   ```
+
+</details>
+
 ## 部署规则（强制）
 
 ### 服务器目录结构
 
-**重要：服务器上的目录结构与本地不同！**
+**重要：服务器上只部署后端 API 和落地页，不再部署 Web 前端！**
 
 | 本地路径 | 服务器路径 | 说明 |
 |---------|-----------|------|
 | `server/dist/` | `/var/www/geo-system/server/` | 后端代码 |
 | `server/dist/services/` | `/var/www/geo-system/server/services/` | 服务层 |
 | `server/dist/routes/` | `/var/www/geo-system/server/routes/` | 路由层 |
-| `client/dist/` | `/var/www/geo-system/client/dist/` | 主前端应用 |
 | `landing/dist/` | `/var/www/geo-system/landing/` | **落地页（注意：不是 landing/dist/）** |
 | `landing/dist/assets/` | `/var/www/geo-system/landing/assets/` | 落地页静态资源 |
+
+**注意**：
+- ❌ 服务器不再部署 `client/` 目录（已移除）
+- ✅ 所有系统功能通过 Windows 桌面客户端访问
+- ✅ 服务器只提供后端 API 和营销落地页
 
 ### 落地页部署步骤（重要）
 
@@ -185,6 +241,9 @@ npm run status           # 检查服务状态
 - ❌ 错误：落地页只上传到 `/var/www/geo-system/landing/dist/`
 - ✅ 正确：落地页需要同步 `index.html` 和 `assets/` 到 `/var/www/geo-system/landing/`
 
+- ❌ 错误：尝试部署 Web 前端到服务器
+- ✅ 正确：Web 前端已废弃，使用 Windows 桌面客户端
+
 ### PM2 进程名称
 
 - 服务器上的 PM2 进程名是 `geo-server`（不是 `geo-api`）
@@ -205,16 +264,27 @@ npm run status           # 检查服务状态
 
 ### 关键路径映射
 
-**注意：服务器上前端文件直接放在 `/var/www/geo-system/client/`，不是 `client/dist/`！**
+**注意：服务器不再部署 Web 前端（/app 路径已移除）！**
 
 | Nginx location | alias/root 路径 | 说明 |
 |----------------|-----------------|------|
 | `/` | `/var/www/geo-system/landing` | 落地页（营销页面） |
-| `/app` | `/var/www/geo-system/client` | 主前端应用 |
-| `/app/assets/` | `/var/www/geo-system/client/assets/` | 前端静态资源 |
 | `/api` | `proxy_pass http://127.0.0.1:3000` | 后端 API |
 | `/ws` | `proxy_pass http://127.0.0.1:3000` | WebSocket |
 | `/uploads/` | `/var/www/geo-system/uploads/` | 上传文件 |
+
+**已移除的路径**：
+- ❌ `/app` - Web 前端应用（已废弃）
+- ❌ `/app/assets/` - Web 前端静态资源（已废弃）
+
+---
+
+## 🗄️ 归档的 Web 前端部署说明（仅供参考）
+
+**注意：以下内容已废弃，仅作历史参考。**
+
+<details>
+<summary>点击查看归档的部署说明</summary>
 
 ### 前端部署步骤（client）
 
@@ -261,6 +331,8 @@ location / {
 }
 ```
 
+</details>
+
 ### 修改 Nginx 配置后
 
 ```bash
@@ -288,28 +360,7 @@ sudo systemctl reload nginx
 
 ---
 
-## 架构改造开发规则（强制遵守）
 
-> 以下规则来自 `改造方案-最终版.md`，在进行系统改造时必须严格遵守。
-
-### 改造核心原则
-
-**改造前架构：**
-```
-Windows 端（界面） → 服务器（执行所有操作） → 返回结果
-```
-
-**改造后架构：**
-```
-Windows 端（界面 + 执行操作） → 服务器（仅验证配额） → 返回验证结果
-```
-
-**关键点：**
-- ❌ 不是新增功能，所有功能都已实现
-- ✅ 只是改变执行位置
-- ✅ 用户体验完全不变
-以上关键点原则必须遵守！
-### 功能分类规则
 
 #### 🟢 保留在服务器的功能
 

@@ -85,6 +85,9 @@ class IPCHandler {
     // 存储管理
     this.registerStorageHandlers();
     
+    // 发布任务管理
+    this.registerPublishingHandlers();
+    
     // 设置WebSocket事件转发回调
     wsManager.setEventForwardCallback((event: AccountEvent) => {
       this.broadcastAccountEvent(event);
@@ -609,61 +612,130 @@ class IPCHandler {
 
   /**
    * 注册账号管理处理器
+   * 改造说明：账号数据存储在Windows端本地SQLite，不再从服务器获取
    */
   private registerAccountHandlers(): void {
-    // 获取所有账号
-    ipcMain.handle('get-accounts', async () => {
-      try {
-        log.info('IPC: get-accounts');
+    const { accountService } = require('../services');
 
-        // 从后端获取账号
-        const accounts = await apiClient.getAccounts();
-        log.info(`IPC: 从后端获取到 ${accounts.length} 个账号`);
+    // 获取所有账号（本地SQLite）
+    ipcMain.handle('get-accounts', async (_event, userId?: number) => {
+      try {
+        log.info('IPC: get-accounts (local)');
         
-        // 更新本地缓存
-        await storageManager.saveAccountsCache(accounts);
+        // 如果没有传userId，从存储中获取当前用户
+        if (!userId) {
+          const user = await storageManager.getUser();
+          if (!user) {
+            log.warn('IPC: No user logged in');
+            return [];
+          }
+          userId = user.id;
+        }
+
+        const accounts = accountService.findAll(userId);
+        log.info(`IPC: 从本地获取到 ${accounts.length} 个账号`);
         
         return accounts;
       } catch (error) {
         log.error('IPC: get-accounts failed:', error);
-        // 后端失败时返回空数组，不使用缓存
         return [];
       }
     });
 
-    // 删除账号
-    ipcMain.handle('delete-account', async (event, accountId: number) => {
+    // 获取账号详情（本地SQLite，包含解密的凭证）
+    ipcMain.handle('account:getById', async (_event, accountId: string, includeCredentials: boolean = false) => {
+      try {
+        log.info(`IPC: account:getById - ${accountId}`);
+        
+        if (includeCredentials) {
+          const account = accountService.getDecrypted(accountId);
+          return { success: true, data: account };
+        } else {
+          const account = accountService.findById(accountId);
+          return { success: true, data: account };
+        }
+      } catch (error: any) {
+        log.error('IPC: account:getById failed:', error);
+        return { success: false, error: error.message || '获取账号详情失败' };
+      }
+    });
+
+    // 根据平台获取账号（本地SQLite）
+    ipcMain.handle('account:getByPlatform', async (_event, userId: number, platform: string) => {
+      try {
+        log.info(`IPC: account:getByPlatform - ${platform}`);
+        const accounts = accountService.findByPlatform(userId, platform);
+        return { success: true, data: accounts };
+      } catch (error: any) {
+        log.error('IPC: account:getByPlatform failed:', error);
+        return { success: false, error: error.message || '获取账号列表失败' };
+      }
+    });
+
+    // 创建账号（本地SQLite）
+    // 注意：账号创建通常在登录成功后自动完成，这个接口主要用于手动添加
+    ipcMain.handle('account:create', async (_event, params: {
+      user_id: number;
+      platform: string;
+      platform_id?: string;
+      account_name?: string;
+      real_username?: string;
+      credentials?: any;
+      cookies?: any[];
+      status?: string;
+      is_default?: boolean;
+    }) => {
+      try {
+        log.info(`IPC: account:create - ${params.platform}`);
+        const account = accountService.create(params);
+        return { success: true, data: account };
+      } catch (error: any) {
+        log.error('IPC: account:create failed:', error);
+        return { success: false, error: error.message || '创建账号失败' };
+      }
+    });
+
+    // 更新账号（本地SQLite）
+    ipcMain.handle('account:update', async (_event, accountId: string, params: {
+      account_name?: string;
+      real_username?: string;
+      credentials?: any;
+      cookies?: any[];
+      status?: string;
+      is_default?: boolean;
+      error_message?: string;
+    }) => {
+      try {
+        log.info(`IPC: account:update - ${accountId}`);
+        const account = accountService.update(accountId, params);
+        return { success: true, data: account };
+      } catch (error: any) {
+        log.error('IPC: account:update failed:', error);
+        return { success: false, error: error.message || '更新账号失败' };
+      }
+    });
+
+    // 删除账号（本地SQLite）
+    ipcMain.handle('delete-account', async (_event, accountId: string, userId?: number) => {
       try {
         log.info(`IPC: delete-account - ${accountId}`);
-
-        // 必须先从后端删除，确保数据同步
-        try {
-          await apiClient.deleteAccount(accountId);
-          log.info(`Account ${accountId} deleted from backend`);
-        } catch (error: any) {
-          log.error('Failed to delete from backend:', error);
-          
-          // 区分不同类型的错误
-          if (error.response) {
-            // 后端返回了错误响应（如 400, 404 等）
-            const message = error.response.data?.message || error.message || '删除失败';
-            throw new Error(message);
-          } else if (error.request) {
-            // 请求已发送但没有收到响应（网络问题）
-            throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，删除操作已取消。');
-          } else {
-            // 其他错误
-            throw new Error(error.message || '删除失败，请重试');
+        
+        // 如果没有传userId，从存储中获取当前用户
+        if (!userId) {
+          const user = await storageManager.getUser();
+          if (user) {
+            userId = user.id;
           }
         }
 
-        // 只有后端删除成功，才删除本地缓存
-        const accounts = await storageManager.getAccountsCache();
-        const filtered = accounts.filter((a) => a.id !== accountId);
-        await storageManager.saveAccountsCache(filtered);
-        log.info(`Account ${accountId} removed from local cache`);
-
-        return { success: true };
+        const success = accountService.delete(accountId, userId);
+        
+        if (success) {
+          log.info(`Account ${accountId} deleted from local SQLite`);
+          return { success: true };
+        } else {
+          return { success: false, error: '账号不存在或无权删除' };
+        }
       } catch (error) {
         log.error('IPC: delete-account failed:', error);
         return {
@@ -673,60 +745,111 @@ class IPCHandler {
       }
     });
 
-    // 设置默认账号
-    ipcMain.handle(
-      'set-default-account',
-      async (event, platformId: string, accountId: number) => {
-        try {
-          log.info(`IPC: set-default-account - ${platformId}, ${accountId}`);
-
-          // 必须先更新后端，确保数据同步
-          try {
-            await apiClient.setDefaultAccount(platformId, accountId);
-            log.info(`Default account set on backend: ${platformId} -> ${accountId}`);
-          } catch (error: any) {
-            log.error('Failed to set default on backend:', error);
-            
-            // 区分不同类型的错误
-            if (error.response) {
-              // 后端返回了错误响应
-              const message = error.response.data?.message || error.message || '设置失败';
-              throw new Error(message);
-            } else if (error.request) {
-              // 网络问题
-              throw new Error('无法连接到服务器，请检查网络连接后重试。为确保数据安全，设置操作已取消。');
-            } else {
-              // 其他错误
-              throw new Error(error.message || '设置失败，请重试');
-            }
-          }
-
-          // 只有后端更新成功，才更新本地缓存
-          const accounts = await storageManager.getAccountsCache();
-          accounts.forEach((a) => {
-            if (a.platform_id === platformId) {
-              a.is_default = a.id === accountId;
-            }
-          });
-          await storageManager.saveAccountsCache(accounts);
-          log.info(`Default account updated in local cache`);
-
-          return { success: true };
-        } catch (error) {
-          log.error('IPC: set-default-account failed:', error);
-          return {
-            success: false,
-            error: error instanceof Error ? error.message : '设置失败，请重试',
-          };
-        }
-      }
-    );
-
-    // 刷新账号列表
-    ipcMain.handle('refresh-accounts', async () => {
+    // 设置默认账号（本地SQLite）
+    ipcMain.handle('set-default-account', async (_event, platformId: string, accountId: string, userId?: number) => {
       try {
-        log.info('IPC: refresh-accounts');
-        const accounts = await syncService.pullAccounts();
+        log.info(`IPC: set-default-account - ${platformId}, ${accountId}`);
+        
+        // 如果没有传userId，从存储中获取当前用户
+        if (!userId) {
+          const user = await storageManager.getUser();
+          if (!user) {
+            return { success: false, error: '用户未登录' };
+          }
+          userId = user.id;
+        }
+
+        const success = accountService.setDefaultAccount(userId, platformId, accountId);
+        
+        if (success) {
+          log.info(`Default account set in local SQLite: ${platformId} -> ${accountId}`);
+          return { success: true };
+        } else {
+          return { success: false, error: '设置失败' };
+        }
+      } catch (error) {
+        log.error('IPC: set-default-account failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '设置失败，请重试',
+        };
+      }
+    });
+
+    // 获取默认账号（本地SQLite）
+    ipcMain.handle('account:getDefault', async (_event, userId: number, platform: string) => {
+      try {
+        log.info(`IPC: account:getDefault - ${platform}`);
+        const account = accountService.getDefaultAccount(userId, platform);
+        return { success: true, data: account };
+      } catch (error: any) {
+        log.error('IPC: account:getDefault failed:', error);
+        return { success: false, error: error.message || '获取默认账号失败' };
+      }
+    });
+
+    // 获取活跃账号（本地SQLite）
+    ipcMain.handle('account:getActive', async (_event, userId: number) => {
+      try {
+        log.info('IPC: account:getActive');
+        const accounts = accountService.findActiveAccounts(userId);
+        return { success: true, data: accounts };
+      } catch (error: any) {
+        log.error('IPC: account:getActive failed:', error);
+        return { success: false, error: error.message || '获取活跃账号失败' };
+      }
+    });
+
+    // 获取账号统计（本地SQLite）
+    ipcMain.handle('account:getStats', async (_event, userId: number) => {
+      try {
+        log.info('IPC: account:getStats');
+        const stats = accountService.getStats(userId);
+        return { success: true, data: stats };
+      } catch (error: any) {
+        log.error('IPC: account:getStats failed:', error);
+        return { success: false, error: error.message || '获取统计数据失败' };
+      }
+    });
+
+    // 更新账号Cookies（本地SQLite）
+    ipcMain.handle('account:updateCookies', async (_event, accountId: string, cookies: any[]) => {
+      try {
+        log.info(`IPC: account:updateCookies - ${accountId}`);
+        const success = accountService.updateCookies(accountId, cookies);
+        return { success, message: success ? 'Cookies更新成功' : 'Cookies更新失败' };
+      } catch (error: any) {
+        log.error('IPC: account:updateCookies failed:', error);
+        return { success: false, error: error.message || 'Cookies更新失败' };
+      }
+    });
+
+    // 更新账号状态（本地SQLite）
+    ipcMain.handle('account:updateStatus', async (_event, accountId: string, status: string, errorMessage?: string) => {
+      try {
+        log.info(`IPC: account:updateStatus - ${accountId} -> ${status}`);
+        const success = accountService.updateStatus(accountId, status, errorMessage);
+        return { success, message: success ? '状态更新成功' : '状态更新失败' };
+      } catch (error: any) {
+        log.error('IPC: account:updateStatus failed:', error);
+        return { success: false, error: error.message || '状态更新失败' };
+      }
+    });
+
+    // 刷新账号列表（保留，但改为从本地获取）
+    ipcMain.handle('refresh-accounts', async (_event, userId?: number) => {
+      try {
+        log.info('IPC: refresh-accounts (local)');
+        
+        if (!userId) {
+          const user = await storageManager.getUser();
+          if (!user) {
+            return [];
+          }
+          userId = user.id;
+        }
+        
+        const accounts = accountService.findAll(userId);
         return accounts;
       } catch (error) {
         log.error('IPC: refresh-accounts failed:', error);
@@ -1253,6 +1376,260 @@ class IPCHandler {
       } catch (error) {
         log.error('IPC: storage:clear-tokens failed:', error);
         throw error;
+      }
+    });
+  }
+
+  /**
+   * 注册发布任务管理处理器
+   * Requirements: Phase 3 - 发布功能本地化
+   */
+  private registerPublishingHandlers(): void {
+    const { taskService } = require('../services');
+    const { publishingExecutor } = require('../publishing/PublishingExecutor');
+    const { articleService } = require('../services');
+    const { accountService } = require('../services');
+
+    // 创建发布任务
+    ipcMain.handle('task:create', async (_event, params: {
+      user_id: number;
+      article_id?: string;
+      account_id: string;
+      platform_id: string;
+      config: object;
+      scheduled_at?: string;
+      batch_id?: string;
+      batch_order?: number;
+      interval_minutes?: number;
+    }) => {
+      try {
+        log.info('IPC: task:create');
+        const task = taskService.create(params);
+        return { success: true, data: task };
+      } catch (error: any) {
+        log.error('IPC: task:create failed:', error);
+        return { success: false, error: error.message || '创建任务失败' };
+      }
+    });
+
+    // 执行发布任务
+    ipcMain.handle('task:execute', async (_event, taskId: string) => {
+      try {
+        log.info(`IPC: task:execute - ${taskId}`);
+        
+        // 异步执行，不阻塞IPC响应
+        publishingExecutor.executeTask(taskId).catch((error: any) => {
+          log.error(`Task ${taskId} execution failed:`, error);
+        });
+        
+        return { success: true, message: '任务已开始执行' };
+      } catch (error: any) {
+        log.error('IPC: task:execute failed:', error);
+        return { success: false, error: error.message || '执行任务失败' };
+      }
+    });
+
+    // 获取任务列表
+    ipcMain.handle('task:findAll', async (_event, params: {
+      user_id: number;
+      page?: number;
+      pageSize?: number;
+      status?: string;
+      platform_id?: string;
+      batch_id?: string;
+    }) => {
+      try {
+        log.info('IPC: task:findAll');
+        const result = taskService.query(params.user_id, params);
+        return { success: true, data: result };
+      } catch (error: any) {
+        log.error('IPC: task:findAll failed:', error);
+        return { success: false, error: error.message || '获取任务列表失败' };
+      }
+    });
+
+    // 获取任务详情
+    ipcMain.handle('task:findById', async (_event, taskId: string) => {
+      try {
+        log.info(`IPC: task:findById - ${taskId}`);
+        const task = taskService.findById(taskId);
+        if (!task) {
+          return { success: false, error: '任务不存在' };
+        }
+        return { success: true, data: task };
+      } catch (error: any) {
+        log.error('IPC: task:findById failed:', error);
+        return { success: false, error: error.message || '获取任务详情失败' };
+      }
+    });
+
+    // 获取任务日志
+    ipcMain.handle('task:getLogs', async (_event, taskId: string) => {
+      try {
+        log.info(`IPC: task:getLogs - ${taskId}`);
+        const logs = taskService.getLogs(taskId);
+        return { success: true, data: logs };
+      } catch (error: any) {
+        log.error('IPC: task:getLogs failed:', error);
+        return { success: false, error: error.message || '获取任务日志失败' };
+      }
+    });
+
+    // 取消任务
+    ipcMain.handle('task:cancel', async (_event, taskId: string) => {
+      try {
+        log.info(`IPC: task:cancel - ${taskId}`);
+        const success = taskService.updateStatus(taskId, 'cancelled', '用户手动取消');
+        if (success) {
+          return { success: true, message: '任务已取消' };
+        } else {
+          return { success: false, error: '取消任务失败' };
+        }
+      } catch (error: any) {
+        log.error('IPC: task:cancel failed:', error);
+        return { success: false, error: error.message || '取消任务失败' };
+      }
+    });
+
+    // 删除任务
+    ipcMain.handle('task:delete', async (_event, taskId: string, userId?: number) => {
+      try {
+        log.info(`IPC: task:delete - ${taskId}`);
+        const success = taskService.delete(taskId, userId);
+        if (success) {
+          return { success: true, message: '任务已删除' };
+        } else {
+          return { success: false, error: '删除任务失败' };
+        }
+      } catch (error: any) {
+        log.error('IPC: task:delete failed:', error);
+        return { success: false, error: error.message || '删除任务失败' };
+      }
+    });
+
+    // 批量删除任务
+    ipcMain.handle('task:batchDelete', async (_event, taskIds: string[]) => {
+      try {
+        log.info(`IPC: task:batchDelete - ${taskIds.length} tasks`);
+        let successCount = 0;
+        let failCount = 0;
+        const errors: string[] = [];
+
+        for (const taskId of taskIds) {
+          try {
+            const success = taskService.delete(taskId);
+            if (success) {
+              successCount++;
+            } else {
+              failCount++;
+              errors.push(`任务 ${taskId} 删除失败`);
+            }
+          } catch (error: any) {
+            failCount++;
+            errors.push(`任务 ${taskId}: ${error.message}`);
+          }
+        }
+
+        return { success: true, data: { successCount, failCount, errors } };
+      } catch (error: any) {
+        log.error('IPC: task:batchDelete failed:', error);
+        return { success: false, error: error.message || '批量删除任务失败' };
+      }
+    });
+
+    // 获取批次信息
+    ipcMain.handle('task:getBatchInfo', async (_event, batchId: string) => {
+      try {
+        log.info(`IPC: task:getBatchInfo - ${batchId}`);
+        const stats = taskService.getBatchStats(batchId);
+        return { success: true, data: stats };
+      } catch (error: any) {
+        log.error('IPC: task:getBatchInfo failed:', error);
+        return { success: false, error: error.message || '获取批次信息失败' };
+      }
+    });
+
+    // 停止批次
+    ipcMain.handle('task:stopBatch', async (_event, batchId: string) => {
+      try {
+        log.info(`IPC: task:stopBatch - ${batchId}`);
+        const result = taskService.cancelBatch(batchId);
+        return { success: true, data: result };
+      } catch (error: any) {
+        log.error('IPC: task:stopBatch failed:', error);
+        return { success: false, error: error.message || '停止批次失败' };
+      }
+    });
+
+    // 删除批次
+    ipcMain.handle('task:deleteBatch', async (_event, batchId: string) => {
+      try {
+        log.info(`IPC: task:deleteBatch - ${batchId}`);
+        const result = taskService.deleteBatch(batchId);
+        return { success: true, data: result };
+      } catch (error: any) {
+        log.error('IPC: task:deleteBatch failed:', error);
+        return { success: false, error: error.message || '删除批次失败' };
+      }
+    });
+
+    // 获取发布记录列表
+    ipcMain.handle('publishing:getRecords', async (_event, params: {
+      user_id: number;
+      page?: number;
+      pageSize?: number;
+      platform_id?: string;
+      article_id?: string;
+      account_id?: string;
+    }) => {
+      try {
+        log.info('IPC: publishing:getRecords');
+        // TODO: 实现发布记录查询
+        return { success: true, data: { records: [], total: 0, page: 1, pageSize: 20 } };
+      } catch (error: any) {
+        log.error('IPC: publishing:getRecords failed:', error);
+        return { success: false, error: error.message || '获取发布记录失败' };
+      }
+    });
+
+    // 获取任务统计
+    ipcMain.handle('task:getStats', async (_event, userId: number) => {
+      try {
+        log.info(`IPC: task:getStats - user ${userId}`);
+        const stats = taskService.getStats(userId);
+        return { success: true, data: stats };
+      } catch (error: any) {
+        log.error('IPC: task:getStats failed:', error);
+        return { success: false, error: error.message || '获取统计数据失败' };
+      }
+    });
+
+    // 设置日志回调（用于实时日志流）
+    ipcMain.handle('task:setLogCallback', async (_event, taskId: string) => {
+      try {
+        log.info(`IPC: task:setLogCallback - ${taskId}`);
+        
+        // 设置日志回调，将日志发送到渲染进程
+        publishingExecutor.setLogCallback((tid, level, message, details) => {
+          if (tid === taskId) {
+            BrowserWindow.getAllWindows().forEach(window => {
+              if (!window.isDestroyed()) {
+                window.webContents.send('task-log', {
+                  taskId: tid,
+                  level,
+                  message,
+                  details,
+                  timestamp: new Date().toISOString()
+                });
+              }
+            });
+          }
+        });
+        
+        return { success: true };
+      } catch (error: any) {
+        log.error('IPC: task:setLogCallback failed:', error);
+        return { success: false, error: error.message };
       }
     });
   }

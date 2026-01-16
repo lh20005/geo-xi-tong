@@ -17,10 +17,17 @@ articleGenerationRouter.use(requireTenantContext);
 const service = new ArticleGenerationService();
 
 // Zod验证schemas
+// 支持数字ID（Web端/服务器数据库）和UUID字符串（Windows端本地SQLite）
 const createTaskSchema = z.object({
   distillationId: z.number().int().positive('蒸馏历史ID必须是正整数'),
-  albumId: z.number().int().positive('图库ID必须是正整数'),
-  knowledgeBaseId: z.number().int().positive('知识库ID必须是正整数'),
+  albumId: z.union([
+    z.number().int().positive('图库ID必须是正整数'),
+    z.string().uuid('图库ID必须是有效的UUID')
+  ]),
+  knowledgeBaseId: z.union([
+    z.number().int().positive('知识库ID必须是正整数'),
+    z.string().uuid('知识库ID必须是有效的UUID')
+  ]),
   articleSettingId: z.number().int().positive('文章设置ID必须是正整数'),
   conversionTargetId: z.number().int().positive('转化目标ID必须是正整数').optional(),
   articleCount: z.number().int().positive('文章数量必须是正整数').max(100, '文章数量不能超过100')
@@ -33,6 +40,18 @@ const createTaskSchema = z.object({
 articleGenerationRouter.post('/tasks', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
+    
+    // 添加详细日志
+    console.log('🔍 服务器收到的原始数据:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 各字段类型:', {
+      distillationId: typeof req.body.distillationId,
+      albumId: typeof req.body.albumId,
+      knowledgeBaseId: typeof req.body.knowledgeBaseId,
+      articleSettingId: typeof req.body.articleSettingId,
+      conversionTargetId: typeof req.body.conversionTargetId,
+      articleCount: typeof req.body.articleCount
+    });
+    
     const validatedData = createTaskSchema.parse(req.body);
 
     // ========== 配额检查 ==========
@@ -58,14 +77,22 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       return res.status(404).json({ error: '蒸馏历史不存在' });
     }
 
-    const albumCheck = await pool.query('SELECT id FROM albums WHERE id = $1', [validatedData.albumId]);
-    if (albumCheck.rows.length === 0) {
-      return res.status(404).json({ error: '图库不存在' });
+    // 如果 albumId 是数字，验证服务器数据库中是否存在
+    // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
+    if (typeof validatedData.albumId === 'number') {
+      const albumCheck = await pool.query('SELECT id FROM albums WHERE id = $1', [validatedData.albumId]);
+      if (albumCheck.rows.length === 0) {
+        return res.status(404).json({ error: '图库不存在' });
+      }
     }
 
-    const knowledgeBaseCheck = await pool.query('SELECT id FROM knowledge_bases WHERE id = $1', [validatedData.knowledgeBaseId]);
-    if (knowledgeBaseCheck.rows.length === 0) {
-      return res.status(404).json({ error: '知识库不存在' });
+    // 如果 knowledgeBaseId 是数字，验证服务器数据库中是否存在
+    // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
+    if (typeof validatedData.knowledgeBaseId === 'number') {
+      const knowledgeBaseCheck = await pool.query('SELECT id FROM knowledge_bases WHERE id = $1', [validatedData.knowledgeBaseId]);
+      if (knowledgeBaseCheck.rows.length === 0) {
+        return res.status(404).json({ error: '知识库不存在' });
+      }
     }
 
     const articleSettingCheck = await pool.query('SELECT id FROM article_settings WHERE id = $1', [validatedData.articleSettingId]);
@@ -610,5 +637,61 @@ articleGenerationRouter.get('/pending', async (req, res) => {
       message: '获取失败',
       details: error.message 
     });
+  }
+});
+
+// ==================== 辅助数据接口 ====================
+// 为文章生成任务配置提供必要的数据
+
+/**
+ * 获取相册列表
+ * GET /api/article-generation/albums
+ */
+articleGenerationRouter.get('/albums', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    
+    const result = await pool.query(
+      `SELECT a.id, a.name, a.created_at,
+              COUNT(i.id) as image_count,
+              (SELECT url FROM images WHERE album_id = a.id ORDER BY created_at DESC LIMIT 1) as cover_image
+       FROM albums a
+       LEFT JOIN images i ON a.id = i.album_id
+       WHERE a.user_id = $1
+       GROUP BY a.id
+       ORDER BY a.created_at DESC`,
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error('获取相册列表错误:', error);
+    res.status(500).json({ error: '获取相册列表失败', details: error.message });
+  }
+});
+
+/**
+ * 获取知识库列表
+ * GET /api/article-generation/knowledge-bases
+ */
+articleGenerationRouter.get('/knowledge-bases', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    
+    const result = await pool.query(
+      `SELECT kb.id, kb.name, kb.description, kb.created_at,
+              COUNT(kd.id) as document_count
+       FROM knowledge_bases kb
+       LEFT JOIN knowledge_documents kd ON kb.id = kd.knowledge_base_id
+       WHERE kb.user_id = $1
+       GROUP BY kb.id
+       ORDER BY kb.created_at DESC`,
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (error: any) {
+    console.error('获取知识库列表错误:', error);
+    res.status(500).json({ error: '获取知识库列表失败', details: error.message });
   }
 });

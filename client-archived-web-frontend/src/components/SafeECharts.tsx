@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, memo } from 'react';
+import { useRef, useEffect, memo } from 'react';
 import ReactECharts, { EChartsReactProps } from 'echarts-for-react';
 
 /**

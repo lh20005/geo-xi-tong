@@ -16,13 +16,18 @@ import {
   getArticles, getArticle, Article 
 } from '../api/articles';
 import { 
-  getPlatforms, getAccounts, Platform, Account,
+  getPlatforms, Platform
+} from '../api/publishing';
+import {
+  getAccounts, Account
+} from '../api/accounts';
+import {
   createPublishingTask, getPublishingTasks, getTaskLogs,
   executeTask, cancelTask, terminateTask, deleteTask,
   batchDeleteTasks, deleteAllTasks, PublishingTask, PublishingLog,
   stopBatch, deleteBatch,
   subscribeToTaskLogs
-} from '../api/publishing';
+} from '../api/publishingTasks';
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
 

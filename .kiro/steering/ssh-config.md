@@ -75,14 +75,15 @@ mcp_ssh_mcp_server_remote_ssh({
 
 | 服务 | 路径/命令 |
 |------|----------|
-| PM2 进程 | geo-api |
+| PM2 进程 | geo-server |
 | 后端 API | http://localhost:3000 |
-| 前端静态文件 | /var/www/geo-system/client/dist/ |
-| 落地页静态文件 | /var/www/geo-system/landing/dist/ |
-| 后端代码 | /var/www/geo-system/server/dist/ |
-| 上传目录 | /var/www/geo-system/server/uploads/ |
+| 落地页静态文件 | /var/www/geo-system/landing/ |
+| 后端代码 | /var/www/geo-system/server/ |
+| 上传目录 | /var/www/geo-system/uploads/ |
 | Nginx 配置 | /etc/nginx/sites-available/geo-system |
 | 环境配置 | /var/www/geo-system/server/.env |
+
+**注意**: 服务器不再部署 Web 前端（client/），所有系统功能通过 Windows 桌面客户端访问。
 
 ## 常用命令
 

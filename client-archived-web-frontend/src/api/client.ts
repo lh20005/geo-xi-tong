@@ -22,6 +22,12 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // 调试日志
+    console.log('[API Client] 📤 请求:', {
+      url: config.url,
+      method: config.method,
+      data: config.data
+    });
     return config;
   },
   (error) => Promise.reject(error)
@@ -31,8 +37,20 @@ apiClient.interceptors.request.use(
  * 响应拦截器 - 统一错误处理和token刷新
  */
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('[API Client] ✅ 响应成功:', {
+      url: response.config.url,
+      status: response.status
+    });
+    return response;
+  },
   async (error: AxiosError<{ error?: string; details?: string }>) => {
+    console.log('[API Client] ❌ 响应错误:', {
+      url: error.config?.url,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    
     const originalRequest = error.config as any;
     
     // 处理401错误（token过期）
