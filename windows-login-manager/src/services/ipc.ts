@@ -33,7 +33,7 @@ class IPCBridge {
   }
 
   // 测试账号登录
-  async testAccountLogin(accountId: number): Promise<{ success: boolean; message?: string }> {
+  async testAccountLogin(accountId: string | number): Promise<{ success: boolean; message?: string }> {
     return await this.api.testAccountLogin(accountId);
   }
 

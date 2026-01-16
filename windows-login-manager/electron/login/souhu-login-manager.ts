@@ -330,38 +330,26 @@ class SouhuLoginManager {
   }
 
   /**
-   * 保存账号到本地
+   * 保存账号到本地 SQLite
    */
   private async saveAccount(account: any): Promise<void> {
     try {
-      log.info('[Souhu] 保存账号到本地...');
+      log.info('[Souhu] 保存账号到本地 SQLite...');
 
-      const existingAccounts = await storageManager.getAccountsCache();
-      const existingIndex = existingAccounts.findIndex(
-        a => a.platform_id === account.platform_id && a.account_name === account.account_name
-      );
+      const result = await syncService.saveAccountToLocal({
+        platform_id: account.platform_id,
+        account_name: account.account_name,
+        real_username: account.real_username,
+        credentials: account.credentials
+      });
 
-      if (existingIndex >= 0) {
-        existingAccounts[existingIndex] = {
-          ...existingAccounts[existingIndex],
-          ...account,
-          updated_at: new Date()
-        };
-      } else {
-        existingAccounts.push({
-          id: Date.now(),
-          ...account,
-          is_default: existingAccounts.length === 0,
-          status: 'active',
-          created_at: new Date(),
-          updated_at: new Date()
-        });
+      if (!result.success) {
+        throw new Error(result.error || '保存失败');
       }
 
-      await storageManager.saveAccountsCache(existingAccounts);
-      log.info('[Souhu] 账号保存成功');
+      log.info(`[Souhu] 账号保存到本地 SQLite 成功, ID: ${result.accountId}`);
     } catch (error) {
-      log.error('[Souhu] 保存账号失败:', error);
+      log.error('[Souhu] 保存账号到本地 SQLite 失败:', error);
       throw error;
     }
   }

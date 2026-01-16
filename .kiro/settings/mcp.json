@@ -17,7 +17,8 @@
         "remote-ssh",
         "ssh-edit-block",
         "ssh-write-chunk",
-        "ssh-read-lines"
+        "ssh-read-lines",
+        "ssh-search-code"
       ]
     }
   }

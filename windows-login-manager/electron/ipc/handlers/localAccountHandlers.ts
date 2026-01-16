@@ -30,7 +30,23 @@ export function registerLocalAccountHandlers(): void {
         user_id: user.id
       });
 
-      return { success: true, data: account };
+      // 转换字段名从 snake_case 到 camelCase
+      const formattedAccount = {
+        id: account.id,
+        userId: account.user_id,
+        platform: account.platform,
+        platformId: account.platform_id || account.platform,
+        accountName: account.account_name,
+        realUsername: account.real_username,
+        status: account.status || 'unknown',
+        isDefault: account.is_default === 1,
+        errorMessage: account.error_message,
+        lastUsedAt: account.last_used_at,
+        createdAt: account.created_at,
+        updatedAt: account.updated_at,
+      };
+
+      return { success: true, data: formattedAccount };
     } catch (error: any) {
       log.error('IPC: account:local:create failed:', error);
       return { success: false, error: error.message || '创建账号失败' };
@@ -47,7 +63,22 @@ export function registerLocalAccountHandlers(): void {
       }
 
       const accounts = accountService.findAll(user.id);
-      return { success: true, data: accounts };
+      // 转换字段名从 snake_case 到 camelCase，以匹配前端接口
+      const formattedAccounts = accounts.map((acc: any) => ({
+        id: acc.id,
+        userId: acc.user_id,
+        platform: acc.platform,
+        platformId: acc.platform_id || acc.platform,
+        accountName: acc.account_name,
+        realUsername: acc.real_username,
+        status: acc.status || 'unknown',
+        isDefault: acc.is_default === 1,
+        errorMessage: acc.error_message,
+        lastUsedAt: acc.last_used_at,
+        createdAt: acc.created_at,
+        updatedAt: acc.updated_at,
+      }));
+      return { success: true, data: formattedAccounts };
     } catch (error: any) {
       log.error('IPC: account:local:findAll failed:', error);
       return { success: false, error: error.message || '获取账号列表失败' };
@@ -64,7 +95,23 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '账号不存在' };
       }
 
-      return { success: true, data: account };
+      // 转换字段名从 snake_case 到 camelCase
+      const formattedAccount = {
+        id: account.id,
+        userId: account.user_id,
+        platform: account.platform,
+        platformId: account.platform_id || account.platform,
+        accountName: account.account_name,
+        realUsername: account.real_username,
+        status: account.status || 'unknown',
+        isDefault: account.is_default === 1,
+        errorMessage: account.error_message,
+        lastUsedAt: account.last_used_at,
+        createdAt: account.created_at,
+        updatedAt: account.updated_at,
+      };
+
+      return { success: true, data: formattedAccount };
     } catch (error: any) {
       log.error('IPC: account:local:findById failed:', error);
       return { success: false, error: error.message || '获取账号失败' };
@@ -81,7 +128,22 @@ export function registerLocalAccountHandlers(): void {
       }
 
       const accounts = accountService.findByPlatform(user.id, platformId);
-      return { success: true, data: accounts };
+      // 转换字段名从 snake_case 到 camelCase
+      const formattedAccounts = accounts.map((acc: any) => ({
+        id: acc.id,
+        userId: acc.user_id,
+        platform: acc.platform,
+        platformId: acc.platform_id || acc.platform,
+        accountName: acc.account_name,
+        realUsername: acc.real_username,
+        status: acc.status || 'unknown',
+        isDefault: acc.is_default === 1,
+        errorMessage: acc.error_message,
+        lastUsedAt: acc.last_used_at,
+        createdAt: acc.created_at,
+        updatedAt: acc.updated_at,
+      }));
+      return { success: true, data: formattedAccounts };
     } catch (error: any) {
       log.error('IPC: account:local:findByPlatform failed:', error);
       return { success: false, error: error.message || '获取平台账号失败' };
@@ -98,7 +160,23 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '账号不存在' };
       }
 
-      return { success: true, data: account };
+      // 转换字段名从 snake_case 到 camelCase
+      const formattedAccount = {
+        id: account.id,
+        userId: account.user_id,
+        platform: account.platform,
+        platformId: account.platform_id || account.platform,
+        accountName: account.account_name,
+        realUsername: account.real_username,
+        status: account.status || 'unknown',
+        isDefault: account.is_default === 1,
+        errorMessage: account.error_message,
+        lastUsedAt: account.last_used_at,
+        createdAt: account.created_at,
+        updatedAt: account.updated_at,
+      };
+
+      return { success: true, data: formattedAccount };
     } catch (error: any) {
       log.error('IPC: account:local:update failed:', error);
       return { success: false, error: error.message || '更新账号失败' };
@@ -154,7 +232,26 @@ export function registerLocalAccountHandlers(): void {
       }
 
       const account = accountService.getDefaultAccount(user.id, platformId);
-      return { success: true, data: account };
+      if (!account) {
+        return { success: true, data: null };
+      }
+      
+      // 转换字段名从 snake_case 到 camelCase
+      const formattedAccount = {
+        id: account.id,
+        userId: account.user_id,
+        platform: account.platform,
+        platformId: account.platform_id || account.platform,
+        accountName: account.account_name,
+        realUsername: account.real_username,
+        status: account.status || 'unknown',
+        isDefault: account.is_default === 1,
+        errorMessage: account.error_message,
+        lastUsedAt: account.last_used_at,
+        createdAt: account.created_at,
+        updatedAt: account.updated_at,
+      };
+      return { success: true, data: formattedAccount };
     } catch (error: any) {
       log.error('IPC: account:local:getDefault failed:', error);
       return { success: false, error: error.message || '获取默认账号失败' };

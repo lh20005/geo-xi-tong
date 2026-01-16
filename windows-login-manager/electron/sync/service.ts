@@ -2,6 +2,7 @@ import { app } from 'electron';
 import log from 'electron-log';
 import { apiClient, Account } from '../api/client';
 import { storageManager } from '../storage/manager';
+import { accountService } from '../services';
 
 /**
  * 同步服务
@@ -381,6 +382,67 @@ class SyncService {
     this.syncQueue = [];
     await this.saveOfflineQueue();
     log.info('Sync queue cleared');
+  }
+
+  /**
+   * 保存账号到本地 SQLite
+   * 用于登录成功后保存账号到本地数据库
+   */
+  async saveAccountToLocal(account: {
+    platform_id: string;
+    account_name: string;
+    real_username?: string;
+    credentials?: any;
+  }): Promise<{ success: boolean; accountId?: string; error?: string }> {
+    try {
+      log.info(`[SyncService] 保存账号到本地 SQLite: ${account.platform_id}`);
+
+      // 获取当前用户
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 检查账号是否已存在
+      const existingAccounts = accountService.findByPlatform(user.id, account.platform_id);
+      const existingAccount = existingAccounts.find(
+        a => a.account_name === account.account_name
+      );
+
+      let accountId: string;
+
+      if (existingAccount) {
+        // 更新现有账号
+        log.info(`[SyncService] 更新现有账号: ${existingAccount.id}`);
+        accountService.update(existingAccount.id, {
+          account_name: account.account_name,
+          real_username: account.real_username,
+          cookies: account.credentials?.cookies,
+          status: 'active'
+        });
+        accountId = existingAccount.id;
+      } else {
+        // 创建新账号
+        log.info('[SyncService] 创建新账号');
+        const newAccount = accountService.create({
+          user_id: user.id,
+          platform: account.platform_id,
+          platform_id: account.platform_id,
+          account_name: account.account_name,
+          real_username: account.real_username,
+          cookies: account.credentials?.cookies,
+          status: 'active',
+          is_default: existingAccounts.length === 0
+        });
+        accountId = newAccount.id;
+      }
+
+      log.info(`[SyncService] 账号保存到本地 SQLite 成功, ID: ${accountId}`);
+      return { success: true, accountId };
+    } catch (error: any) {
+      log.error('[SyncService] 保存账号到本地 SQLite 失败:', error);
+      return { success: false, error: error.message || '保存失败' };
+    }
   }
 
   /**

@@ -186,7 +186,7 @@ export default function PlatformManagementPage() {
   const handleTestLogin = async (accountId: string) => {
     try {
       message.loading({ content: '正在打开测试页面...', key: 'test-login', duration: 0 });
-      const result = await ipcBridge.testAccountLogin(Number(accountId));
+      const result = await ipcBridge.testAccountLogin(accountId);
       message.destroy('test-login');
       if (result.success) message.success(result.message || '已打开测试页面');
       else message.error(result.message || '打开测试页面失败');

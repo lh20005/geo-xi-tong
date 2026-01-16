@@ -20,6 +20,7 @@ import { apiClient } from '../api/client';
 import { syncService } from '../sync/service';
 import { wsManager, WebSocketManager } from '../websocket/manager';
 import { AccountEvent } from '../websocket/client';
+import { accountService } from '../services';
 import path from 'path';
 import fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -463,7 +464,7 @@ class IPCHandler {
     });
 
     // 测试账号登录（使用 webview 打开平台页面验证 Cookie 是否有效）
-    ipcMain.handle('test-account-login', async (event, accountId: number) => {
+    ipcMain.handle('test-account-login', async (event, accountId: string | number) => {
       try {
         log.info(`IPC: test-account-login - ${accountId}`);
 
@@ -473,23 +474,25 @@ class IPCHandler {
           throw new Error('Main window not available');
         }
 
-        // 从后端获取账号信息（包含凭证）
-        log.info(`IPC: 从后端获取账号 ${accountId}（包含凭证）`);
-        const account = await apiClient.getAccount(accountId, true);
+        // 从本地 SQLite 获取账号信息（包含解密的凭证）
+        // accountId 可能是字符串（UUID）或数字，统一转为字符串
+        const accountIdStr = String(accountId);
+        log.info(`IPC: 从本地获取账号 ${accountIdStr}（包含凭证）`);
+        const account = accountService.getDecrypted(accountIdStr);
         
         if (!account) {
-          log.error(`IPC: 账号 ${accountId} 不存在`);
+          log.error(`IPC: 账号 ${accountIdStr} 不存在`);
           return {
             success: false,
             message: '账号不存在'
           };
         }
         
-        log.info(`IPC: 获取到账号: ${account.account_name}, platform: ${account.platform_id}`);
+        log.info(`IPC: 获取到账号: ${account.account_name}, platform: ${account.platform}`);
 
         // 获取平台配置
         const platforms = await apiClient.getPlatforms();
-        const platform = platforms.find((p: any) => p.platform_id === account.platform_id);
+        const platform = platforms.find((p: any) => p.platform_id === account.platform);
         
         if (!platform) {
           return {
@@ -503,11 +506,11 @@ class IPCHandler {
         log.info(`IPC: 测试登录 URL: ${testUrl}`);
         
         // 使用持久化 partition 用于测试登录
-        const partition = `persist:${account.platform_id}`;
+        const partition = `persist:${account.platform}`;
         
         // 先设置 cookies 到 session
-        if (account.credentials && account.credentials.cookies) {
-          log.info(`IPC: 设置 ${account.credentials.cookies.length} 个 cookies 到 session`);
+        if (account.cookies && account.cookies.length > 0) {
+          log.info(`IPC: 设置 ${account.cookies.length} 个 cookies 到 session`);
           const { session } = require('electron');
           const ses = session.fromPartition(partition);
           
@@ -523,7 +526,7 @@ class IPCHandler {
           }
           
           // 设置新的 cookies
-          for (const cookie of account.credentials.cookies) {
+          for (const cookie of account.cookies) {
             try {
               const domain = cookie.domain.startsWith('.') ? cookie.domain.substring(1) : cookie.domain;
               const cookieDetails: Electron.CookiesSetDetails = {
