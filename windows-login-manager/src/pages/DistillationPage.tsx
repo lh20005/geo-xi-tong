@@ -36,6 +36,7 @@ export default function DistillationPage() {
     isFromCache
   } = useCachedData('distillation:history', fetchHistory, {
     onError: (error) => console.error('加载历史失败:', error),
+    forceRefresh: true, // 每次进入页面强制刷新
   });
 
   // 使缓存失效并刷新
@@ -43,6 +44,12 @@ export default function DistillationPage() {
     invalidateCacheByPrefix('distillation:');
     await refreshHistory(true);
   }, [invalidateCacheByPrefix, refreshHistory]);
+
+  // 页面进入时主动刷新数据，确保数据最新
+  useEffect(() => {
+    // 组件挂载时强制刷新一次，确保数据同步
+    refreshHistory(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 查看历史记录详情
   const handleViewHistory = async (record: any) => {

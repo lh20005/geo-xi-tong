@@ -79,7 +79,8 @@ export default function DistillationResultsPage() {
     fetchData,
     {
       deps: [filterKeyword, searchText, currentPage, pageSize],
-      onError: (error) => message.error(error.message || '加载数据失败')
+      onError: (error) => message.error(error.message || '加载数据失败'),
+      forceRefresh: true, // 每次进入页面强制刷新
     }
   );
 
@@ -90,8 +91,18 @@ export default function DistillationResultsPage() {
   } = useCachedData(
     'distillationResults:keywords',
     fetchAllKeywords,
-    { onError: () => console.error('加载关键词列表失败') }
+    { 
+      onError: () => console.error('加载关键词列表失败'),
+      forceRefresh: true, // 每次进入页面强制刷新
+    }
   );
+
+  // 页面进入时主动刷新数据，确保数据最新
+  useEffect(() => {
+    // 组件挂载时强制刷新一次，确保数据同步
+    refreshResults(true);
+    refreshKeywords(true);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 更新本地状态
   useEffect(() => {
