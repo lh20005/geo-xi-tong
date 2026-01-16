@@ -15,7 +15,10 @@
     "lint": "eslint . --ext .ts,.tsx",
     "lint:fix": "eslint . --ext .ts,.tsx --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx}\" \"electron/**/*.ts\"",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "db:setup": "ts-node scripts/setup-database.ts",
+    "db:init": "ts-node scripts/init-database.ts",
+    "db:import-data": "ts-node scripts/import-data.ts"
   },
   "dependencies": {
     "@ant-design/icons": "^5.3.7",
@@ -26,6 +29,7 @@
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.10",
     "dompurify": "^3.0.8",
+    "dotenv": "^17.2.3",
     "echarts": "^5.4.3",
     "echarts-for-react": "^3.0.0",
     "electron-log": "^5.0.1",
@@ -35,6 +39,7 @@
     "mammoth": "^1.11.0",
     "node-machine-id": "^1.1.12",
     "pdf-parse": "^1.1.4",
+    "pg": "^8.11.3",
     "playwright": "^1.57.0",
     "qrcode.react": "^3.1.0",
     "react": "^18.2.0",
@@ -54,6 +59,7 @@
     "@types/crypto-js": "^4.2.2",
     "@types/node": "^20.10.4",
     "@types/pdf-parse": "^1.1.5",
+    "@types/pg": "^8.10.9",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
     "@types/react-resizable": "^3.0.8",
@@ -72,6 +78,7 @@
     "postcss": "^8.4.32",
     "prettier": "^3.1.0",
     "tailwindcss": "^3.3.6",
+    "ts-node": "^10.9.2",
     "typescript": "^5.3.3",
     "vite": "^5.0.7",
     "vite-plugin-electron": "^0.28.0",

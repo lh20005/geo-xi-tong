@@ -1,7 +1,7 @@
 /**
  * 本地知识库 IPC 处理器
  * 处理知识库的本地 CRUD 操作
- * Requirements: Phase 6 - 注册 IPC 处理器
+ * Requirements: Phase 6 - PostgreSQL 迁移
  */
 
 import { ipcMain, app } from 'electron';
@@ -10,7 +10,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
-import { knowledgeBaseService, CreateKnowledgeBaseParams } from '../../services';
+import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
 
 /**
@@ -52,10 +52,10 @@ async function parseDocumentContent(filePath: string, fileType: string): Promise
  * 注意：这些处理器使用 'knowledge:local:' 前缀，与现有的服务器知识库处理器区分
  */
 export function registerLocalKnowledgeHandlers(): void {
-  log.info('Registering local knowledge base IPC handlers...');
+  log.info('Registering local knowledge base IPC handlers (PostgreSQL)...');
 
   // 创建知识库
-  ipcMain.handle('knowledge:local:create', async (_event, params: Omit<CreateKnowledgeBaseParams, 'user_id'>) => {
+  ipcMain.handle('knowledge:local:create', async (_event, params: any) => {
     try {
       log.info('IPC: knowledge:local:create');
       const user = await storageManager.getUser();
@@ -63,10 +63,11 @@ export function registerLocalKnowledgeHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const kb = knowledgeBaseService.create({
-        ...params,
-        user_id: user.id
-      });
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      const kb = await knowledgeBaseService.create(params);
 
       return { success: true, data: kb };
     } catch (error: any) {
@@ -84,18 +85,13 @@ export function registerLocalKnowledgeHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const kbs = knowledgeBaseService.findAll(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      const kbs = await knowledgeBaseService.findAllWithDocumentCount();
       
-      // 为每个知识库添加文档数量
-      const kbsWithCount = kbs.map(kb => {
-        const kbWithDocs = knowledgeBaseService.getWithDocuments(kb.id);
-        return {
-          ...kb,
-          document_count: kbWithDocs?.documents?.length || 0
-        };
-      });
-      
-      return { success: true, data: kbsWithCount };
+      return { success: true, data: kbs };
     } catch (error: any) {
       log.error('IPC: knowledge:local:findAll failed:', error);
       return { success: false, error: error.message || '获取知识库列表失败' };
@@ -106,7 +102,16 @@ export function registerLocalKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:local:findById', async (_event, id: string) => {
     try {
       log.info(`IPC: knowledge:local:findById - ${id}`);
-      const kb = knowledgeBaseService.findById(id);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      const kb = await knowledgeBaseService.findById(id);
       
       if (!kb) {
         return { success: false, error: '知识库不存在' };
@@ -123,7 +128,16 @@ export function registerLocalKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:local:update', async (_event, id: string, params: { name?: string; description?: string }) => {
     try {
       log.info(`IPC: knowledge:local:update - ${id}`);
-      const kb = knowledgeBaseService.update(id, params);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      const kb = await knowledgeBaseService.update(id, params);
       
       if (!kb) {
         return { success: false, error: '知识库不存在' };
@@ -145,11 +159,11 @@ export function registerLocalKnowledgeHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const success = knowledgeBaseService.delete(id, user.id);
-      
-      if (!success) {
-        return { success: false, error: '知识库不存在或无权删除' };
-      }
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      await knowledgeBaseService.delete(id);
 
       return { success: true };
     } catch (error: any) {
@@ -171,7 +185,11 @@ export function registerLocalKnowledgeHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const kb = knowledgeBaseService.findById(kbId);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      const kb = await knowledgeBaseService.findById(kbId);
       if (!kb) {
         return { success: false, error: '知识库不存在' };
       }
@@ -206,12 +224,13 @@ export function registerLocalKnowledgeHandlers(): void {
           log.info(`Parsed document ${file.name}, content length: ${parsedContent.length}`);
 
           // 创建文档记录
-          const doc = knowledgeBaseService.uploadDocument({
-            knowledge_base_id: kbId,
+          const doc = await knowledgeBaseService.uploadDocument({
+            knowledgeBaseId: parseInt(kbId),
             filename: file.name,
-            file_type: file.type,
-            file_size: content.length,
-            content: parsedContent
+            filepath: destPath,
+            content: parsedContent,
+            fileType: file.type,
+            fileSize: content.length
           });
 
           uploadedDocs.push(doc);
@@ -237,11 +256,19 @@ export function registerLocalKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:local:getDocuments', async (_event, kbId: string) => {
     try {
       log.info(`IPC: knowledge:local:getDocuments - ${kbId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
       
-      const kbWithDocs = knowledgeBaseService.getWithDocuments(kbId);
+      const docs = await knowledgeBaseService.getDocuments(parseInt(kbId));
       
       // 为每个文档添加内容预览
-      const docsWithPreview = (kbWithDocs?.documents || []).map(doc => ({
+      const docsWithPreview = docs.map(doc => ({
         ...doc,
         content_preview: doc.content ? doc.content.substring(0, 100) + (doc.content.length > 100 ? '...' : '') : ''
       }));
@@ -257,8 +284,16 @@ export function registerLocalKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:local:getDocument', async (_event, docId: string) => {
     try {
       log.info(`IPC: knowledge:local:getDocument - ${docId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
       
-      const doc = knowledgeBaseService.findDocumentById(docId);
+      const doc = await knowledgeBaseService.findDocumentById(parseInt(docId));
       if (!doc) {
         return { success: false, error: '文档不存在' };
       }
@@ -274,9 +309,17 @@ export function registerLocalKnowledgeHandlers(): void {
   ipcMain.handle('knowledge:local:deleteDocument', async (_event, docId: string) => {
     try {
       log.info(`IPC: knowledge:local:deleteDocument - ${docId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
       
-      const success = knowledgeBaseService.deleteDocument(docId);
-      return { success };
+      await knowledgeBaseService.deleteDocument(parseInt(docId));
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: knowledge:local:deleteDocument failed:', error);
       return { success: false, error: error.message || '删除文档失败' };
@@ -291,11 +334,13 @@ export function registerLocalKnowledgeHandlers(): void {
       if (!user) {
         return { success: false, error: '用户未登录' };
       }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
       
-      const results = knowledgeBaseService.searchDocuments(user.id, query);
-      // 过滤出属于指定知识库的文档
-      const filtered = results.filter(doc => doc.knowledge_base_id === kbId);
-      return { success: true, data: filtered };
+      const results = await knowledgeBaseService.searchDocuments(query, parseInt(kbId));
+      return { success: true, data: results };
     } catch (error: any) {
       log.error('IPC: knowledge:local:search failed:', error);
       return { success: false, error: error.message || '搜索文档失败' };
@@ -334,7 +379,11 @@ export function registerLocalKnowledgeHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const stats = knowledgeBaseService.getStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const knowledgeBaseService = serviceFactory.getKnowledgeBaseService();
+
+      const stats = await knowledgeBaseService.getStats();
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: knowledge:local:getStats failed:', error);
@@ -342,5 +391,5 @@ export function registerLocalKnowledgeHandlers(): void {
     }
   });
 
-  log.info('Local knowledge base IPC handlers registered');
+  log.info('Local knowledge base IPC handlers registered (PostgreSQL)');
 }

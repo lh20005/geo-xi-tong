@@ -30,8 +30,8 @@ windows-login-manager/
 ├── electron/            # Electron 主进程
 │   ├── main.ts         # 应用入口
 │   ├── preload.ts      # 预加载脚本
-│   ├── database/       # 本地 SQLite 数据库
-│   ├── services/       # 本地服务层
+│   ├── database/       # 本地 PostgreSQL 数据库连接 ⭐
+│   ├── services/       # 本地服务层（PostgreSQL 版本）
 │   ├── browser/        # 浏览器自动化
 │   ├── publishing/     # 发布执行引擎
 │   ├── adapters/       # 平台适配器

@@ -1,22 +1,22 @@
 /**
  * 任务 IPC 处理器
  * 处理发布任务的本地 CRUD 操作
- * Requirements: Phase 6 - 注册 IPC 处理器
+ * Requirements: Phase 6 - PostgreSQL 迁移
  */
 
 import { ipcMain } from 'electron';
 import log from 'electron-log';
-import { taskService, CreateTaskParams, TaskQueryParams } from '../../services';
+import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
 
 /**
  * 注册任务相关 IPC 处理器
  */
 export function registerTaskHandlers(): void {
-  log.info('Registering task IPC handlers...');
+  log.info('Registering task IPC handlers (PostgreSQL)...');
 
   // 创建任务
-  ipcMain.handle('task:create', async (_event, params: Omit<CreateTaskParams, 'user_id'>) => {
+  ipcMain.handle('task:create', async (_event, params: any) => {
     try {
       log.info('IPC: task:create');
       const user = await storageManager.getUser();
@@ -24,10 +24,11 @@ export function registerTaskHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const task = taskService.create({
-        ...params,
-        user_id: user.id
-      });
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const task = await taskService.create(params);
 
       return { success: true, data: task };
     } catch (error: any) {
@@ -37,7 +38,7 @@ export function registerTaskHandlers(): void {
   });
 
   // 获取所有任务（分页）
-  ipcMain.handle('task:findAll', async (_event, params?: TaskQueryParams) => {
+  ipcMain.handle('task:findAll', async (_event, params?: any) => {
     try {
       log.info('IPC: task:findAll');
       const user = await storageManager.getUser();
@@ -45,7 +46,11 @@ export function registerTaskHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const result = taskService.query(user.id, params || {});
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const result = await taskService.findPaginated(params || {}, ['article_title', 'platform']);
       return { success: true, data: result };
     } catch (error: any) {
       log.error('IPC: task:findAll failed:', error);
@@ -57,7 +62,16 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:findById', async (_event, id: string) => {
     try {
       log.info(`IPC: task:findById - ${id}`);
-      const task = taskService.findById(id);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const task = await taskService.findById(id);
       
       if (!task) {
         return { success: false, error: '任务不存在' };
@@ -74,8 +88,17 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:updateStatus', async (_event, id: string, status: string, errorMessage?: string) => {
     try {
       log.info(`IPC: task:updateStatus - ${id} -> ${status}`);
-      const success = taskService.updateStatus(id, status, errorMessage);
-      return { success };
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      await taskService.updateStatus(parseInt(id), status, errorMessage);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: task:updateStatus failed:', error);
       return { success: false, error: error.message || '更新任务状态失败' };
@@ -86,8 +109,17 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:cancel', async (_event, id: string) => {
     try {
       log.info(`IPC: task:cancel - ${id}`);
-      const success = taskService.updateStatus(id, 'cancelled', '用户手动取消');
-      return { success };
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      await taskService.updateStatus(parseInt(id), 'cancelled', '用户手动取消');
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: task:cancel failed:', error);
       return { success: false, error: error.message || '取消任务失败' };
@@ -103,14 +135,12 @@ export function registerTaskHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      // 验证任务属于当前用户
-      const task = taskService.findById(id);
-      if (!task || task.user_id !== user.id) {
-        return { success: false, error: '任务不存在或无权删除' };
-      }
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
 
-      const success = taskService.delete(id);
-      return { success };
+      await taskService.delete(id);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: task:delete failed:', error);
       return { success: false, error: error.message || '删除任务失败' };
@@ -126,7 +156,11 @@ export function registerTaskHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const tasks = taskService.findPendingTasks(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const tasks = await taskService.findPendingTasks();
       return { success: true, data: tasks };
     } catch (error: any) {
       log.error('IPC: task:findPending failed:', error);
@@ -138,7 +172,16 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:findByBatchId', async (_event, batchId: string) => {
     try {
       log.info(`IPC: task:findByBatchId - ${batchId}`);
-      const tasks = taskService.findByBatchId(batchId);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const tasks = await taskService.findByBatchId(batchId); // batchId is string
       return { success: true, data: tasks };
     } catch (error: any) {
       log.error('IPC: task:findByBatchId failed:', error);
@@ -150,7 +193,16 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:cancelBatch', async (_event, batchId: string) => {
     try {
       log.info(`IPC: task:cancelBatch - ${batchId}`);
-      const result = taskService.cancelBatch(batchId);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const result = await taskService.cancelBatch(batchId);
       return { success: true, data: result };
     } catch (error: any) {
       log.error('IPC: task:cancelBatch failed:', error);
@@ -162,7 +214,16 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:deleteBatch', async (_event, batchId: string) => {
     try {
       log.info(`IPC: task:deleteBatch - ${batchId}`);
-      const result = taskService.deleteBatch(batchId);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const result = await taskService.deleteBatch(batchId);
       return { success: true, data: result };
     } catch (error: any) {
       log.error('IPC: task:deleteBatch failed:', error);
@@ -174,7 +235,16 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:getBatchStats', async (_event, batchId: string) => {
     try {
       log.info(`IPC: task:getBatchStats - ${batchId}`);
-      const stats = taskService.getBatchStats(batchId);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const stats = await taskService.getBatchStats(batchId);
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: task:getBatchStats failed:', error);
@@ -191,7 +261,11 @@ export function registerTaskHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const stats = taskService.getStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const taskService = serviceFactory.getPublishingTaskService();
+
+      const stats = await taskService.getStats();
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: task:getStats failed:', error);
@@ -203,7 +277,16 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:getLogs', async (_event, taskId: string) => {
     try {
       log.info(`IPC: task:getLogs - ${taskId}`);
-      const logs = taskService.getLogs(taskId);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      const logs = await recordService.findByTaskId(parseInt(taskId));
       return { success: true, data: logs };
     } catch (error: any) {
       log.error('IPC: task:getLogs failed:', error);
@@ -220,10 +303,11 @@ export function registerTaskHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const record = taskService.createRecord({
-        ...params,
-        user_id: user.id
-      });
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      const record = await recordService.create(params);
 
       return { success: true, data: record };
     } catch (error: any) {
@@ -236,13 +320,22 @@ export function registerTaskHandlers(): void {
   ipcMain.handle('task:updateRecord', async (_event, id: string, params: any) => {
     try {
       log.info(`IPC: task:updateRecord - ${id}`);
-      const success = taskService.updateRecord(id, params);
-      return { success };
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      await recordService.update(id, params);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: task:updateRecord failed:', error);
       return { success: false, error: error.message || '更新发布记录失败' };
     }
   });
 
-  log.info('Task IPC handlers registered');
+  log.info('Task IPC handlers registered (PostgreSQL)');
 }

@@ -1901,22 +1901,30 @@ export class ArticleGenerationService {
       throw new Error('蒸馏记录没有关联的话题，无法生成文章');
     }
 
-    // 验证图库
-    const albumResult = await pool.query(
-      'SELECT id FROM albums WHERE id = $1',
-      [task.albumId]
-    );
-    if (albumResult.rows.length === 0) {
-      throw new Error(`图库ID ${task.albumId} 不存在`);
+    // 验证图库（如果是 UUID 格式，说明来自 Windows 端本地数据，跳过验证）
+    if (typeof task.albumId === 'number') {
+      const albumResult = await pool.query(
+        'SELECT id FROM albums WHERE id = $1',
+        [task.albumId]
+      );
+      if (albumResult.rows.length === 0) {
+        throw new Error(`图库ID ${task.albumId} 不存在`);
+      }
+    } else {
+      console.log(`[任务 ${taskId}] 图库ID是UUID格式，跳过服务器验证（来自Windows端本地数据）`);
     }
 
-    // 验证知识库
-    const kbResult = await pool.query(
-      'SELECT id FROM knowledge_bases WHERE id = $1',
-      [task.knowledgeBaseId]
-    );
-    if (kbResult.rows.length === 0) {
-      throw new Error(`知识库ID ${task.knowledgeBaseId} 不存在`);
+    // 验证知识库（如果是 UUID 格式，说明来自 Windows 端本地数据，跳过验证）
+    if (typeof task.knowledgeBaseId === 'number') {
+      const kbResult = await pool.query(
+        'SELECT id FROM knowledge_bases WHERE id = $1',
+        [task.knowledgeBaseId]
+      );
+      if (kbResult.rows.length === 0) {
+        throw new Error(`知识库ID ${task.knowledgeBaseId} 不存在`);
+      }
+    } else {
+      console.log(`[任务 ${taskId}] 知识库ID是UUID格式，跳过服务器验证（来自Windows端本地数据）`);
     }
 
     // 验证文章设置

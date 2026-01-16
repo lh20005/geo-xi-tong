@@ -10,7 +10,8 @@
 - **React Router v6** 路由
 - **Zustand** 状态管理
 - **ECharts** 数据可视化
-- **SQLite** 本地数据库
+- **PostgreSQL** 本地数据库 ⭐ 已从 SQLite 迁移
+- **pg** PostgreSQL 客户端库
 - **Playwright** 本地浏览器自动化
 - 包含完整的用户界面和本地功能执行
 
@@ -34,6 +35,7 @@
 
 ## 关键依赖
 
+- `pg` - PostgreSQL 客户端（Windows 端和服务器端）
 - `playwright` - 浏览器自动化，用于多平台发布
 - `wechatpay-axios-plugin` - 微信支付集成
 - `jsonwebtoken` + `bcrypt` - 认证
@@ -87,11 +89,42 @@ npm run status           # 检查服务状态
 ## 环境变量
 
 通过各项目根目录的 `.env` 文件配置：
-- 数据库：`DATABASE_URL`
-- AI API：`DEEPSEEK_API_KEY`、`GEMINI_API_KEY`、`OLLAMA_BASE_URL`
-- 认证：`JWT_SECRET`、`JWT_REFRESH_SECRET`
-- 浏览器：`PUPPETEER_EXECUTABLE_PATH`、`BROWSER_HEADLESS`
-- 支付：`WECHAT_PAY_*` 系列变量
+
+### Windows 端 (windows-login-manager/.env)
+```bash
+# PostgreSQL 数据库配置（本地）
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=geo_windows
+DB_USER=lzc  # macOS 本地用户
+DB_PASSWORD=  # 本地开发无密码
+
+# API 配置
+VITE_API_BASE_URL=https://jzgeo.cc
+VITE_WS_BASE_URL=wss://jzgeo.cc/ws
+```
+
+### 服务器端 (server/.env)
+```bash
+# PostgreSQL 数据库配置（生产）
+DATABASE_URL=postgresql://geo_user:password@localhost:5432/geo_system
+
+# AI API
+DEEPSEEK_API_KEY=xxx
+GEMINI_API_KEY=xxx
+OLLAMA_BASE_URL=http://localhost:11434
+
+# 认证
+JWT_SECRET=xxx
+JWT_REFRESH_SECRET=xxx
+
+# 浏览器
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+BROWSER_HEADLESS=true
+
+# 支付
+WECHAT_PAY_*=xxx
+```
 
 ## 端口分配
 
@@ -378,19 +411,198 @@ sudo systemctl reload nginx
 | 分析上报 | 发布统计、错误追踪 |
 | 适配器版本 | 适配器热更新支持 |
 
-#### 🔴 迁移到 Windows 端的功能
+#### 🔴 Windows 端本地功能
 
-| 功能 | 说明 |
-|------|------|
-| 文章存储 | SQLite 本地存储 |
-| 知识库存储 | 本地文件系统 |
-| 图库存储 | 本地文件系统 |
-| 平台账号存储 | Cookie 本地加密 |
-| 浏览器自动化 | Playwright 本地执行 |
-| 发布执行 | 发布任务本地执行 |
-| 平台适配器 | 12+ 平台适配器 |
-| 文档解析 | mammoth/pdf-parse |
-| 图片处理 | 图片压缩/格式转换 |
+| 功能 | 说明 | 数据库 |
+|------|------|--------|
+| 文章存储 | PostgreSQL 本地存储 | geo_windows |
+| 知识库存储 | 本地文件系统 + PostgreSQL 元数据 | geo_windows |
+| 图库存储 | 本地文件系统 + PostgreSQL 元数据 | geo_windows |
+| 平台账号存储 | Cookie 本地加密 + PostgreSQL | geo_windows |
+| 浏览器自动化 | Playwright 本地执行 | - |
+| 发布执行 | 发布任务本地执行 | geo_windows |
+| 平台适配器 | 12+ 平台适配器 | - |
+| 文档解析 | mammoth/pdf-parse | - |
+| 图片处理 | 图片压缩/格式转换 | - |
+
+---
+
+## PostgreSQL 数据库配置规范（强制）⭐
+
+### Windows 端本地数据库
+
+**数据库信息**：
+- 数据库名：`geo_windows`
+- 用户：`lzc`（macOS 本地用户）
+- 主机：`localhost`
+- 端口：`5432`
+- 密码：无（本地开发）
+
+**配置文件**：`windows-login-manager/.env`
+```bash
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=geo_windows
+DB_USER=lzc
+DB_PASSWORD=
+```
+
+**初始化命令**：
+```bash
+# 创建数据库（如果不存在）
+createdb geo_windows
+
+# 运行初始化脚本
+cd windows-login-manager
+npm run db:init
+
+# 导入数据
+npm run db:import
+```
+
+### 服务器端生产数据库
+
+**数据库信息**：
+- 数据库名：`geo_system`
+- 用户：`geo_user`
+- 主机：`localhost`
+- 端口：`5432`
+- 密码：（生产环境密码）
+
+**配置文件**：`server/.env`
+```bash
+DATABASE_URL=postgresql://geo_user:password@localhost:5432/geo_system
+```
+
+### 数据库连接规范
+
+#### Windows 端连接池配置
+
+```typescript
+// electron/database/postgres.ts
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || 'geo_windows',
+  user: process.env.DB_USER || 'lzc',
+  password: process.env.DB_PASSWORD || '',
+  max: 10,  // 最大连接数
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+```
+
+#### 服务器端连接池配置
+
+```typescript
+// server/src/db/database.ts
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 20,  // 生产环境更大的连接池
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+```
+
+### 数据库表结构规范
+
+#### 主键类型
+
+| 表类型 | 主键类型 | 说明 |
+|--------|---------|------|
+| 用户相关 | `SERIAL` | 自增整数 |
+| 文章/任务 | `SERIAL` | 自增整数 |
+| 知识库/图库 | `SERIAL` | 自增整数 |
+| 平台账号 | `SERIAL` | 自增整数 |
+
+#### 字段命名规范
+
+- 使用 `snake_case`（不是 camelCase）
+- 示例：`user_id`, `created_at`, `is_published`
+
+#### 时间戳字段
+
+```sql
+created_at TIMESTAMP DEFAULT NOW(),
+updated_at TIMESTAMP DEFAULT NOW()
+```
+
+#### 布尔字段
+
+```sql
+is_published BOOLEAN DEFAULT FALSE,
+is_default BOOLEAN DEFAULT FALSE
+```
+
+### 数据库迁移规范
+
+#### Windows 端迁移文件位置
+
+```
+windows-login-manager/electron/database/migrations/
+├── 001_initial_schema.sql
+├── 002_add_indexes.sql
+└── ...
+```
+
+#### 服务器端迁移文件位置
+
+```
+server/src/db/migrations/
+├── 001_create_users.sql
+├── 002_create_articles.sql
+└── ...
+```
+
+### 外键约束替代方案
+
+**重要**：Windows 端 PostgreSQL 不使用外键约束，改用应用层验证。
+
+**原因**：
+- 避免级联删除的复杂性
+- 提高数据操作灵活性
+- 简化数据迁移和同步
+
+**实现方式**：
+```typescript
+// 在 Service 层验证关联
+async create(data: CreateInput): Promise<Entity> {
+  // 验证 user_id 存在
+  const userExists = await this.pool.query(
+    'SELECT 1 FROM users WHERE id = $1',
+    [data.user_id]
+  );
+  
+  if (userExists.rows.length === 0) {
+    throw new Error('User not found');
+  }
+  
+  // 执行插入
+  // ...
+}
+```
+
+### 数据库备份规范
+
+#### Windows 端备份
+
+```bash
+# 导出数据
+pg_dump -U lzc -d geo_windows -f backup_$(date +%Y%m%d).sql
+
+# 导入数据
+psql -U lzc -d geo_windows -f backup_20260116.sql
+```
+
+#### 服务器端备份
+
+```bash
+# 导出数据
+sudo -u postgres pg_dump -d geo_system -f backup_$(date +%Y%m%d).sql
+
+# 导入数据
+sudo -u postgres psql -d geo_system -f backup_20260116.sql
+```
 
 ---
 
@@ -398,58 +610,70 @@ sudo systemctl reload nginx
 
 ### 问题背景
 
-服务器（PostgreSQL）和 Windows 端（SQLite）使用不同数据库，ID 格式必须统一才能互相引用。
+服务器（PostgreSQL）和 Windows 端（PostgreSQL）都使用 PostgreSQL，但需要统一 ID 格式以便数据同步和引用。
 
-### 解决方案：统一使用 UUID v4 格式
+### 解决方案：统一使用 SERIAL（自增整数）
 
-| 场景 | 服务器（PostgreSQL） | Windows 端（SQLite） | 示例 |
-|------|---------------------|---------------------|------|
-| 配额预留 ID | `UUID` 类型 | `TEXT` 存储 | `550e8400-e29b-41d4-a716-446655440000` |
-| 文章 ID | `SERIAL` (数字) | `TEXT` (UUID) | Windows 端生成 UUID |
-| 任务 ID | - | `TEXT` (UUID) | Windows 端生成 UUID |
-| 用户 ID | `SERIAL` (数字) | `INTEGER` | 服务器返回，Windows 端存储 |
+| 场景 | 服务器（PostgreSQL） | Windows 端（PostgreSQL） | 说明 |
+|------|---------------------|------------------------|------|
+| 用户 ID | `SERIAL` (INTEGER) | `INTEGER` | 服务器生成，Windows 端存储 |
+| 文章 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
+| 任务 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
+| 知识库 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
+| 图库 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
+| 配额预留 ID | `UUID` | `TEXT` | 服务器生成 UUID，Windows 端存储为 TEXT |
 
 ### 关键规则
 
-1. **服务器生成的 ID**（如 `reservationId`）
+1. **服务器生成的 ID**（如用户 ID）
+   - 类型：SERIAL（自增整数）
+   - Windows 端：INTEGER 存储
+   - 示例：`userId: 123`
+
+2. **Windows 端生成的 ID**（如文章、任务）
+   - 类型：SERIAL（自增整数）
+   - 本地唯一即可
+   - 示例：`articleId: 456`
+
+3. **配额预留 ID**（特殊情况）
    - 服务器：UUID 类型
    - Windows 端：TEXT 存储
    - 示例：`reservationId: '550e8400-e29b-41d4-a716-446655440000'`
 
-2. **Windows 端生成的 ID**（如文章、任务）
-   - 使用 `uuid` 包生成 v4 UUID
-   - 存储为 TEXT
-   - 示例：`articleId: uuid.v4()`
-
-3. **用户 ID**（特殊情况）
-   - 服务器：SERIAL（数字，如 `123`）
-   - Windows 端：INTEGER 存储
-   - 从服务器 JWT token 中获取
-
 ### 代码示例
 
 ```typescript
-// Windows 端生成 UUID
-import { v4 as uuidv4 } from 'uuid';
+// Windows 端创建文章（自动生成 ID）
+const result = await pool.query(
+  `INSERT INTO articles (user_id, title, content, created_at, updated_at)
+   VALUES ($1, $2, $3, NOW(), NOW())
+   RETURNING id`,
+  [userId, title, content]
+);
+const articleId = result.rows[0].id;  // SERIAL 自动生成的整数 ID
 
-// 创建文章
-const articleId = uuidv4();  // '550e8400-e29b-41d4-a716-446655440000'
-db.prepare('INSERT INTO articles (id, ...) VALUES (?, ...)').run(articleId, ...);
-
-// 关联服务器的预留 ID
+// 关联服务器的预留 ID（UUID）
 const { reservationId } = await apiClient.post('/api/quota/reserve', { ... });
-db.prepare('UPDATE publishing_tasks SET reservation_id = ? WHERE id = ?')
-  .run(reservationId, taskId);
+await pool.query(
+  'UPDATE publishing_tasks SET reservation_id = $1 WHERE id = $2',
+  [reservationId, taskId]  // reservationId 是 UUID 字符串
+);
 ```
 
-### UUID 格式验证
+### PostgreSQL SERIAL 类型说明
 
-```typescript
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+```sql
+-- SERIAL 是 PostgreSQL 的自增整数类型
+CREATE TABLE articles (
+    id SERIAL PRIMARY KEY,  -- 等价于 INTEGER PRIMARY KEY + 自动序列
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 
-function isValidUUID(id: string): boolean {
-  return UUID_REGEX.test(id);
-}
+-- 插入时不需要指定 id
+INSERT INTO articles (user_id, title) VALUES (1, 'Test');
+-- id 会自动生成：1, 2, 3, ...
 ```
 
 ---
@@ -490,15 +714,19 @@ DROP TABLE IF EXISTS table_name;
 
 ### SQLite 与 PostgreSQL 字段对照
 
-| PostgreSQL | SQLite | 说明 |
-|------------|--------|------|
-| `SERIAL` | `INTEGER PRIMARY KEY AUTOINCREMENT` | 自增主键 |
-| `UUID` | `TEXT` | UUID 存为字符串 |
-| `BOOLEAN` | `INTEGER` | 0/1 代替 true/false |
-| `TIMESTAMP` | `TEXT` | ISO 8601 格式字符串 |
-| `JSONB` | `TEXT` | JSON 字符串 |
-| `VARCHAR(n)` | `TEXT` | SQLite 无长度限制 |
-| `DECIMAL(m,n)` | `REAL` | 浮点数 |
+**注意**：Windows 端已从 SQLite 迁移到 PostgreSQL，以下对照表仅供历史参考。
+
+| PostgreSQL | 说明 | 示例 |
+|------------|------|------|
+| `SERIAL` | 自增主键 | `id SERIAL PRIMARY KEY` |
+| `INTEGER` | 整数 | `user_id INTEGER NOT NULL` |
+| `TEXT` | 文本（无长度限制） | `content TEXT` |
+| `VARCHAR(n)` | 可变长度字符串 | `username VARCHAR(50)` |
+| `BOOLEAN` | 布尔值 | `is_published BOOLEAN DEFAULT FALSE` |
+| `TIMESTAMP` | 时间戳 | `created_at TIMESTAMP DEFAULT NOW()` |
+| `JSONB` | JSON 二进制格式 | `metadata JSONB` |
+| `DECIMAL(m,n)` | 精确小数 | `price DECIMAL(10,2)` |
+| `UUID` | UUID 类型 | `reservation_id UUID` |
 
 ### 迁移必须完整
 
@@ -653,23 +881,75 @@ DELETE /api/sync/snapshots/:snapshotId
 
 ---
 
-## Windows 端 SQLite 规范
+## PostgreSQL 连接和查询示例
 
-### 数据库初始化
+### 数据库连接初始化
 
 ```typescript
-// 启用外键约束
-this.db.pragma('foreign_keys = ON');
+import { Pool } from 'pg';
 
-// 启用 WAL 模式（提高并发性能）
-this.db.pragma('journal_mode = WAL');
+// Windows 端连接配置
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  database: process.env.DB_NAME || 'geo_windows',
+  user: process.env.DB_USER || 'lzc',
+  password: process.env.DB_PASSWORD || '',
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+// 测试连接
+async function testConnection() {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    console.log('✅ PostgreSQL 连接成功:', result.rows[0].now);
+  } catch (error) {
+    console.error('❌ PostgreSQL 连接失败:', error);
+  }
+}
 ```
 
-### 数据库存储位置
+### CRUD 操作示例
 
 ```typescript
-const userDataPath = app.getPath('userData');
-const dbPath = path.join(userDataPath, 'geo-data.db');
+// 创建文章
+async function createArticle(data: CreateArticleInput): Promise<Article> {
+  const result = await pool.query(
+    `INSERT INTO articles (user_id, title, content, created_at, updated_at)
+     VALUES ($1, $2, $3, NOW(), NOW())
+     RETURNING *`,
+    [data.userId, data.title, data.content]
+  );
+  return result.rows[0];
+}
+
+// 查询文章
+async function findArticleById(id: number): Promise<Article | null> {
+  const result = await pool.query(
+    'SELECT * FROM articles WHERE id = $1',
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+// 更新文章
+async function updateArticle(id: number, data: UpdateArticleInput): Promise<Article> {
+  const result = await pool.query(
+    `UPDATE articles 
+     SET title = $1, content = $2, updated_at = NOW()
+     WHERE id = $3
+     RETURNING *`,
+    [data.title, data.content, id]
+  );
+  return result.rows[0];
+}
+
+// 删除文章
+async function deleteArticle(id: number): Promise<void> {
+  await pool.query('DELETE FROM articles WHERE id = $1', [id]);
+}
 ```
 
 ### Cookie 加密存储
@@ -687,6 +967,25 @@ function encrypt(data: string): string {
 
 function decrypt(encrypted: string): string {
   return CryptoJS.AES.decrypt(encrypted, machineKey).toString(CryptoJS.enc.Utf8);
+}
+
+// 存储加密的 Cookie
+async function savePlatformCookies(accountId: number, cookies: string): Promise<void> {
+  const encrypted = encrypt(cookies);
+  await pool.query(
+    'UPDATE platform_accounts SET cookies = $1, updated_at = NOW() WHERE id = $2',
+    [encrypted, accountId]
+  );
+}
+
+// 读取并解密 Cookie
+async function getPlatformCookies(accountId: number): Promise<string> {
+  const result = await pool.query(
+    'SELECT cookies FROM platform_accounts WHERE id = $1',
+    [accountId]
+  );
+  const encrypted = result.rows[0]?.cookies;
+  return encrypted ? decrypt(encrypted) : '';
 }
 ```
 
@@ -782,16 +1081,22 @@ async flushPendingReports(): Promise<void> {
 1. 在服务器端执行浏览器自动化（改造后）
 2. 在服务器端存储用户文章/知识库/图片（改造后）
 3. 在服务器端存储平台 Cookie
-4. 使用不一致的 ID 格式
+4. 使用不一致的 ID 格式（必须使用 SERIAL）
 5. 跳过配额预扣减直接执行任务
 6. 创建不完整的数据库迁移
 7. 在 Windows 端明文存储敏感数据
+8. 在 Windows 端使用 SQLite（已迁移到 PostgreSQL）
+9. 在 PostgreSQL 中使用外键约束（使用应用层验证）
 
 ### ✅ 必须遵守
 
 1. 所有消耗配额的操作必须使用预扣减机制
 2. AI 生成必须使用确认机制
 3. 数据库迁移必须包含完整的 UP/DOWN
-4. Windows 端 ID 必须使用 UUID v4
-5. Cookie 必须加密存储
-6. 分析数据必须上报（支持离线队列）
+4. Windows 端和服务器端都使用 PostgreSQL
+5. Windows 端数据库名：`geo_windows`，用户：`lzc`
+6. 服务器端数据库名：`geo_system`，用户：`geo_user`
+7. Cookie 必须加密存储
+8. 分析数据必须上报（支持离线队列）
+9. 字段命名使用 `snake_case`（不是 camelCase）
+10. 主键使用 SERIAL 类型（自增整数）

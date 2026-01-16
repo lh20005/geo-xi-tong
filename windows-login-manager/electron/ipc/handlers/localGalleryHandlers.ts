@@ -1,24 +1,24 @@
 /**
  * 本地图库 IPC 处理器
  * 处理图库的本地 CRUD 操作
- * Requirements: Phase 6 - 注册 IPC 处理器
+ * Requirements: Phase 6 - PostgreSQL 迁移
  */
 
 import { ipcMain, app } from 'electron';
 import log from 'electron-log';
 import * as path from 'path';
 import * as fs from 'fs';
-import { galleryService, CreateAlbumParams } from '../../services';
+import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
 
 /**
  * 注册本地图库相关 IPC 处理器
  */
 export function registerLocalGalleryHandlers(): void {
-  log.info('Registering local gallery IPC handlers...');
+  log.info('Registering local gallery IPC handlers (PostgreSQL)...');
 
   // 创建相册
-  ipcMain.handle('gallery:createAlbum', async (_event, params: Omit<CreateAlbumParams, 'user_id'>) => {
+  ipcMain.handle('gallery:createAlbum', async (_event, params: any) => {
     try {
       log.info('IPC: gallery:createAlbum');
       const user = await storageManager.getUser();
@@ -26,14 +26,15 @@ export function registerLocalGalleryHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const album = galleryService.createAlbum({
-        ...params,
-        user_id: user.id
-      });
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
+
+      const album = await albumService.create(params);
 
       // 创建相册目录
       const userDataPath = app.getPath('userData');
-      const albumPath = path.join(userDataPath, 'gallery', album.id);
+      const albumPath = path.join(userDataPath, 'gallery', album.id.toString());
       if (!fs.existsSync(albumPath)) {
         fs.mkdirSync(albumPath, { recursive: true });
       }
@@ -54,7 +55,11 @@ export function registerLocalGalleryHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const albums = galleryService.findAlbumsWithStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
+
+      const albums = await albumService.findAllWithStats();
       return { success: true, data: albums };
     } catch (error: any) {
       log.error('IPC: gallery:findAlbums failed:', error);
@@ -66,8 +71,16 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:getAlbum', async (_event, albumId: string) => {
     try {
       log.info(`IPC: gallery:getAlbum - ${albumId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
       
-      const album = galleryService.getAlbumWithStats(albumId);
+      const album = await albumService.findByIdWithStats(parseInt(albumId));
       if (!album) {
         return { success: false, error: '相册不存在' };
       }
@@ -83,8 +96,16 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:updateAlbum', async (_event, albumId: string, params: { name?: string; description?: string }) => {
     try {
       log.info(`IPC: gallery:updateAlbum - ${albumId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
       
-      const album = galleryService.updateAlbum(albumId, params.name || '');
+      const album = await albumService.update(albumId, params);
       if (!album) {
         return { success: false, error: '相册不存在' };
       }
@@ -112,8 +133,12 @@ export function registerLocalGalleryHandlers(): void {
         fs.rmSync(albumPath, { recursive: true, force: true });
       }
 
-      const success = galleryService.deleteAlbum(albumId, user.id);
-      return { success };
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
+
+      await albumService.delete(albumId);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: gallery:deleteAlbum failed:', error);
       return { success: false, error: error.message || '删除相册失败' };
@@ -133,7 +158,12 @@ export function registerLocalGalleryHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const album = galleryService.findAlbumById(albumId);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
+      const imageService = serviceFactory.getImageService();
+
+      const album = await albumService.findById(albumId);
       if (!album) {
         return { success: false, error: '相册不存在' };
       }
@@ -162,16 +192,10 @@ export function registerLocalGalleryHandlers(): void {
           
           // 复制文件到相册目录
           fs.writeFileSync(destPath, content);
-          
-          // 获取图片尺寸（简单实现）
-          // TODO: 使用 sharp 或其他库获取实际尺寸
-          const width = 0;
-          const height = 0;
 
           // 创建图片记录
-          const image = galleryService.uploadImage({
-            user_id: user.id,
-            album_id: albumId,
+          const image = await imageService.create({
+            album_id: parseInt(albumId),
             filename: file.name,
             filepath: destPath,
             mime_type: file.type,
@@ -201,8 +225,16 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:findImages', async (_event, albumId: string) => {
     try {
       log.info(`IPC: gallery:findImages - ${albumId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const imageService = serviceFactory.getImageService();
       
-      const images = galleryService.findImagesByAlbum(albumId);
+      const images = await imageService.findByAlbum(parseInt(albumId));
       return { success: true, data: images };
     } catch (error: any) {
       log.error('IPC: gallery:findImages failed:', error);
@@ -214,8 +246,16 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:getImage', async (_event, imageId: string) => {
     try {
       log.info(`IPC: gallery:getImage - ${imageId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const imageService = serviceFactory.getImageService();
       
-      const image = galleryService.findImageById(imageId);
+      const image = await imageService.findById(imageId);
       if (!image) {
         return { success: false, error: '图片不存在' };
       }
@@ -231,9 +271,17 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:deleteImage', async (_event, imageId: string) => {
     try {
       log.info(`IPC: gallery:deleteImage - ${imageId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const imageService = serviceFactory.getImageService();
       
-      const result = galleryService.deleteImage(imageId);
-      return { success: result.success, data: result };
+      await imageService.delete(imageId);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: gallery:deleteImage failed:', error);
       return { success: false, error: error.message || '删除图片失败' };
@@ -244,14 +292,16 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:deleteImages', async (_event, imageIds: string[]) => {
     try {
       log.info(`IPC: gallery:deleteImages - ${imageIds.length} images`);
-      
-      let deletedCount = 0;
-      for (const imageId of imageIds) {
-        const result = galleryService.deleteImage(imageId);
-        if (result.success) {
-          deletedCount++;
-        }
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
       }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const imageService = serviceFactory.getImageService();
+      
+      const deletedCount = await imageService.deleteMany(imageIds);
 
       return { success: true, data: { deletedCount } };
     } catch (error: any) {
@@ -264,13 +314,22 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:moveImage', async (_event, imageId: string, targetAlbumId: string) => {
     try {
       log.info(`IPC: gallery:moveImage - ${imageId} -> ${targetAlbumId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const imageService = serviceFactory.getImageService();
+      const albumService = serviceFactory.getAlbumService();
       
-      const image = galleryService.findImageById(imageId);
+      const image = await imageService.findById(imageId);
       if (!image) {
         return { success: false, error: '图片不存在' };
       }
 
-      const targetAlbum = galleryService.findAlbumById(targetAlbumId);
+      const targetAlbum = await albumService.findById(targetAlbumId);
       if (!targetAlbum) {
         return { success: false, error: '目标相册不存在' };
       }
@@ -287,11 +346,11 @@ export function registerLocalGalleryHandlers(): void {
         const newFilePath = path.join(targetPath, path.basename(image.filepath));
         fs.renameSync(image.filepath, newFilePath);
 
-        // 更新数据库记录 - 使用 db 直接更新
-        const db = galleryService['db'];
-        db.prepare(`
-          UPDATE images SET album_id = ?, filepath = ?, updated_at = ? WHERE id = ?
-        `).run(targetAlbumId, newFilePath, new Date().toISOString(), imageId);
+        // 更新数据库记录
+        await imageService.update(imageId, {
+          album_id: parseInt(targetAlbumId),
+          filepath: newFilePath
+        });
       }
 
       return { success: true };
@@ -310,7 +369,11 @@ export function registerLocalGalleryHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const stats = galleryService.getStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const albumService = serviceFactory.getAlbumService();
+
+      const stats = await albumService.getStats();
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: gallery:getStats failed:', error);
@@ -322,8 +385,16 @@ export function registerLocalGalleryHandlers(): void {
   ipcMain.handle('gallery:readImageFile', async (_event, imageId: string) => {
     try {
       log.info(`IPC: gallery:readImageFile - ${imageId}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const imageService = serviceFactory.getImageService();
       
-      const image = galleryService.findImageById(imageId);
+      const image = await imageService.findById(imageId);
       if (!image || !image.filepath) {
         return { success: false, error: '图片不存在' };
       }
@@ -350,5 +421,5 @@ export function registerLocalGalleryHandlers(): void {
     }
   });
 
-  log.info('Local gallery IPC handlers registered');
+  log.info('Local gallery IPC handlers registered (PostgreSQL)');
 }

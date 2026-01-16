@@ -1,12 +1,12 @@
 /**
  * 本地账号 IPC 处理器
- * 处理平台账号的本地 CRUD 操作（使用 SQLite + 加密）
- * Requirements: Phase 6 - 注册 IPC 处理器
+ * 处理平台账号的本地 CRUD 操作（使用 PostgreSQL + 加密）
+ * Requirements: Phase 6 - PostgreSQL 迁移
  */
 
 import { ipcMain } from 'electron';
 import log from 'electron-log';
-import { accountService, CreateAccountParams, UpdateAccountParams } from '../../services';
+import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
 
 /**
@@ -14,10 +14,10 @@ import { storageManager } from '../../storage/manager';
  * 注意：这些处理器使用 'account:local:' 前缀，与现有的服务器账号处理器区分
  */
 export function registerLocalAccountHandlers(): void {
-  log.info('Registering local account IPC handlers...');
+  log.info('Registering local account IPC handlers (PostgreSQL)...');
 
   // 创建账号
-  ipcMain.handle('account:local:create', async (_event, params: Omit<CreateAccountParams, 'user_id'>) => {
+  ipcMain.handle('account:local:create', async (_event, params: any) => {
     try {
       log.info('IPC: account:local:create');
       const user = await storageManager.getUser();
@@ -25,10 +25,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const account = accountService.create({
-        ...params,
-        user_id: user.id
-      });
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const account = await accountService.create(params);
 
       // 转换字段名从 snake_case 到 camelCase
       const formattedAccount = {
@@ -39,7 +40,7 @@ export function registerLocalAccountHandlers(): void {
         accountName: account.account_name,
         realUsername: account.real_username,
         status: account.status || 'unknown',
-        isDefault: account.is_default === 1,
+        isDefault: Boolean(account.is_default),
         errorMessage: account.error_message,
         lastUsedAt: account.last_used_at,
         createdAt: account.created_at,
@@ -62,7 +63,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const accounts = accountService.findAll(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const accounts = await accountService.findAll();
       // 转换字段名从 snake_case 到 camelCase，以匹配前端接口
       const formattedAccounts = accounts.map((acc: any) => ({
         id: acc.id,
@@ -72,7 +77,7 @@ export function registerLocalAccountHandlers(): void {
         accountName: acc.account_name,
         realUsername: acc.real_username,
         status: acc.status || 'unknown',
-        isDefault: acc.is_default === 1,
+        isDefault: Boolean(acc.is_default),
         errorMessage: acc.error_message,
         lastUsedAt: acc.last_used_at,
         createdAt: acc.created_at,
@@ -89,7 +94,16 @@ export function registerLocalAccountHandlers(): void {
   ipcMain.handle('account:local:findById', async (_event, id: string) => {
     try {
       log.info(`IPC: account:local:findById - ${id}`);
-      const account = accountService.findById(id);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const account = await accountService.findById(id);
       
       if (!account) {
         return { success: false, error: '账号不存在' };
@@ -104,7 +118,7 @@ export function registerLocalAccountHandlers(): void {
         accountName: account.account_name,
         realUsername: account.real_username,
         status: account.status || 'unknown',
-        isDefault: account.is_default === 1,
+        isDefault: Boolean(account.is_default),
         errorMessage: account.error_message,
         lastUsedAt: account.last_used_at,
         createdAt: account.created_at,
@@ -127,7 +141,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const accounts = accountService.findByPlatform(user.id, platformId);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const accounts = await accountService.findByPlatform(platformId);
       // 转换字段名从 snake_case 到 camelCase
       const formattedAccounts = accounts.map((acc: any) => ({
         id: acc.id,
@@ -137,7 +155,7 @@ export function registerLocalAccountHandlers(): void {
         accountName: acc.account_name,
         realUsername: acc.real_username,
         status: acc.status || 'unknown',
-        isDefault: acc.is_default === 1,
+        isDefault: Boolean(acc.is_default),
         errorMessage: acc.error_message,
         lastUsedAt: acc.last_used_at,
         createdAt: acc.created_at,
@@ -151,10 +169,19 @@ export function registerLocalAccountHandlers(): void {
   });
 
   // 更新账号
-  ipcMain.handle('account:local:update', async (_event, id: string, params: UpdateAccountParams) => {
+  ipcMain.handle('account:local:update', async (_event, id: string, params: any) => {
     try {
       log.info(`IPC: account:local:update - ${id}`);
-      const account = accountService.update(id, params);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const account = await accountService.update(id, params);
       
       if (!account) {
         return { success: false, error: '账号不存在' };
@@ -169,7 +196,7 @@ export function registerLocalAccountHandlers(): void {
         accountName: account.account_name,
         realUsername: account.real_username,
         status: account.status || 'unknown',
-        isDefault: account.is_default === 1,
+        isDefault: Boolean(account.is_default),
         errorMessage: account.error_message,
         lastUsedAt: account.last_used_at,
         createdAt: account.created_at,
@@ -192,11 +219,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const success = accountService.delete(id, user.id);
-      
-      if (!success) {
-        return { success: false, error: '账号不存在或无权删除' };
-      }
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      await accountService.delete(id);
 
       return { success: true };
     } catch (error: any) {
@@ -214,8 +241,12 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const success = accountService.setDefaultAccount(user.id, platformId, accountId);
-      return { success };
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      await accountService.setDefaultAccount(platformId, accountId);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: account:local:setDefault failed:', error);
       return { success: false, error: error.message || '设置默认账号失败' };
@@ -231,7 +262,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const account = accountService.getDefaultAccount(user.id, platformId);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const account = await accountService.getDefaultAccount(platformId);
       if (!account) {
         return { success: true, data: null };
       }
@@ -245,7 +280,7 @@ export function registerLocalAccountHandlers(): void {
         accountName: account.account_name,
         realUsername: account.real_username,
         status: account.status || 'unknown',
-        isDefault: account.is_default === 1,
+        isDefault: Boolean(account.is_default),
         errorMessage: account.error_message,
         lastUsedAt: account.last_used_at,
         createdAt: account.created_at,
@@ -262,9 +297,17 @@ export function registerLocalAccountHandlers(): void {
   ipcMain.handle('account:local:updateLoginStatus', async (_event, id: string, status: string, errorMessage?: string) => {
     try {
       log.info(`IPC: account:local:updateLoginStatus - ${id} -> ${status}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
       
-      const success = accountService.updateStatus(id, status, errorMessage);
-      return { success };
+      await accountService.updateStatus(id, status, errorMessage);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: account:local:updateLoginStatus failed:', error);
       return { success: false, error: error.message || '更新登录状态失败' };
@@ -275,9 +318,17 @@ export function registerLocalAccountHandlers(): void {
   ipcMain.handle('account:local:saveCookies', async (_event, id: string, cookies: any[]) => {
     try {
       log.info(`IPC: account:local:saveCookies - ${id}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
       
-      const success = accountService.updateCookies(id, cookies);
-      return { success };
+      await accountService.updateCookies(id, cookies);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: account:local:saveCookies failed:', error);
       return { success: false, error: error.message || '保存 Cookies 失败' };
@@ -288,8 +339,16 @@ export function registerLocalAccountHandlers(): void {
   ipcMain.handle('account:local:getCookies', async (_event, id: string) => {
     try {
       log.info(`IPC: account:local:getCookies - ${id}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
       
-      const account = accountService.getDecrypted(id);
+      const account = await accountService.getDecrypted(id);
       return { success: true, data: account?.cookies || null };
     } catch (error: any) {
       log.error('IPC: account:local:getCookies failed:', error);
@@ -306,7 +365,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const stats = accountService.getStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const stats = await accountService.getStats();
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: account:local:getStats failed:', error);
@@ -323,7 +386,11 @@ export function registerLocalAccountHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const exists = accountService.existsByPlatform(user.id, platformId, platformUserId);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
+      const exists = await accountService.existsByPlatform(platformId, platformUserId);
       return { success: true, data: { exists } };
     } catch (error: any) {
       log.error('IPC: account:local:exists failed:', error);
@@ -331,5 +398,5 @@ export function registerLocalAccountHandlers(): void {
     }
   });
 
-  log.info('Local account IPC handlers registered');
+  log.info('Local account IPC handlers registered (PostgreSQL)');
 }

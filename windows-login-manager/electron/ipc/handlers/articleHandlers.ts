@@ -1,22 +1,22 @@
 /**
  * 文章 IPC 处理器
  * 处理文章的本地 CRUD 操作
- * Requirements: Phase 6 - 注册 IPC 处理器
+ * Requirements: Phase 6 - PostgreSQL 迁移
  */
 
 import { ipcMain } from 'electron';
 import log from 'electron-log';
-import { articleService, CreateArticleParams, UpdateArticleParams, ArticleQueryParams } from '../../services';
+import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
 
 /**
  * 注册文章相关 IPC 处理器
  */
 export function registerArticleHandlers(): void {
-  log.info('Registering article IPC handlers...');
+  log.info('Registering article IPC handlers (PostgreSQL)...');
 
   // 创建文章
-  ipcMain.handle('article:create', async (_event, params: Omit<CreateArticleParams, 'user_id'>) => {
+  ipcMain.handle('article:create', async (_event, params: any) => {
     try {
       log.info('IPC: article:create');
       const user = await storageManager.getUser();
@@ -24,10 +24,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const article = articleService.create({
-        ...params,
-        user_id: user.id
-      });
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const article = await articleService.create(params);
 
       return { success: true, data: article };
     } catch (error: any) {
@@ -37,7 +38,7 @@ export function registerArticleHandlers(): void {
   });
 
   // 获取所有文章（分页）
-  ipcMain.handle('article:findAll', async (_event, params?: ArticleQueryParams) => {
+  ipcMain.handle('article:findAll', async (_event, params?: any) => {
     try {
       log.info('IPC: article:findAll');
       const user = await storageManager.getUser();
@@ -45,7 +46,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const result = articleService.query(user.id, params || {});
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const result = await articleService.findPaginated(params || {}, ['title', 'content', 'keywords']);
       return { success: true, data: result };
     } catch (error: any) {
       log.error('IPC: article:findAll failed:', error);
@@ -57,7 +62,16 @@ export function registerArticleHandlers(): void {
   ipcMain.handle('article:findById', async (_event, id: string) => {
     try {
       log.info(`IPC: article:findById - ${id}`);
-      const article = articleService.findById(id);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const article = await articleService.findById(id);
       
       if (!article) {
         return { success: false, error: '文章不存在' };
@@ -71,10 +85,19 @@ export function registerArticleHandlers(): void {
   });
 
   // 更新文章
-  ipcMain.handle('article:update', async (_event, id: string, params: UpdateArticleParams) => {
+  ipcMain.handle('article:update', async (_event, id: string, params: any) => {
     try {
       log.info(`IPC: article:update - ${id}`);
-      const article = articleService.update(id, params);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const article = await articleService.update(id, params);
       
       if (!article) {
         return { success: false, error: '文章不存在' };
@@ -96,11 +119,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const success = articleService.delete(id, user.id);
-      
-      if (!success) {
-        return { success: false, error: '文章不存在或无权删除' };
-      }
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      await articleService.delete(id);
 
       return { success: true };
     } catch (error: any) {
@@ -110,7 +133,7 @@ export function registerArticleHandlers(): void {
   });
 
   // 搜索文章
-  ipcMain.handle('article:search', async (_event, params: ArticleQueryParams) => {
+  ipcMain.handle('article:search', async (_event, params: any) => {
     try {
       log.info('IPC: article:search');
       const user = await storageManager.getUser();
@@ -118,7 +141,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const result = articleService.query(user.id, params);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const result = await articleService.findPaginated(params, ['title', 'content', 'keywords']);
       return { success: true, data: result };
     } catch (error: any) {
       log.error('IPC: article:search failed:', error);
@@ -135,8 +162,12 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const result = articleService.deleteBatch(user.id, ids);
-      return { success: true, data: result };
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const count = await articleService.deleteMany(ids);
+      return { success: true, data: { deletedCount: count } };
     } catch (error: any) {
       log.error('IPC: article:deleteBatch failed:', error);
       return { success: false, error: error.message || '批量删除失败' };
@@ -152,8 +183,16 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const result = articleService.deleteAll(user.id);
-      return { success: true, data: result };
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      // 获取所有文章 ID 并删除
+      const articles = await articleService.findAll();
+      const ids = articles.map(a => a.id);
+      const count = await articleService.deleteMany(ids);
+      
+      return { success: true, data: { deletedCount: count } };
     } catch (error: any) {
       log.error('IPC: article:deleteAll failed:', error);
       return { success: false, error: error.message || '删除所有文章失败' };
@@ -169,7 +208,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const stats = articleService.getStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const stats = await articleService.getStats();
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: article:getStats failed:', error);
@@ -186,7 +229,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const stats = articleService.getKeywordStats(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const stats = await articleService.getKeywordStats();
       return { success: true, data: stats };
     } catch (error: any) {
       log.error('IPC: article:getKeywordStats failed:', error);
@@ -198,8 +245,17 @@ export function registerArticleHandlers(): void {
   ipcMain.handle('article:markAsPublished', async (_event, id: string, publishedAt?: string) => {
     try {
       log.info(`IPC: article:markAsPublished - ${id}`);
-      const success = articleService.markAsPublished(id, publishedAt);
-      return { success };
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      await articleService.markAsPublished(parseInt(id), publishedAt);
+      return { success: true };
     } catch (error: any) {
       log.error('IPC: article:markAsPublished failed:', error);
       return { success: false, error: error.message || '标记发布状态失败' };
@@ -215,7 +271,11 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '用户未登录' };
       }
 
-      const articles = articleService.findUnpublished(user.id);
+      // 设置用户 ID 并获取服务
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const articles = await articleService.findUnpublished();
       return { success: true, data: articles };
     } catch (error: any) {
       log.error('IPC: article:findUnpublished failed:', error);
@@ -223,5 +283,5 @@ export function registerArticleHandlers(): void {
     }
   });
 
-  log.info('Article IPC handlers registered');
+  log.info('Article IPC handlers registered (PostgreSQL)');
 }

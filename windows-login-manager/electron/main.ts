@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu } from 'electron';
 import path from 'path';
+import * as dotenv from 'dotenv';
 import { ipcHandler } from './ipc/handler';
 import { registerAllLocalHandlers, cleanupAllLocalHandlers } from './ipc/handlers';
 import { Logger } from './logger/logger';
@@ -12,7 +13,15 @@ import { userWsManager, UserWebSocketManager } from './websocket/userManager';
 import { storageManager } from './storage/manager';
 import { AutoUpdater } from './updater/auto-updater';
 import { sqliteManager } from './database/sqlite';
+import { initializePostgres, closePostgres } from './database/postgres';
 import { registerLocalFileProtocol } from './protocol/localFile';
+
+// 加载环境变量（必须在最开始）
+const envPath = path.join(__dirname, '../../.env');
+dotenv.config({ path: envPath });
+console.log('✅ 环境变量已加载:', envPath);
+console.log('DB_USER:', process.env.DB_USER);
+console.log('DB_NAME:', process.env.DB_NAME);
 
 // 初始化核心服务
 const logger = Logger.getInstance();
@@ -67,9 +76,9 @@ class ApplicationManager {
       // 注册IPC处理器
       await ipcHandler.registerHandlers();
       
-      // 初始化本地 SQLite 数据库（Phase 2）
-      await sqliteManager.initialize();
-      logger.info('SQLite database initialized');
+      // 初始化 PostgreSQL 数据库（Phase 6 - 迁移到 PostgreSQL）
+      await initializePostgres();
+      logger.info('PostgreSQL database initialized');
       
       // 注册本地数据相关的 IPC 处理器（Phase 6）
       registerAllLocalHandlers();
@@ -109,8 +118,12 @@ class ApplicationManager {
       app.on('window-all-closed', () => {
         logger.info('All windows closed');
         if (process.platform !== 'darwin') {
-          this.handleAppQuit();
-          app.quit();
+          this.handleAppQuit().then(() => {
+            app.quit();
+          }).catch(err => {
+            logger.error('Error during quit:', err);
+            app.quit();
+          });
         }
       });
 
@@ -121,8 +134,14 @@ class ApplicationManager {
       });
 
       // 处理应用退出
-      app.on('will-quit', () => {
-        this.handleAppQuit();
+      app.on('will-quit', (event) => {
+        event.preventDefault();
+        this.handleAppQuit().then(() => {
+          app.exit(0);
+        }).catch(err => {
+          logger.error('Error during quit:', err);
+          app.exit(1);
+        });
       });
 
       // 处理未捕获的异常
@@ -345,20 +364,23 @@ class ApplicationManager {
   /**
    * 处理应用退出
    */
-  handleAppQuit(): void {
+  async handleAppQuit(): Promise<void> {
     logger.info('Application quitting...');
     
     // 清理本地数据相关资源（Phase 6）
-    cleanupAllLocalHandlers().catch(err => {
-      logger.error('Failed to cleanup local handlers:', err);
-    });
-    
-    // 关闭 SQLite 数据库连接（Phase 2）
     try {
-      sqliteManager.close();
-      logger.info('SQLite database closed');
+      await cleanupAllLocalHandlers();
+      logger.info('Local handlers cleaned up');
+    } catch (err) {
+      logger.error('Failed to cleanup local handlers:', err);
+    }
+    
+    // 关闭 PostgreSQL 数据库连接（Phase 6 - 迁移到 PostgreSQL）
+    try {
+      await closePostgres();
+      logger.info('PostgreSQL database closed');
     } catch (error) {
-      logger.error('Failed to close SQLite database:', error);
+      logger.error('Failed to close PostgreSQL database:', error);
     }
     
     // 断开WebSocket连接

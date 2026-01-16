@@ -10,7 +10,7 @@ GEO（Generative Engine Optimization，生成式引擎优化）是一个品牌 A
 
 - **客户端**：Windows Electron 桌面应用（`windows-login-manager/`）
   - 完整的用户界面
-  - 本地数据存储（SQLite）
+  - 本地数据存储（**PostgreSQL**）⭐ 已从 SQLite 迁移
   - 本地浏览器自动化执行
   - 平台账号管理和发布执行
   
@@ -19,6 +19,7 @@ GEO（Generative Engine Optimization，生成式引擎优化）是一个品牌 A
   - 配额管理和订阅系统
   - AI 内容生成（DeepSeek/Gemini）
   - 数据同步和分析上报
+  - 数据库：PostgreSQL
 
 - **营销页面**：落地页（`landing/`）
   - 产品介绍和用户注册
