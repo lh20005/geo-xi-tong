@@ -147,6 +147,21 @@ export default function KnowledgeBaseDetailPage() {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
   };
 
+  // 获取文件扩展名显示
+  const getFileExtension = (filename: string, fileType: string) => {
+    // 优先从文件名获取扩展名
+    const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
+    if (ext && ext !== filename) {
+      return ext;
+    }
+    // 从 MIME 类型推断
+    if (fileType.includes('wordprocessingml') || fileType.includes('msword')) return '.docx';
+    if (fileType.includes('pdf')) return '.pdf';
+    if (fileType.includes('text/plain')) return '.txt';
+    if (fileType.includes('markdown')) return '.md';
+    return fileType.split('/').pop()?.substring(0, 10) || '未知';
+  };
+
   const columns = [
     {
       title: '文件名',
@@ -158,7 +173,7 @@ export default function KnowledgeBaseDetailPage() {
         <Space>
           <FileTextOutlined style={{ color: '#1890ff' }} />
           <span>{text}</span>
-          <Tag color="blue">{record.file_type}</Tag>
+          <Tag color="blue">{getFileExtension(text, record.file_type)}</Tag>
         </Space>
       ),
     },

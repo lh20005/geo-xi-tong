@@ -8,8 +8,44 @@ import { ipcMain, app } from 'electron';
 import log from 'electron-log';
 import * as path from 'path';
 import * as fs from 'fs';
+import mammoth from 'mammoth';
+import pdfParse from 'pdf-parse';
 import { knowledgeBaseService, CreateKnowledgeBaseParams } from '../../services';
 import { storageManager } from '../../storage/manager';
+
+/**
+ * 解析文档内容
+ * 支持 txt, md, docx, pdf 格式
+ */
+async function parseDocumentContent(filePath: string, fileType: string): Promise<string> {
+  const ext = path.extname(filePath).toLowerCase();
+  const content = fs.readFileSync(filePath);
+  
+  try {
+    // 纯文本文件
+    if (ext === '.txt' || ext === '.md') {
+      return content.toString('utf-8');
+    }
+    
+    // Word 文档
+    if (ext === '.docx' || fileType.includes('wordprocessingml')) {
+      const result = await mammoth.extractRawText({ buffer: content });
+      return result.value;
+    }
+    
+    // PDF 文档
+    if (ext === '.pdf' || fileType === 'application/pdf') {
+      const result = await pdfParse(content);
+      return result.text;
+    }
+    
+    // 其他格式尝试作为文本读取
+    return content.toString('utf-8');
+  } catch (error: any) {
+    log.error(`Failed to parse document ${filePath}:`, error);
+    return '';
+  }
+}
 
 /**
  * 注册本地知识库相关 IPC 处理器
@@ -49,7 +85,17 @@ export function registerLocalKnowledgeHandlers(): void {
       }
 
       const kbs = knowledgeBaseService.findAll(user.id);
-      return { success: true, data: kbs };
+      
+      // 为每个知识库添加文档数量
+      const kbsWithCount = kbs.map(kb => {
+        const kbWithDocs = knowledgeBaseService.getWithDocuments(kb.id);
+        return {
+          ...kb,
+          document_count: kbWithDocs?.documents?.length || 0
+        };
+      });
+      
+      return { success: true, data: kbsWithCount };
     } catch (error: any) {
       log.error('IPC: knowledge:local:findAll failed:', error);
       return { success: false, error: error.message || '获取知识库列表失败' };
@@ -155,14 +201,9 @@ export function registerLocalKnowledgeHandlers(): void {
           // 复制文件到知识库目录
           fs.writeFileSync(destPath, content);
           
-          // 解析文档内容（简单实现，实际应使用 mammoth/pdf-parse）
-          let parsedContent = '';
-          if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-            parsedContent = content.toString('utf-8');
-          } else if (file.name.endsWith('.md')) {
-            parsedContent = content.toString('utf-8');
-          }
-          // TODO: 添加 docx/pdf 解析支持
+          // 解析文档内容（支持 txt, md, docx, pdf）
+          const parsedContent = await parseDocumentContent(file.path, file.type);
+          log.info(`Parsed document ${file.name}, content length: ${parsedContent.length}`);
 
           // 创建文档记录
           const doc = knowledgeBaseService.uploadDocument({
@@ -198,7 +239,14 @@ export function registerLocalKnowledgeHandlers(): void {
       log.info(`IPC: knowledge:local:getDocuments - ${kbId}`);
       
       const kbWithDocs = knowledgeBaseService.getWithDocuments(kbId);
-      return { success: true, data: kbWithDocs?.documents || [] };
+      
+      // 为每个文档添加内容预览
+      const docsWithPreview = (kbWithDocs?.documents || []).map(doc => ({
+        ...doc,
+        content_preview: doc.content ? doc.content.substring(0, 100) + (doc.content.length > 100 ? '...' : '') : ''
+      }));
+      
+      return { success: true, data: docsWithPreview };
     } catch (error: any) {
       log.error('IPC: knowledge:local:getDocuments failed:', error);
       return { success: false, error: error.message || '获取文档列表失败' };
@@ -263,17 +311,12 @@ export function registerLocalKnowledgeHandlers(): void {
         return { success: false, error: '文件不存在' };
       }
 
-      const content = fs.readFileSync(filePath);
       const ext = path.extname(filePath).toLowerCase();
+      const mimeType = ext === '.pdf' ? 'application/pdf' : 
+                       ext === '.docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+                       'text/plain';
       
-      let parsedContent = '';
-      
-      if (ext === '.txt' || ext === '.md') {
-        parsedContent = content.toString('utf-8');
-      } else if (ext === '.json') {
-        parsedContent = JSON.stringify(JSON.parse(content.toString('utf-8')), null, 2);
-      }
-      // TODO: 添加 docx/pdf 解析支持
+      const parsedContent = await parseDocumentContent(filePath, mimeType);
 
       return { success: true, data: { content: parsedContent } };
     } catch (error: any) {
