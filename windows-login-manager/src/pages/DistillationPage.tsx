@@ -3,6 +3,7 @@ import { Card, Input, Button, message, Space, Typography, Tag, Modal, Empty, Too
 import { ThunderboltOutlined, FileTextOutlined, EyeOutlined, DeleteOutlined, EditOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
+import { localDistillationApi } from '../api/localDistillationApi';
 import ResizableTable from '../components/ResizableTable';
 import { 
   saveResultToLocalStorage, 
@@ -21,11 +22,13 @@ export default function DistillationPage() {
   const [loading, setLoading] = useState(false);
   const [selectedRecordId, setSelectedRecordId] = useState<number | null>(null);
 
-  // 使用缓存加载历史记录
+  // 使用缓存加载历史记录（从本地数据库）
   const fetchHistory = useCallback(async () => {
-    const response = await apiClient.get('/distillation/history');
-    const data = response.data.data || response.data;
-    return Array.isArray(data) ? data : [];
+    const result = await localDistillationApi.findAll({ page: 1, pageSize: 1000 });
+    if (!result.success) {
+      throw new Error(result.error || '加载历史记录失败');
+    }
+    return result.data?.items || [];
   }, []);
 
   const {
@@ -51,16 +54,26 @@ export default function DistillationPage() {
     refreshHistory(true);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 查看历史记录详情
+  // 查看历史记录详情（从本地数据库）
   const handleViewHistory = async (record: any) => {
     setLoading(true);
     try {
-      const response = await apiClient.get(`/distillation/${record.id}`);
+      const result = await localDistillationApi.findById(record.id);
+      if (!result.success || !result.data) {
+        throw new Error(result.error || '加载历史记录失败');
+      }
+      
+      // 从本地话题表获取话题列表
+      const topicsResult = await window.electron.invoke('topic:local:findByDistillation', record.id);
+      if (!topicsResult.success) {
+        throw new Error(topicsResult.error || '加载话题列表失败');
+      }
+      
       const detailData = {
-        distillationId: response.data.id,
-        keyword: response.data.keyword,
-        questions: response.data.questions,
-        count: response.data.questions.length
+        distillationId: result.data.id,
+        keyword: result.data.keyword,
+        questions: topicsResult.data || [],
+        count: topicsResult.data?.length || 0
       };
       setSelectedRecordId(record.id);
       saveResultToLocalStorage(detailData);
@@ -73,7 +86,7 @@ export default function DistillationPage() {
     }
   };
 
-  // 删除单条记录
+  // 删除单条记录（从本地数据库）
   const handleDeleteRecord = async (id: number) => {
     Modal.confirm({
       title: '确认删除',
@@ -83,7 +96,10 @@ export default function DistillationPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await apiClient.delete(`/distillation/${id}`);
+          const result = await localDistillationApi.delete(id);
+          if (!result.success) {
+            throw new Error(result.error || '删除失败');
+          }
           message.success('删除成功');
           if (selectedRecordId === id) {
             setSelectedRecordId(null);
@@ -97,7 +113,7 @@ export default function DistillationPage() {
     });
   };
 
-  // 编辑关键词
+  // 编辑关键词（更新本地数据库）
   const handleEditKeyword = (id: number, currentKeyword: string) => {
     let newKeyword = currentKeyword;
     
@@ -122,7 +138,10 @@ export default function DistillationPage() {
         }
         
         try {
-          await apiClient.patch(`/distillation/${id}`, { keyword: newKeyword.trim() });
+          const result = await localDistillationApi.update(id, { keyword: newKeyword.trim() });
+          if (!result.success) {
+            throw new Error(result.error || '更新失败');
+          }
           message.success('关键词更新成功');
           if (selectedRecordId === id) {
             const savedResult = loadResultFromLocalStorage();
@@ -140,7 +159,7 @@ export default function DistillationPage() {
     });
   };
 
-  // 删除所有记录
+  // 删除所有记录（从本地数据库）
   const handleDeleteAll = () => {
     Modal.confirm({
       title: '确认删除所有记录',
@@ -150,8 +169,20 @@ export default function DistillationPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const response = await apiClient.delete('/distillation/all/records');
-          message.success(`成功删除 ${response.data.deletedCount} 条记录`);
+          // 获取所有记录的 ID
+          const allRecords = history || [];
+          const ids = allRecords.map((record: any) => record.id);
+          
+          if (ids.length === 0) {
+            message.info('没有记录可删除');
+            return;
+          }
+          
+          const result = await localDistillationApi.deleteBatch(ids);
+          if (!result.success) {
+            throw new Error(result.error || '删除失败');
+          }
+          message.success(`成功删除 ${result.data?.deletedCount || ids.length} 条记录`);
           setSelectedRecordId(null);
           clearResultFromLocalStorage();
           invalidateAndRefresh();
@@ -178,25 +209,52 @@ export default function DistillationPage() {
 
     setLoading(true);
     try {
-      const response = await apiClient.post('/distillation', { keyword });
+      // 1. 调用服务器 API 执行蒸馏（调用 AI 生成话题）
+      const response = await apiClient.post('/distillation', { keyword: keyword.trim() });
       
-      // 保存结果到LocalStorage
+      const questions = response.data.questions || [];
+      const count = questions.length;
+      
+      // 2. 保存蒸馏记录到本地数据库
+      const createResult = await localDistillationApi.create({
+        keyword: keyword.trim(),
+        topic_count: count,
+        provider: response.data.provider || 'deepseek'
+      });
+      
+      if (!createResult.success || !createResult.data) {
+        throw new Error(createResult.error || '保存蒸馏记录失败');
+      }
+      
+      const distillationId = createResult.data.id;
+      
+      // 3. 保存话题到本地数据库
+      for (const question of questions) {
+        await window.electron.invoke('topic:local:create', {
+          distillation_id: distillationId,
+          question: question.question || question,
+          category: question.category || '',
+          priority: question.priority || 0
+        });
+      }
+      
+      // 4. 保存结果到 LocalStorage（用于结果页面显示）
       const resultData = {
-        distillationId: response.data.distillationId,
-        keyword: response.data.keyword,
-        questions: response.data.questions,
-        count: response.data.count
+        distillationId,
+        keyword: keyword.trim(),
+        questions,
+        count
       };
       saveResultToLocalStorage(resultData);
-      setSelectedRecordId(response.data.distillationId);
+      setSelectedRecordId(distillationId);
       
-      message.success(`成功生成 ${response.data.count} 个话题！`);
+      message.success(`成功生成 ${count} 个话题！`);
       setKeyword('');
       
-      // 刷新历史列表
+      // 5. 刷新历史列表
       invalidateAndRefresh();
       
-      // 自动导航到结果页面
+      // 6. 自动导航到结果页面
       navigate('/distillation-results');
     } catch (error: any) {
       message.error(error.message || '蒸馏失败，请检查API配置');

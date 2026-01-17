@@ -116,6 +116,7 @@ apiClient.interceptors.response.use(
       // 如果是刷新接口本身返回 401，直接登出
       if (originalRequest.url?.includes('/auth/refresh')) {
         console.error('[API Client] ❌ Refresh token 已失效，需要重新登录');
+        isRefreshing = false; // 重置刷新状态
         
         // 清除所有认证信息
         if (window.electron) {
@@ -138,6 +139,10 @@ apiClient.interceptors.response.use(
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
+            if (!token) {
+              // 如果刷新失败，直接拒绝
+              return Promise.reject(new Error('Token 刷新失败'));
+            }
             originalRequest.headers.Authorization = `Bearer ${token}`;
             return apiClient.request(originalRequest);
           })
@@ -188,6 +193,9 @@ apiClient.interceptors.response.use(
           }
           localStorage.setItem('auth_token', newToken);
           
+          // 重置刷新状态
+          isRefreshing = false;
+          
           // 处理队列中的请求
           processQueue(null, newToken);
           
@@ -200,7 +208,10 @@ apiClient.interceptors.response.use(
       } catch (refreshError: any) {
         console.error('[API Client] ❌ Token 刷新失败:', refreshError);
         
-        // 处理队列中的请求
+        // 重置刷新状态（关键！）
+        isRefreshing = false;
+        
+        // 处理队列中的请求（传递 null 表示失败）
         processQueue(refreshError, null);
         
         // 清除所有认证信息
@@ -215,8 +226,6 @@ apiClient.interceptors.response.use(
         }));
         
         return Promise.reject(new Error('登录已过期，请重新登录'));
-      } finally {
-        isRefreshing = false;
       }
     }
     

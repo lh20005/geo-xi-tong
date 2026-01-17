@@ -15,6 +15,7 @@ import { registerLocalDistillationHandlers } from './localDistillationHandlers';
 import { registerLocalTopicHandlers } from './localTopicHandlers';
 import { registerLocalConversionTargetHandlers } from './localConversionTargetHandlers';
 import { registerLocalArticleSettingHandlers } from './localArticleSettingHandlers';
+import { registerTaskCleanupHandlers } from './taskCleanupHandlers';
 
 // 重新导出
 export { registerArticleHandlers } from './articleHandlers';
@@ -29,6 +30,7 @@ export { registerLocalDistillationHandlers } from './localDistillationHandlers';
 export { registerLocalTopicHandlers } from './localTopicHandlers';
 export { registerLocalConversionTargetHandlers } from './localConversionTargetHandlers';
 export { registerLocalArticleSettingHandlers } from './localArticleSettingHandlers';
+export { registerTaskCleanupHandlers } from './taskCleanupHandlers';
 
 /**
  * 注册所有本地数据相关的 IPC 处理器
@@ -69,6 +71,9 @@ export function registerAllLocalHandlers(): void {
   
   // 文章设置管理（本地 PostgreSQL）
   registerLocalArticleSettingHandlers();
+  
+  // 任务清理（定时清理旧任务）
+  registerTaskCleanupHandlers();
 }
 
 /**

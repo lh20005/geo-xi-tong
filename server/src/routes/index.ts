@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { configRouter } from './config';
-// [已迁移到 Windows 端] import { distillationRouter } from './distillation';
+import { distillationRouter } from './distillation'; // 恢复蒸馏路由（仅执行功能）
 // [已迁移到 Windows 端] import { topicRouter } from './topic';
 // [已迁移到 Windows 端] import { articleRouter } from './article';
 // [已迁移到 Windows 端] import { galleryRouter } from './gallery';
@@ -60,7 +60,7 @@ apiRouter.use('/agent', agentRouter);  // 代理商API
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);
-// [已迁移到 Windows 端] apiRouter.use('/distillation', distillationRouter);
+apiRouter.use('/distillation', distillationRouter); // 恢复蒸馏路由（仅执行功能）
 // [已迁移到 Windows 端] apiRouter.use('/topics', topicRouter);
 // [已迁移到 Windows 端] apiRouter.use('/articles', articleRouter);
 // [已迁移到 Windows 端] apiRouter.use('/gallery', galleryRouter);

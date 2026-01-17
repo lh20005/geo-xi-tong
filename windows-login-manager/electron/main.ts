@@ -15,6 +15,7 @@ import { AutoUpdater } from './updater/auto-updater';
 import { sqliteManager } from './database/sqlite';
 import { initializePostgres, closePostgres } from './database/postgres';
 import { registerLocalFileProtocol } from './protocol/localFile';
+import { taskCleanupService } from './services/TaskCleanupService';
 
 // 加载环境变量（必须在最开始）
 const envPath = path.join(__dirname, '../../.env');
@@ -103,6 +104,10 @@ class ApplicationManager {
       
       // 初始化自动更新器
       this.initializeAutoUpdater();
+      
+      // 启动定时清理服务
+      taskCleanupService.start();
+      logger.info('Task cleanup service started');
       
       // 处理应用激活（macOS）
       app.on('activate', () => {
@@ -366,6 +371,14 @@ class ApplicationManager {
    */
   async handleAppQuit(): Promise<void> {
     logger.info('Application quitting...');
+    
+    // 停止定时清理服务
+    try {
+      taskCleanupService.stop();
+      logger.info('Task cleanup service stopped');
+    } catch (err) {
+      logger.error('Failed to stop task cleanup service:', err);
+    }
     
     // 清理本地数据相关资源（Phase 6）
     try {
