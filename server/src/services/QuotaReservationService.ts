@@ -40,7 +40,7 @@ export interface ReserveParams {
 
 export interface ReserveResult {
   success: boolean;
-  reservationId?: string;
+  reservationId?: number;  // ✅ 修复：SERIAL -> number
   expiresAt?: Date;
   remainingQuota?: number;
   error?: string;
@@ -48,7 +48,7 @@ export interface ReserveResult {
 }
 
 export interface ConfirmParams {
-  reservationId: string;
+  reservationId: number;  // ✅ 修复：SERIAL -> number
   result?: {
     status?: string;
     publishUrl?: string;
@@ -66,7 +66,7 @@ export interface ConfirmResult {
 }
 
 export interface ReleaseParams {
-  reservationId: string;
+  reservationId: number;  // ✅ 修复：SERIAL -> number
   reason?: string;
   errorCode?: string;
 }

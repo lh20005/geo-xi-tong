@@ -68,7 +68,7 @@ export class PublishingExecutor {
     console.log(`\n🚀 [任务 ${taskId}] 开始执行 at ${new Date().toISOString()}`);
     
     let page = null;
-    let reservationId: string | null = null;
+    let reservationId: number | null = null;  // ✅ 修复：SERIAL -> number
 
     try {
       // 获取任务详情

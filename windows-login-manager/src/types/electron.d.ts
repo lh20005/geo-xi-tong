@@ -130,8 +130,8 @@ export interface ElectronAPI {
     stopScheduler: () => Promise<{ success: boolean; message?: string; error?: string }>;
     getSchedulerStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
     reserveQuota: (quotaType: string, amount?: number, taskInfo?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
-    confirmQuota: (reservationId: string, result?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
-    releaseQuota: (reservationId: string, reason?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    confirmQuota: (reservationId: number, result?: object) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
+    releaseQuota: (reservationId: number, reason?: string) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
     getQuotaInfo: () => Promise<{ success: boolean; data?: any; error?: string }>;
     reportResult: (report: any) => Promise<{ success: boolean; message?: string; error?: string }>;
     flushPendingAnalytics: () => Promise<{ success: boolean; error?: string }>;
@@ -206,9 +206,9 @@ export interface ElectronAPI {
   // 数据同步（与服务器同步）
   dataSync: {
     backup: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    restore: (snapshotId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    restore: (snapshotId: number) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
     getSnapshots: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteSnapshot: (snapshotId: string) => Promise<{ success: boolean; error?: string }>;
+    deleteSnapshot: (snapshotId: number) => Promise<{ success: boolean; error?: string }>;  // ✅ 修复
     exportLocal: (exportPath?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     importLocal: (importPath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     getLocalStats: () => Promise<{ success: boolean; data?: any; error?: string }>;

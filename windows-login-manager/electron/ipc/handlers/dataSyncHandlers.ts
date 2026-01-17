@@ -83,7 +83,7 @@ export function registerDataSyncHandlers(): void {
   });
 
   // 恢复数据（从服务器下载）
-  ipcMain.handle('sync:restore', async (_event, snapshotId: string) => {
+  ipcMain.handle('sync:restore', async (_event, snapshotId: number) => {  // ✅ 修复：SERIAL -> number
     try {
       log.info(`IPC: sync:restore - ${snapshotId}`);
       const user = await storageManager.getUser();
@@ -163,7 +163,7 @@ export function registerDataSyncHandlers(): void {
   });
 
   // 删除快照
-  ipcMain.handle('sync:deleteSnapshot', async (_event, snapshotId: string) => {
+  ipcMain.handle('sync:deleteSnapshot', async (_event, snapshotId: number) => {  // ✅ 修复：SERIAL -> number
     try {
       log.info(`IPC: sync:deleteSnapshot - ${snapshotId}`);
       const user = await storageManager.getUser();

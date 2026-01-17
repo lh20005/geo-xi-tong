@@ -211,7 +211,7 @@ export function registerPublishHandlers(): void {
   });
 
   // 确认配额消费
-  ipcMain.handle('publish:confirmQuota', async (_event, reservationId: string, result?: object) => {
+  ipcMain.handle('publish:confirmQuota', async (_event, reservationId: number, result?: object) => {  // ✅ 修复：SERIAL -> number
     try {
       log.info(`IPC: publish:confirmQuota - ${reservationId}`);
       
@@ -227,7 +227,7 @@ export function registerPublishHandlers(): void {
   });
 
   // 释放配额
-  ipcMain.handle('publish:releaseQuota', async (_event, reservationId: string, reason?: string) => {
+  ipcMain.handle('publish:releaseQuota', async (_event, reservationId: number, reason?: string) => {  // ✅ 修复：SERIAL -> number
     try {
       log.info(`IPC: publish:releaseQuota - ${reservationId}`);
       

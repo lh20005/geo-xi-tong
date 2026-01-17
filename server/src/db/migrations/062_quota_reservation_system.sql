@@ -7,7 +7,7 @@
 
 -- 配额预留表
 CREATE TABLE IF NOT EXISTS quota_reservations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     quota_type VARCHAR(50) NOT NULL,  -- 'article_generation', 'publish', 'knowledge_upload', 'image_upload'
     amount INTEGER NOT NULL DEFAULT 1,

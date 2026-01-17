@@ -17,6 +17,18 @@ function AppContent() {
 
   useEffect(() => {
     checkAuth();
+    
+    // 监听来自 API 客户端的登出事件
+    const handleAuthLogout = (event: any) => {
+      console.log('[App] 收到 auth:logout 事件:', event.detail);
+      handleLogout();
+    };
+    
+    window.addEventListener('auth:logout', handleAuthLogout as EventListener);
+    
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout as EventListener);
+    };
   }, []);
 
   // WebSocket 连接（用于存储警告等实时通知）- 必须在所有条件返回之前

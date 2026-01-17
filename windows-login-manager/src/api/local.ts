@@ -249,11 +249,11 @@ export const localPublishApi = {
     return window.electron.publish.reserveQuota(quotaType, amount, taskInfo);
   },
   
-  confirmQuota: async (reservationId: string, result?: object) => {
+  confirmQuota: async (reservationId: number, result?: object) => {  // ✅ 修复
     return window.electron.publish.confirmQuota(reservationId, result);
   },
   
-  releaseQuota: async (reservationId: string, reason?: string) => {
+  releaseQuota: async (reservationId: number, reason?: string) => {  // ✅ 修复
     return window.electron.publish.releaseQuota(reservationId, reason);
   },
   
@@ -583,7 +583,7 @@ export const localSyncApi = {
     return window.electron.dataSync.backup();
   },
   
-  restore: async (snapshotId: string) => {
+  restore: async (snapshotId: number) => {
     return window.electron.dataSync.restore(snapshotId);
   },
   
@@ -591,7 +591,7 @@ export const localSyncApi = {
     return window.electron.dataSync.getSnapshots();
   },
   
-  deleteSnapshot: async (snapshotId: string) => {
+  deleteSnapshot: async (snapshotId: number) => {
     return window.electron.dataSync.deleteSnapshot(snapshotId);
   },
   

@@ -481,8 +481,8 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   distillation_id INTEGER REFERENCES distillations(id) ON DELETE SET NULL,
-  album_id TEXT, -- 支持 INTEGER 和 UUID（Windows 端本地数据）
-  knowledge_base_id TEXT, -- 支持 INTEGER 和 UUID（Windows 端本地数据）
+  album_id INTEGER, -- 相册 ID（服务器端不存储相册，仅记录引用）
+  knowledge_base_id INTEGER, -- 知识库 ID（服务器端不存储知识库，仅记录引用）
   article_setting_id INTEGER REFERENCES article_settings(id) ON DELETE SET NULL,
   conversion_target_id INTEGER REFERENCES conversion_targets(id) ON DELETE SET NULL,
   requested_count INTEGER NOT NULL CHECK (requested_count > 0),

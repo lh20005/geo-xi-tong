@@ -632,7 +632,7 @@ class APIClient {
     taskInfo?: object;
   }): Promise<{
     success: boolean;
-    reservationId?: string;
+    reservationId?: number;  // ✅ 修复：SERIAL -> number
     expiresAt?: string;
     remainingQuota?: number;
     error?: string;
@@ -657,7 +657,7 @@ class APIClient {
    * Requirements: 改造方案 - 配额预扣减机制
    */
   async confirmQuota(params: {
-    reservationId: string;
+    reservationId: number;  // ✅ 修复：SERIAL -> number
     result?: object;
   }): Promise<{
     success: boolean;
@@ -684,7 +684,7 @@ class APIClient {
    * Requirements: 改造方案 - 配额预扣减机制
    */
   async releaseQuota(params: {
-    reservationId: string;
+    reservationId: number;  // ✅ 修复：SERIAL -> number
     reason?: string;
     errorCode?: string;
   }): Promise<{
@@ -790,7 +790,7 @@ class APIClient {
    */
   async uploadSnapshot(file: Buffer, checksum: string, metadata: object): Promise<{
     success: boolean;
-    snapshotId?: string;
+    snapshotId?: number;  // ✅ 修复：SERIAL -> number
     uploadedAt?: string;
     deletedOldSnapshots?: number;
     remainingSnapshots?: number;
@@ -825,7 +825,7 @@ class APIClient {
    */
   async getSnapshots(): Promise<{
     snapshots: Array<{
-      id: string;
+      id: number;  // ✅ 修复：SERIAL -> number
       metadata: object;
       uploadedAt: string;
       lastDownloadedAt?: string;
@@ -848,7 +848,7 @@ class APIClient {
    * 下载快照
    * Requirements: 改造方案 - 数据同步功能
    */
-  async downloadSnapshot(snapshotId: string): Promise<Buffer> {
+  async downloadSnapshot(snapshotId: number): Promise<Buffer> {  // ✅ 修复：SERIAL -> number
     try {
       const response = await this.axiosInstance.get(`/api/sync/download/${snapshotId}`, {
         responseType: 'arraybuffer'
@@ -865,7 +865,7 @@ class APIClient {
    * 删除快照
    * Requirements: 改造方案 - 数据同步功能
    */
-  async deleteSnapshot(snapshotId: string): Promise<{ success: boolean }> {
+  async deleteSnapshot(snapshotId: number): Promise<{ success: boolean }> {  // ✅ 修复：SERIAL -> number
     try {
       const response = await this.axiosInstance.delete(`/api/sync/snapshots/${snapshotId}`);
       log.info(`Snapshot deleted: ${snapshotId}`);

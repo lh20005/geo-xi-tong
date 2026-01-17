@@ -6,7 +6,7 @@
 
 -- 同步快照表
 CREATE TABLE IF NOT EXISTS sync_snapshots (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     
     -- 文件信息

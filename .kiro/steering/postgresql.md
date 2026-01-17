@@ -525,22 +525,91 @@ const pool = new Pool({
 1. 在 Windows 端使用 SQLite（已迁移到 PostgreSQL）
 2. 使用外键约束（使用应用层验证）
 3. 字段名使用 camelCase（必须使用 snake_case）
-4. 主键使用 UUID（必须使用 SERIAL）
+4. **主键使用 UUID（必须使用 SERIAL，GEO 系统无例外）**
 5. 明文存储敏感数据（必须加密）
 6. 跳过参数化查询（防止 SQL 注入）
+7. 混用 UUID 和 INTEGER 类型（必须类型一致）
+8. **认为 API 传递的 ID 需要 UUID（错误！只是临时参数）**
 
 ### ✅ 必须遵守
 
 1. Windows 端数据库名：`geo_windows`
 2. 服务器端数据库名：`geo_system`
 3. 字段命名：`snake_case`
-4. 主键类型：`SERIAL`
+4. **主键类型：SERIAL（自增整数），所有表无例外**
 5. 时间戳：`TIMESTAMP DEFAULT NOW()`
 6. 布尔值：`BOOLEAN DEFAULT FALSE`
 7. 参数化查询：使用 `$1, $2, ...`
 8. 连接池：使用 `pg.Pool`
 9. 事务：使用 `BEGIN/COMMIT/ROLLBACK`
 10. 备份：定期备份数据库
+11. 类型一致性：关联字段必须使用相同类型
+12. **API 传递的 ID：使用 number 类型（对应 SERIAL）**
+
+---
+
+## UUID vs SERIAL 主键策略
+
+### 推荐：统一使用 SERIAL
+
+**GEO 系统特点**：
+- ✅ 单实例 PostgreSQL 部署
+- ✅ 集中式数据库架构
+- ✅ 无分布式 ID 生成需求
+- ✅ 高性能查询要求
+
+**结论**：使用 SERIAL（自增整数）作为主键
+
+### 性能对比
+
+| 指标 | SERIAL | UUID | 差异 |
+|------|--------|------|------|
+| 插入速度 | 快 | 慢 3.75x | ⚠️ |
+| 索引大小 | 小 | 大 2x | ⚠️ |
+| 存储空间 | 8 字节 | 16 字节 | ⚠️ |
+| 查询速度 | 快 | 慢 2.4x | ⚠️ |
+| 索引碎片 | 少 | 多 | ⚠️ |
+
+### 特殊场景
+
+**GEO 系统中没有需要使用 UUID 的场景！**
+
+**所有表都使用 SERIAL（自增整数）主键。**
+
+**之前的错误判断**：
+- ❌ 认为 `quota_reservations` 需要 UUID（因为"跨系统引用"）
+- ❌ 认为 `sync_snapshots` 需要 UUID（因为"跨系统引用"）
+
+**正确理解**：
+- ✅ Windows 端和服务器端是两个独立的数据库
+- ✅ 它们通过 HTTP API 通信
+- ✅ API 中传递的 ID 只是临时参数，不持久化到 Windows 端数据库
+- ✅ 因此不需要 UUID 的"全局唯一性"
+
+**判断标准**：
+- 只有当 ID 需要在**不同数据库**之间**持久化存储**时才考虑 UUID
+- GEO 系统中没有这样的场景
+
+### 双 ID 策略（可选，未使用）
+
+如果需要对外暴露不可预测的 ID：
+
+```sql
+CREATE TABLE orders (
+    -- 内部主键（性能优化）
+    id SERIAL PRIMARY KEY,
+    
+    -- 外部公开 ID（安全性）
+    public_id VARCHAR(32) UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(16), 'hex'),
+    
+    user_id INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+**使用方式**：
+- 内部查询：使用 `id`（快速）
+- 外部 API：使用 `public_id`（安全）
 
 ---
 

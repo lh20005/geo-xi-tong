@@ -31,9 +31,9 @@ interface SyncState {
   
   // 云端操作
   backup: () => Promise<{ success: boolean; snapshotId?: string; error?: string }>;
-  restore: (snapshotId: string) => Promise<boolean>;
+  restore: (snapshotId: number) => Promise<boolean>;
   fetchSnapshots: () => Promise<void>;
-  deleteSnapshot: (snapshotId: string) => Promise<boolean>;
+  deleteSnapshot: (snapshotId: number) => Promise<boolean>;
   
   // 本地操作
   exportLocal: (exportPath?: string) => Promise<{ success: boolean; path?: string; error?: string }>;

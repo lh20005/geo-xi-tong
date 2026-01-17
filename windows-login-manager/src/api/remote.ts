@@ -76,7 +76,7 @@ export interface ReserveQuotaParams {
 
 export interface ReserveQuotaResponse {
   success: boolean;
-  reservationId: string;
+  reservationId: number;
   expiresAt: string;
   remainingQuota: number;
 }
@@ -92,12 +92,12 @@ export const remoteQuotaApi = {
     return response.data;
   },
   
-  confirm: async (reservationId: string, result?: object) => {
+  confirm: async (reservationId: number, result?: object) => {
     const response = await apiClient.post('/quota/confirm', { reservationId, result });
     return response.data;
   },
   
-  release: async (reservationId: string, reason?: string) => {
+  release: async (reservationId: number, reason?: string) => {
     const response = await apiClient.post('/quota/release', { reservationId, reason });
     return response.data;
   },
@@ -260,7 +260,7 @@ export const remotePaymentApi = {
 // ==================== 数据同步 ====================
 
 export interface SyncSnapshot {
-  id: string;
+  id: number;
   metadata: {
     version: string;
     articleCount: number;
@@ -291,14 +291,14 @@ export const remoteSyncApi = {
     return response.data;
   },
   
-  download: async (snapshotId: string): Promise<Blob> => {
+  download: async (snapshotId: number): Promise<Blob> => {
     const response = await apiClient.get(`/sync/download/${snapshotId}`, {
       responseType: 'blob'
     });
     return response.data;
   },
   
-  deleteSnapshot: async (snapshotId: string) => {
+  deleteSnapshot: async (snapshotId: number) => {
     const response = await apiClient.delete(`/sync/snapshots/${snapshotId}`);
     return response.data;
   },

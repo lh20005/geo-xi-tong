@@ -606,22 +606,30 @@ sudo -u postgres psql -d geo_system -f backup_20260116.sql
 
 ---
 
-## 数据库 ID 格式统一规范（强制）
+## 数据库 ID 格式统一规范（强制）⭐ 已更新
 
-### 问题背景
+### 核心原则
 
-服务器（PostgreSQL）和 Windows 端（PostgreSQL）都使用 PostgreSQL，但需要统一 ID 格式以便数据同步和引用。
+**GEO 系统中所有表都使用 SERIAL（自增整数）主键，没有例外！**
 
-### 解决方案：统一使用 SERIAL（自增整数）
+### 架构说明
 
-| 场景 | 服务器（PostgreSQL） | Windows 端（PostgreSQL） | 说明 |
-|------|---------------------|------------------------|------|
+**Windows 端和服务器端是两个独立的 PostgreSQL 数据库**：
+- Windows 端：本地 PostgreSQL（`geo_windows` 数据库）
+- 服务器端：远程 PostgreSQL（`geo_system` 数据库）
+- 通信方式：HTTP API（不能直接 SQL 查询对方数据库）
+
+### ID 类型规范
+
+| 场景 | 服务器端 | Windows 端 | 说明 |
+|------|---------|-----------|------|
 | 用户 ID | `SERIAL` (INTEGER) | `INTEGER` | 服务器生成，Windows 端存储 |
 | 文章 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
 | 任务 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
 | 知识库 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
 | 图库 ID | - | `SERIAL` (INTEGER) | Windows 端生成 |
-| 配额预留 ID | `UUID` | `TEXT` | 服务器生成 UUID，Windows 端存储为 TEXT |
+| **配额预留 ID** | **`SERIAL` (INTEGER)** | **不存储** | 服务器生成，Windows 端临时使用 |
+| **快照 ID** | **`SERIAL` (INTEGER)** | **不存储** | 服务器生成，Windows 端临时使用 |
 
 ### 关键规则
 
@@ -635,10 +643,11 @@ sudo -u postgres psql -d geo_system -f backup_20260116.sql
    - 本地唯一即可
    - 示例：`articleId: 456`
 
-3. **配额预留 ID**（特殊情况）
-   - 服务器：UUID 类型
-   - Windows 端：TEXT 存储
-   - 示例：`reservationId: '550e8400-e29b-41d4-a716-446655440000'`
+3. **API 传递的 ID**（如 reservationId, snapshotId）⭐ 重要
+   - 服务器：SERIAL（自增整数）
+   - Windows 端：**不持久化存储**，只在内存中临时使用
+   - TypeScript 类型：`number`
+   - 示例：`reservationId: 123`（不是字符串！）
 
 ### 代码示例
 
@@ -652,12 +661,16 @@ const result = await pool.query(
 );
 const articleId = result.rows[0].id;  // SERIAL 自动生成的整数 ID
 
-// 关联服务器的预留 ID（UUID）
+// 配额预留流程（reservationId 不存储）
 const { reservationId } = await apiClient.post('/api/quota/reserve', { ... });
-await pool.query(
-  'UPDATE publishing_tasks SET reservation_id = $1 WHERE id = $2',
-  [reservationId, taskId]  // reservationId 是 UUID 字符串
-);
+// reservationId = 123（number 类型，不是 string）
+
+// 执行任务
+await this.performPublish(taskId);
+
+// 确认配额（使用后丢弃，不存储）
+await apiClient.post('/api/quota/confirm', { reservationId: 123 });
+// ← reservationId 变量销毁，不存储到任何数据库
 ```
 
 ### PostgreSQL SERIAL 类型说明
@@ -738,7 +751,7 @@ DROP TABLE IF EXISTS table_name;
 
 ---
 
-## 配额预扣减机制（强制）
+## 配额预扣减机制（强制）⭐ 已更新
 
 ### 问题分析
 
@@ -748,10 +761,11 @@ DROP TABLE IF EXISTS table_name;
 
 ```
 1. Windows 端发起预扣减请求
-2. 服务器锁定配额，返回 reservationId
-3. Windows 端本地执行任务
+2. 服务器锁定配额，返回 reservationId（整数）
+3. Windows 端本地执行任务（reservationId 保存在内存变量中）
 4a. 成功：调用确认接口，扣减配额
 4b. 失败：调用释放接口，恢复配额
+5. reservationId 变量销毁，不存储到数据库
 ```
 
 ### API 规范
@@ -767,18 +781,18 @@ Request: {
 }
 Response: {
   success: true,
-  reservationId: 'uuid-xxx',
+  reservationId: 123,  // ⭐ number 类型（SERIAL），不是 string
   expiresAt: '2025-01-14T12:10:00Z',
   remainingQuota: 99
 }
 
 // 2. 确认消费
 POST /api/quota/confirm
-Request: { reservationId: 'uuid-xxx', result?: object }
+Request: { reservationId: 123, result?: object }  // ⭐ number 类型
 
 // 3. 释放配额
 POST /api/quota/release
-Request: { reservationId: 'uuid-xxx', reason?: string }
+Request: { reservationId: 123, reason?: string }  // ⭐ number 类型
 ```
 
 ### Windows 端调用模板

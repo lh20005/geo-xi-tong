@@ -163,7 +163,17 @@ syncRouter.get('/download/:snapshotId', async (req, res) => {
       });
     }
 
-    const { buffer, checksum, metadata } = await syncService.downloadSnapshot(snapshotId, userId);
+    // 转换为数字类型
+    const snapshotIdNum = parseInt(snapshotId, 10);
+    if (isNaN(snapshotIdNum)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_SNAPSHOT_ID',
+        message: '快照 ID 格式无效'
+      });
+    }
+
+    const { buffer, checksum, metadata } = await syncService.downloadSnapshot(snapshotIdNum, userId);
 
     // 设置响应头
     res.setHeader('Content-Type', 'application/octet-stream');
@@ -210,7 +220,17 @@ syncRouter.get('/snapshots/:snapshotId', async (req, res) => {
       });
     }
 
-    const snapshot = await syncService.getSnapshotDetail(snapshotId, userId);
+    // 转换为数字类型
+    const snapshotIdNum = parseInt(snapshotId, 10);
+    if (isNaN(snapshotIdNum)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_SNAPSHOT_ID',
+        message: '快照 ID 格式无效'
+      });
+    }
+
+    const snapshot = await syncService.getSnapshotDetail(snapshotIdNum, userId);
 
     if (!snapshot) {
       return res.status(404).json({
@@ -252,7 +272,17 @@ syncRouter.delete('/snapshots/:snapshotId', async (req, res) => {
       });
     }
 
-    const deleted = await syncService.deleteSnapshot(snapshotId, userId);
+    // 转换为数字类型
+    const snapshotIdNum = parseInt(snapshotId, 10);
+    if (isNaN(snapshotIdNum)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_SNAPSHOT_ID',
+        message: '快照 ID 格式无效'
+      });
+    }
+
+    const deleted = await syncService.deleteSnapshot(snapshotIdNum, userId);
 
     if (!deleted) {
       return res.status(404).json({

@@ -61,7 +61,7 @@ export interface SnapshotInfo {
  * 上传结果接口
  */
 export interface UploadResult {
-  snapshotId: string;
+  snapshotId: number;  // ✅ 修复：SERIAL -> number
   uploadedAt: string;
   deletedOldSnapshots: number;
   remainingSnapshots: number;
@@ -108,7 +108,7 @@ export class SyncService {
   /**
    * 生成快照文件路径
    */
-  private generateFilePath(userId: number, snapshotId: string): string {
+  private generateFilePath(userId: number, snapshotId: number): string {  // ✅ 修复：SERIAL -> number
     const userDir = path.join(SNAPSHOTS_DIR, String(userId));
     if (!fs.existsSync(userDir)) {
       fs.mkdirSync(userDir, { recursive: true });
@@ -142,30 +142,36 @@ export class SyncService {
       throw new Error('文件校验和不匹配，文件可能已损坏');
     }
 
-    // 3. 生成快照 ID 和文件路径
-    const snapshotId = crypto.randomUUID();
-    const filePath = this.generateFilePath(userId, snapshotId);
-    const relativeFilePath = path.relative(SNAPSHOTS_DIR, filePath);
-
-    // 4. 计算过期时间
+    // 3. 计算过期时间
     const expiresAt = new Date(Date.now() + EXPIRE_DAYS * 24 * 60 * 60 * 1000);
 
-    // 5. 保存文件
-    fs.writeFileSync(filePath, fileBuffer);
-
-    // 6. 保存数据库记录
+    // 4. 保存数据库记录（先插入获取 SERIAL ID）
+    let snapshotId: number;
+    let relativeFilePath: string;
+    
     try {
-      await pool.query(
+      const insertResult = await pool.query(
         `INSERT INTO sync_snapshots 
-         (id, user_id, file_path, file_size, checksum, metadata, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [snapshotId, userId, relativeFilePath, fileBuffer.length, checksum, JSON.stringify(metadata), expiresAt]
+         (user_id, file_path, file_size, checksum, metadata, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id`,
+        [userId, 'temp', fileBuffer.length, checksum, JSON.stringify(metadata), expiresAt]
+      );
+      
+      snapshotId = insertResult.rows[0].id;
+      
+      // 5. 生成文件路径并保存文件
+      const filePath = this.generateFilePath(userId, snapshotId);
+      relativeFilePath = path.relative(SNAPSHOTS_DIR, filePath);
+      fs.writeFileSync(filePath, fileBuffer);
+      
+      // 6. 更新文件路径
+      await pool.query(
+        `UPDATE sync_snapshots SET file_path = $1 WHERE id = $2`,
+        [relativeFilePath, snapshotId]
       );
     } catch (error) {
-      // 如果数据库插入失败，删除已保存的文件
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
+      // 如果失败，尝试清理
       throw error;
     }
 
@@ -272,7 +278,7 @@ export class SyncService {
    * 
    * 下载后自动更新 last_downloaded_at 和重置过期时间
    */
-  async downloadSnapshot(snapshotId: string, userId: number): Promise<{
+  async downloadSnapshot(snapshotId: number, userId: number): Promise<{  // ✅ 修复：SERIAL -> number
     buffer: Buffer;
     checksum: string;
     metadata: SnapshotMetadata;
@@ -321,7 +327,7 @@ export class SyncService {
   /**
    * 删除快照
    */
-  async deleteSnapshot(snapshotId: string, userId: number): Promise<boolean> {
+  async deleteSnapshot(snapshotId: number, userId: number): Promise<boolean> {  // ✅ 修复：SERIAL -> number
     // 获取快照信息
     const result = await pool.query(
       `SELECT file_path
@@ -389,7 +395,7 @@ export class SyncService {
   /**
    * 获取快照详情
    */
-  async getSnapshotDetail(snapshotId: string, userId: number): Promise<SnapshotInfo | null> {
+  async getSnapshotDetail(snapshotId: number, userId: number): Promise<SnapshotInfo | null> {  // ✅ 修复：SERIAL -> number
     const result = await pool.query(
       `SELECT id, metadata, file_size, checksum, created_at, last_downloaded_at, expires_at
        FROM sync_snapshots

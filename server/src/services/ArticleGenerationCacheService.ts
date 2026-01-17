@@ -39,7 +39,7 @@ export interface GeneratedArticle {
 interface CachedGenerationData {
   article: GeneratedArticle;
   userId: number;
-  reservationId?: string;  // 配额预留 ID
+  reservationId?: number;  // ✅ 修复：配额预留 ID（SERIAL -> number）
   createdAt: string;
   metadata?: Record<string, any>;
 }
@@ -83,14 +83,14 @@ export class ArticleGenerationCacheService {
    * 
    * @param article 生成的文章
    * @param userId 用户 ID
-   * @param reservationId 配额预留 ID（可选）
+   * @param reservationId 配额预留 ID（可选，SERIAL -> number）
    * @param metadata 额外元数据（可选）
    * @returns 生成结果，包含 generationId 和过期时间
    */
   async cacheGenerationResult(
     article: GeneratedArticle,
     userId: number,
-    reservationId?: string,
+    reservationId?: number,  // ✅ 修复：SERIAL -> number
     metadata?: Record<string, any>
   ): Promise<GenerationResult> {
     const generationId = `gen-${crypto.randomUUID()}`;

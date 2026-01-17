@@ -161,8 +161,8 @@ export interface ElectronAPI {
     stopScheduler: () => Promise<{ success: boolean; message?: string; error?: string }>;
     getSchedulerStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
     reserveQuota: (quotaType: string, amount?: number, taskInfo?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
-    confirmQuota: (reservationId: string, result?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
-    releaseQuota: (reservationId: string, reason?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    confirmQuota: (reservationId: number, result?: object) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
+    releaseQuota: (reservationId: number, reason?: string) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
     getQuotaInfo: () => Promise<{ success: boolean; data?: any; error?: string }>;
     reportResult: (report: any) => Promise<{ success: boolean; message?: string; error?: string }>;
     flushPendingAnalytics: () => Promise<{ success: boolean; error?: string }>;
@@ -237,9 +237,9 @@ export interface ElectronAPI {
   // 数据同步（与服务器同步）
   dataSync: {
     backup: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    restore: (snapshotId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    restore: (snapshotId: number) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
     getSnapshots: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteSnapshot: (snapshotId: string) => Promise<{ success: boolean; error?: string }>;
+    deleteSnapshot: (snapshotId: number) => Promise<{ success: boolean; error?: string }>;  // ✅ 修复
     exportLocal: (exportPath?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     importLocal: (importPath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
     getLocalStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
@@ -422,8 +422,8 @@ const electronAPI = {
     stopScheduler: () => ipcRenderer.invoke('publish:stopScheduler'),
     getSchedulerStatus: () => ipcRenderer.invoke('publish:getSchedulerStatus'),
     reserveQuota: (quotaType: string, amount?: number, taskInfo?: object) => ipcRenderer.invoke('publish:reserveQuota', quotaType, amount, taskInfo),
-    confirmQuota: (reservationId: string, result?: object) => ipcRenderer.invoke('publish:confirmQuota', reservationId, result),
-    releaseQuota: (reservationId: string, reason?: string) => ipcRenderer.invoke('publish:releaseQuota', reservationId, reason),
+    confirmQuota: (reservationId: number, result?: object) => ipcRenderer.invoke('publish:confirmQuota', reservationId, result),  // ✅ 修复
+    releaseQuota: (reservationId: number, reason?: string) => ipcRenderer.invoke('publish:releaseQuota', reservationId, reason),  // ✅ 修复
     getQuotaInfo: () => ipcRenderer.invoke('publish:getQuotaInfo'),
     reportResult: (report: any) => ipcRenderer.invoke('publish:reportResult', report),
     flushPendingAnalytics: () => ipcRenderer.invoke('publish:flushPendingAnalytics'),
@@ -498,9 +498,9 @@ const electronAPI = {
   // 数据同步（与服务器同步）
   dataSync: {
     backup: () => ipcRenderer.invoke('sync:backup'),
-    restore: (snapshotId: string) => ipcRenderer.invoke('sync:restore', snapshotId),
+    restore: (snapshotId: number) => ipcRenderer.invoke('sync:restore', snapshotId),  // ✅ 修复
     getSnapshots: () => ipcRenderer.invoke('sync:getSnapshots'),
-    deleteSnapshot: (snapshotId: string) => ipcRenderer.invoke('sync:deleteSnapshot', snapshotId),
+    deleteSnapshot: (snapshotId: number) => ipcRenderer.invoke('sync:deleteSnapshot', snapshotId),  // ✅ 修复
     exportLocal: (exportPath?: string) => ipcRenderer.invoke('sync:exportLocal', exportPath),
     importLocal: (importPath: string) => ipcRenderer.invoke('sync:importLocal', importPath),
     getLocalStats: () => ipcRenderer.invoke('sync:getLocalStats'),
