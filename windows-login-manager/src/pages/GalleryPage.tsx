@@ -58,24 +58,57 @@ export default function GalleryPage() {
         // 如果有图片，上传图片
         if (fileList.length > 0) {
           const { uploadImages } = useGalleryStore.getState();
-          // 提取可序列化的文件数据（Electron 环境下 File 对象有 path 属性）
+          
+          // 提取文件数据并读取文件内容
           const filesData: Array<{ name: string; type: string; size: number; path: string }> = [];
+          
           for (const file of fileList) {
             if (file.originFileObj) {
               const fileObj = file.originFileObj as any;
-              const filePath = fileObj.path;
-              if (filePath) {
-                filesData.push({
-                  name: file.name || fileObj.name,
-                  type: file.type || fileObj.type || 'image/jpeg',
-                  size: file.size || fileObj.size || 0,
-                  path: filePath
-                });
+              
+              // 尝试多种方式获取文件路径
+              let filePath = fileObj.path;
+              
+              // 如果没有 path 属性，尝试使用 webkitRelativePath 或创建临时路径
+              if (!filePath) {
+                console.warn('文件没有 path 属性，尝试其他方式:', file.name);
+                
+                // 在 Electron 中，我们可以使用 File 对象的 arrayBuffer 方法
+                // 然后通过 IPC 传递 buffer 数据
+                try {
+                  const arrayBuffer = await fileObj.arrayBuffer();
+                  const buffer = Array.from(new Uint8Array(arrayBuffer));
+                  
+                  filesData.push({
+                    name: file.name || fileObj.name,
+                    type: file.type || fileObj.type || 'image/jpeg',
+                    size: file.size || fileObj.size || 0,
+                    path: '', // 空路径表示使用 buffer
+                    buffer: buffer as any // 添加 buffer 数据
+                  } as any);
+                  continue;
+                } catch (err) {
+                  console.error('读取文件失败:', err);
+                  continue;
+                }
               }
+              
+              filesData.push({
+                name: file.name || fileObj.name,
+                type: file.type || fileObj.type || 'image/jpeg',
+                size: file.size || fileObj.size || 0,
+                path: filePath
+              });
             }
           }
+          
           if (filesData.length > 0) {
+            console.log('准备上传文件:', filesData.length, '个');
             await uploadImages(album.id, filesData);
+            // 刷新相册列表以更新图片数量
+            await fetchAlbums();
+          } else {
+            console.warn('没有有效的文件可上传');
           }
         }
         
@@ -85,13 +118,14 @@ export default function GalleryPage() {
         setFileList([]);
       }
     } catch (error: any) {
+      console.error('创建相册失败:', error);
       message.error(error.message || '创建相册失败');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDeleteAlbum = (id: string) => {
+  const handleDeleteAlbum = (id: number) => {
     modal.confirm({
       title: '确认删除',
       content: '确定要删除这个相册吗？相册中的所有图片也会被删除，此操作不可恢复。',
@@ -107,7 +141,7 @@ export default function GalleryPage() {
     });
   };
 
-  const handleEditAlbum = (id: string, currentName: string) => {
+  const handleEditAlbum = (id: number, currentName: string) => {
     let newName = currentName;
     
     modal.confirm({

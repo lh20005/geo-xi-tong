@@ -68,7 +68,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 获取相册详情
-  ipcMain.handle('gallery:getAlbum', async (_event, albumId: string) => {
+  ipcMain.handle('gallery:getAlbum', async (_event, albumId: number) => {
     try {
       log.info(`IPC: gallery:getAlbum - ${albumId}`);
       const user = await storageManager.getUser();
@@ -80,7 +80,7 @@ export function registerLocalGalleryHandlers(): void {
       serviceFactory.setUserId(user.id);
       const albumService = serviceFactory.getAlbumService();
       
-      const album = await albumService.findByIdWithStats(parseInt(albumId));
+      const album = await albumService.findByIdWithStats(albumId);
       if (!album) {
         return { success: false, error: '相册不存在' };
       }
@@ -93,7 +93,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 更新相册
-  ipcMain.handle('gallery:updateAlbum', async (_event, albumId: string, params: { name?: string; description?: string }) => {
+  ipcMain.handle('gallery:updateAlbum', async (_event, albumId: number, params: { name?: string; description?: string }) => {
     try {
       log.info(`IPC: gallery:updateAlbum - ${albumId}`);
       const user = await storageManager.getUser();
@@ -118,7 +118,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 删除相册
-  ipcMain.handle('gallery:deleteAlbum', async (_event, albumId: string) => {
+  ipcMain.handle('gallery:deleteAlbum', async (_event, albumId: number) => {
     try {
       log.info(`IPC: gallery:deleteAlbum - ${albumId}`);
       const user = await storageManager.getUser();
@@ -128,7 +128,7 @@ export function registerLocalGalleryHandlers(): void {
 
       // 删除相册目录
       const userDataPath = app.getPath('userData');
-      const albumPath = path.join(userDataPath, 'gallery', albumId);
+      const albumPath = path.join(userDataPath, 'gallery', String(albumId));
       if (fs.existsSync(albumPath)) {
         fs.rmSync(albumPath, { recursive: true, force: true });
       }
@@ -146,31 +146,52 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 上传图片
-  ipcMain.handle('gallery:uploadImage', async (_event, albumId: string, files: Array<{
+  ipcMain.handle('gallery:uploadImage', async (_event, albumId: number, files: Array<{
     name: string;
     path: string;
     type: string;
+    buffer?: number[]; // 可选的 buffer 数据
   }>) => {
+    log.info(`========== 🔥 图片上传 IPC 被调用 ==========`);
+    log.info(`📋 参数: albumId=${albumId}, files数量=${files?.length || 0}`);
+    
     try {
+      log.info(`========== 图片上传开始 ==========`);
       log.info(`IPC: gallery:uploadImage - Album: ${albumId}, files: ${files.length}`);
+      log.info(`Files info:`, files.map(f => ({ name: f.name, type: f.type, hasBuffer: !!f.buffer, bufferLength: f.buffer?.length, path: f.path })));
+      log.info(`========== 🔥 图片上传 IPC 被调用 ==========`);
+      log.info(`📋 参数: albumId=${albumId}, files数量=${files?.length || 0}`);
+      
       const user = await storageManager.getUser();
       if (!user) {
+        log.error('❌ 用户未登录');
         return { success: false, error: '用户未登录' };
       }
+      log.info(`✅ 用户已登录: User ID=${user.id}, Username=${user.username}`);
 
       // 设置用户 ID 并获取服务
+      log.info(`🔧 设置 ServiceFactory userId=${user.id}`);
       serviceFactory.setUserId(user.id);
+      
+      log.info(`🔧 获取 AlbumService...`);
       const albumService = serviceFactory.getAlbumService();
+      log.info(`🔧 获取 ImageService...`);
       const imageService = serviceFactory.getImageService();
+      log.info(`✅ Services 获取成功`);
 
+      log.info(`🔍 查询相册: albumId=${albumId}`);
       const album = await albumService.findById(albumId);
       if (!album) {
+        log.error(`❌ 相册不存在: ${albumId}`);
         return { success: false, error: '相册不存在' };
       }
+      log.info(`✅ 相册找到:`, album);
 
       // 获取相册存储目录
       const userDataPath = app.getPath('userData');
-      const albumPath = path.join(userDataPath, 'gallery', albumId);
+      log.info(`User data path: ${userDataPath}`);
+      const albumPath = path.join(userDataPath, 'gallery', String(albumId));
+      log.info(`Album path: ${albumPath}`);
       
       // 确保目录存在
       if (!fs.existsSync(albumPath)) {
@@ -181,8 +202,20 @@ export function registerLocalGalleryHandlers(): void {
 
       for (const file of files) {
         try {
-          // 读取文件内容
-          const content = fs.readFileSync(file.path);
+          log.info(`========== 处理文件: ${file.name} ==========`);
+          let content: Buffer;
+          
+          // 如果有 buffer 数据，使用 buffer；否则从路径读取
+          if (file.buffer && file.buffer.length > 0) {
+            content = Buffer.from(file.buffer);
+            log.info(`Using buffer data for ${file.name}, size: ${content.length}`);
+          } else if (file.path && fs.existsSync(file.path)) {
+            content = fs.readFileSync(file.path);
+            log.info(`Reading from path ${file.path}, size: ${content.length}`);
+          } else {
+            log.error(`No valid data source for ${file.name}, buffer: ${!!file.buffer}, path exists: ${file.path && fs.existsSync(file.path)}`);
+            continue;
+          }
           
           // 生成新文件名
           const ext = path.extname(file.name);
@@ -190,24 +223,32 @@ export function registerLocalGalleryHandlers(): void {
           const newFileName = `${baseName}-${Date.now()}${ext}`;
           const destPath = path.join(albumPath, newFileName);
           
+          log.info(`Saving to: ${destPath}`);
+          
           // 复制文件到相册目录
           fs.writeFileSync(destPath, content);
+          log.info(`File saved successfully: ${destPath}`);
 
           // 创建图片记录
-          const image = await imageService.create({
-            album_id: parseInt(albumId),
+          log.info(`Creating image record in database...`);
+          const image = await imageService.createImage({
+            album_id: albumId,
             filename: file.name,
             filepath: destPath,
             mime_type: file.type,
             size: content.length
           });
 
+          log.info(`Image record created successfully: ${image.id}`);
           uploadedImages.push(image);
         } catch (err: any) {
           log.error(`Failed to upload image ${file.name}:`, err);
+          log.error(`Error stack:`, err.stack);
         }
       }
 
+      log.info(`========== 上传完成 ==========`);
+      log.info(`Upload complete: ${uploadedImages.length} images uploaded`);
       return { 
         success: true, 
         data: { 
@@ -216,13 +257,15 @@ export function registerLocalGalleryHandlers(): void {
         } 
       };
     } catch (error: any) {
+      log.error('========== 图片上传失败 ==========');
       log.error('IPC: gallery:uploadImage failed:', error);
+      log.error('Error stack:', error.stack);
       return { success: false, error: error.message || '上传图片失败' };
     }
   });
 
   // 获取相册图片列表
-  ipcMain.handle('gallery:findImages', async (_event, albumId: string) => {
+  ipcMain.handle('gallery:findImages', async (_event, albumId: number) => {
     try {
       log.info(`IPC: gallery:findImages - ${albumId}`);
       const user = await storageManager.getUser();
@@ -234,7 +277,7 @@ export function registerLocalGalleryHandlers(): void {
       serviceFactory.setUserId(user.id);
       const imageService = serviceFactory.getImageService();
       
-      const images = await imageService.findByAlbum(parseInt(albumId));
+      const images = await imageService.findByAlbum(albumId);
       return { success: true, data: images };
     } catch (error: any) {
       log.error('IPC: gallery:findImages failed:', error);
@@ -243,7 +286,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 获取图片详情
-  ipcMain.handle('gallery:getImage', async (_event, imageId: string) => {
+  ipcMain.handle('gallery:getImage', async (_event, imageId: number) => {
     try {
       log.info(`IPC: gallery:getImage - ${imageId}`);
       const user = await storageManager.getUser();
@@ -268,7 +311,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 删除图片
-  ipcMain.handle('gallery:deleteImage', async (_event, imageId: string) => {
+  ipcMain.handle('gallery:deleteImage', async (_event, imageId: number) => {
     try {
       log.info(`IPC: gallery:deleteImage - ${imageId}`);
       const user = await storageManager.getUser();
@@ -289,7 +332,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 批量删除图片
-  ipcMain.handle('gallery:deleteImages', async (_event, imageIds: string[]) => {
+  ipcMain.handle('gallery:deleteImages', async (_event, imageIds: number[]) => {
     try {
       log.info(`IPC: gallery:deleteImages - ${imageIds.length} images`);
       const user = await storageManager.getUser();
@@ -311,7 +354,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 移动图片到其他相册
-  ipcMain.handle('gallery:moveImage', async (_event, imageId: string, targetAlbumId: string) => {
+  ipcMain.handle('gallery:moveImage', async (_event, imageId: number, targetAlbumId: number) => {
     try {
       log.info(`IPC: gallery:moveImage - ${imageId} -> ${targetAlbumId}`);
       const user = await storageManager.getUser();
@@ -337,7 +380,7 @@ export function registerLocalGalleryHandlers(): void {
       // 移动物理文件
       if (image.filepath && fs.existsSync(image.filepath)) {
         const userDataPath = app.getPath('userData');
-        const targetPath = path.join(userDataPath, 'gallery', targetAlbumId);
+        const targetPath = path.join(userDataPath, 'gallery', String(targetAlbumId));
         
         if (!fs.existsSync(targetPath)) {
           fs.mkdirSync(targetPath, { recursive: true });
@@ -348,7 +391,7 @@ export function registerLocalGalleryHandlers(): void {
 
         // 更新数据库记录
         await imageService.update(imageId, {
-          album_id: parseInt(targetAlbumId),
+          album_id: targetAlbumId,
           filepath: newFilePath
         });
       }
@@ -382,7 +425,7 @@ export function registerLocalGalleryHandlers(): void {
   });
 
   // 读取图片文件（返回 base64）
-  ipcMain.handle('gallery:readImageFile', async (_event, imageId: string) => {
+  ipcMain.handle('gallery:readImageFile', async (_event, imageId: number) => {
     try {
       log.info(`IPC: gallery:readImageFile - ${imageId}`);
       const user = await storageManager.getUser();

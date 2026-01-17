@@ -27,19 +27,19 @@ interface GalleryState {
   
   // 相册操作
   fetchAlbums: () => Promise<void>;
-  fetchAlbum: (albumId: string) => Promise<void>;
+  fetchAlbum: (albumId: number) => Promise<void>;
   createAlbum: (params: CreateAlbumParams) => Promise<LocalAlbum | null>;
-  updateAlbum: (albumId: string, params: Partial<CreateAlbumParams>) => Promise<boolean>;
-  deleteAlbum: (albumId: string) => Promise<boolean>;
+  updateAlbum: (albumId: number, params: Partial<CreateAlbumParams>) => Promise<boolean>;
+  deleteAlbum: (albumId: number) => Promise<boolean>;
   
   // 图片操作
-  uploadImages: (albumId: string, files: any[]) => Promise<boolean>;
-  fetchImages: (albumId: string) => Promise<void>;
-  fetchImage: (imageId: string) => Promise<void>;
-  deleteImage: (imageId: string) => Promise<boolean>;
-  deleteImages: (imageIds: string[]) => Promise<{ success: boolean; deletedCount: number }>;
-  moveImage: (imageId: string, targetAlbumId: string) => Promise<boolean>;
-  readImageFile: (imageId: string) => Promise<{ data: string; mimeType: string } | null>;
+  uploadImages: (albumId: number, files: any[]) => Promise<boolean>;
+  fetchImages: (albumId: number) => Promise<void>;
+  fetchImage: (imageId: number) => Promise<void>;
+  deleteImage: (imageId: number) => Promise<boolean>;
+  deleteImages: (imageIds: number[]) => Promise<{ success: boolean; deletedCount: number }>;
+  moveImage: (imageId: number, targetAlbumId: number) => Promise<boolean>;
+  readImageFile: (imageId: number) => Promise<{ data: string; mimeType: string } | null>;
   
   fetchStats: () => Promise<void>;
   clearError: () => void;

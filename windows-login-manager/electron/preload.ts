@@ -249,6 +249,9 @@ export interface ElectronAPI {
   utils: {
     getLocalFileUrl: (filePath: string) => string;
   };
+  
+  // 通用 invoke 方法（用于直接调用 IPC）
+  invoke: (channel: string, ...args: any[]) => Promise<any>;
 }
 
 // 创建 API 对象
@@ -510,7 +513,10 @@ const electronAPI = {
   utils: {
     getLocalFileUrl: (filePath: string) => getLocalFileUrl(filePath),
   },
-} as ElectronAPI;
+  
+  // 通用 invoke 方法（用于直接调用 IPC）
+  invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args),
+} as ElectronAPI & { invoke: (channel: string, ...args: any[]) => Promise<any> };
 
 // 通过contextBridge安全地暴露API
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

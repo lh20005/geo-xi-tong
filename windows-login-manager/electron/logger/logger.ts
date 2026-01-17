@@ -34,6 +34,9 @@ export class Logger {
       fs.mkdirSync(this.logPath, { recursive: true });
     }
 
+    // Rotate logs BEFORE configuring electron-log
+    this.rotateLogs();
+
     // Configure electron-log
     log.transports.file.level = 'info';
     log.transports.file.maxSize = this.maxLogSize;
@@ -44,14 +47,40 @@ export class Logger {
     log.transports.console.level = process.env.NODE_ENV === 'development' ? 'debug' : 'info';
     log.transports.console.format = '[{h}:{i}:{s}] [{level}] {text}';
 
-    // Rotate logs on startup
-    this.rotateLogs();
+    // Write startup log
+    this.info('='.repeat(80));
+    this.info(`Logger initialized - ${new Date().toISOString()}`);
+    this.info(`Log path: ${this.logPath}`);
+    this.info(`Node environment: ${process.env.NODE_ENV || 'production'}`);
+    this.info('='.repeat(80));
   }
 
   private rotateLogs(): void {
     try {
+      const mainLogPath = path.join(this.logPath, 'main.log');
+      
+      // Check if main.log exists and is not empty
+      if (fs.existsSync(mainLogPath)) {
+        const stats = fs.statSync(mainLogPath);
+        
+        // If log file is larger than 1MB or older than 1 day, rotate it
+        const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+        const shouldRotate = stats.size > 1024 * 1024 || stats.mtime.getTime() < oneDayAgo;
+        
+        if (shouldRotate) {
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const archiveName = `main.${timestamp}.log`;
+          const archivePath = path.join(this.logPath, archiveName);
+          
+          // Archive current log
+          fs.renameSync(mainLogPath, archivePath);
+          console.log(`[Logger] Rotated log to: ${archiveName}`);
+        }
+      }
+
+      // Clean up old log files (keep only the most recent 5)
       const files = fs.readdirSync(this.logPath)
-        .filter(f => f.startsWith('main') && f.endsWith('.log'))
+        .filter(f => f.startsWith('main') && f.endsWith('.log') && f !== 'main.log')
         .map(f => ({
           name: f,
           path: path.join(this.logPath, f),
@@ -59,29 +88,19 @@ export class Logger {
         }))
         .sort((a, b) => b.time - a.time);
 
-      // Keep only the most recent logs
-      if (files.length >= this.maxLogFiles) {
-        const mainLog = path.join(this.logPath, 'main.log');
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const archiveName = `main.${timestamp}.log`;
-        const archivePath = path.join(this.logPath, archiveName);
-
-        // Archive current log
-        if (fs.existsSync(mainLog)) {
-          fs.renameSync(mainLog, archivePath);
-        }
-
-        // Delete old logs
-        files.slice(this.maxLogFiles - 1).forEach(file => {
+      // Delete old logs (keep only 5 most recent archives)
+      if (files.length > this.maxLogFiles) {
+        files.slice(this.maxLogFiles).forEach(file => {
           try {
             fs.unlinkSync(file.path);
+            console.log(`[Logger] Deleted old log: ${file.name}`);
           } catch (err) {
-            console.error(`Failed to delete old log: ${file.name}`, err);
+            console.error(`[Logger] Failed to delete old log: ${file.name}`, err);
           }
         });
       }
     } catch (err) {
-      console.error('Failed to rotate logs:', err);
+      console.error('[Logger] Failed to rotate logs:', err);
     }
   }
 

@@ -129,6 +129,10 @@ $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION cleanup_expired_reservations IS '清理过期的配额预留，将状态更新为 expired';
 
+-- 授予权限
+GRANT ALL PRIVILEGES ON TABLE quota_reservations TO geo_user;
+GRANT ALL PRIVILEGES ON SEQUENCE quota_reservations_id_seq TO geo_user;
+
 -- ==================== DOWN ====================
 -- DROP FUNCTION IF EXISTS cleanup_expired_reservations();
 -- DROP FUNCTION IF EXISTS get_available_quota_with_reservations(INTEGER, VARCHAR);

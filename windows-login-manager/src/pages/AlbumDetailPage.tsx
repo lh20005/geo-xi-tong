@@ -7,7 +7,8 @@ import type { UploadFile } from 'antd';
 
 export default function AlbumDetailPage() {
   const navigate = useNavigate();
-  const { albumId } = useParams<{ albumId: string }>();
+  const { albumId: albumIdParam } = useParams<{ albumId: string }>();
+  const albumId = albumIdParam ? parseInt(albumIdParam, 10) : undefined;
   
   const {
     currentAlbum,
@@ -99,7 +100,7 @@ export default function AlbumDetailPage() {
     }
   };
 
-  const handleDeleteImage = (imageId: string) => {
+  const handleDeleteImage = (imageId: number) => {
     Modal.confirm({
       title: '确认删除',
       content: '确定要删除这张图片吗？此操作不可恢复。',

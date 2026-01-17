@@ -110,25 +110,26 @@ export class AlbumServicePostgres extends BaseServicePostgres<Album> {
   }
 
   /**
-   * 获取所有相册（带图片统计）
+   * 获取所有相册（带图片统计和封面图）
    */
-  async findAllWithStats(): Promise<Array<Album & { imageCount: number }>> {
+  async findAllWithStats(): Promise<Array<Album & { imageCount: number; coverImage: string | null }>> {
     this.validateUserId();
 
     try {
       const result = await this.pool.query(
-        `SELECT a.*, COUNT(i.id) as image_count
+        `SELECT a.*, 
+          (SELECT COUNT(*) FROM images WHERE album_id = a.id AND deleted_at IS NULL) as image_count,
+          (SELECT filepath FROM images WHERE album_id = a.id AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1) as cover_image
          FROM albums a
-         LEFT JOIN images i ON i.album_id = a.id
          WHERE a.user_id = $1
-         GROUP BY a.id
          ORDER BY a.created_at DESC`,
         [this.userId]
       );
 
       return result.rows.map(row => ({
         ...row,
-        imageCount: parseInt(row.image_count)
+        imageCount: parseInt(row.image_count || '0'),
+        coverImage: row.cover_image
       }));
     } catch (error) {
       log.error('AlbumService: findAllWithStats 失败:', error);

@@ -483,7 +483,7 @@ export const localKnowledgeApi = {
 // ==================== 本地图库管理 ====================
 
 export interface LocalAlbum {
-  id: string;
+  id: number;
   userId: number;
   name: string;
   createdAt: string;
@@ -491,9 +491,9 @@ export interface LocalAlbum {
 }
 
 export interface LocalImage {
-  id: string;
+  id: number;
   userId: number;
-  albumId: string;
+  albumId: number;
   filename: string;
   filepath: string;
   mimeType: string;
@@ -516,39 +516,39 @@ export const localGalleryApi = {
     return window.electron.gallery.findAlbums();
   },
   
-  getAlbum: async (albumId: string) => {
+  getAlbum: async (albumId: number) => {
     return window.electron.gallery.getAlbum(albumId);
   },
   
-  updateAlbum: async (albumId: string, params: Partial<CreateAlbumParams>) => {
+  updateAlbum: async (albumId: number, params: Partial<CreateAlbumParams>) => {
     return window.electron.gallery.updateAlbum(albumId, params);
   },
   
-  deleteAlbum: async (albumId: string) => {
+  deleteAlbum: async (albumId: number) => {
     return window.electron.gallery.deleteAlbum(albumId);
   },
   
-  uploadImage: async (albumId: string, files: any[]) => {
+  uploadImage: async (albumId: number, files: any[]) => {
     return window.electron.gallery.uploadImage(albumId, files);
   },
   
-  findImages: async (albumId: string) => {
+  findImages: async (albumId: number) => {
     return window.electron.gallery.findImages(albumId);
   },
   
-  getImage: async (imageId: string) => {
+  getImage: async (imageId: number) => {
     return window.electron.gallery.getImage(imageId);
   },
   
-  deleteImage: async (imageId: string) => {
+  deleteImage: async (imageId: number) => {
     return window.electron.gallery.deleteImage(imageId);
   },
   
-  deleteImages: async (imageIds: string[]) => {
+  deleteImages: async (imageIds: number[]) => {
     return window.electron.gallery.deleteImages(imageIds);
   },
   
-  moveImage: async (imageId: string, targetAlbumId: string) => {
+  moveImage: async (imageId: number, targetAlbumId: number) => {
     return window.electron.gallery.moveImage(imageId, targetAlbumId);
   },
   
@@ -556,7 +556,7 @@ export const localGalleryApi = {
     return window.electron.gallery.getStats();
   },
   
-  readImageFile: async (imageId: string) => {
+  readImageFile: async (imageId: number) => {
     return window.electron.gallery.readImageFile(imageId);
   },
 };
