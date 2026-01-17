@@ -1,8 +1,6 @@
 import { pool } from '../db/database';
 import { AIService } from './aiService';
 import { ContentCleaner } from './contentCleaner';
-// [已迁移到 Windows 端] 话题和图片选择已在 Windows 端完成，服务器端只负责 AI 生成
-// 保留导入仅用于编译通过，实际调用会抛出错误
 import { TopicSelectionService } from './topicSelectionService';
 import { ImageSelectionService } from './imageSelectionService';
 

@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { configRouter } from './config';
-import { distillationRouter } from './distillation';
-import { topicRouter } from './topic';
+// [已迁移到 Windows 端] import { distillationRouter } from './distillation';
+// [已迁移到 Windows 端] import { topicRouter } from './topic';
 // [已迁移到 Windows 端] import { articleRouter } from './article';
 // [已迁移到 Windows 端] import { galleryRouter } from './gallery';
 // [已迁移到 Windows 端] import { knowledgeBaseRouter } from './knowledgeBase';
 import { conversionTargetRouter } from './conversionTarget';
-import { articleSettingsRouter } from './articleSettings';
+// [已迁移到 Windows 端] import { articleSettingsRouter } from './articleSettings';
 import { articleGenerationRouter } from './articleGeneration';
-import platformAccountsRouter from './platformAccounts';
-import publishingTasksRouter from './publishingTasks';
-import publishingRecordsRouter from './publishingRecords';
+// [已迁移到 Windows 端] import platformAccountsRouter from './platformAccounts';
+// [已迁移到 Windows 端] import publishingTasksRouter from './publishingTasks';
+// [已迁移到 Windows 端] import publishingRecordsRouter from './publishingRecords';
 import publishingSSERouter from './publishingSSE';
 import { dashboardRouter } from './dashboard';
 import authRouter from './auth';
@@ -60,19 +60,19 @@ apiRouter.use('/agent', agentRouter);  // 代理商API
 apiRouter.use('/platforms', platformsRouter);
 apiRouter.use('/accounts', accountsRouter);
 apiRouter.use('/config', configRouter);
-apiRouter.use('/distillation', distillationRouter);
-apiRouter.use('/topics', topicRouter);
+// [已迁移到 Windows 端] apiRouter.use('/distillation', distillationRouter);
+// [已迁移到 Windows 端] apiRouter.use('/topics', topicRouter);
 // [已迁移到 Windows 端] apiRouter.use('/articles', articleRouter);
 // [已迁移到 Windows 端] apiRouter.use('/gallery', galleryRouter);
 // [已迁移到 Windows 端] apiRouter.use('/knowledge-bases', knowledgeBaseRouter);
 apiRouter.use('/conversion-targets', conversionTargetRouter);
-apiRouter.use('/article-settings', articleSettingsRouter);
+// [已迁移到 Windows 端] apiRouter.use('/article-settings', articleSettingsRouter);
 apiRouter.use('/article-generation', articleGenerationRouter);
 // SSE 路由必须在其他 publishing 路由之前，因为它有自己的认证逻辑
 apiRouter.use('/publishing', publishingSSERouter);
-apiRouter.use('/publishing', platformAccountsRouter);
-apiRouter.use('/publishing', publishingTasksRouter);
-apiRouter.use('/publishing', publishingRecordsRouter);
+// [已迁移到 Windows 端] apiRouter.use('/publishing', platformAccountsRouter);
+// [已迁移到 Windows 端] apiRouter.use('/publishing', publishingTasksRouter);
+// [已迁移到 Windows 端] apiRouter.use('/publishing', publishingRecordsRouter);
 apiRouter.use('/dashboard', dashboardRouter);
 apiRouter.use('/sync', syncRouter);  // 数据同步API
 apiRouter.use('/analytics', analyticsRouter);  // 发布分析API
