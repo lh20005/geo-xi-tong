@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
-  Card, Button, message, Space, Tag, Modal, Empty, 
-  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Popconfirm 
+  Card, Button, Space, Tag, Modal, Empty, 
+  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Popconfirm, App 
 } from 'antd';
 import { 
   FileTextOutlined, DeleteOutlined, ThunderboltOutlined, 
@@ -25,6 +25,7 @@ const { Option } = Select;
 
 export default function DistillationResultsPage() {
   const navigate = useNavigate();
+  const { message, modal } = App.useApp(); // 使用 App 提供的 hooks
   const { invalidateCacheByPrefix } = useCacheStore();
   const [data, setData] = useState<TopicWithReference[]>([]);
   const [total, setTotal] = useState(0);
@@ -156,7 +157,7 @@ export default function DistillationResultsPage() {
       return;
     }
 
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       content: `确定要删除选中的 ${selectedRowKeys.length} 个话题吗？此操作不可恢复。`,
       okText: '确定',
@@ -234,7 +235,7 @@ export default function DistillationResultsPage() {
       return;
     }
 
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除',
       icon: <ExclamationCircleOutlined />,
       content: (

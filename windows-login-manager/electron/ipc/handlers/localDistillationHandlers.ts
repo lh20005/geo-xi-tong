@@ -357,7 +357,7 @@ export function registerLocalDistillationHandlers(): void {
     }
   });
 
-  // 获取所有唯一关键词列表
+  // 获取所有唯一关键词列表（只返回有话题的关键词）
   ipcMain.handle('distillation:local:getKeywords', async () => {
     try {
       log.info('IPC: distillation:local:getKeywords');
@@ -369,11 +369,13 @@ export function registerLocalDistillationHandlers(): void {
       serviceFactory.setUserId(user.id);
       const pool = getPool();
 
+      // 只返回有话题的关键词
       const query = `
-        SELECT DISTINCT keyword
-        FROM distillations
-        WHERE user_id = $1
-        ORDER BY keyword ASC
+        SELECT DISTINCT d.keyword
+        FROM distillations d
+        INNER JOIN topics t ON d.id = t.distillation_id
+        WHERE d.user_id = $1
+        ORDER BY d.keyword ASC
       `;
       const result = await pool.query(query, [user.id]);
 
@@ -427,7 +429,7 @@ export function registerLocalDistillationHandlers(): void {
     }
   });
 
-  // 按关键词删除所有话题
+  // 按关键词删除所有话题（同时清理空的 distillations 记录）
   ipcMain.handle('distillation:local:deleteTopicsByKeyword', async (_event, keyword: string) => {
     try {
       log.info(`IPC: distillation:local:deleteTopicsByKeyword - ${keyword}`);
@@ -439,24 +441,54 @@ export function registerLocalDistillationHandlers(): void {
       serviceFactory.setUserId(user.id);
       const pool = getPool();
 
-      // 删除话题
-      const query = `
-        DELETE FROM topics t
-        USING distillations d
-        WHERE t.distillation_id = d.id
-          AND d.keyword = $1
-          AND t.user_id = $2
-        RETURNING t.id
-      `;
-      const result = await pool.query(query, [keyword, user.id]);
+      // 开始事务
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
 
-      return {
-        success: true,
-        data: {
-          deletedCount: result.rowCount || 0,
-          keyword,
-        },
-      };
+        // 1. 删除话题
+        const deleteTopicsQuery = `
+          DELETE FROM topics t
+          USING distillations d
+          WHERE t.distillation_id = d.id
+            AND d.keyword = $1
+            AND t.user_id = $2
+          RETURNING t.id
+        `;
+        const deleteResult = await client.query(deleteTopicsQuery, [keyword, user.id]);
+        const deletedCount = deleteResult.rowCount || 0;
+
+        // 2. 删除没有话题的 distillations 记录
+        const deleteDistillationsQuery = `
+          DELETE FROM distillations d
+          WHERE d.keyword = $1
+            AND d.user_id = $2
+            AND NOT EXISTS (
+              SELECT 1 FROM topics t WHERE t.distillation_id = d.id
+            )
+          RETURNING d.id
+        `;
+        const distillationResult = await client.query(deleteDistillationsQuery, [keyword, user.id]);
+        const deletedDistillations = distillationResult.rowCount || 0;
+
+        await client.query('COMMIT');
+
+        log.info(`Deleted ${deletedCount} topics and ${deletedDistillations} distillations for keyword: ${keyword}`);
+
+        return {
+          success: true,
+          data: {
+            deletedCount,
+            deletedDistillations,
+            keyword,
+          },
+        };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
     } catch (error: any) {
       log.error('IPC: distillation:local:deleteTopicsByKeyword failed:', error);
       return { success: false, error: error.message || '按关键词删除话题失败' };

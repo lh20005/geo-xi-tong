@@ -1,43 +1,35 @@
 #!/bin/bash
 
-# Windows登录管理器 - 一键启动脚本
-# 自动启动所有必需服务：PostgreSQL、后端服务器、Windows管理器
+# Windows登录管理器 - 混合模式启动脚本
+# 本地 Windows 端 + 生产服务器（推荐用于开发测试）
 #
-# 架构说明（PostgreSQL 迁移后）：
-# - 本地执行：发布任务、浏览器自动化、文章/知识库/图库/账号存储（PostgreSQL）
-# - 服务器执行：用户认证、配额验证、AI生成、订阅管理、数据同步
-# - 数据库：Windows 端使用本地 PostgreSQL (geo_windows)，服务器使用 PostgreSQL (geo_system)
+# 架构说明：
+# - 本地执行：Windows 端、本地 PostgreSQL (geo_windows)、浏览器自动化
+# - 服务器执行：用户认证、配额验证、AI生成、订阅管理（连接 jzgeo.cc）
+# - 优势：使用真实数据测试，本地修改后同步到服务器
 
 cd "$(dirname "$0")"
-echo -ne "\033]0;GEO系统 - 一键启动\007"
+echo -ne "\033]0;GEO系统 - 混合模式\007"
 
 clear
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "🚀 GEO 系统 - 一键启动脚本"
+echo "🚀 GEO 系统 - 混合模式启动"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo ""
+echo "📋 模式说明："
+echo "   • 本地：Windows 端 + PostgreSQL 数据库"
+echo "   • 服务器：用户认证 + AI 生成 + 配额管理"
+echo "   • 连接到：https://jzgeo.cc"
 echo ""
 
 # 清理函数
 cleanup() {
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🛑 正在停止所有服务..."
+    echo "🛑 正在停止服务..."
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
-    # 停止后端服务器
-    if [ ! -z "$SERVER_PID" ]; then
-        echo "   🔴 停止后端服务器 (PID: $SERVER_PID)..."
-        kill $SERVER_PID 2>/dev/null
-    fi
-    
-    # 停止 Windows 管理器
-    if [ ! -z "$WINDOWS_PID" ]; then
-        echo "   🔴 停止 Windows 管理器 (PID: $WINDOWS_PID)..."
-        kill $WINDOWS_PID 2>/dev/null
-    fi
-    
     echo ""
-    echo "✅ 所有服务已停止"
+    echo "✅ 服务已停止"
     echo ""
     read -p "按回车键退出..."
     exit 0
@@ -47,7 +39,7 @@ cleanup() {
 trap cleanup SIGINT SIGTERM EXIT
 
 # 1. 系统检查
-echo "🔍 [1/6] 系统环境检查..."
+echo "🔍 [1/4] 系统环境检查..."
 if ! command -v node &> /dev/null; then
     echo "❌ 未找到 Node.js，请先安装: https://nodejs.org/"
     read -p "按回车键退出..." && exit 1
@@ -66,7 +58,7 @@ echo "   ✅ PostgreSQL: $(psql --version | head -n 1)"
 echo ""
 
 # 2. 启动 PostgreSQL
-echo "🗄️  [2/6] 启动 PostgreSQL 数据库..."
+echo "🗄️  [2/4] 启动 PostgreSQL 数据库..."
 
 # 检查 PostgreSQL 是否已运行
 if pg_isready -h localhost &> /dev/null; then
@@ -95,7 +87,7 @@ fi
 echo ""
 
 # 3. 检查并创建数据库
-echo "🗄️  [3/6] 检查 PostgreSQL 数据库..."
+echo "🗄️  [3/4] 检查 PostgreSQL 数据库..."
 
 # 检查 geo_windows 数据库
 if psql -lqt | cut -d \| -f 1 | grep -qw geo_windows; then
@@ -115,66 +107,18 @@ else
 fi
 echo ""
 
-# 4. 检查并安装依赖
-echo "📦 [4/6] 检查依赖包..."
-
-# 检查后端依赖
-cd server
-if [ ! -d "node_modules" ]; then
-    echo "   🔄 安装后端依赖..."
-    npm install
-fi
-echo "   ✅ 后端依赖检查完成"
-
-# 检查 Windows 管理器依赖
-cd ../windows-login-manager
-if [ ! -d "node_modules" ]; then
-    echo "   🔄 安装 Windows 管理器依赖..."
-    npm install
-fi
-echo "   ✅ Windows 管理器依赖检查完成"
-cd ..
-echo ""
-
-# 5. 启动后端服务器
-echo "🌐 [5/6] 启动后端服务器..."
-
-# 检查后端是否已在运行
-if lsof -Pi :3000 -sTCP:LISTEN -t >/dev/null 2>&1; then
-    echo "   ⚠️  端口 3000 已被占用"
-    echo "   💡 后端服务器可能已在运行"
-    echo "   💡 如需重启，请先停止现有服务"
-    read -p "   是否继续？(y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        exit 1
-    fi
-else
-    cd server
-    echo "   🔄 启动后端服务器 (端口 3000)..."
-    npm run dev > ../logs/server.log 2>&1 &
-    SERVER_PID=$!
-    cd ..
-    
-    # 等待服务器启动
-    echo "   ⏳ 等待服务器启动..."
-    sleep 3
-    
-    # 检查服务器是否启动成功
-    if curl -s http://localhost:3000/api/health > /dev/null 2>&1; then
-        echo "   ✅ 后端服务器启动成功 (PID: $SERVER_PID)"
-    else
-        echo "   ⚠️  后端服务器可能未完全启动，继续..."
-    fi
-fi
-echo ""
-
-# 6. 配置并启动 Windows 管理器
-echo "🖥️  [6/6] 启动 Windows 管理器..."
+# 4. 配置并启动 Windows 管理器
+echo "🖥️  [4/4] 启动 Windows 管理器..."
 
 cd windows-login-manager
 
-# 配置环境变量（本地模式）
+# 检查依赖
+if [ ! -d "node_modules" ]; then
+    echo "   🔄 安装依赖..."
+    npm install
+fi
+
+# 配置环境变量（混合模式：本地 Windows 端 + 生产服务器）
 cat > .env << 'EOF'
 # PostgreSQL 数据库配置（本地）
 DB_HOST=localhost
@@ -183,14 +127,14 @@ DB_NAME=geo_windows
 DB_USER=lzc
 DB_PASSWORD=
 
-# 后端API基础地址（不包含 /api）- 本地服务器
-VITE_API_BASE_URL=http://localhost:3000
+# 后端API基础地址（不包含 /api）- 连接到生产服务器
+VITE_API_BASE_URL=https://jzgeo.cc
 
 # WebSocket基础地址（包含 /ws 路径）
-VITE_WS_BASE_URL=ws://localhost:3000/ws
+VITE_WS_BASE_URL=wss://jzgeo.cc/ws
 
 # Landing页面地址
-VITE_LANDING_URL=http://localhost:8080
+VITE_LANDING_URL=https://jzgeo.cc
 
 # 应用环境
 NODE_ENV=development
@@ -199,18 +143,18 @@ NODE_ENV=development
 LOG_LEVEL=debug
 EOF
 
-echo "   ✅ 已配置连接到本地服务器"
+echo "   ✅ 已配置连接到生产服务器"
 echo ""
 
 # 启动信息
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "✅ 所有服务启动完成！"
+echo "✅ 混合模式配置完成！"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "📋 服务信息:"
-echo "   • PostgreSQL:  localhost:5432 (数据库: geo_windows)"
-echo "   • 后端API:     http://localhost:3000/api"
-echo "   • WebSocket:   ws://localhost:3000/ws"
+echo "   • 本地数据库:  localhost:5432 (geo_windows)"
+echo "   • 生产API:     https://jzgeo.cc/api"
+echo "   • WebSocket:   wss://jzgeo.cc/ws"
 echo "   • Windows端:   http://localhost:5174"
 echo ""
 echo "📦 本地执行:"
@@ -218,10 +162,19 @@ echo "   • 发布任务:   本地 Playwright 执行"
 echo "   • 数据存储:   本地 PostgreSQL 数据库"
 echo "   • 浏览器:     本地 Chrome/Chromium"
 echo ""
+echo "☁️  服务器功能:"
+echo "   • 用户认证、配额验证、AI生成"
+echo "   • 订阅管理、数据同步"
+echo ""
+echo "🔑 登录账号:"
+echo "   • 管理员: admin / admin123"
+echo "   • 普通用户: testuser / test123"
+echo ""
 echo "⚠️  操作提示:"
 echo "   • 保持此窗口打开以查看日志"
-echo "   • 按 Ctrl+C 停止所有服务"
-echo "   • 后端日志: logs/server.log"
+echo "   • 按 Ctrl+C 停止服务"
+echo "   • 使用生产服务器的真实用户数据"
+echo "   • 本地修改后可同步到服务器测试"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -231,5 +184,5 @@ echo "🚀 正在启动 Windows 管理器..."
 echo ""
 npm run electron:dev
 
-# 如果 Windows 管理器退出，清理其他服务
+# 如果 Windows 管理器退出，清理
 cleanup

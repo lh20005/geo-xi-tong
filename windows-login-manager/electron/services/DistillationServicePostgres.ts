@@ -66,10 +66,54 @@ export class DistillationServicePostgres extends BaseServicePostgres<Distillatio
   }
 
   /**
-   * 删除蒸馏
+   * 删除蒸馏（同时删除相关话题）
    */
   async deleteDistillation(id: number): Promise<void> {
-    await this.delete(id);
+    this.validateUserId();
+
+    try {
+      // 先删除相关的话题
+      await this.pool.query(
+        'DELETE FROM topics WHERE distillation_id = $1 AND user_id = $2',
+        [id, this.userId]
+      );
+
+      // 再删除蒸馏记录
+      await this.delete(id);
+
+      log.info(`DistillationService: 删除蒸馏及相关话题成功, ID: ${id}`);
+    } catch (error) {
+      log.error('DistillationService: deleteDistillation 失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 批量删除蒸馏（同时删除相关话题）
+   */
+  async deleteMany(ids: number[]): Promise<number> {
+    this.validateUserId();
+
+    try {
+      if (ids.length === 0) return 0;
+
+      // 先删除相关的话题
+      const placeholders = ids.map((_, i) => `$${i + 2}`).join(',');
+      await this.pool.query(
+        `DELETE FROM topics WHERE distillation_id IN (${placeholders}) AND user_id = $1`,
+        [this.userId, ...ids]
+      );
+
+      // 再批量删除蒸馏记录
+      const count = await super.deleteMany(ids);
+
+      log.info(`DistillationService: 批量删除蒸馏及相关话题成功, 删除 ${count} 条记录`);
+
+      return count;
+    } catch (error) {
+      log.error('DistillationService: deleteMany 失败:', error);
+      throw error;
+    }
   }
 
   /**
