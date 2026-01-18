@@ -64,7 +64,7 @@ export default function DistillationPage() {
       }
       
       // 从本地话题表获取话题列表
-      const topicsResult = await window.electron.invoke('topic:local:findByDistillation', record.id);
+      const topicsResult = await window.electron.invoke('topic:local:getByDistillation', record.id);
       if (!topicsResult.success) {
         throw new Error(topicsResult.error || '加载话题列表失败');
       }
@@ -210,12 +210,15 @@ export default function DistillationPage() {
     setLoading(true);
     try {
       // 1. 调用服务器 API 执行蒸馏（调用 AI 生成话题）
+      console.log('[蒸馏] 开始调用服务器 API');
       const response = await apiClient.post('/distillation', { keyword: keyword.trim() });
       
       const questions = response.data.questions || [];
       const count = questions.length;
+      console.log('[蒸馏] 服务器返回话题数量:', count);
       
       // 2. 保存蒸馏记录到本地数据库
+      console.log('[蒸馏] 开始保存蒸馏记录');
       const createResult = await localDistillationApi.create({
         keyword: keyword.trim(),
         topic_count: count,
@@ -227,16 +230,29 @@ export default function DistillationPage() {
       }
       
       const distillationId = createResult.data.id;
+      console.log('[蒸馏] 蒸馏记录已保存, ID:', distillationId);
       
       // 3. 保存话题到本地数据库
-      for (const question of questions) {
-        await window.electron.invoke('topic:local:create', {
+      console.log('[蒸馏] 开始保存话题，数量:', questions.length);
+      for (let i = 0; i < questions.length; i++) {
+        const question = questions[i];
+        console.log(`[蒸馏] 保存话题 ${i + 1}/${questions.length}:`, question.question || question);
+        
+        const topicResult = await window.electron.invoke('topic:local:create', {
           distillation_id: distillationId,
           question: question.question || question,
           category: question.category || '',
           priority: question.priority || 0
         });
+        
+        console.log(`[蒸馏] 话题 ${i + 1} 保存结果:`, topicResult);
+        
+        if (!topicResult.success) {
+          console.error('[蒸馏] 保存话题失败:', topicResult.error);
+          throw new Error(`保存话题失败: ${topicResult.error}`);
+        }
       }
+      console.log('[蒸馏] 所有话题保存完成');
       
       // 4. 保存结果到 LocalStorage（用于结果页面显示）
       const resultData = {
@@ -257,6 +273,7 @@ export default function DistillationPage() {
       // 6. 自动导航到结果页面
       navigate('/distillation-results');
     } catch (error: any) {
+      console.error('[蒸馏] 蒸馏失败:', error);
       message.error(error.message || '蒸馏失败，请检查API配置');
     } finally {
       setLoading(false);

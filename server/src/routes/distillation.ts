@@ -65,7 +65,7 @@ distillationRouter.post('/', async (req, res) => {
     
     // 保存蒸馏记录（关联用户）
     const distillationResult = await pool.query(
-      'INSERT INTO distillations (keyword, provider, user_id) VALUES ($1, $2, $3) RETURNING id',
+      'INSERT INTO distillations (keyword, provider, user_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id',
       [keyword, currentConfig.provider, userId]
     );
     
@@ -148,7 +148,7 @@ distillationRouter.post('/manual', async (req, res) => {
       
       // 保存蒸馏记录（provider标记为'manual'表示手动输入，关联用户）
       const distillationResult = await client.query(
-        'INSERT INTO distillations (keyword, provider, user_id) VALUES ($1, $2, $3) RETURNING id',
+        'INSERT INTO distillations (keyword, provider, user_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id',
         [keyword.trim(), 'manual', userId]
       );
       

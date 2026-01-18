@@ -245,6 +245,36 @@ export interface ElectronAPI {
     getLocalStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
   };
 
+  // 蒸馏管理（本地 PostgreSQL）
+  distillation: {
+    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    update: (id: number, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    delete: (id: number) => Promise<{ success: boolean; error?: string }>;
+    deleteBatch: (ids: number[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getResults: (filters?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getKeywords: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteTopics: (topicIds: number[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    deleteTopicsByKeyword: (keyword: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
+  // 话题管理（本地 PostgreSQL）
+  topic: {
+    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    update: (id: number, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    delete: (id: number) => Promise<{ success: boolean; error?: string }>;
+    deleteBatch: (ids: number[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getByDistillation: (distillationId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    search: (searchTerm: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findUnused: (limit?: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findRecent: (limit?: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    exists: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
   // 工具函数
   utils: {
     getLocalFileUrl: (filePath: string) => string;
@@ -507,6 +537,36 @@ const electronAPI = {
     exportLocal: (exportPath?: string) => ipcRenderer.invoke('sync:exportLocal', exportPath),
     importLocal: (importPath: string) => ipcRenderer.invoke('sync:importLocal', importPath),
     getLocalStats: () => ipcRenderer.invoke('sync:getLocalStats'),
+  },
+
+  // 蒸馏管理（本地 PostgreSQL）
+  distillation: {
+    create: (params: any) => ipcRenderer.invoke('distillation:local:create', params),
+    findAll: (params?: any) => ipcRenderer.invoke('distillation:local:findAll', params),
+    findById: (id: number) => ipcRenderer.invoke('distillation:local:findById', id),
+    update: (id: number, params: any) => ipcRenderer.invoke('distillation:local:update', id, params),
+    delete: (id: number) => ipcRenderer.invoke('distillation:local:delete', id),
+    deleteBatch: (ids: number[]) => ipcRenderer.invoke('distillation:local:deleteBatch', ids),
+    getResults: (filters?: any) => ipcRenderer.invoke('distillation:local:getResults', filters),
+    getKeywords: () => ipcRenderer.invoke('distillation:local:getKeywords'),
+    deleteTopics: (topicIds: number[]) => ipcRenderer.invoke('distillation:local:deleteTopics', topicIds),
+    deleteTopicsByKeyword: (keyword: string) => ipcRenderer.invoke('distillation:local:deleteTopicsByKeyword', keyword),
+  },
+
+  // 话题管理（本地 PostgreSQL）
+  topic: {
+    create: (params: any) => ipcRenderer.invoke('topic:local:create', params),
+    findAll: (params?: any) => ipcRenderer.invoke('topic:local:findAll', params),
+    findById: (id: number) => ipcRenderer.invoke('topic:local:findById', id),
+    update: (id: number, params: any) => ipcRenderer.invoke('topic:local:update', id, params),
+    delete: (id: number) => ipcRenderer.invoke('topic:local:delete', id),
+    deleteBatch: (ids: number[]) => ipcRenderer.invoke('topic:local:deleteBatch', ids),
+    getByDistillation: (distillationId: number) => ipcRenderer.invoke('topic:local:getByDistillation', distillationId),
+    search: (searchTerm: string) => ipcRenderer.invoke('topic:local:search', searchTerm),
+    findUnused: (limit?: number) => ipcRenderer.invoke('topic:local:findUnused', limit),
+    findRecent: (limit?: number) => ipcRenderer.invoke('topic:local:findRecent', limit),
+    getStats: () => ipcRenderer.invoke('topic:local:getStats'),
+    exists: (id: number) => ipcRenderer.invoke('topic:local:exists', id),
   },
 
   // 工具函数

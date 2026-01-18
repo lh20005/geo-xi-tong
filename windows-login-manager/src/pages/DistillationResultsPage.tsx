@@ -1,22 +1,21 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Card, Button, message, Space, Tag, Modal, Empty, 
-  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Form, Popconfirm 
+  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Popconfirm 
 } from 'antd';
 import { 
   FileTextOutlined, DeleteOutlined, ThunderboltOutlined, 
-  SearchOutlined, FilterOutlined, ReloadOutlined, PlusOutlined,
+  SearchOutlined, FilterOutlined, ReloadOutlined,
   ExclamationCircleOutlined, CloudSyncOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
 import { 
-  fetchResultsWithReferences, 
-  fetchAllKeywords, 
-  deleteTopics, 
-  createManualDistillation,
-  deleteTopicsByKeyword
-} from '../api/distillationResultsApi';
+  fetchLocalResultsWithReferences, 
+  fetchLocalKeywords, 
+  deleteLocalTopics, 
+  deleteLocalTopicsByKeyword
+} from '../api/localDistillationResultsApi';
 import { TopicWithReference, Statistics } from '../types/distillationResults';
 import { useCachedData } from '../hooks/useCachedData';
 import { useCacheStore } from '../stores/cacheStore';
@@ -37,18 +36,11 @@ export default function DistillationResultsPage() {
     totalKeywords: 0,
     totalReferences: 0
   });
-  
-  // 筛选状态
   const [filterKeyword, setFilterKeyword] = useState<string>('');
   const [searchText, setSearchText] = useState('');
-  const [searchInput, setSearchInput] = useState(''); // 用于输入框的即时值
-  const [allKeywords, setAllKeywords] = useState<string[]>([]); // 所有关键词
-  const [isSearchMode, setIsSearchMode] = useState(false); // 是否处于搜索模式
-  
-  // 手动输入对话框状态
-  const [isManualModalVisible, setIsManualModalVisible] = useState(false);
-  const [manualForm] = Form.useForm();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [allKeywords, setAllKeywords] = useState<string[]>([]);
+  const [isSearchMode, setIsSearchMode] = useState(false);
 
   // 生成缓存 key
   const cacheKey = useMemo(() => 
@@ -58,7 +50,7 @@ export default function DistillationResultsPage() {
 
   // 数据获取函数
   const fetchData = useCallback(async () => {
-    const result = await fetchResultsWithReferences({
+    const result = await fetchLocalResultsWithReferences({
       keyword: filterKeyword || undefined,
       search: searchText || undefined,
       page: currentPage,
@@ -80,7 +72,7 @@ export default function DistillationResultsPage() {
     {
       deps: [filterKeyword, searchText, currentPage, pageSize],
       onError: (error) => message.error(error.message || '加载数据失败'),
-      forceRefresh: true, // 每次进入页面强制刷新
+      // ✅ 移除 forceRefresh，使用正常的缓存策略
     }
   );
 
@@ -90,19 +82,15 @@ export default function DistillationResultsPage() {
     refresh: refreshKeywords 
   } = useCachedData(
     'distillationResults:keywords',
-    fetchAllKeywords,
+    fetchLocalKeywords,
     { 
       onError: () => console.error('加载关键词列表失败'),
-      forceRefresh: true, // 每次进入页面强制刷新
+      // ✅ 移除 forceRefresh，使用正常的缓存策略
     }
   );
 
-  // 页面进入时主动刷新数据，确保数据最新
-  useEffect(() => {
-    // 组件挂载时强制刷新一次，确保数据同步
-    refreshResults(true);
-    refreshKeywords(true);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // ✅ 移除手动刷新，让 useCachedData 自动处理
+  // useCachedData 会在 deps 变化时自动刷新，无需手动调用
 
   // 更新本地状态
   useEffect(() => {
@@ -191,7 +179,7 @@ export default function DistillationResultsPage() {
             return;
           }
 
-          const result = await deleteTopics(topicIds);
+          const result = await deleteLocalTopics(topicIds);
           message.success(`成功删除 ${result.deletedCount} 个话题`);
           setSelectedRowKeys([]);
           invalidateAndRefresh();
@@ -227,62 +215,15 @@ export default function DistillationResultsPage() {
   // 计算是否有活动的筛选条件
   const hasActiveFilters = filterKeyword || searchText;
 
-  // 打开手动输入对话框
-  const handleOpenManualModal = () => {
-    manualForm.resetFields();
-    setIsManualModalVisible(true);
-  };
-
-  // 关闭手动输入对话框
-  const handleCloseManualModal = () => {
-    setIsManualModalVisible(false);
-    manualForm.resetFields();
-  };
-
-  // 提交手动输入的蒸馏结果
-  const handleManualSubmit = async () => {
-    try {
-      const values = await manualForm.validateFields();
-      const { keyword, questions } = values;
-      
-      // 将多行文本分割成数组，过滤空行
-      const questionArray = questions
-        .split('\n')
-        .map((q: string) => q.trim())
-        .filter((q: string) => q.length > 0);
-      
-      if (questionArray.length === 0) {
-        message.warning('请至少输入一个蒸馏结果');
-        return;
-      }
-      
-      setIsSubmitting(true);
-      const result = await createManualDistillation(keyword.trim(), questionArray);
-      
-      message.success(`成功保存 ${result.count} 个蒸馏结果`);
-      handleCloseManualModal();
-      invalidateAndRefresh();
-    } catch (error: any) {
-      console.error('保存失败:', error);
-      if (error.response?.data?.error) {
-        message.error(error.response.data.error);
-      } else {
-        message.error('保存失败，请重试');
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   // 删除单个话题
   const handleDeleteSingle = async (topicId: number, _question: string) => {
     try {
-      await deleteTopics([topicId]);
+      await deleteLocalTopics([topicId]);
       message.success('删除成功');
       invalidateAndRefresh();
     } catch (error: any) {
       console.error('删除失败:', error);
-      message.error(error.response?.data?.error || '删除失败');
+      message.error(error.message || '删除失败');
     }
   };
 
@@ -307,7 +248,7 @@ export default function DistillationResultsPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          const result = await deleteTopicsByKeyword(filterKeyword);
+          const result = await deleteLocalTopicsByKeyword(filterKeyword);
           message.success(`成功删除 ${result.deletedCount} 个蒸馏结果`);
           setFilterKeyword('');
           setSelectedRowKeys([]);
@@ -451,13 +392,6 @@ export default function DistillationResultsPage() {
               {refreshing && (
                 <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
               )}
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={handleOpenManualModal}
-              >
-                新建
-              </Button>
               <Button
                 icon={<ReloadOutlined />}
                 onClick={() => {
@@ -669,53 +603,6 @@ export default function DistillationResultsPage() {
         </Card>
       )}
 
-      {/* 手动输入对话框 */}
-      <Modal
-        title="手动批量输入蒸馏结果"
-        open={isManualModalVisible}
-        onOk={handleManualSubmit}
-        onCancel={handleCloseManualModal}
-        confirmLoading={isSubmitting}
-        width={600}
-        okText="保存"
-        cancelText="取消"
-      >
-        <Form
-          form={manualForm}
-          layout="vertical"
-          style={{ marginTop: 16 }}
-        >
-          <Form.Item
-            name="keyword"
-            label="关键词"
-            rules={[
-              { required: true, message: '请输入关键词' },
-              { max: 255, message: '关键词不能超过255个字符' }
-            ]}
-            extra="只能输入一个关键词"
-          >
-            <Input 
-              placeholder="请输入关键词" 
-              maxLength={255}
-            />
-          </Form.Item>
-          
-          <Form.Item
-            name="questions"
-            label="蒸馏结果"
-            rules={[
-              { required: true, message: '请输入蒸馏结果' }
-            ]}
-            extra="可以输入若干个蒸馏结果，每行一个"
-          >
-            <Input.TextArea
-              placeholder="请输入蒸馏结果，每行一个&#10;例如：&#10;如何提高工作效率？&#10;团队协作的最佳实践是什么？&#10;如何管理时间？"
-              rows={10}
-              showCount
-            />
-          </Form.Item>
-        </Form>
-      </Modal>
     </div>
   );
 }

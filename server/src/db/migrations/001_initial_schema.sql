@@ -345,7 +345,9 @@ CREATE TABLE IF NOT EXISTS distillations (
   keyword VARCHAR(255) NOT NULL,
   provider VARCHAR(20) NOT NULL,
   usage_count INTEGER DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  topic_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_distillations_user_id ON distillations(user_id);

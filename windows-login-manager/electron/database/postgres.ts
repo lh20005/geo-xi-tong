@@ -79,6 +79,9 @@ export class PostgresDatabase {
       // 测试连接
       await this.testConnection();
 
+      // 运行迁移
+      await this.runMigrations();
+
       console.log('✅ PostgreSQL 数据库连接成功');
     } catch (error) {
       console.error('❌ PostgreSQL 数据库初始化失败:', error);
@@ -98,6 +101,89 @@ export class PostgresDatabase {
     try {
       const result = await client.query('SELECT NOW()');
       console.log('数据库连接测试成功:', result.rows[0]);
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 运行数据库迁移
+   */
+  private async runMigrations(): Promise<void> {
+    if (!this.pool) {
+      throw new Error('数据库连接池未初始化');
+    }
+
+    console.log('PostgreSQL: 开始运行迁移...');
+
+    const client = await this.pool.connect();
+    try {
+      // 创建迁移记录表
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS _migrations (
+          id SERIAL PRIMARY KEY,
+          name TEXT UNIQUE NOT NULL,
+          applied_at TIMESTAMP DEFAULT NOW()
+        )
+      `);
+
+      // 获取迁移文件目录
+      let migrationsDir: string;
+      
+      if (app.isPackaged) {
+        // 生产环境：迁移文件在 resources/migrations
+        migrationsDir = path.join(process.resourcesPath, 'migrations');
+      } else {
+        // 开发环境：迁移文件在 dist-electron/database/migrations
+        migrationsDir = path.join(__dirname, 'migrations');
+      }
+
+      console.log(`PostgreSQL: 迁移目录: ${migrationsDir}`);
+
+      // 如果迁移目录不存在，创建它
+      if (!fs.existsSync(migrationsDir)) {
+        fs.mkdirSync(migrationsDir, { recursive: true });
+        console.log('PostgreSQL: 创建迁移目录');
+      }
+
+      // 获取所有迁移文件
+      const migrationFiles = fs.readdirSync(migrationsDir)
+        .filter(f => f.endsWith('.sql'))
+        .sort();
+
+      console.log(`PostgreSQL: 找到 ${migrationFiles.length} 个迁移文件`);
+
+      // 执行未应用的迁移
+      for (const file of migrationFiles) {
+        const result = await client.query(
+          'SELECT 1 FROM _migrations WHERE name = $1',
+          [file]
+        );
+
+        if (result.rows.length === 0) {
+          console.log(`PostgreSQL: 应用迁移: ${file}`);
+          
+          const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
+          
+          // 使用事务执行迁移
+          try {
+            await client.query('BEGIN');
+            await client.query(sql);
+            await client.query(
+              'INSERT INTO _migrations (name) VALUES ($1)',
+              [file]
+            );
+            await client.query('COMMIT');
+            console.log(`PostgreSQL: 迁移应用成功: ${file}`);
+          } catch (error) {
+            await client.query('ROLLBACK');
+            console.error(`PostgreSQL: 迁移应用失败 ${file}:`, error);
+            throw error;
+          }
+        }
+      }
+
+      console.log('PostgreSQL: 迁移完成');
     } finally {
       client.release();
     }

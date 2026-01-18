@@ -8,6 +8,7 @@ import { ipcMain } from 'electron';
 import log from 'electron-log';
 import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
+import { getPool } from '../../database/postgres';
 
 /**
  * 注册蒸馏相关 IPC 处理器
@@ -250,6 +251,215 @@ export function registerLocalDistillationHandlers(): void {
     } catch (error: any) {
       log.error('IPC: distillation:local:exists failed:', error);
       return { success: false, error: error.message || '检查蒸馏记录失败' };
+    }
+  });
+
+  // 获取蒸馏结果列表（用于结果页面）
+  ipcMain.handle('distillation:local:getResults', async (_event, filters?: any) => {
+    try {
+      log.info('IPC: distillation:local:getResults', filters);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const pool = getPool();
+
+      // 构建查询条件
+      const conditions: string[] = ['t.user_id = $1'];
+      const params: any[] = [user.id];
+      let paramIndex = 2;
+
+      // 关键词筛选
+      if (filters?.keyword) {
+        conditions.push(`d.keyword = $${paramIndex}`);
+        params.push(filters.keyword);
+        paramIndex++;
+      }
+
+      // 搜索
+      if (filters?.search) {
+        conditions.push(`t.question ILIKE $${paramIndex}`);
+        params.push(`%${filters.search}%`);
+        paramIndex++;
+      }
+
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // 分页参数
+      const page = filters?.page || 1;
+      const pageSize = filters?.pageSize || 10;
+      const offset = (page - 1) * pageSize;
+
+      // 查询总数
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM topics t
+        JOIN distillations d ON t.distillation_id = d.id
+        ${whereClause}
+      `;
+      const countResult = await pool.query(countQuery, params);
+      const total = parseInt(countResult.rows[0].total);
+
+      // 查询数据（包含引用次数）
+      const dataQuery = `
+        SELECT 
+          t.id,
+          t.question,
+          t.distillation_id,
+          t.created_at as "createdAt",
+          d.keyword,
+          COALESCE(
+            (SELECT COUNT(*) FROM articles a WHERE a.topic_id = t.id),
+            0
+          ) as "referenceCount"
+        FROM topics t
+        JOIN distillations d ON t.distillation_id = d.id
+        ${whereClause}
+        ORDER BY t.created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+      params.push(pageSize, offset);
+      const dataResult = await pool.query(dataQuery, params);
+
+      // 获取统计信息
+      const statsQuery = `
+        SELECT 
+          COUNT(DISTINCT t.id) as "totalTopics",
+          COUNT(DISTINCT d.id) as "totalKeywords",
+          COALESCE(SUM(
+            (SELECT COUNT(*) FROM articles a WHERE a.topic_id = t.id)
+          ), 0) as "totalReferences"
+        FROM topics t
+        JOIN distillations d ON t.distillation_id = d.id
+        WHERE t.user_id = $1
+      `;
+      const statsResult = await pool.query(statsQuery, [user.id]);
+
+      return {
+        success: true,
+        data: {
+          data: dataResult.rows,
+          total,
+          page,
+          pageSize,
+          statistics: {
+            totalTopics: parseInt(statsResult.rows[0].totalTopics) || 0,
+            totalKeywords: parseInt(statsResult.rows[0].totalKeywords) || 0,
+            totalReferences: parseInt(statsResult.rows[0].totalReferences) || 0,
+          },
+        },
+      };
+    } catch (error: any) {
+      log.error('IPC: distillation:local:getResults failed:', error);
+      return { success: false, error: error.message || '获取蒸馏结果失败' };
+    }
+  });
+
+  // 获取所有唯一关键词列表
+  ipcMain.handle('distillation:local:getKeywords', async () => {
+    try {
+      log.info('IPC: distillation:local:getKeywords');
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const pool = getPool();
+
+      const query = `
+        SELECT DISTINCT keyword
+        FROM distillations
+        WHERE user_id = $1
+        ORDER BY keyword ASC
+      `;
+      const result = await pool.query(query, [user.id]);
+
+      return {
+        success: true,
+        data: {
+          keywords: result.rows.map((row: any) => row.keyword),
+        },
+      };
+    } catch (error: any) {
+      log.error('IPC: distillation:local:getKeywords failed:', error);
+      return { success: false, error: error.message || '获取关键词列表失败' };
+    }
+  });
+
+  // 批量删除话题
+  ipcMain.handle('distillation:local:deleteTopics', async (_event, topicIds: number[]) => {
+    try {
+      log.info(`IPC: distillation:local:deleteTopics - ${topicIds.length} topics`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const pool = getPool();
+
+      // 验证所有 ID 都是有效的整数
+      const validIds = topicIds.filter((id) => Number.isInteger(id) && id > 0);
+      if (validIds.length !== topicIds.length) {
+        return { success: false, error: '部分话题 ID 无效' };
+      }
+
+      // 删除话题
+      const query = `
+        DELETE FROM topics
+        WHERE id = ANY($1) AND user_id = $2
+        RETURNING id
+      `;
+      const result = await pool.query(query, [validIds, user.id]);
+
+      return {
+        success: true,
+        data: {
+          deletedCount: result.rowCount || 0,
+        },
+      };
+    } catch (error: any) {
+      log.error('IPC: distillation:local:deleteTopics failed:', error);
+      return { success: false, error: error.message || '删除话题失败' };
+    }
+  });
+
+  // 按关键词删除所有话题
+  ipcMain.handle('distillation:local:deleteTopicsByKeyword', async (_event, keyword: string) => {
+    try {
+      log.info(`IPC: distillation:local:deleteTopicsByKeyword - ${keyword}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const pool = getPool();
+
+      // 删除话题
+      const query = `
+        DELETE FROM topics t
+        USING distillations d
+        WHERE t.distillation_id = d.id
+          AND d.keyword = $1
+          AND t.user_id = $2
+        RETURNING t.id
+      `;
+      const result = await pool.query(query, [keyword, user.id]);
+
+      return {
+        success: true,
+        data: {
+          deletedCount: result.rowCount || 0,
+          keyword,
+        },
+      };
+    } catch (error: any) {
+      log.error('IPC: distillation:local:deleteTopicsByKeyword failed:', error);
+      return { success: false, error: error.message || '按关键词删除话题失败' };
     }
   });
 

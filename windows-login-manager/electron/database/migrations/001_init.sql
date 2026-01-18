@@ -1,7 +1,8 @@
 -- ========================================
--- GEO 系统 Windows 端 SQLite 初始化迁移
+-- GEO 系统 Windows 端 PostgreSQL 初始化迁移
 -- 文件: 001_init.sql
 -- 创建时间: 2026-01-15
+-- 更新时间: 2026-01-17 (迁移到 PostgreSQL)
 -- 说明: 创建所有本地数据表
 -- ========================================
 
@@ -9,27 +10,26 @@
 -- 1. 文章表（对应服务器 articles 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS articles (
-    id TEXT PRIMARY KEY,  -- UUID
-    user_id INTEGER NOT NULL,  -- 用户 ID（从服务器获取）
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
     title TEXT,
     keyword TEXT NOT NULL,
-    distillation_id TEXT,
-    topic_id TEXT,
-    task_id TEXT,
-    image_id TEXT,
+    distillation_id INTEGER,
+    topic_id INTEGER,
+    task_id INTEGER,
+    image_id INTEGER,
     requirements TEXT,
     content TEXT NOT NULL,
     image_url TEXT,
     image_size_bytes INTEGER DEFAULT 0,
-    provider TEXT NOT NULL,  -- 'deepseek', 'gemini', 'ollama'
-    is_published INTEGER DEFAULT 0,  -- SQLite 用 INTEGER 代替 BOOLEAN
+    provider TEXT NOT NULL,
+    is_published BOOLEAN DEFAULT FALSE,
     publishing_status TEXT,
-    published_at TEXT,
-    -- 快照字段
+    published_at TIMESTAMP,
     distillation_keyword_snapshot TEXT,
     topic_question_snapshot TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_articles_user_id ON articles(user_id);
@@ -41,11 +41,11 @@ CREATE INDEX IF NOT EXISTS idx_articles_created_at ON articles(created_at);
 -- 2. 相册表（对应服务器 albums 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS albums (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_albums_user_id ON albums(user_id);
@@ -54,18 +54,18 @@ CREATE INDEX IF NOT EXISTS idx_albums_user_id ON albums(user_id);
 -- 3. 图片表（对应服务器 images 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS images (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    album_id TEXT REFERENCES albums(id) ON DELETE CASCADE,
+    album_id INTEGER,
     filename TEXT NOT NULL,
     filepath TEXT NOT NULL,
     mime_type TEXT NOT NULL,
     size INTEGER NOT NULL,
     usage_count INTEGER DEFAULT 0,
-    deleted_at TEXT,
-    is_orphan INTEGER DEFAULT 0,
+    deleted_at TIMESTAMP,
+    is_orphan BOOLEAN DEFAULT FALSE,
     reference_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_images_user_id ON images(user_id);
@@ -76,12 +76,12 @@ CREATE INDEX IF NOT EXISTS idx_images_usage_count ON images(album_id, usage_coun
 -- 4. 知识库表（对应服务器 knowledge_bases 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS knowledge_bases (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_bases_user_id ON knowledge_bases(user_id);
@@ -90,13 +90,13 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_bases_user_id ON knowledge_bases(user_i
 -- 5. 知识文档表（对应服务器 knowledge_documents 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS knowledge_documents (
-    id TEXT PRIMARY KEY,
-    knowledge_base_id TEXT NOT NULL REFERENCES knowledge_bases(id) ON DELETE CASCADE,
+    id SERIAL PRIMARY KEY,
+    knowledge_base_id INTEGER NOT NULL,
     filename TEXT NOT NULL,
     file_type TEXT NOT NULL,
     file_size INTEGER NOT NULL,
-    content TEXT NOT NULL,  -- 解析后的文本内容
-    created_at TEXT DEFAULT (datetime('now'))
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_documents_kb_id ON knowledge_documents(knowledge_base_id);
@@ -105,20 +105,20 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_documents_kb_id ON knowledge_documents(
 -- 6. 平台账号表（对应服务器 platform_accounts 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS platform_accounts (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     platform TEXT NOT NULL,
     platform_id TEXT,
     account_name TEXT,
     real_username TEXT,
-    credentials TEXT,  -- 加密存储
-    cookies TEXT,      -- 加密存储
+    credentials TEXT,
+    cookies TEXT,
     status TEXT DEFAULT 'inactive',
-    is_default INTEGER DEFAULT 0,
+    is_default BOOLEAN DEFAULT FALSE,
     error_message TEXT,
-    last_used_at TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    last_used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_platform_accounts_user_id ON platform_accounts(user_id);
@@ -129,31 +129,29 @@ CREATE INDEX IF NOT EXISTS idx_platform_accounts_status ON platform_accounts(sta
 -- 7. 发布任务表（对应服务器 publishing_tasks 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS publishing_tasks (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    article_id TEXT REFERENCES articles(id) ON DELETE SET NULL,
-    account_id TEXT NOT NULL REFERENCES platform_accounts(id) ON DELETE CASCADE,
+    article_id INTEGER,
+    account_id INTEGER NOT NULL,
     platform_id TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',  -- 'pending', 'running', 'completed', 'failed'
-    config TEXT NOT NULL,  -- JSON 配置
-    scheduled_at TEXT,
-    started_at TEXT,
-    completed_at TEXT,
+    status TEXT DEFAULT 'pending',
+    config TEXT NOT NULL,
+    scheduled_at TIMESTAMP,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
     error_message TEXT,
     retry_count INTEGER DEFAULT 0,
     max_retries INTEGER DEFAULT 3,
     batch_id TEXT,
     batch_order INTEGER DEFAULT 0,
     interval_minutes INTEGER DEFAULT 0,
-    -- 配额预留 ID（服务器返回的 UUID）
-    reservation_id TEXT,
-    -- 快照字段
+    reservation_id INTEGER,
     article_title TEXT,
     article_content TEXT,
     article_keyword TEXT,
     article_image_url TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_user_id ON publishing_tasks(user_id);
@@ -165,20 +163,19 @@ CREATE INDEX IF NOT EXISTS idx_publishing_tasks_batch_id ON publishing_tasks(bat
 -- 8. 发布记录表（对应服务器 publishing_records 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS publishing_records (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    article_id TEXT REFERENCES articles(id) ON DELETE SET NULL,
-    task_id TEXT REFERENCES publishing_tasks(id) ON DELETE SET NULL,
-    account_id TEXT NOT NULL REFERENCES platform_accounts(id) ON DELETE CASCADE,
+    article_id INTEGER,
+    task_id INTEGER,
+    account_id INTEGER NOT NULL,
     account_name TEXT,
     platform_id TEXT NOT NULL,
     platform_article_id TEXT,
     platform_url TEXT,
     status TEXT DEFAULT 'pending',
     publishing_status TEXT DEFAULT 'draft',
-    published_at TEXT,
+    published_at TIMESTAMP,
     error_message TEXT,
-    -- 快照字段
     article_title TEXT,
     article_content TEXT,
     article_keyword TEXT,
@@ -186,8 +183,8 @@ CREATE TABLE IF NOT EXISTS publishing_records (
     topic_question TEXT,
     article_setting_name TEXT,
     distillation_keyword TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_publishing_records_user_id ON publishing_records(user_id);
@@ -199,12 +196,12 @@ CREATE INDEX IF NOT EXISTS idx_publishing_records_status ON publishing_records(s
 -- 9. 发布日志表（对应服务器 publishing_logs 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS publishing_logs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    task_id TEXT NOT NULL REFERENCES publishing_tasks(id) ON DELETE CASCADE,
-    level TEXT NOT NULL,  -- 'info', 'warn', 'error'
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    level TEXT NOT NULL,
     message TEXT NOT NULL,
     details TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_publishing_logs_task ON publishing_logs(task_id);
@@ -213,7 +210,7 @@ CREATE INDEX IF NOT EXISTS idx_publishing_logs_task ON publishing_logs(task_id);
 -- 10. 转化目标表（对应服务器 conversion_targets 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS conversion_targets (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     company_name TEXT NOT NULL,
     industry TEXT,
@@ -224,8 +221,8 @@ CREATE TABLE IF NOT EXISTS conversion_targets (
     target_audience TEXT,
     core_products TEXT,
     address TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversion_targets_user_id ON conversion_targets(user_id);
@@ -234,12 +231,14 @@ CREATE INDEX IF NOT EXISTS idx_conversion_targets_user_id ON conversion_targets(
 -- 11. 蒸馏记录表（对应服务器 distillations 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS distillations (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     keyword TEXT NOT NULL,
+    topic_count INTEGER DEFAULT 0,
     provider TEXT NOT NULL,
     usage_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_distillations_user_id ON distillations(user_id);
@@ -249,13 +248,16 @@ CREATE INDEX IF NOT EXISTS idx_distillations_keyword ON distillations(keyword);
 -- 12. 话题表（对应服务器 topics 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS topics (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
-    distillation_id TEXT REFERENCES distillations(id) ON DELETE CASCADE,
+    distillation_id INTEGER,
     keyword TEXT NOT NULL,
     question TEXT NOT NULL,
+    category TEXT,
+    priority INTEGER DEFAULT 0,
     usage_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_topics_user_id ON topics(user_id);
@@ -265,12 +267,12 @@ CREATE INDEX IF NOT EXISTS idx_topics_distillation ON topics(distillation_id);
 -- 13. 文章设置表（对应服务器 article_settings 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS article_settings (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     prompt TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_article_settings_user_id ON article_settings(user_id);
@@ -279,13 +281,13 @@ CREATE INDEX IF NOT EXISTS idx_article_settings_user_id ON article_settings(user
 -- 14. 蒸馏配置表（对应服务器 distillation_config 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS distillation_config (
-    id TEXT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL,
     prompt TEXT NOT NULL,
     topic_count INTEGER NOT NULL DEFAULT 12,
-    is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_distillation_config_user_id ON distillation_config(user_id);
@@ -294,10 +296,10 @@ CREATE INDEX IF NOT EXISTS idx_distillation_config_user_id ON distillation_confi
 -- 15. 图片使用追踪表（对应服务器 image_usage 表）
 -- ========================================
 CREATE TABLE IF NOT EXISTS image_usage (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    image_id TEXT NOT NULL REFERENCES images(id) ON DELETE CASCADE,
-    article_id TEXT NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
-    used_at TEXT DEFAULT (datetime('now')),
+    id SERIAL PRIMARY KEY,
+    image_id INTEGER NOT NULL,
+    article_id INTEGER NOT NULL,
+    used_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(image_id, article_id)
 );
 
@@ -310,18 +312,18 @@ CREATE INDEX IF NOT EXISTS idx_image_usage_article_id ON image_usage(article_id)
 CREATE TABLE IF NOT EXISTS local_settings (
     key TEXT PRIMARY KEY,
     value TEXT,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- ========================================
 -- 17. 待上报分析队列（用于离线上报）
 -- ========================================
 CREATE TABLE IF NOT EXISTS pending_analytics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_type TEXT NOT NULL,  -- 'publish'
-    report_data TEXT NOT NULL,  -- JSON
+    id SERIAL PRIMARY KEY,
+    report_type TEXT NOT NULL,
+    report_data TEXT NOT NULL,
     retry_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_pending_analytics_type ON pending_analytics(report_type);
@@ -332,20 +334,20 @@ CREATE INDEX IF NOT EXISTS idx_pending_analytics_type ON pending_analytics(repor
 CREATE TABLE IF NOT EXISTS adapter_versions (
     platform TEXT PRIMARY KEY,
     version TEXT NOT NULL,
-    code_path TEXT,  -- 本地代码文件路径
-    updated_at TEXT DEFAULT (datetime('now'))
+    code_path TEXT,
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
 -- ========================================
 -- 19. 数据同步状态表
 -- ========================================
 CREATE TABLE IF NOT EXISTS sync_status (
-    id INTEGER PRIMARY KEY CHECK (id = 1),  -- 只允许一条记录
-    last_backup_at TEXT,
-    last_restore_at TEXT,
-    last_snapshot_id TEXT,
-    updated_at TEXT DEFAULT (datetime('now'))
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_backup_at TIMESTAMP,
+    last_restore_at TIMESTAMP,
+    last_snapshot_id INTEGER,
+    updated_at TIMESTAMP DEFAULT NOW()
 );
 
--- 插入默认同步状态记录
-INSERT OR IGNORE INTO sync_status (id) VALUES (1);
+-- 插入默认同步状态记录（PostgreSQL 使用 ON CONFLICT）
+INSERT INTO sync_status (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
