@@ -28,7 +28,7 @@ export default function DistillationPage() {
     if (!result.success) {
       throw new Error(result.error || '加载历史记录失败');
     }
-    return result.data?.items || [];
+    return result.data?.items || result.data?.data || [];
   }, []);
 
   const {
