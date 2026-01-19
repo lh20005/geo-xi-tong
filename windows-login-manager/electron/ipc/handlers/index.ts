@@ -16,6 +16,7 @@ import { registerLocalTopicHandlers } from './localTopicHandlers';
 import { registerLocalConversionTargetHandlers } from './localConversionTargetHandlers';
 import { registerLocalArticleSettingHandlers } from './localArticleSettingHandlers';
 import { registerTaskCleanupHandlers } from './taskCleanupHandlers';
+import { registerUserHandlers, cleanupUserHandlers } from './userHandlers';
 
 // 重新导出
 export { registerArticleHandlers } from './articleHandlers';
@@ -31,11 +32,15 @@ export { registerLocalTopicHandlers } from './localTopicHandlers';
 export { registerLocalConversionTargetHandlers } from './localConversionTargetHandlers';
 export { registerLocalArticleSettingHandlers } from './localArticleSettingHandlers';
 export { registerTaskCleanupHandlers } from './taskCleanupHandlers';
+export { registerUserHandlers, cleanupUserHandlers } from './userHandlers';
 
 /**
  * 注册所有本地数据相关的 IPC 处理器
  */
 export function registerAllLocalHandlers(): void {
+  // 用户管理（本地 PostgreSQL）⭐ 新增
+  registerUserHandlers();
+  
   // 文章管理（本地 PostgreSQL）
   registerArticleHandlers();
   
@@ -82,4 +87,5 @@ export function registerAllLocalHandlers(): void {
 export async function cleanupAllLocalHandlers(): Promise<void> {
   await cleanupBrowserHandlers();
   cleanupPublishHandlers();
+  cleanupUserHandlers();  // ⭐ 新增
 }

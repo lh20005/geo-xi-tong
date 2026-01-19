@@ -131,9 +131,42 @@ class IPCHandler {
         // 调用API登录
         const loginResult = await apiClient.login(username, password);
         
-        // 保存用户信息
+        // 保存用户信息到 Electron Store
         if (loginResult.user) {
           await storageManager.saveUser(loginResult.user);
+          
+          // ⭐ 同步用户信息到本地数据库（新增）
+          try {
+            const { getPool } = await import('../database/postgres');
+            const pool = getPool();
+            
+            const query = `
+              INSERT INTO users (id, username, email, role, invitation_code, is_temp_password, synced_at, updated_at)
+              VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+              ON CONFLICT (id) DO UPDATE SET
+                username = EXCLUDED.username,
+                email = EXCLUDED.email,
+                role = EXCLUDED.role,
+                invitation_code = EXCLUDED.invitation_code,
+                is_temp_password = EXCLUDED.is_temp_password,
+                synced_at = NOW(),
+                updated_at = NOW()
+            `;
+            
+            await pool.query(query, [
+              loginResult.user.id,
+              loginResult.user.username,
+              loginResult.user.email || null,
+              loginResult.user.role,
+              (loginResult.user as any).invitationCode || null,
+              (loginResult.user as any).isTempPassword || false,
+            ]);
+            
+            log.info(`✅ 用户信息已同步到本地数据库: ${loginResult.user.username}`);
+          } catch (dbError) {
+            log.error('同步用户信息到本地数据库失败:', dbError);
+            // 不抛出错误，允许登录继续
+          }
         }
         
         // 获取保存的 tokens 并发送到渲染进程

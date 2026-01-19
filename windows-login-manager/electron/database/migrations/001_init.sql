@@ -263,6 +263,31 @@ CREATE TABLE IF NOT EXISTS topics (
 CREATE INDEX IF NOT EXISTS idx_topics_user_id ON topics(user_id);
 CREATE INDEX IF NOT EXISTS idx_topics_distillation ON topics(distillation_id);
 
+-- 创建自动更新 distillations.topic_count 的触发器函数
+CREATE OR REPLACE FUNCTION update_distillation_topic_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE distillations 
+    SET topic_count = topic_count + 1,
+        updated_at = NOW()
+    WHERE id = NEW.distillation_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE distillations 
+    SET topic_count = GREATEST(topic_count - 1, 0),
+        updated_at = NOW()
+    WHERE id = OLD.distillation_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 创建触发器：当插入或删除 topic 时自动更新 distillation 的 topic_count
+CREATE TRIGGER trigger_update_topic_count
+AFTER INSERT OR DELETE ON topics
+FOR EACH ROW
+EXECUTE FUNCTION update_distillation_topic_count();
+
 -- ========================================
 -- 13. 文章设置表（对应服务器 article_settings 表）
 -- ========================================
