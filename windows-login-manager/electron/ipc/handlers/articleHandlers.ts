@@ -30,7 +30,14 @@ function transformArticle(article: Article): any {
     distillationId: article.distillation_id,
     distillationKeywordSnapshot: article.distillation_keyword_snapshot,
     topicId: article.topic_id,
+    topicQuestion: article.topic_question_snapshot, // 映射到前端显示的 topicQuestion
     topicQuestionSnapshot: article.topic_question_snapshot,
+    articleSettingId: article.article_setting_id,
+    articleSettingName: article.article_setting_snapshot, // 映射到前端显示的 articleSettingName
+    articleSettingSnapshot: article.article_setting_snapshot,
+    conversionTargetId: article.conversion_target_id,
+    conversionTargetName: article.conversion_target_snapshot, // 映射到前端显示的 conversionTargetName
+    conversionTargetSnapshot: article.conversion_target_snapshot,
     taskId: article.task_id,
     imageId: article.image_id,
     requirements: article.requirements,

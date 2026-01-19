@@ -145,6 +145,13 @@ export default function ArticlePage() {
 
       const userId = await getCurrentUserId();
       if (userId) {
+        // 获取选中的配置名称
+        const selectedArticleSetting = articleSettings.find(s => s.id === selectedArticleSettingId);
+        const selectedConversionTarget = conversionTargets.find(t => t.id === selectedConversionTargetId);
+        const conversionTargetName = selectedConversionTarget 
+          ? `${selectedConversionTarget.company_name} (${selectedConversionTarget.industry})` 
+          : undefined;
+
         const saveResult = await localArticleApi.create({
           userId,
           title: generatedArticle.title,
@@ -155,6 +162,10 @@ export default function ArticlePage() {
           distillationId: detail.distillationId,
           distillationKeywordSnapshot: detail.keyword || keyword,
           topicQuestionSnapshot: detail.distillationResult || undefined,
+          articleSettingId: selectedArticleSettingId || undefined,
+          articleSettingSnapshot: selectedArticleSetting?.name,
+          conversionTargetId: selectedConversionTargetId || undefined,
+          conversionTargetSnapshot: conversionTargetName,
           taskId: task.taskId,
           isPublished: false,
         });

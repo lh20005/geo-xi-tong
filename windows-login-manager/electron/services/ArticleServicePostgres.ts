@@ -34,6 +34,10 @@ export interface Article {
   published_at?: Date;
   distillation_keyword_snapshot?: string;
   topic_question_snapshot?: string;
+  article_setting_id?: number;
+  article_setting_snapshot?: string;
+  conversion_target_id?: number;
+  conversion_target_snapshot?: string;
   created_at: Date;
   updated_at: Date;
 }
@@ -54,6 +58,10 @@ export interface GeneratedArticle {
   imageSizeBytes?: number;
   distillationKeywordSnapshot?: string;
   topicQuestionSnapshot?: string;
+  articleSettingId?: number;
+  articleSettingSnapshot?: string;
+  conversionTargetId?: number;
+  conversionTargetSnapshot?: string;
 }
 
 /**
@@ -71,6 +79,12 @@ export interface CreateArticleInput {
   requirements?: string;
   imageUrl?: string;
   imageSizeBytes?: number;
+  distillationKeywordSnapshot?: string;
+  topicQuestionSnapshot?: string;
+  articleSettingId?: number;
+  articleSettingSnapshot?: string;
+  conversionTargetId?: number;
+  conversionTargetSnapshot?: string;
 }
 
 /**
@@ -149,6 +163,10 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
         published_at: null,
         distillation_keyword_snapshot: article.distillationKeywordSnapshot || null,
         topic_question_snapshot: article.topicQuestionSnapshot || null,
+        article_setting_id: article.articleSettingId || null,
+        article_setting_snapshot: article.articleSettingSnapshot || null,
+        conversion_target_id: article.conversionTargetId || null,
+        conversion_target_snapshot: article.conversionTargetSnapshot || null,
         created_at: this.now(),
         updated_at: this.now()
       };
@@ -284,6 +302,12 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
         is_published: false,
         publishing_status: null,
         published_at: null,
+        distillation_keyword_snapshot: input.distillationKeywordSnapshot || null,
+        topic_question_snapshot: input.topicQuestionSnapshot || null,
+        article_setting_id: input.articleSettingId || null,
+        article_setting_snapshot: input.articleSettingSnapshot || null,
+        conversion_target_id: input.conversionTargetId || null,
+        conversion_target_snapshot: input.conversionTargetSnapshot || null,
         created_at: this.now(),
         updated_at: this.now()
       };

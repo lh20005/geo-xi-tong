@@ -22,7 +22,14 @@ export interface LocalArticle {
   distillationId?: number;
   distillationKeywordSnapshot?: string;
   topicId?: number;
+  topicQuestion?: string;
   topicQuestionSnapshot?: string;
+  articleSettingId?: number;
+  articleSettingName?: string;
+  articleSettingSnapshot?: string;
+  conversionTargetId?: number;
+  conversionTargetName?: string;
+  conversionTargetSnapshot?: string;
   taskId?: number;
   imageId?: number;
   requirements?: string;
@@ -42,6 +49,10 @@ export interface CreateArticleParams {
   distillationKeywordSnapshot?: string;
   topicId?: number;
   topicQuestionSnapshot?: string;
+  articleSettingId?: number;
+  articleSettingSnapshot?: string;
+  conversionTargetId?: number;
+  conversionTargetSnapshot?: string;
   taskId?: number;
   imageId?: number;
   requirements?: string;
