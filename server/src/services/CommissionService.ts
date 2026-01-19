@@ -12,6 +12,7 @@ import {
   PaginatedResult
 } from '../types/agent';
 import { agentService } from './AgentService';
+import { profitSharingService } from './ProfitSharingService';
 
 export class CommissionService {
   private static instance: CommissionService;
@@ -312,8 +313,74 @@ export class CommissionService {
 
     console.log(`[CommissionService] 开始批量结算 ${pendingCommissions.length} 笔佣金`);
 
-    // 这里只是标记状态，实际分账由 ProfitSharingService 处理
-    // 返回待处理列表供调用方使用
+    for (const commission of pendingCommissions) {
+      try {
+        // 获取代理商信息
+        const agent = await agentService.getAgentById(commission.agentId);
+        if (!agent || !agent.wechatOpenid || !agent.receiverAdded) {
+          console.log(`[CommissionService] 佣金 ${commission.id} 跳过：代理商未绑定微信或未添加为接收方`);
+          continue;
+        }
+
+        if (agent.status !== 'active') {
+          console.log(`[CommissionService] 佣金 ${commission.id} 跳过：代理商已暂停`);
+          continue;
+        }
+
+        // 获取订单的微信支付交易号
+        const orderResult = await pool.query(
+          'SELECT transaction_id, amount FROM orders WHERE id = $1',
+          [commission.orderId]
+        );
+        
+        const transactionId = orderResult.rows[0]?.transaction_id;
+        const orderAmount = orderResult.rows[0]?.amount;
+        if (!transactionId) {
+          console.log(`[CommissionService] 佣金 ${commission.id} 跳过：订单无交易号`);
+          await this.updateCommissionStatus(commission.id, 'cancelled', '订单无微信交易号');
+          result.failed++;
+          result.errors.push({ commissionId: commission.id, error: '订单无微信交易号' });
+          continue;
+        }
+
+        // 检查分账限额
+        const amountInFen = Math.round(commission.commissionAmount * 100);
+        const limitCheck = await profitSharingService.checkProfitSharingLimits(amountInFen, orderAmount);
+        if (!limitCheck.allowed) {
+          console.log(`[CommissionService] 佣金 ${commission.id} 跳过：${limitCheck.reason}`);
+          // 不取消，等待下次结算
+          continue;
+        }
+
+        // 执行分账
+        const shareResult = await profitSharingService.requestProfitSharing(
+          transactionId,
+          agent.wechatOpenid,
+          amountInFen,
+          '代理商佣金',
+          commission.id
+        );
+
+        if (shareResult.success) {
+          // 分账请求成功，等待查询结果
+          console.log(`[CommissionService] 佣金 ${commission.id} 分账请求成功: ${shareResult.outOrderNo}`);
+          result.success++;
+        } else {
+          // 分账请求失败
+          await this.updateCommissionStatus(commission.id, 'cancelled', shareResult.message);
+          console.log(`[CommissionService] 佣金 ${commission.id} 分账请求失败: ${shareResult.message}`);
+          result.failed++;
+          result.errors.push({ commissionId: commission.id, error: shareResult.message || '未知错误' });
+        }
+      } catch (error: any) {
+        console.error(`[CommissionService] 处理佣金 ${commission.id} 失败:`, error);
+        await this.updateCommissionStatus(commission.id, 'cancelled', error.message);
+        result.failed++;
+        result.errors.push({ commissionId: commission.id, error: error.message });
+      }
+    }
+
+    console.log(`[CommissionService] 佣金结算完成: 成功 ${result.success}, 失败 ${result.failed}`);
     return result;
   }
 

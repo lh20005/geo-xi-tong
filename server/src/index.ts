@@ -15,7 +15,6 @@ import { getWebSocketService } from './services/WebSocketService';
 import { rateLimitService } from './services/RateLimitService';
 import { tokenService } from './services/TokenService';
 import { securityCheckService } from './services/SecurityCheckService';
-import { schedulerService } from './services/SchedulerService';
 import { SecurityService } from './services/SecurityService';
 import { authService } from './services/AuthService';
 
@@ -162,13 +161,13 @@ async function startServer() {
     // EncryptionService已在导入时初始化，无需调用initialize
     console.log('✅ 加密服务初始化成功');
     
-    // 🔴 [架构改造] 停止服务器端 TaskScheduler
+    // 🔴 [架构改造] TaskScheduler 已禁用
     // 发布任务执行已迁移到 Windows 端，服务器不再需要调度发布任务
     // taskScheduler.start();
     console.log('⚠️  TaskScheduler 已禁用（发布任务已迁移到 Windows 端）');
     
-    // 启动订阅系统定时任务
-    schedulerService.start();
+    // 🔴 [架构改造] 定时任务调度器已迁移到 Windows 端
+    console.log('⚠️  SchedulerService 已禁用（定时任务已迁移到 Windows 端）');
     
     // 启动订阅到期检查服务
     console.log('⏰ 启动订阅到期检查服务...');
@@ -305,7 +304,7 @@ process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
   // 🔴 [架构改造] TaskScheduler 已禁用
   // taskScheduler.stop();
-  schedulerService.stop();
+  // schedulerService.stop();
   
   // 停止订阅到期检查服务
   const { subscriptionExpirationService } = await import('./services/SubscriptionExpirationService');
@@ -324,7 +323,7 @@ process.on('SIGINT', () => {
   console.log('收到 SIGINT 信号，正在关闭服务器...');
   // 🔴 [架构改造] TaskScheduler 已禁用
   // taskScheduler.stop();
-  schedulerService.stop();
+  // schedulerService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();
   process.exit(0);

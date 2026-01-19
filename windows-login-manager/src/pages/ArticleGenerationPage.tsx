@@ -79,6 +79,86 @@ export default function ArticleGenerationPage() {
   const [availableKeywords, setAvailableKeywords] = useState<string[]>([]);
   const [availableConversionTargets, setAvailableConversionTargets] = useState<string[]>([]);
 
+  // 记录已同步的任务ID，避免重复检查
+  const syncedTaskIdsRef = useMemo(() => new Set<number>(), []);
+
+  // 自动同步完成的任务
+  const autoSyncTasks = useCallback(async (taskList: GenerationTask[]) => {
+    if (!isElectron()) return;
+
+    // 筛选出已完成且未完全同步的任务
+    const completedTasks = taskList.filter(t => t.status === 'completed');
+    if (completedTasks.length === 0) return;
+
+    try {
+      const userId = await getCurrentUserId();
+      if (!userId) return;
+
+      let totalSyncedCount = 0;
+
+      for (const task of completedTasks) {
+        // 如果该任务已经标记为已同步，且生成的文章数量没变，则跳过
+        if (syncedTaskIdsRef.has(task.id)) {
+          continue;
+        }
+
+        // 获取任务详情以拿到文章列表
+        const detail = await fetchTaskDetail(task.id);
+        const articles = detail.generatedArticles || [];
+        
+        if (articles.length === 0) continue;
+
+        let allSynced = true;
+
+        for (const article of articles) {
+          // 检查是否已存在
+          const checkResult = await localArticleApi.checkArticleExists(task.id, article.title);
+          if (checkResult.data?.exists) {
+            continue;
+          }
+
+          allSynced = false; // 发现未同步的文章
+
+          // 获取文章内容
+          const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
+          const content = articleResponse.data?.content || '';
+
+          // 同步到本地
+          const result = await localArticleApi.create({
+            userId,
+            title: article.title,
+            keyword: detail.keyword,
+            content,
+            imageUrl: article.imageUrl || undefined,
+            provider: detail.provider,
+            distillationId: detail.distillationId,
+            distillationKeywordSnapshot: detail.keyword,
+            topicQuestionSnapshot: detail.distillationResult || undefined,
+            taskId: detail.id,
+            isPublished: false,
+          });
+
+          if (result && result.success) {
+            totalSyncedCount++;
+          }
+        }
+
+        // 如果所有文章都已同步（或者是本次同步完成），标记为已同步
+        if (allSynced || articles.length === task.generatedCount) {
+          syncedTaskIdsRef.add(task.id);
+        }
+      }
+
+      if (totalSyncedCount > 0) {
+        message.success(`自动同步完成：新增 ${totalSyncedCount} 篇文章`);
+        // 清除文章列表缓存，确保用户去文章管理页面能看到新文章
+        invalidateCacheByPrefix('articles:');
+      }
+    } catch (error) {
+      console.error('自动同步失败:', error);
+    }
+  }, [syncedTaskIdsRef]);
+
   // 搜索防抖
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -179,8 +259,11 @@ export default function ArticleGenerationPage() {
       )) as string[];
       setAvailableKeywords(keywords);
       setAvailableConversionTargets(targets);
+
+      // 自动同步任务
+      autoSyncTasks(data.tasks);
     }
-  }, [cachedData, currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText]);
+  }, [cachedData, currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText, autoSyncTasks]);
 
   // 每10秒刷新一次任务状态
   useEffect(() => {
@@ -233,61 +316,6 @@ export default function ArticleGenerationPage() {
   };
 
   const isElectron = () => !!(window as any).electron || !!(window as any).electronAPI;
-
-  const handleSyncTask = async (taskId: number) => {
-    if (!isElectron()) {
-      message.warning('仅本地客户端可用');
-      return;
-    }
-
-    try {
-      setDeleting(true);
-      const detail = await fetchTaskDetail(taskId);
-      const articles = detail.generatedArticles || [];
-
-      if (articles.length === 0) {
-        message.info('未找到可同步的文章');
-        return;
-      }
-
-      const userId = await getCurrentUserId();
-      if (!userId) {
-        message.warning('未获取到本地用户信息，无法保存');
-        return;
-      }
-
-      let successCount = 0;
-
-      for (const article of articles) {
-        const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
-        const content = articleResponse.data?.content || '';
-
-        const saveResult = await localArticleApi.create({
-          userId,
-          title: article.title,
-          keyword: detail.keyword,
-          content,
-          imageUrl: article.imageUrl || undefined,
-          provider: detail.provider,
-          distillationId: detail.distillationId,
-          distillationKeywordSnapshot: detail.keyword,
-          topicQuestionSnapshot: detail.distillationResult || undefined,
-          taskId: detail.id,
-          isPublished: false,
-        });
-
-        if (saveResult.success) {
-          successCount += 1;
-        }
-      }
-
-      message.success(`已同步 ${successCount}/${articles.length} 篇文章到本地`);
-    } catch (error: any) {
-      message.error(error.response?.data?.error || error.message || '同步失败');
-    } finally {
-      setDeleting(false);
-    }
-  };
 
   // 终止任务
   const handleCancelTask = async (taskId: number) => {
@@ -554,19 +582,6 @@ export default function ArticleGenerationPage() {
       fixed: 'right' as const,
       render: (_: any, record: GenerationTask) => (
         <Space size="small">
-          {record.status === 'completed' && (
-            <Tooltip title="同步到本地">
-              <Button
-                type="text"
-                icon={<CloudSyncOutlined />}
-                size="small"
-                loading={deleting}
-                onClick={() => handleSyncTask(record.id)}
-              >
-                同步
-              </Button>
-            </Tooltip>
-          )}
           {(record.status === 'running' || record.status === 'pending') && (
             <Popconfirm
               title="确认终止"

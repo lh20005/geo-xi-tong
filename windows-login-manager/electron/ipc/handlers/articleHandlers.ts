@@ -8,6 +8,36 @@ import { ipcMain } from 'electron';
 import log from 'electron-log';
 import { serviceFactory } from '../../services/ServiceFactory';
 import { storageManager } from '../../storage/manager';
+import { Article } from '../../services/ArticleServicePostgres';
+
+/**
+ * 将后端 snake_case 文章对象转换为前端 camelCase 格式
+ */
+function transformArticle(article: Article): any {
+  if (!article) return null;
+  return {
+    id: article.id.toString(), // 转为字符串
+    userId: article.user_id,
+    title: article.title,
+    keyword: article.keyword,
+    content: article.content,
+    imageUrl: article.image_url,
+    imageSizeBytes: article.image_size_bytes,
+    provider: article.provider,
+    isPublished: article.is_published,
+    publishingStatus: article.publishing_status,
+    publishedAt: article.published_at ? new Date(article.published_at).toISOString() : null,
+    distillationId: article.distillation_id,
+    distillationKeywordSnapshot: article.distillation_keyword_snapshot,
+    topicId: article.topic_id,
+    topicQuestionSnapshot: article.topic_question_snapshot,
+    taskId: article.task_id,
+    imageId: article.image_id,
+    requirements: article.requirements,
+    createdAt: article.created_at ? new Date(article.created_at).toISOString() : null,
+    updatedAt: article.updated_at ? new Date(article.updated_at).toISOString() : null
+  };
+}
 
 /**
  * 注册文章相关 IPC 处理器
@@ -28,9 +58,9 @@ export function registerArticleHandlers(): void {
       serviceFactory.setUserId(user.id);
       const articleService = serviceFactory.getArticleService();
 
-      const article = await articleService.create(params);
+      const article = await articleService.createArticle(params);
 
-      return { success: true, data: article };
+      return { success: true, data: transformArticle(article) };
     } catch (error: any) {
       log.error('IPC: article:create failed:', error);
       return { success: false, error: error.message || '创建文章失败' };
@@ -50,8 +80,15 @@ export function registerArticleHandlers(): void {
       serviceFactory.setUserId(user.id);
       const articleService = serviceFactory.getArticleService();
 
-      const result = await articleService.findPaginated(params || {}, ['title', 'content', 'keywords']);
-      return { success: true, data: result };
+      const result = await articleService.findPaginated(params || {}, ['title', 'content', 'keyword']);
+      
+      // 转换列表数据
+      const transformedResult = {
+        ...result,
+        data: result.data.map(transformArticle)
+      };
+
+      return { success: true, data: transformedResult };
     } catch (error: any) {
       log.error('IPC: article:findAll failed:', error);
       return { success: false, error: error.message || '获取文章列表失败' };
@@ -77,7 +114,7 @@ export function registerArticleHandlers(): void {
         return { success: false, error: '文章不存在' };
       }
 
-      return { success: true, data: article };
+      return { success: true, data: transformArticle(article) };
     } catch (error: any) {
       log.error('IPC: article:findById failed:', error);
       return { success: false, error: error.message || '获取文章失败' };
@@ -97,13 +134,13 @@ export function registerArticleHandlers(): void {
       serviceFactory.setUserId(user.id);
       const articleService = serviceFactory.getArticleService();
 
-      const article = await articleService.update(id, params);
+      const article = await articleService.updateArticle(parseInt(id), params);
       
       if (!article) {
         return { success: false, error: '文章不存在' };
       }
 
-      return { success: true, data: article };
+      return { success: true, data: transformArticle(article) };
     } catch (error: any) {
       log.error('IPC: article:update failed:', error);
       return { success: false, error: error.message || '更新文章失败' };
@@ -145,8 +182,15 @@ export function registerArticleHandlers(): void {
       serviceFactory.setUserId(user.id);
       const articleService = serviceFactory.getArticleService();
 
-      const result = await articleService.findPaginated(params, ['title', 'content', 'keywords']);
-      return { success: true, data: result };
+      const result = await articleService.findPaginated(params, ['title', 'content', 'keyword']);
+      
+      // 转换列表数据
+      const transformedResult = {
+        ...result,
+        data: result.data.map(transformArticle)
+      };
+
+      return { success: true, data: transformedResult };
     } catch (error: any) {
       log.error('IPC: article:search failed:', error);
       return { success: false, error: error.message || '搜索文章失败' };
@@ -262,6 +306,26 @@ export function registerArticleHandlers(): void {
     }
   });
 
+  // 检查文章是否存在
+  ipcMain.handle('article:checkExists', async (_event, params: { taskId: number, title: string }) => {
+    try {
+      // log.info(`IPC: article:checkExists - taskId: ${params.taskId}, title: ${params.title}`); // 减少日志
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const articleService = serviceFactory.getArticleService();
+
+      const exists = await articleService.checkArticleExists(params.taskId, params.title);
+      return { success: true, data: { exists } };
+    } catch (error: any) {
+      log.error('IPC: article:checkExists failed:', error);
+      return { success: false, error: error.message || '检查文章是否存在失败' };
+    }
+  });
+
   // 获取未发布的文章
   ipcMain.handle('article:findUnpublished', async () => {
     try {
@@ -276,7 +340,7 @@ export function registerArticleHandlers(): void {
       const articleService = serviceFactory.getArticleService();
 
       const articles = await articleService.findUnpublished();
-      return { success: true, data: articles };
+      return { success: true, data: articles.map(transformArticle) };
     } catch (error: any) {
       log.error('IPC: article:findUnpublished failed:', error);
       return { success: false, error: error.message || '获取未发布文章失败' };

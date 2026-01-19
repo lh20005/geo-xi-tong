@@ -433,6 +433,7 @@ const electronAPI = {
     getKeywordStats: () => ipcRenderer.invoke('article:getKeywordStats'),
     markAsPublished: (id: string, publishedAt?: string) => ipcRenderer.invoke('article:markAsPublished', id, publishedAt),
     findUnpublished: () => ipcRenderer.invoke('article:findUnpublished'),
+    checkArticleExists: (params: { taskId: number; title: string }) => ipcRenderer.invoke('article:checkExists', params),
   },
 
   // 任务管理（本地 SQLite）

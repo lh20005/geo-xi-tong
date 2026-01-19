@@ -414,6 +414,97 @@ export class ProfitSharingService {
   }
 
   /**
+   * 处理待处理的分账记录（定时任务调用）
+   */
+  async processPendingRecords(): Promise<{
+    processed: number;
+    success: number;
+    failed: number;
+  }> {
+    const pendingRecords = await this.getPendingProfitSharingRecords();
+    
+    const result = {
+      processed: pendingRecords.length,
+      success: 0,
+      failed: 0
+    };
+
+    if (pendingRecords.length === 0) {
+      console.log('[ProfitSharingService] 没有待查询的分账记录');
+      return result;
+    }
+
+    console.log(`[ProfitSharingService] 开始处理 ${pendingRecords.length} 条待查询分账记录`);
+
+    // 避免循环依赖，我们需要动态导入或通过事件/回调处理 CommissionService
+    // 但为了简单起见，这里假设 updateCommissionStatus 可以通过 sql 直接更新
+    // 或者我们在此处不引入 CommissionService，而是只更新 ProfitSharingRecord，
+    // CommissionService 的状态更新留给另一层或通过 sql。
+    // 更好的方式是：在 SchedulerService 里，我们看到它调用了 commissionService.updateCommissionStatus
+    // 所以 ProfitSharingService 不应该直接依赖 CommissionService。
+    // 但是，为了封装逻辑，我们可以让 CommissionService 监听或定期检查 ProfitSharingRecord 的状态？
+    // 或者，我们可以将 CommissionService 注入？
+    // 为了避免循环依赖 (CommissionService -> ProfitSharingService -> CommissionService)，
+    // 我们可以在这里只更新 profit_sharing_records 表。
+    // 并且我们还需要更新 commission_records 表。
+    // 我们可以直接使用 pool 更新 commission_records 表，而不通过 CommissionService 类。
+    
+    for (const record of pendingRecords) {
+      try {
+        const queryResult = await this.queryProfitSharing(
+          record.outOrderNo,
+          record.transactionId
+        );
+
+        if (queryResult.status === 'success') {
+          // 分账成功
+          await this.updateProfitSharingRecord(
+            record.outOrderNo,
+            'success',
+            queryResult.wechatOrderId
+          );
+          
+          // 直接更新 commission_records 表
+          await pool.query(
+            `UPDATE commission_records 
+             SET status = 'settled', settled_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP 
+             WHERE id = $1`,
+            [record.commissionId]
+          );
+          
+          console.log(`[ProfitSharingService] 分账 ${record.outOrderNo} 成功`);
+          result.success++;
+        } else if (queryResult.status === 'failed') {
+          // 分账失败
+          await this.updateProfitSharingRecord(
+            record.outOrderNo,
+            'failed',
+            undefined,
+            queryResult.failReason
+          );
+          
+          // 直接更新 commission_records 表
+          await pool.query(
+            `UPDATE commission_records 
+             SET status = 'cancelled', fail_reason = $2, updated_at = CURRENT_TIMESTAMP 
+             WHERE id = $1`,
+            [record.commissionId, queryResult.failReason]
+          );
+          
+          console.log(`[ProfitSharingService] 分账 ${record.outOrderNo} 失败: ${queryResult.failReason}`);
+          result.failed++;
+        }
+        // processing 状态继续等待
+      } catch (error: any) {
+        console.error(`[ProfitSharingService] 查询分账 ${record.outOrderNo} 失败:`, error);
+      }
+    }
+
+    console.log('[ProfitSharingService] 分账结果处理完成');
+    return result;
+  }
+
+  /**
    * 使用公钥加密（用于加密姓名）
    */
   private encryptWithPublicKey(data: string, publicKey: string): string {

@@ -130,12 +130,27 @@ export class PostgresDatabase {
       // 获取迁移文件目录
       let migrationsDir: string;
       
-      if (app.isPackaged) {
+      if (app && app.isPackaged) {
         // 生产环境：迁移文件在 resources/migrations
         migrationsDir = path.join(process.resourcesPath, 'migrations');
       } else {
         // 开发环境：迁移文件在 dist-electron/database/migrations
         migrationsDir = path.join(__dirname, 'migrations');
+        
+        // 脚本执行时的路径兼容
+        if (!fs.existsSync(migrationsDir)) {
+            // 尝试相对于项目根目录的路径
+            const possiblePath = path.join(process.cwd(), 'electron/database/migrations');
+            if (fs.existsSync(possiblePath)) {
+                migrationsDir = possiblePath;
+            } else {
+                // 尝试相对于当前文件的路径（如果是 ts-node/tsx 执行，__dirname 可能是源文件位置）
+                const sourcePath = path.join(__dirname, 'migrations');
+                if (fs.existsSync(sourcePath)) {
+                    migrationsDir = sourcePath;
+                }
+            }
+        }
       }
 
       console.log(`PostgreSQL: 迁移目录: ${migrationsDir}`);
@@ -328,8 +343,12 @@ export class PostgresDatabase {
    */
   private getConfigPath(): string {
     // 使用 Electron 的 userData 目录
-    const userDataPath = app.getPath('userData');
-    return path.join(userDataPath, 'db-config.json');
+    if (app) {
+      const userDataPath = app.getPath('userData');
+      return path.join(userDataPath, 'db-config.json');
+    }
+    // 脚本环境下使用当前目录
+    return path.join(process.cwd(), 'db-config.json');
   }
 
   /**

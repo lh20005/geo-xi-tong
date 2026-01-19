@@ -71,7 +71,7 @@ export const useArticleStore = create<ArticleState>((set, get) => ({
       const result = await localArticleApi.findAll(params);
       if (result.success) {
         set({
-          articles: result.data.articles || [],
+          articles: result.data.data || [],
           total: result.data.total || 0,
           page: params?.page || 1,
           pageSize: params?.pageSize || 10,
@@ -166,7 +166,7 @@ export const useArticleStore = create<ArticleState>((set, get) => ({
       const result = await localArticleApi.search(params);
       if (result.success) {
         set({
-          articles: result.data.articles || [],
+          articles: result.data.data || [],
           total: result.data.total || 0,
           page: params.page || 1,
           pageSize: params.pageSize || 10,

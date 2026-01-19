@@ -422,6 +422,9 @@ export class SubscriptionService {
     }
   }
 
+
+
+
   /**
    * 清除套餐缓存
    */
@@ -755,7 +758,146 @@ export class SubscriptionService {
 
     return result.rows[0];
   }
-}
+/**
+   * 基于订阅周期的配额重置检查
+   * 检查所有需要重置配额的用户，并为他们创建新周期记录
+   */
+  async checkAndResetQuotas(): Promise<number> {
+    try {
+      console.log('[SubscriptionService] 开始执行基于订阅周期的配额检查...');
+      
+      // 查找所有需要进入新配额周期的用户
+      // 条件：当前时间已超过用户的当前配额周期结束时间
+      const usersNeedingReset = await pool.query(`
+        WITH user_periods AS (
+          SELECT 
+            us.user_id,
+            us.quota_reset_anchor,
+            us.quota_cycle_type,
+            us.end_date as subscription_end,
+            (SELECT period_end FROM get_user_quota_period(us.user_id, 'articles_per_month') LIMIT 1) as current_period_end
+          FROM user_subscriptions us
+          WHERE us.status = 'active'
+            AND us.end_date > CURRENT_TIMESTAMP
+        )
+        SELECT user_id, quota_reset_anchor, quota_cycle_type, subscription_end, current_period_end
+        FROM user_periods
+        WHERE current_period_end IS NOT NULL
+          AND current_period_end < CURRENT_TIMESTAMP
+      `);
 
+      if (usersNeedingReset.rows.length === 0) {
+        return 0;
+      }
+
+      console.log(`[SubscriptionService] 发现 ${usersNeedingReset.rows.length} 个用户需要进入新配额周期`);
+
+      let resetCount = 0;
+      for (const user of usersNeedingReset.rows) {
+        try {
+          // 获取用户的新配额周期
+          const newPeriod = await pool.query(
+            `SELECT period_start, period_end FROM get_user_quota_period($1, 'articles_per_month') LIMIT 1`,
+            [user.user_id]
+          );
+
+          if (newPeriod.rows.length > 0) {
+            const { period_start, period_end } = newPeriod.rows[0];
+            
+            // 为用户的所有月度配额功能创建新周期记录（使用量从0开始）
+            // 注意：不删除旧记录，而是创建新周期记录，旧记录用于历史统计
+            const monthlyFeatures = ['articles_per_month', 'publish_per_month', 'keyword_distillation'];
+            
+            for (const featureCode of monthlyFeatures) {
+              await pool.query(`
+                INSERT INTO user_usage (user_id, feature_code, usage_count, period_start, period_end, last_reset_at)
+                VALUES ($1, $2, 0, $3, $4, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, feature_code, period_start) DO NOTHING
+              `, [user.user_id, featureCode, period_start, period_end]);
+            }
+            
+            resetCount++;
+            console.log(`[SubscriptionService] 用户 ${user.user_id} 已进入新配额周期: ${period_start} - ${period_end}`);
+          }
+        } catch (userError) {
+          console.error(`[SubscriptionService] 处理用户 ${user.user_id} 配额重置失败:`, userError);
+        }
+      }
+
+      // 清理超过3个周期的旧配额记录（保留历史数据但不无限增长）
+      await pool.query(`
+        WITH ranked_periods AS (
+          SELECT 
+            id,
+            user_id,
+            feature_code,
+            period_start,
+            ROW_NUMBER() OVER (PARTITION BY user_id, feature_code ORDER BY period_start DESC) as rn
+          FROM user_usage
+        )
+        DELETE FROM user_usage
+        WHERE id IN (
+          SELECT id FROM ranked_periods WHERE rn > 3
+        )
+      `);
+
+      return resetCount;
+    } catch (error) {
+      console.error('[SubscriptionService] 基于订阅周期的配额检查失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 订阅到期检查
+   * 检查即将到期的订阅并处理过期订阅
+   */
+  async checkSubscriptionExpiry(): Promise<{ expiringCount: number; expiredCount: number }> {
+    try {
+      console.log('[SubscriptionService] 开始执行订阅到期检查...');
+      
+      // 1. 查找7天内到期的订阅（排除永久有效的订阅）
+      const expiringSubscriptions = await pool.query(`
+        SELECT 
+          us.id,
+          us.user_id,
+          us.end_date,
+          sp.plan_name,
+          sp.duration_days,
+          u.username,
+          u.email
+        FROM user_subscriptions us
+        JOIN subscription_plans sp ON us.plan_id = sp.id
+        JOIN users u ON us.user_id = u.id
+        WHERE us.status = 'active'
+        AND us.end_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+        AND us.auto_renew = false
+        AND sp.duration_days < 36500
+      `);
+
+      // TODO: 发送提醒逻辑可在此处扩展，或者返回列表让Controller处理
+
+      // 2. 自动降级已到期的订阅
+      const expiredResult = await pool.query(`
+        UPDATE user_subscriptions us
+        SET status = 'expired', updated_at = CURRENT_TIMESTAMP
+        FROM subscription_plans sp
+        WHERE us.plan_id = sp.id
+        AND us.status = 'active'
+        AND us.end_date < CURRENT_DATE
+        AND sp.duration_days < 36500
+        RETURNING us.id, us.user_id
+      `);
+
+      return {
+        expiringCount: expiringSubscriptions.rowCount || 0,
+        expiredCount: expiredResult.rowCount || 0
+      };
+    } catch (error) {
+      console.error('[SubscriptionService] 订阅到期检查失败:', error);
+      throw error;
+    }
+  }
+}
 
 export const subscriptionService = new SubscriptionService();

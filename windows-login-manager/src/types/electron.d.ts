@@ -99,6 +99,7 @@ export interface ElectronAPI {
     getKeywordStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
     markAsPublished: (id: string, publishedAt?: string) => Promise<{ success: boolean; error?: string }>;
     findUnpublished: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    checkArticleExists: (params: { taskId: number; title: string }) => Promise<{ success: boolean; data?: { exists: boolean }; error?: string }>;
   };
 
   // 任务管理（本地 SQLite）

@@ -127,6 +127,20 @@ class StorageManager {
   }
 
   /**
+   * 获取任务上次执行时间
+   */
+  getTaskLastRunTime(taskName: string): number {
+    return store.get(`tasks.${taskName}.lastRunTime`, 0) as number;
+  }
+
+  /**
+   * 设置任务上次执行时间
+   */
+  setTaskLastRunTime(taskName: string, timestamp: number): void {
+    store.set(`tasks.${taskName}.lastRunTime`, timestamp);
+  }
+
+  /**
    * 保存配置
    * Requirements: 7.1
    */

@@ -108,6 +108,10 @@ export const localArticleApi = {
   findUnpublished: async () => {
     return window.electron.article.findUnpublished();
   },
+
+  checkArticleExists: async (taskId: number, title: string) => {
+    return window.electron.article.checkArticleExists({ taskId, title });
+  },
 };
 
 // ==================== 任务管理 ====================

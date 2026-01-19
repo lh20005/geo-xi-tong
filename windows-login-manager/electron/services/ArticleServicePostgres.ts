@@ -9,7 +9,7 @@
  * Requirements: PostgreSQL 迁移 - 外键约束替代
  */
 
-import { BaseServicePostgres } from './BaseServicePostgres';
+import { BaseServicePostgres, PaginationParams, SortParams, PaginatedResult } from './BaseServicePostgres';
 import log from 'electron-log';
 
 /**
@@ -22,7 +22,7 @@ export interface Article {
   keyword: string;
   distillation_id?: number;
   topic_id?: number;
-  task_id?: number | null;  // ⚠️ 始终为 NULL（generation_tasks 表在服务器）
+  task_id?: number | null;
   image_id?: number;
   requirements?: string;
   content: string;
@@ -67,6 +67,7 @@ export interface CreateArticleInput {
   distillationId?: number;
   topicId?: number;
   imageId?: number;
+  taskId?: number;
   requirements?: string;
   imageUrl?: string;
   imageSizeBytes?: number;
@@ -85,6 +86,13 @@ export interface UpdateArticleInput {
   isPublished?: boolean;
   publishingStatus?: string;
   publishedAt?: Date;
+  provider?: string;
+  distillationId?: number;
+  distillationKeywordSnapshot?: string;
+  topicId?: number;
+  topicQuestionSnapshot?: string;
+  taskId?: number;
+  imageId?: number;
 }
 
 /**
@@ -167,6 +175,90 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
   }
 
   /**
+   * 分页查询（重写以支持 isPublished 过滤）
+   * 
+   * @param params 分页和排序参数
+   * @param searchFields 搜索字段
+   * @returns 分页结果
+   */
+  async findPaginated(
+    params: PaginationParams & SortParams & { search?: string, isPublished?: boolean },
+    searchFields: string[] = []
+  ): Promise<PaginatedResult<Article>> {
+    this.validateUserId();
+
+    try {
+      const page = params.page || 1;
+      const pageSize = params.pageSize || 20;
+      const offset = (page - 1) * pageSize;
+
+      const whereClauses: string[] = ['user_id = $1'];
+      const queryParams: any[] = [this.userId];
+      let paramIndex = 2;
+
+      // 过滤发布状态
+      if (params.isPublished !== undefined) {
+        whereClauses.push(`is_published = $${paramIndex}`);
+        queryParams.push(params.isPublished);
+        paramIndex++;
+      }
+
+      // 搜索条件
+      if (params.search && searchFields.length > 0) {
+        const searchConditions = searchFields.map(field => {
+          const condition = `${field}::text ILIKE $${paramIndex}`;
+          paramIndex++;
+          return condition;
+        });
+        whereClauses.push(`(${searchConditions.join(' OR ')})`);
+        searchFields.forEach(() => {
+          queryParams.push(`%${params.search}%`);
+        });
+      }
+
+      const whereClause = whereClauses.join(' AND ');
+
+      // 排序
+      const sortField = params.sortField || 'created_at';
+      const sortOrder = params.sortOrder || 'desc';
+      const orderClause = `ORDER BY ${sortField} ${sortOrder.toUpperCase()}`;
+
+      // 查询总数
+      const countSql = `SELECT COUNT(*) as total FROM ${this.tableName} WHERE ${whereClause}`;
+      const countResult = await this.pool.query(countSql, queryParams);
+      const total = parseInt(countResult.rows[0].total);
+
+      // 查询数据
+      const dataSql = `
+        SELECT * FROM ${this.tableName} 
+        WHERE ${whereClause} 
+        ${orderClause}
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+
+      log.info('ArticleService: findPaginated SQL:', { 
+        sql: dataSql, 
+        params: [...queryParams, pageSize, offset] 
+      });
+
+      const dataResult = await this.pool.query(dataSql, [...queryParams, pageSize, offset]);
+      
+      const data = dataResult.rows as Article[];
+
+      return {
+        data,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+      };
+    } catch (error) {
+      log.error('ArticleService: findPaginated 失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 创建文章（手动创建）
    * 
    * @param input 文章输入数据
@@ -185,7 +277,7 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
         distillation_id: input.distillationId || null,
         topic_id: input.topicId || null,
         image_id: input.imageId || null,
-        task_id: null,  // ⭐ 始终设为 NULL
+        task_id: input.taskId || null,
         requirements: input.requirements || null,
         image_url: input.imageUrl || null,
         image_size_bytes: input.imageSizeBytes || 0,
@@ -218,6 +310,29 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
   }
 
   /**
+   * 检查文章是否存在（防止重复同步）
+   * 
+   * @param taskId 任务 ID
+   * @param title 文章标题
+   */
+  async checkArticleExists(taskId: number, title: string): Promise<boolean> {
+    this.validateUserId();
+    
+    try {
+      const query = `
+        SELECT 1 FROM articles 
+        WHERE user_id = $1 AND task_id = $2 AND title = $3
+      `;
+      
+      const result = await this.pool.query(query, [this.userId, taskId, title]);
+      return result.rows.length > 0;
+    } catch (error) {
+      log.error('ArticleService: 检查文章是否存在失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 更新文章
    * 
    * @param id 文章 ID
@@ -225,7 +340,27 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
    * @returns 更新后的文章
    */
   async updateArticle(id: number, input: UpdateArticleInput): Promise<Article> {
-    return await this.update(id, input);
+    this.validateUserId();
+    
+    const updateData: any = {};
+    if (input.title !== undefined) updateData.title = input.title;
+    if (input.keyword !== undefined) updateData.keyword = input.keyword;
+    if (input.content !== undefined) updateData.content = input.content;
+    if (input.imageUrl !== undefined) updateData.image_url = input.imageUrl;
+    if (input.imageSizeBytes !== undefined) updateData.image_size_bytes = input.imageSizeBytes;
+    if (input.provider !== undefined) updateData.provider = input.provider;
+    if (input.isPublished !== undefined) updateData.is_published = input.isPublished;
+    if (input.publishingStatus !== undefined) updateData.publishing_status = input.publishingStatus;
+    if (input.publishedAt !== undefined) updateData.published_at = input.publishedAt;
+    if (input.distillationId !== undefined) updateData.distillation_id = input.distillationId;
+    if (input.distillationKeywordSnapshot !== undefined) updateData.distillation_keyword_snapshot = input.distillationKeywordSnapshot;
+    if (input.topicId !== undefined) updateData.topic_id = input.topicId;
+    if (input.topicQuestionSnapshot !== undefined) updateData.topic_question_snapshot = input.topicQuestionSnapshot;
+    if (input.taskId !== undefined) updateData.task_id = input.taskId;
+    if (input.imageId !== undefined) updateData.image_id = input.imageId;
+    if (input.requirements !== undefined) updateData.requirements = input.requirements;
+
+    return await this.update(id, updateData);
   }
 
   /**

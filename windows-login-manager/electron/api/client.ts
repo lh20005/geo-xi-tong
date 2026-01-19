@@ -296,6 +296,38 @@ class APIClient {
   }
 
   /**
+   * 通用 GET 请求
+   */
+  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.axiosInstance.get<T>(url, config);
+    return response.data;
+  }
+
+  /**
+   * 通用 POST 请求
+   */
+  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.axiosInstance.post<T>(url, data, config);
+    return response.data;
+  }
+
+  /**
+   * 通用 PUT 请求
+   */
+  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.axiosInstance.put<T>(url, data, config);
+    return response.data;
+  }
+
+  /**
+   * 通用 DELETE 请求
+   */
+  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await this.axiosInstance.delete<T>(url, config);
+    return response.data;
+  }
+
+  /**
    * 创建账号
    * Requirements: 6.1, 12.1
    */
@@ -797,7 +829,6 @@ class APIClient {
     error?: string;
   }> {
     try {
-      const FormData = require('form-data');
       const formData = new FormData();
       formData.append('snapshot', file, { filename: 'snapshot.db' });
       formData.append('checksum', checksum);

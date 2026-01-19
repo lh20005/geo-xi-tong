@@ -2,20 +2,24 @@ import { taskService } from '../services/TaskService';
 import { publishingExecutor } from './PublishingExecutor';
 import { batchExecutor } from './BatchExecutor';
 import { apiClient } from '../api/client';
+import { storageManager } from '../storage/manager';
 
 /**
  * 任务调度器
- * 负责检查和执行定时任务（包括批次任务）
+ * 负责检查和执行定时任务（包括批次任务和远程服务器任务）
  * 
  * 改造说明：从服务器迁移到 Windows 端
  * - 使用本地 SQLite 替代 PostgreSQL
  * - 添加离线分析数据上报功能
+ * - 接管服务器端定时任务调度
  */
 export class TaskScheduler {
   private intervalId: NodeJS.Timeout | null = null;
   private analyticsIntervalId: NodeJS.Timeout | null = null;
   private isRunning = false;
-  private checkInterval = 10000; // 每10秒检查一次
+  private checkInterval = 10000; // 每10秒检查一次本地任务
+  private remoteTaskCheckInterval = 60000; // 每60秒检查一次远程任务
+  private remoteTaskIntervalId: NodeJS.Timeout | null = null;
   private analyticsInterval = 60000; // 每分钟上报一次分析数据
   private executingTasks: Set<string> = new Set();
   private currentUserId: number | null = null;
@@ -41,11 +45,17 @@ export class TaskScheduler {
 
     // 立即执行一次检查
     this.checkAndExecuteTasks();
+    this.checkAndExecuteRemoteTasks();
 
-    // 定期检查任务
+    // 定期检查本地任务
     this.intervalId = setInterval(() => {
       this.checkAndExecuteTasks();
     }, this.checkInterval);
+
+    // 定期检查远程任务
+    this.remoteTaskIntervalId = setInterval(() => {
+      this.checkAndExecuteRemoteTasks();
+    }, this.remoteTaskCheckInterval);
 
     // 定期上报离线分析数据
     this.analyticsIntervalId = setInterval(() => {
@@ -61,6 +71,10 @@ export class TaskScheduler {
       clearInterval(this.intervalId);
       this.intervalId = null;
     }
+    if (this.remoteTaskIntervalId) {
+      clearInterval(this.remoteTaskIntervalId);
+      this.remoteTaskIntervalId = null;
+    }
     if (this.analyticsIntervalId) {
       clearInterval(this.analyticsIntervalId);
       this.analyticsIntervalId = null;
@@ -68,6 +82,98 @@ export class TaskScheduler {
     this.isRunning = false;
     console.log('⏹️ 任务调度器已停止');
   }
+
+  /**
+   * 检查并执行远程服务器任务
+   * 迁移自服务器 SchedulerService.ts
+   */
+  private async checkAndExecuteRemoteTasks(): Promise<void> {
+    try {
+      // 1. 订单超时关闭任务 (每5分钟)
+      await this.executeIntervalTask('order-timeout', 5 * 60 * 1000, '/admin/tasks/order-timeout');
+
+      // 2. 配额预留清理任务 (每分钟)
+      await this.executeIntervalTask('quota-reservation-cleanup', 60 * 1000, '/admin/tasks/quota-reservation-cleanup');
+
+      // 3. 分账结果查询任务 (每小时)
+      await this.executeIntervalTask('profit-sharing-query', 60 * 60 * 1000, '/admin/tasks/profit-sharing-query');
+
+      // 4. 代理商异常检测任务 (每6小时)
+      await this.executeIntervalTask('agent-anomaly-detection', 6 * 60 * 60 * 1000, '/admin/tasks/agent-anomaly-detection');
+
+      // 5. 基于订阅周期的配额重置任务 (每小时)
+      await this.executeIntervalTask('quota-reset', 60 * 60 * 1000, '/admin/tasks/quota-reset');
+
+      // 6. 订阅到期检查任务 (每日 00:00)
+      await this.executeDailyTask('subscription-expiry', 0, 0, '/admin/tasks/subscription-expiry');
+
+      // 7. 佣金结算任务 (每日 02:00)
+      await this.executeDailyTask('commission-settlement', 2, 0, '/admin/tasks/commission-settlement');
+
+      // 8. 同步快照过期清理任务 (每日 03:00)
+      await this.executeDailyTask('sync-snapshot-cleanup', 3, 0, '/admin/tasks/sync-snapshot-cleanup');
+
+    } catch (error) {
+      console.error('❌ 检查远程任务失败:', error);
+    }
+  }
+
+  /**
+   * 执行间隔性任务
+   */
+  private async executeIntervalTask(taskName: string, intervalMs: number, endpoint: string): Promise<void> {
+    const lastRunTime = storageManager.getTaskLastRunTime(taskName);
+    const now = Date.now();
+
+    if (now - lastRunTime >= intervalMs) {
+      console.log(`🚀 触发远程任务: ${taskName}`);
+      try {
+        await apiClient.post(endpoint);
+        storageManager.setTaskLastRunTime(taskName, now);
+        console.log(`✅ 远程任务执行成功: ${taskName}`);
+      } catch (error) {
+        console.error(`❌ 远程任务执行失败: ${taskName}`, error);
+      }
+    }
+  }
+
+  /**
+   * 执行每日定时任务
+   */
+  private async executeDailyTask(taskName: string, hour: number, minute: number, endpoint: string): Promise<void> {
+    const lastRunTime = storageManager.getTaskLastRunTime(taskName);
+    const now = new Date();
+    const lastRunDate = new Date(lastRunTime);
+
+    // 检查是否已经是今天
+    const isSameDay = now.getFullYear() === lastRunDate.getFullYear() &&
+                      now.getMonth() === lastRunDate.getMonth() &&
+                      now.getDate() === lastRunDate.getDate();
+
+    // 如果今天已经运行过，跳过
+    if (isSameDay) {
+      return;
+    }
+
+    // 检查是否到达指定时间
+    const targetTime = new Date(now);
+    targetTime.setHours(hour, minute, 0, 0);
+
+    if (now.getTime() >= targetTime.getTime()) {
+      console.log(`🚀 触发远程每日任务: ${taskName}`);
+      try {
+        await apiClient.post(endpoint);
+        storageManager.setTaskLastRunTime(taskName, now.getTime());
+        console.log(`✅ 远程每日任务执行成功: ${taskName}`);
+      } catch (error) {
+        console.error(`❌ 远程每日任务执行失败: ${taskName}`, error);
+      }
+    }
+  }
+
+  /**
+   * 上报离线分析数据
+   */
 
   /**
    * 检查并执行到期任务
