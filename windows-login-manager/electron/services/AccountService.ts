@@ -82,24 +82,49 @@ class AccountService extends BaseService<PlatformAccount> {
   }
 
   /**
+   * 根据 ID 查找记录 (Override BaseService)
+   * 确保 ID 转换为字符串，避免数据库返回 number 导致类型错误
+   */
+  findById(id: string): PlatformAccount | null {
+    const account = super.findById(id);
+    if (account) {
+      // 确保 ID 是字符串
+      account.id = account.id.toString();
+    }
+    return account;
+  }
+
+  /**
+   * 获取最近使用的用户ID（用于故障恢复）
+   */
+  getLastUsedUserId(): number | null {
+    try {
+      const stmt = this.db.prepare('SELECT user_id FROM platform_accounts ORDER BY updated_at DESC LIMIT 1');
+      const result = stmt.get() as { user_id: number } | undefined;
+      return result ? result.user_id : null;
+    } catch (error) {
+      log.error('AccountService: getLastUsedUserId failed:', error);
+      return null;
+    }
+  }
+
+  /**
    * 创建账号
    */
   create(params: CreateAccountParams): PlatformAccount {
     try {
-      const id = this.generateId();
       const now = this.now();
 
       // 加密敏感数据
       const encryptedCredentials = params.credentials ? encryptObject(params.credentials) : null;
       const encryptedCookies = params.cookies ? encryptObject(params.cookies) : null;
 
-      this.db.prepare(`
+      const result = this.db.prepare(`
         INSERT INTO platform_accounts (
-          id, user_id, platform, platform_id, account_name, real_username,
+          user_id, platform, platform_id, account_name, real_username,
           credentials, cookies, status, is_default, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id,
         params.user_id,
         params.platform,
         params.platform_id || null,
@@ -112,6 +137,9 @@ class AccountService extends BaseService<PlatformAccount> {
         now,
         now
       );
+
+      // 获取自增 ID
+      const id = result.lastInsertRowid.toString();
 
       log.info(`AccountService: Created account ${id} for platform ${params.platform}`);
       return this.findById(id)!;

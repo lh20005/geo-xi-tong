@@ -10,13 +10,14 @@
  */
 
 import { BaseServicePostgres } from './BaseServicePostgres';
+import { encryptObject, tryDecryptObject } from '../utils/encryption';
 import log from 'electron-log';
 
 /**
  * 平台账号接口
  */
 export interface PlatformAccount {
-  id: string;  // UUID
+  id: string;  // integer (as string)
   user_id: number;
   platform: string;
   platform_id?: string;
@@ -33,6 +34,14 @@ export interface PlatformAccount {
 }
 
 /**
+ * 解密后的账号接口
+ */
+export interface DecryptedPlatformAccount extends Omit<PlatformAccount, 'credentials' | 'cookies'> {
+  credentials: any | null;
+  cookies: any[] | null;
+}
+
+/**
  * 创建平台账号输入
  */
 export interface CreatePlatformAccountInput {
@@ -40,8 +49,8 @@ export interface CreatePlatformAccountInput {
   platform_id?: string;
   account_name?: string;
   real_username?: string;
-  credentials?: string;
-  cookies?: string;
+  credentials?: any; // 支持对象，自动加密
+  cookies?: any;     // 支持对象，自动加密
   is_default?: boolean;
 }
 
@@ -51,8 +60,8 @@ export interface CreatePlatformAccountInput {
 export interface UpdatePlatformAccountInput {
   account_name?: string;
   real_username?: string;
-  credentials?: string;
-  cookies?: string;
+  credentials?: any; // 支持对象，自动加密
+  cookies?: any;     // 支持对象，自动加密
   status?: string;
   is_default?: boolean;
   error_message?: string;
@@ -71,9 +80,13 @@ export class PlatformAccountServicePostgres extends BaseServicePostgres<Platform
    * 创建平台账号
    */
   async createAccount(input: CreatePlatformAccountInput): Promise<PlatformAccount> {
+    const encryptedCredentials = input.credentials ? encryptObject(input.credentials) : undefined;
+    const encryptedCookies = input.cookies ? encryptObject(input.cookies) : undefined;
+
     return await this.create({
-      id: this.generateId(),  // 生成 UUID
       ...input,
+      credentials: encryptedCredentials,
+      cookies: encryptedCookies,
       status: 'inactive',
       is_default: input.is_default || false
     });
@@ -83,7 +96,17 @@ export class PlatformAccountServicePostgres extends BaseServicePostgres<Platform
    * 更新平台账号
    */
   async updateAccount(id: string, input: UpdatePlatformAccountInput): Promise<PlatformAccount> {
-    return await this.update(id, input);
+    const updates: any = { ...input };
+    
+    if (input.credentials !== undefined) {
+      updates.credentials = input.credentials ? encryptObject(input.credentials) : undefined;
+    }
+    
+    if (input.cookies !== undefined) {
+      updates.cookies = input.cookies ? encryptObject(input.cookies) : undefined;
+    }
+
+    return await this.update(id, updates);
   }
 
   /**
@@ -91,6 +114,32 @@ export class PlatformAccountServicePostgres extends BaseServicePostgres<Platform
    */
   async deleteAccount(id: string): Promise<void> {
     await this.delete(id);
+  }
+
+  /**
+   * 获取账号（解密敏感数据）
+   */
+  async getDecrypted(id: string): Promise<DecryptedPlatformAccount | null> {
+    try {
+      const account = await this.findById(id);
+      if (!account) return null;
+
+      return this.decryptAccount(account);
+    } catch (error) {
+      log.error('PlatformAccountService: getDecrypted failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 解密账号数据
+   */
+  private decryptAccount(account: PlatformAccount): DecryptedPlatformAccount {
+    return {
+      ...account,
+      credentials: account.credentials ? tryDecryptObject(account.credentials) : null,
+      cookies: account.cookies ? tryDecryptObject(account.cookies) : null
+    };
   }
 
   /**
@@ -126,49 +175,15 @@ export class PlatformAccountServicePostgres extends BaseServicePostgres<Platform
     this.validateUserId();
 
     try {
-      const cookiesJson = JSON.stringify(cookies);
+      const encryptedCookies = encryptObject(cookies);
       await this.pool.query(
         'UPDATE platform_accounts SET cookies = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3',
-        [cookiesJson, id, this.userId]
+        [encryptedCookies, id, this.userId]
       );
 
       log.info(`PlatformAccountService: 更新 Cookies 成功, ID: ${id}`);
     } catch (error) {
       log.error('PlatformAccountService: updateCookies 失败:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 获取解密后的账号信息
-   */
-  async getDecrypted(id: string): Promise<PlatformAccount | null> {
-    this.validateUserId();
-
-    try {
-      const result = await this.pool.query(
-        'SELECT * FROM platform_accounts WHERE id = $1 AND user_id = $2',
-        [id, this.userId]
-      );
-
-      if (result.rows.length === 0) {
-        return null;
-      }
-
-      const account = result.rows[0] as PlatformAccount;
-      
-      // 解析 cookies JSON
-      if (account.cookies) {
-        try {
-          account.cookies = JSON.parse(account.cookies as any);
-        } catch (e) {
-          log.warn(`PlatformAccountService: 解析 cookies 失败, ID: ${id}`);
-        }
-      }
-
-      return account;
-    } catch (error) {
-      log.error('PlatformAccountService: getDecrypted 失败:', error);
       throw error;
     }
   }

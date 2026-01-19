@@ -2,7 +2,8 @@ import { app } from 'electron';
 import log from 'electron-log';
 import { apiClient, Account } from '../api/client';
 import { storageManager } from '../storage/manager';
-import { accountService } from '../services';
+import { serviceFactory } from '../services/ServiceFactory';
+import { getPool } from '../database/postgres';
 
 /**
  * 同步服务
@@ -395,52 +396,79 @@ class SyncService {
     credentials?: any;
   }): Promise<{ success: boolean; accountId?: string; error?: string }> {
     try {
-      log.info(`[SyncService] 保存账号到本地 SQLite: ${account.platform_id}`);
+      log.info(`[SyncService] 保存账号到本地 PostgreSQL: ${account.platform_id}`);
 
       // 获取当前用户
-      const user = await storageManager.getUser();
+      let user = await storageManager.getUser();
+      
+      // [修复] 如果用户状态丢失，尝试自动恢复
       if (!user) {
-        return { success: false, error: '用户未登录' };
+        log.warn('[SyncService] 用户状态丢失，尝试自动恢复...');
+        
+        try {
+          const pool = getPool();
+          const result = await pool.query('SELECT user_id FROM platform_accounts ORDER BY updated_at DESC LIMIT 1');
+          const lastUserId = result.rows[0]?.user_id;
+
+          if (lastUserId) {
+            user = { id: lastUserId, username: 'recovered_user', role: 'user' };
+            log.info(`[SyncService] 已从历史数据恢复用户 ID: ${lastUserId}`);
+          } else {
+            // 如果没有任何历史数据，默认为 1 (单机版默认用户)
+            user = { id: 1, username: 'default_user', role: 'user' };
+            log.warn('[SyncService] 无历史数据，使用默认 ID: 1');
+          }
+        } catch (dbError) {
+          log.error('[SyncService] 恢复用户失败:', dbError);
+          user = { id: 1, username: 'default_user', role: 'user' };
+        }
       }
 
+      // 设置 serviceFactory 用户 ID
+      serviceFactory.setUserId(user.id);
+      const accountService = serviceFactory.getPlatformAccountService();
+
       // 检查账号是否已存在
-      const existingAccounts = accountService.findByPlatform(user.id, account.platform_id);
+      const existingAccounts = await accountService.getByPlatform(account.platform_id);
       const existingAccount = existingAccounts.find(
-        a => a.account_name === account.account_name
+        (a: any) => a.account_name === account.account_name
       );
 
       let accountId: string;
+      // 直接传递对象，让 PlatformAccountServicePostgres 处理加密
+      const cookies = account.credentials?.cookies;
+      const credentials = account.credentials;
 
       if (existingAccount) {
         // 更新现有账号
         log.info(`[SyncService] 更新现有账号: ${existingAccount.id}`);
-        accountService.update(existingAccount.id, {
+        await accountService.updateAccount(existingAccount.id, {
           account_name: account.account_name,
           real_username: account.real_username,
-          cookies: account.credentials?.cookies,
+          cookies: cookies,
+          credentials: credentials,
           status: 'active'
         });
         accountId = existingAccount.id;
       } else {
         // 创建新账号
         log.info('[SyncService] 创建新账号');
-        const newAccount = accountService.create({
-          user_id: user.id,
+        const newAccount = await accountService.createAccount({
           platform: account.platform_id,
           platform_id: account.platform_id,
           account_name: account.account_name,
           real_username: account.real_username,
-          cookies: account.credentials?.cookies,
-          status: 'active',
+          cookies: cookies,
+          credentials: credentials,
           is_default: existingAccounts.length === 0
         });
         accountId = newAccount.id;
       }
 
-      log.info(`[SyncService] 账号保存到本地 SQLite 成功, ID: ${accountId}`);
+      log.info(`[SyncService] 账号保存到本地 PostgreSQL 成功, ID: ${accountId}`);
       return { success: true, accountId };
     } catch (error: any) {
-      log.error('[SyncService] 保存账号到本地 SQLite 失败:', error);
+      log.error('[SyncService] 保存账号到本地 PostgreSQL 失败:', error);
       return { success: false, error: error.message || '保存失败' };
     }
   }

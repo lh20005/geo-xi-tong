@@ -136,16 +136,19 @@ class JianshuLoginManager {
         }
       };
 
-      // 9. 先同步到后端（必须先同步，确保后端有数据）
-      const backendAccount = await this.syncAccountToBackend(account);
-      
-      // 10. 同步成功后，使用后端返回的账号ID保存到本地
-      if (backendAccount && backendAccount.id) {
-        (account as any).id = backendAccount.id;
-        await this.saveAccountLocally(account);
-      } else {
-        log.warn('[Jianshu] 后端同步失败，不保存到本地缓存');
+      // 9. 先尝试同步到后端
+      try {
+        const backendAccount = await this.syncAccountToBackend(account);
+        // 如果同步成功，使用后端返回的ID
+        if (backendAccount && backendAccount.id) {
+          (account as any).id = backendAccount.id;
+        }
+      } catch (error) {
+        log.warn('[Jianshu] 后端同步失败，将降级使用本地保存:', error);
       }
+      
+      // 10. 始终保存到本地（无论后端同步是否成功）
+      await this.saveAccountLocally(account);
 
       // 11. 清理
       await this.cleanup();
@@ -166,7 +169,7 @@ class JianshuLoginManager {
       return {
         success: false,
         error: error instanceof Error ? error.message : '未知错误',
-        message: '登录失败'
+        message: '登录失败: ' + (error instanceof Error ? error.message : '未知错误')
       };
     }
   }

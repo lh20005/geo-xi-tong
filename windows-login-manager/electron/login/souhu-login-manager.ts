@@ -103,14 +103,19 @@ class SouhuLoginManager {
         }
       };
 
-      // 5. 同步到后端
-      const backendAccount = await this.syncToBackend(account);
-
-      // 6. 保存到本地
-      if (backendAccount && backendAccount.id) {
-        (account as any).id = backendAccount.id;
-        await this.saveAccount(account);
+      // 5. 先尝试同步到后端
+      try {
+        const backendAccount = await this.syncToBackend(account);
+        // 如果同步成功，使用后端返回的ID
+        if (backendAccount && backendAccount.id) {
+          (account as any).id = backendAccount.id;
+        }
+      } catch (error) {
+        log.warn('[Souhu] 后端同步失败，将降级使用本地保存:', error);
       }
+
+      // 6. 始终保存到本地
+      await this.saveAccount(account);
 
       // 7. 清理资源
       await this.cleanup();
@@ -132,7 +137,7 @@ class SouhuLoginManager {
       return {
         success: false,
         error: error instanceof Error ? error.message : '未知错误',
-        message: '登录失败'
+        message: '登录失败: ' + (error instanceof Error ? error.message : '未知错误')
       };
     }
   }

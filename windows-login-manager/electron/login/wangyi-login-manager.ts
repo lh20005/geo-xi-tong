@@ -125,34 +125,19 @@ class WangyiLoginManager {
         }
       };
 
-      // 7. 先同步到后端（必须先同步，确保后端有数据）
-
-
-      const backendAccount = await this.syncToBackend(account);
-
-
-      
-
-
-      // 8. 同步成功后，使用后端返回的账号ID保存到本地
-
-
-      if (backendAccount && backendAccount.id) {
-
-
-        (account as any).id = backendAccount.id;
-
-
-        await this.saveAccount(account);
-
-
-      } else {
-
-
-        log.warn('[Wangyi] 后端同步失败，不保存到本地缓存');
-
-
+      // 7. 先尝试同步到后端
+      try {
+        const backendAccount = await this.syncToBackend(account);
+        // 如果同步成功，使用后端返回的ID
+        if (backendAccount && backendAccount.id) {
+          (account as any).id = backendAccount.id;
+        }
+      } catch (error) {
+        log.warn('[Wangyi] 后端同步失败，将降级使用本地保存:', error);
       }
+      
+      // 8. 始终保存到本地（无论后端同步是否成功）
+      await this.saveAccount(account);
 
       // 9. 清理资源
       await this.cleanup();
@@ -178,7 +163,7 @@ class WangyiLoginManager {
       return {
         success: false,
         error: error instanceof Error ? error.message : '未知错误',
-        message: '登录失败'
+        message: '登录失败: ' + (error instanceof Error ? error.message : '未知错误')
       };
     }
   }

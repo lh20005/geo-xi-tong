@@ -26,6 +26,7 @@ import {
   deleteAllTasks,
   cancelTask
 } from '../api/articleGenerationApi';
+import { saveGeneratedArticleToLocal } from '../utils/articleUtils';
 import type { GenerationTask, TaskConfig } from '../types/articleGeneration';
 import { useCachedData } from '../hooks/useCachedData';
 import { useCacheStore } from '../stores/cacheStore';
