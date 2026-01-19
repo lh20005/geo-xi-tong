@@ -21,6 +21,7 @@ import { syncService } from '../sync/service';
 import { wsManager, WebSocketManager } from '../websocket/manager';
 import { AccountEvent } from '../websocket/client';
 import { accountService } from '../services';
+import { ServiceFactory } from '../services/ServiceFactory';
 import path from 'path';
 import fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -510,11 +511,20 @@ class IPCHandler {
           throw new Error('Main window not available');
         }
 
-        // 从本地 SQLite 获取账号信息（包含解密的凭证）
+        // 从本地 PostgreSQL 获取账号信息（包含解密的凭证）
         // accountId 可能是字符串（UUID）或数字，统一转为字符串
         const accountIdStr = String(accountId);
         log.info(`IPC: 从本地获取账号 ${accountIdStr}（包含凭证）`);
-        const account = accountService.getDecrypted(accountIdStr);
+        
+        // 使用 ServiceFactory 获取 PostgreSQL 服务实例
+        const user = await storageManager.getUser();
+        if (!user) {
+          throw new Error('用户未登录，无法获取账号信息');
+        }
+        ServiceFactory.getInstance().setUserId(user.id);
+        
+        const platformAccountService = ServiceFactory.getInstance().getPlatformAccountService();
+        const account = await platformAccountService.getDecrypted(accountIdStr);
         
         if (!account) {
           log.error(`IPC: 账号 ${accountIdStr} 不存在`);
