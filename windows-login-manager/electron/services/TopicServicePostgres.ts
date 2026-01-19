@@ -18,6 +18,7 @@ export interface Topic {
   id: number;
   user_id: number;
   distillation_id: number;
+  keyword: string;
   question: string;
   category?: string;
   priority: number;
@@ -31,6 +32,7 @@ export interface Topic {
  */
 export interface CreateTopicInput {
   distillation_id: number;
+  keyword: string;
   question: string;
   category?: string;
   priority?: number;

@@ -240,6 +240,7 @@ export default function DistillationPage() {
         
         const topicResult = await window.electron.invoke('topic:local:create', {
           distillation_id: distillationId,
+          keyword: keyword.trim(),
           question: question.question || question,
           category: question.category || '',
           priority: question.priority || 0
@@ -269,6 +270,7 @@ export default function DistillationPage() {
       
       // 5. 刷新历史列表
       invalidateAndRefresh();
+      invalidateCacheByPrefix('distillationResults:');
       
       // 6. 自动导航到结果页面
       navigate('/distillation-results');
