@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify';
 import 'react-quill/dist/quill.snow.css';
 import ArticleContent from './ArticleContent';
 import { apiClient } from '../api/client';
-import { localArticleApi } from '../api';
+import { isElectron, localArticleApi } from '../api';
 import { logArticleFormat } from '../utils/debugArticleFormat';
 
 const { TabPane } = Tabs;
@@ -41,6 +41,25 @@ const quillFormats = [
   'list', 'bullet',
   'link', 'image'
 ];
+
+const formatContentLocally = (raw: string) => {
+  const text = raw.trim();
+  if (!text) return '';
+
+  const hasHtmlTags = /<[^>]+>/.test(text);
+  if (hasHtmlTags) return text;
+
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (paragraphs.length === 0) {
+    return text;
+  }
+
+  return paragraphs.map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+};
 
 export default function ArticleEditorModal({ visible, article, onClose, onSave }: ArticleEditorModalProps) {
   const [form] = Form.useForm();
@@ -167,6 +186,13 @@ export default function ArticleEditorModal({ visible, article, onClose, onSave }
 
       setFormatting(true);
       message.loading({ content: '正在智能排版...', key: 'formatting', duration: 0 });
+
+      if (isElectron()) {
+        const formatted = formatContentLocally(content);
+        setContent(formatted);
+        message.success({ content: '智能排版完成', key: 'formatting' });
+        return;
+      }
 
       const response = await apiClient.post(`/articles/${article.id}/smart-format`, {
         content: content,

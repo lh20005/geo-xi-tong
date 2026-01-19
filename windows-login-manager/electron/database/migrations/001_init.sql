@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS knowledge_bases (
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     description TEXT,
+    document_count INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -92,7 +93,9 @@ CREATE INDEX IF NOT EXISTS idx_knowledge_bases_user_id ON knowledge_bases(user_i
 CREATE TABLE IF NOT EXISTS knowledge_documents (
     id SERIAL PRIMARY KEY,
     knowledge_base_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
     filename TEXT NOT NULL,
+    filepath TEXT,
     file_type TEXT NOT NULL,
     file_size INTEGER NOT NULL,
     content TEXT NOT NULL,
@@ -100,6 +103,7 @@ CREATE TABLE IF NOT EXISTS knowledge_documents (
 );
 
 CREATE INDEX IF NOT EXISTS idx_knowledge_documents_kb_id ON knowledge_documents(knowledge_base_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_user_id ON knowledge_documents(user_id);
 
 -- ========================================
 -- 6. 平台账号表（对应服务器 platform_accounts 表）

@@ -1,5 +1,3 @@
-cd windows - login - manager
-npm run build: electron
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Card, Tag, Button, Space, Modal, Typography, message, 

@@ -64,20 +64,40 @@ export default function KnowledgeBaseDetailPage() {
 
     try {
       // 使用文件路径传输（Electron 环境下 File 对象有 path 属性）
-      const filesData = fileList.map((file) => {
+      const filesData = await Promise.all(fileList.map(async (file) => {
         if (file.originFileObj) {
           const fileObj = file.originFileObj as any;
-          return {
-            name: file.name,
-            type: file.type || 'application/octet-stream',
-            size: file.size,
-            path: fileObj.path // Electron 提供的文件路径
-          };
+          if (fileObj.path) {
+            return {
+              name: file.name,
+              type: file.type || 'application/octet-stream',
+              size: file.size,
+              path: fileObj.path
+            };
+          }
+
+          if (typeof fileObj.arrayBuffer === 'function') {
+            const arrayBuffer = await fileObj.arrayBuffer();
+            const buffer = Array.from(new Uint8Array(arrayBuffer));
+            return {
+              name: file.name,
+              type: file.type || 'application/octet-stream',
+              size: file.size,
+              buffer
+            };
+          }
         }
         return null;
-      }).filter(f => f !== null);
+      }));
 
-      const success = await uploadDocuments(id!, filesData);
+      const validFiles = filesData.filter((f): f is { name: string; type: string; size?: number; path?: string; buffer?: number[] } => !!f && (!!f.path || (f.buffer && f.buffer.length > 0)));
+
+      if (validFiles.length === 0) {
+        message.error('无法获取文件内容，请重新选择文件');
+        return;
+      }
+
+      const success = await uploadDocuments(id!, validFiles);
       
       if (success) {
         message.success('文档上传成功！');

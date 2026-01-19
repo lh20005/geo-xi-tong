@@ -41,6 +41,7 @@ export {
   localGalleryApi,
   localSyncApi,
   localPublishingRecordApi,
+  localArticleSettingApi,
   // 类型
   type LocalArticle,
   type CreateArticleParams,
@@ -52,6 +53,8 @@ export {
   type LocalKnowledgeBase,
   type LocalKnowledgeDocument,
   type CreateKnowledgeBaseParams,
+  type LocalArticleSetting,
+  type CreateArticleSettingParams,
   type LocalAlbum,
   type LocalImage,
   type CreateAlbumParams,

@@ -30,7 +30,8 @@ const createTaskSchema = z.object({
   ]),
   articleSettingId: z.number().int().positive('文章设置ID必须是正整数'),
   conversionTargetId: z.number().int().positive('转化目标ID必须是正整数').optional(),
-  articleCount: z.number().int().positive('文章数量必须是正整数').max(100, '文章数量不能超过100')
+  articleCount: z.number().int().positive('文章数量必须是正整数').max(100, '文章数量不能超过100'),
+  resourceSource: z.enum(['local', 'server']).optional()
 });
 
 /**
@@ -80,9 +81,11 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       return res.status(404).json({ error: '蒸馏历史不存在' });
     }
 
-    // 如果 albumId 是数字，验证服务器数据库中是否存在
+    const isLocalResource = validatedData.resourceSource === 'local';
+
+    // 如果 albumId 是数字，验证服务器数据库中是否存在（本地资源跳过验证）
     // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
-    if (typeof validatedData.albumId === 'number') {
+    if (!isLocalResource && typeof validatedData.albumId === 'number') {
       const albumCheck = await pool.query(
         'SELECT id FROM albums WHERE id = $1 AND user_id = $2',
         [validatedData.albumId, userId]
@@ -92,9 +95,9 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       }
     }
 
-    // 如果 knowledgeBaseId 是数字，验证服务器数据库中是否存在
+    // 如果 knowledgeBaseId 是数字，验证服务器数据库中是否存在（本地资源跳过验证）
     // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
-    if (typeof validatedData.knowledgeBaseId === 'number') {
+    if (!isLocalResource && typeof validatedData.knowledgeBaseId === 'number') {
       const knowledgeBaseCheck = await pool.query(
         'SELECT id FROM knowledge_bases WHERE id = $1 AND user_id = $2',
         [validatedData.knowledgeBaseId, userId]
@@ -281,6 +284,47 @@ articleGenerationRouter.get('/tasks/:id', async (req, res) => {
   } catch (error: any) {
     console.error('获取任务详情错误:', error);
     res.status(500).json({ error: '获取任务详情失败', details: error.message });
+  }
+});
+
+/**
+ * 获取生成的文章内容
+ * GET /api/article-generation/articles/:id
+ */
+articleGenerationRouter.get('/articles/:id', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const articleId = parseInt(req.params.id);
+
+    if (isNaN(articleId) || articleId <= 0) {
+      return res.status(400).json({ error: '无效的文章ID' });
+    }
+
+    const result = await pool.query(
+      `SELECT id, title, keyword, content, image_url, created_at, updated_at
+       FROM articles
+       WHERE id = $1 AND user_id = $2`,
+      [articleId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '文章不存在' });
+    }
+
+    const article = result.rows[0];
+
+    res.json({
+      id: article.id,
+      title: article.title,
+      keyword: article.keyword,
+      content: article.content,
+      imageUrl: article.image_url,
+      createdAt: article.created_at,
+      updatedAt: article.updated_at
+    });
+  } catch (error: any) {
+    console.error('获取文章内容错误:', error);
+    res.status(500).json({ error: '获取文章内容失败', details: error.message });
   }
 });
 

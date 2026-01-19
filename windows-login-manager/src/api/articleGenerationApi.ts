@@ -1,4 +1,5 @@
 import { apiClient } from './client';
+import { localArticleSettingApi } from './local';
 import type {
   TaskConfig,
   CreateTaskResponse,
@@ -29,7 +30,10 @@ function getElectronAPI() {
  * 创建文章生成任务
  */
 export async function createTask(config: TaskConfig): Promise<CreateTaskResponse> {
-  const response = await apiClient.post('/article-generation/tasks', config);
+  const response = await apiClient.post('/article-generation/tasks', {
+    ...config,
+    resourceSource: isElectron() ? 'local' : config.resourceSource
+  });
   return response.data;
 }
 
@@ -111,6 +115,13 @@ export async function fetchKnowledgeBases(): Promise<KnowledgeBase[]> {
  * 获取文章设置列表
  */
 export async function fetchArticleSettings(): Promise<ArticleSetting[]> {
+  if (isElectron()) {
+    const result = await localArticleSettingApi.findAll({ page: 1, pageSize: 1000 });
+    if (!result.success) {
+      throw new Error(result.error || '获取文章设置失败');
+    }
+    return result.data?.data || [];
+  }
   const response = await apiClient.get('/article-settings');
   return response.data.settings || [];
 }

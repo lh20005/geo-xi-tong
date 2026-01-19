@@ -47,6 +47,31 @@ async function parseDocumentContent(filePath: string, fileType: string): Promise
   }
 }
 
+async function parseDocumentContentBuffer(buffer: Buffer, fileName: string, fileType: string): Promise<string> {
+  const ext = path.extname(fileName).toLowerCase();
+
+  try {
+    if (ext === '.txt' || ext === '.md') {
+      return buffer.toString('utf-8');
+    }
+
+    if (ext === '.docx' || fileType.includes('wordprocessingml')) {
+      const result = await mammoth.extractRawText({ buffer });
+      return result.value;
+    }
+
+    if (ext === '.pdf' || fileType === 'application/pdf') {
+      const result = await pdfParse(buffer);
+      return result.text;
+    }
+
+    return buffer.toString('utf-8');
+  } catch (error: any) {
+    log.error(`Failed to parse document buffer ${fileName}:`, error);
+    return '';
+  }
+}
+
 /**
  * 注册本地知识库相关 IPC 处理器
  * 注意：这些处理器使用 'knowledge:local:' 前缀，与现有的服务器知识库处理器区分
@@ -175,14 +200,32 @@ export function registerLocalKnowledgeHandlers(): void {
   // 上传文档
   ipcMain.handle('knowledge:local:upload', async (_event, kbId: string, files: Array<{
     name: string;
-    path: string;
+    path?: string;
     type: string;
+    size?: number;
+    buffer?: number[];
   }>) => {
     try {
+      log.info('========== 知识库上传开始 ==========');
       log.info(`IPC: knowledge:local:upload - KB: ${kbId}, files: ${files.length}`);
+      log.info('Files info:', files.map(file => ({
+        name: file?.name,
+        type: file?.type,
+        hasBuffer: !!file?.buffer,
+        bufferLength: file?.buffer?.length,
+        path: file?.path
+      })));
+
       const user = await storageManager.getUser();
       if (!user) {
+        log.error('❌ 用户未登录');
         return { success: false, error: '用户未登录' };
+      }
+
+      const validFiles = files.filter(file => (file?.path && fs.existsSync(file.path)) || (file?.buffer && file.buffer.length > 0));
+      if (validFiles.length === 0) {
+        log.error('❌ 未找到可上传的文件');
+        return { success: false, error: '未找到可上传的文件，请重新选择' };
       }
 
       // 设置用户 ID 并获取服务
@@ -204,23 +247,38 @@ export function registerLocalKnowledgeHandlers(): void {
       }
 
       const uploadedDocs: any[] = [];
+      const uploadErrors: string[] = [];
 
-      for (const file of files) {
+      for (const file of validFiles) {
         try {
-          // 读取文件内容
-          const content = fs.readFileSync(file.path);
-          
+          log.info(`========== 处理文档: ${file.name} ==========`);
+          let contentBuffer: Buffer;
+
+          if (file.buffer && file.buffer.length > 0) {
+            contentBuffer = Buffer.from(file.buffer);
+            log.info(`Using buffer data for ${file.name}, size: ${contentBuffer.length}`);
+          } else if (file.path && fs.existsSync(file.path)) {
+            contentBuffer = fs.readFileSync(file.path);
+            log.info(`Reading from path ${file.path}, size: ${contentBuffer.length}`);
+          } else {
+            log.error(`No valid data source for ${file.name}, buffer: ${!!file.buffer}, path exists: ${file.path && fs.existsSync(file.path)}`);
+            continue;
+          }
+
           // 生成新文件名
           const ext = path.extname(file.name);
           const baseName = path.basename(file.name, ext);
           const newFileName = `${baseName}-${Date.now()}${ext}`;
           const destPath = path.join(kbStoragePath, newFileName);
-          
+
+          log.info(`Saving to: ${destPath}`);
           // 复制文件到知识库目录
-          fs.writeFileSync(destPath, content);
-          
+          fs.writeFileSync(destPath, contentBuffer);
+
           // 解析文档内容（支持 txt, md, docx, pdf）
-          const parsedContent = await parseDocumentContent(file.path, file.type);
+          const parsedContent = file.path && fs.existsSync(file.path)
+            ? await parseDocumentContent(file.path, file.type)
+            : await parseDocumentContentBuffer(contentBuffer, file.name, file.type);
           log.info(`Parsed document ${file.name}, content length: ${parsedContent.length}`);
 
           // 创建文档记录
@@ -230,13 +288,24 @@ export function registerLocalKnowledgeHandlers(): void {
             filepath: destPath,
             content: parsedContent,
             fileType: file.type,
-            fileSize: content.length
+            fileSize: file.size || contentBuffer.length
           });
 
+          log.info(`Document record created: ${doc.id}`);
           uploadedDocs.push(doc);
         } catch (err: any) {
+          const errorMessage = err?.message || '未知错误';
           log.error(`Failed to upload file ${file.name}:`, err);
+          log.error('Error stack:', err?.stack);
+          uploadErrors.push(`${file.name}: ${errorMessage}`);
         }
+      }
+
+      log.info('========== 知识库上传完成 ==========');
+      log.info(`Upload complete: ${uploadedDocs.length} documents uploaded`);
+
+      if (uploadedDocs.length === 0) {
+        return { success: false, error: uploadErrors[0] ? `上传失败：${uploadErrors[0]}` : '上传失败，未写入任何文档' };
       }
 
       return { 

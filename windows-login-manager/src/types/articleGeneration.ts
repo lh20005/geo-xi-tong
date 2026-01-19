@@ -6,6 +6,7 @@ export interface TaskConfig {
   articleSettingId: number;
   conversionTargetId?: number;  // 可选：转化目标ID
   articleCount: number;
+  resourceSource?: 'local' | 'server';
 }
 
 // 生成任务

@@ -45,6 +45,9 @@ export interface CreateArticleParams {
   taskId?: number;
   imageId?: number;
   requirements?: string;
+  isPublished?: boolean;
+  publishingStatus?: string;
+  publishedAt?: string;
 }
 
 export interface ArticleSearchParams {
@@ -530,6 +533,67 @@ export const localKnowledgeApi = {
   
   getStats: async () => {
     return window.electron.localKnowledge.getStats();
+  },
+};
+
+// ==================== 本地文章设置管理 ====================
+
+export interface LocalArticleSetting {
+  id: number;
+  name: string;
+  prompt: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateArticleSettingParams {
+  name: string;
+  prompt: string;
+}
+
+export const localArticleSettingApi = {
+  create: async (params: CreateArticleSettingParams) => {
+    return window.electron.invoke('articleSetting:local:create', params);
+  },
+
+  findAll: async (params?: { page?: number; pageSize?: number; search?: string }) => {
+    return window.electron.invoke('articleSetting:local:findAll', params);
+  },
+
+  findById: async (id: number) => {
+    return window.electron.invoke('articleSetting:local:findById', id);
+  },
+
+  update: async (id: number, params: Partial<CreateArticleSettingParams>) => {
+    return window.electron.invoke('articleSetting:local:update', id, params);
+  },
+
+  delete: async (id: number) => {
+    return window.electron.invoke('articleSetting:local:delete', id);
+  },
+
+  deleteBatch: async (ids: number[]) => {
+    return window.electron.invoke('articleSetting:local:deleteBatch', ids);
+  },
+
+  getDefault: async () => {
+    return window.electron.invoke('articleSetting:local:getDefault');
+  },
+
+  setDefault: async (id: number) => {
+    return window.electron.invoke('articleSetting:local:setDefault', id);
+  },
+
+  search: async (searchTerm: string) => {
+    return window.electron.invoke('articleSetting:local:search', searchTerm);
+  },
+
+  getStats: async () => {
+    return window.electron.invoke('articleSetting:local:getStats');
+  },
+
+  exists: async (id: number) => {
+    return window.electron.invoke('articleSetting:local:exists', id);
   },
 };
 

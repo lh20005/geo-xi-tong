@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card,
   Button,
   Space,
   message,
-  Input,
   Typography,
   Spin,
   Select,
@@ -19,34 +18,39 @@ import {
   BookOutlined,
 } from '@ant-design/icons';
 import { apiClient } from '../api/client';
-import { localKnowledgeApi } from '../api';
 import { localDistillationApi } from '../api/localDistillationApi';
+import {
+  createTask,
+  fetchTaskDetail,
+  fetchAlbums,
+  fetchKnowledgeBases,
+  fetchArticleSettings,
+  fetchConversionTargets,
+} from '../api/articleGenerationApi';
+import type { Album, KnowledgeBase, ArticleSetting, ConversionTarget, TaskDetail } from '../types/articleGeneration';
 import ArticleContent from '../components/ArticleContent';
 
 const { Title, Paragraph } = Typography;
-const { TextArea } = Input;
-
-interface KnowledgeBase {
-  id: number;
-  name: string;
-  description: string;
-  document_count: number;
-}
 
 export default function ArticlePage() {
   const { distillationId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
   const [loading, setLoading] = useState(false);
-  const [requirements, setRequirements] = useState('');
+  const [configLoading, setConfigLoading] = useState(false);
   const [article, setArticle] = useState('');
   const [keyword, setKeyword] = useState('');
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [selectedKnowledgeBases, setSelectedKnowledgeBases] = useState<number[]>([]);
+  const [articleSettings, setArticleSettings] = useState<ArticleSetting[]>([]);
+  const [conversionTargets, setConversionTargets] = useState<ConversionTarget[]>([]);
+  const [selectedAlbumId, setSelectedAlbumId] = useState<number | null>(null);
+  const [selectedKnowledgeBaseId, setSelectedKnowledgeBaseId] = useState<number | null>(null);
+  const [selectedArticleSettingId, setSelectedArticleSettingId] = useState<number | null>(null);
+  const [selectedConversionTargetId, setSelectedConversionTargetId] = useState<number | null>(null);
 
   useEffect(() => {
     loadKeyword();
-    loadKnowledgeBases();
+    loadConfigData();
   }, [distillationId]);
 
   const loadKeyword = async () => {
@@ -61,40 +65,83 @@ export default function ArticlePage() {
     }
   };
 
-  const loadKnowledgeBases = async () => {
+  const loadConfigData = async () => {
+    setConfigLoading(true);
     try {
-      const result = await localKnowledgeApi.findAll();
-      if (result.success) {
-        const items = result.data || [];
-        setKnowledgeBases(items.map((kb: any) => ({
-          id: kb.id,
-          name: kb.name,
-          description: kb.description || '',
-          document_count: kb.documentCount || kb.document_count || 0,
-        })));
-      }
+      const [albumData, knowledgeBaseData, articleSettingData, conversionTargetData] = await Promise.all([
+        fetchAlbums(),
+        fetchKnowledgeBases(),
+        fetchArticleSettings(),
+        fetchConversionTargets()
+      ]);
+
+      setAlbums(albumData || []);
+      setKnowledgeBases(knowledgeBaseData || []);
+      setArticleSettings(articleSettingData || []);
+      setConversionTargets(conversionTargetData || []);
     } catch (error) {
-      console.error('加载知识库失败:', error);
+      console.error('加载配置数据失败:', error);
+      message.error('加载配置数据失败');
+    } finally {
+      setConfigLoading(false);
     }
   };
 
+  const waitForTaskCompletion = async (taskId: number): Promise<TaskDetail> => {
+    const maxAttempts = 60;
+    const intervalMs = 2000;
+
+    for (let i = 0; i < maxAttempts; i += 1) {
+      const detail = await fetchTaskDetail(taskId);
+
+      if (detail.status === 'completed') {
+        return detail;
+      }
+
+      if (detail.status === 'failed') {
+        throw new Error(detail.errorMessage || '文章生成失败');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    throw new Error('生成超时，请到文章生成任务中查看');
+  };
+
   const handleGenerate = async () => {
+    if (!distillationId) {
+      message.error('缺少蒸馏记录');
+      return;
+    }
+
+    if (!selectedAlbumId || !selectedKnowledgeBaseId || !selectedArticleSettingId || !selectedConversionTargetId) {
+      message.error('请先选择完整的生成配置');
+      return;
+    }
+
     setLoading(true);
     try {
-      const selectedTopics = location.state?.selectedTopics || [];
-      
-      const response = await apiClient.post('/articles/generate', {
-        keyword,
-        distillationId,
-        requirements,
-        topicIds: selectedTopics.length > 0 ? selectedTopics : undefined,
-        knowledgeBaseIds: selectedKnowledgeBases.length > 0 ? selectedKnowledgeBases : undefined,
+      const task = await createTask({
+        distillationId: Number(distillationId),
+        albumId: selectedAlbumId,
+        knowledgeBaseId: selectedKnowledgeBaseId,
+        articleSettingId: selectedArticleSettingId,
+        conversionTargetId: selectedConversionTargetId,
+        articleCount: 1,
       });
 
-      setArticle(response.data.content);
+      const detail = await waitForTaskCompletion(task.taskId);
+      const generatedArticle = detail.generatedArticles?.[0];
+
+      if (!generatedArticle) {
+        throw new Error('文章生成完成，但未找到文章内容');
+      }
+
+      const articleResponse = await apiClient.get(`/article-generation/articles/${generatedArticle.id}`);
+      setArticle(articleResponse.data?.content || '');
       message.success('文章生成成功！');
     } catch (error: any) {
-      message.error(error.response?.data?.error || '文章生成失败');
+      message.error(error.response?.data?.error || error.message || '文章生成失败');
     } finally {
       setLoading(false);
     }
@@ -115,6 +162,8 @@ export default function ArticlePage() {
     URL.revokeObjectURL(url);
     message.success('文章已下载');
   };
+
+  const selectedKnowledgeBase = knowledgeBases.find((kb) => kb.id === selectedKnowledgeBaseId);
 
   return (
     <div style={{ padding: 24 }}>
@@ -138,39 +187,62 @@ export default function ArticlePage() {
           </Paragraph>
         </div>
 
-        <Card type="inner" title="选择知识库（可选）" style={{ marginBottom: 16 }}>
+        <Card type="inner" title="生成配置" style={{ marginBottom: 24 }}>
           <Space direction="vertical" style={{ width: '100%' }}>
             <Select
-              mode="multiple"
               style={{ width: '100%' }}
-              placeholder="选择要使用的知识库"
-              value={selectedKnowledgeBases}
-              onChange={setSelectedKnowledgeBases}
+              placeholder="选择转化目标"
+              value={selectedConversionTargetId ?? undefined}
+              onChange={setSelectedConversionTargetId}
+              loading={configLoading}
+              options={conversionTargets.map(target => ({
+                label: `${target.company_name} (${target.industry})`,
+                value: target.id,
+              }))}
+            />
+            <Select
+              style={{ width: '100%' }}
+              placeholder="选择文章设置"
+              value={selectedArticleSettingId ?? undefined}
+              onChange={setSelectedArticleSettingId}
+              loading={configLoading}
+              options={articleSettings.map(setting => ({
+                label: setting.name,
+                value: setting.id,
+              }))}
+            />
+            <Select
+              style={{ width: '100%' }}
+              placeholder="选择企业图库"
+              value={selectedAlbumId ?? undefined}
+              onChange={setSelectedAlbumId}
+              loading={configLoading}
+              options={albums.map(album => ({
+                label: `${album.name} (${album.image_count} 张图片)`,
+                value: album.id,
+              }))}
+            />
+            <Select
+              style={{ width: '100%' }}
+              placeholder="选择企业知识库"
+              value={selectedKnowledgeBaseId ?? undefined}
+              onChange={setSelectedKnowledgeBaseId}
+              loading={configLoading}
               options={knowledgeBases.map(kb => ({
                 label: `${kb.name} (${kb.document_count}个文档)`,
                 value: kb.id,
               }))}
               suffixIcon={<BookOutlined />}
             />
-            {selectedKnowledgeBases.length > 0 && (
+            {selectedKnowledgeBase && (
               <Alert
                 message="知识库已选择"
-                description={`已选择 ${selectedKnowledgeBases.length} 个知识库。AI将基于这些知识库的内容生成更专业、准确的文章。`}
+                description={`当前选择：${selectedKnowledgeBase.name}（${selectedKnowledgeBase.document_count} 个文档）`}
                 type="info"
                 showIcon
               />
             )}
           </Space>
-        </Card>
-
-        <Card type="inner" title="文章要求" style={{ marginBottom: 24 }}>
-          <TextArea
-            rows={6}
-            placeholder="请输入文章生成要求，例如：&#10;- 文章字数在2000字左右&#10;- 语言风格专业、权威&#10;- 包含实际案例和数据支持&#10;- 结构清晰，包含小标题&#10;- 自然融入关键词，符合SEO标准"
-            value={requirements}
-            onChange={(e) => setRequirements(e.target.value)}
-            style={{ fontSize: 14 }}
-          />
           <div style={{ marginTop: 16 }}>
             <Button
               type="primary"
