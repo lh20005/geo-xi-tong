@@ -118,8 +118,8 @@ export class AlbumServicePostgres extends BaseServicePostgres<Album> {
     try {
       const result = await this.pool.query(
         `SELECT a.*, 
-          (SELECT COUNT(*) FROM images WHERE album_id = a.id AND deleted_at IS NULL) as image_count,
-          (SELECT filepath FROM images WHERE album_id = a.id AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1) as cover_image
+          (SELECT COUNT(*) FROM images WHERE album_id = a.id AND deleted_at IS NULL AND user_id = a.user_id) as image_count,
+          (SELECT filepath FROM images WHERE album_id = a.id AND deleted_at IS NULL AND user_id = a.user_id ORDER BY created_at ASC LIMIT 1) as cover_image
          FROM albums a
          WHERE a.user_id = $1
          ORDER BY a.created_at DESC`,
@@ -147,7 +147,7 @@ export class AlbumServicePostgres extends BaseServicePostgres<Album> {
       const result = await this.pool.query(
         `SELECT a.*, COUNT(i.id) as image_count
          FROM albums a
-         LEFT JOIN images i ON i.album_id = a.id
+         LEFT JOIN images i ON i.album_id = a.id AND i.user_id = a.user_id
          WHERE a.id = $1 AND a.user_id = $2
          GROUP BY a.id`,
         [albumId, this.userId]

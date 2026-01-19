@@ -200,10 +200,12 @@ export class OrderService {
   /**
    * 根据订单号获取订单
    */
-  async getOrderByNo(orderNo: string): Promise<Order | null> {
+  async getOrderByNo(orderNo: string, userId?: number): Promise<Order | null> {
     const result = await pool.query(
-      'SELECT * FROM orders WHERE order_no = $1',
-      [orderNo]
+      userId !== undefined
+        ? 'SELECT * FROM orders WHERE order_no = $1 AND user_id = $2'
+        : 'SELECT * FROM orders WHERE order_no = $1',
+      userId !== undefined ? [orderNo, userId] : [orderNo]
     );
 
     return result.rows.length > 0 ? result.rows[0] : null;

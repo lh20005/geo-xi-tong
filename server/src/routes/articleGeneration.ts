@@ -72,7 +72,10 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
     }
 
     // 验证引用的资源是否存在
-    const distillationCheck = await pool.query('SELECT id FROM distillations WHERE id = $1', [validatedData.distillationId]);
+    const distillationCheck = await pool.query(
+      'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
+      [validatedData.distillationId, userId]
+    );
     if (distillationCheck.rows.length === 0) {
       return res.status(404).json({ error: '蒸馏历史不存在' });
     }
@@ -80,7 +83,10 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
     // 如果 albumId 是数字，验证服务器数据库中是否存在
     // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
     if (typeof validatedData.albumId === 'number') {
-      const albumCheck = await pool.query('SELECT id FROM albums WHERE id = $1', [validatedData.albumId]);
+      const albumCheck = await pool.query(
+        'SELECT id FROM albums WHERE id = $1 AND user_id = $2',
+        [validatedData.albumId, userId]
+      );
       if (albumCheck.rows.length === 0) {
         return res.status(404).json({ error: '图库不存在' });
       }
@@ -89,20 +95,29 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
     // 如果 knowledgeBaseId 是数字，验证服务器数据库中是否存在
     // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
     if (typeof validatedData.knowledgeBaseId === 'number') {
-      const knowledgeBaseCheck = await pool.query('SELECT id FROM knowledge_bases WHERE id = $1', [validatedData.knowledgeBaseId]);
+      const knowledgeBaseCheck = await pool.query(
+        'SELECT id FROM knowledge_bases WHERE id = $1 AND user_id = $2',
+        [validatedData.knowledgeBaseId, userId]
+      );
       if (knowledgeBaseCheck.rows.length === 0) {
         return res.status(404).json({ error: '知识库不存在' });
       }
     }
 
-    const articleSettingCheck = await pool.query('SELECT id FROM article_settings WHERE id = $1', [validatedData.articleSettingId]);
+    const articleSettingCheck = await pool.query(
+      'SELECT id FROM article_settings WHERE id = $1 AND user_id = $2',
+      [validatedData.articleSettingId, userId]
+    );
     if (articleSettingCheck.rows.length === 0) {
       return res.status(404).json({ error: '文章设置不存在' });
     }
 
     // 验证转化目标是否存在（如果提供了）
     if (validatedData.conversionTargetId) {
-      const conversionTargetCheck = await pool.query('SELECT id FROM conversion_targets WHERE id = $1', [validatedData.conversionTargetId]);
+      const conversionTargetCheck = await pool.query(
+        'SELECT id FROM conversion_targets WHERE id = $1 AND user_id = $2',
+        [validatedData.conversionTargetId, userId]
+      );
       if (conversionTargetCheck.rows.length === 0) {
         return res.status(404).json({ error: '转化目标不存在' });
       }
@@ -121,8 +136,8 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
 
     // 获取任务详情（包含selected_distillation_ids）
     const taskResult = await pool.query(
-      'SELECT id, status, created_at, selected_distillation_ids FROM generation_tasks WHERE id = $1',
-      [taskId]
+      'SELECT id, status, created_at, selected_distillation_ids FROM generation_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
     );
     
     const task = taskResult.rows[0];
@@ -203,17 +218,17 @@ articleGenerationRouter.get('/tasks/:id', async (req, res) => {
     const articlesResult = await pool.query(
       `SELECT id, title, keyword, image_url, created_at 
        FROM articles 
-       WHERE task_id = $1 
+       WHERE task_id = $1 AND user_id = $2
        ORDER BY created_at DESC`,
-      [taskId]
+      [taskId, userId]
     );
 
     // 获取selected_distillation_ids对应的蒸馏结果（需求 8.1, 8.2, 13.2）
     let selectedDistillations: Array<{ id: number; keyword: string }> = [];
     
     const taskDetailResult = await pool.query(
-      'SELECT selected_distillation_ids FROM generation_tasks WHERE id = $1',
-      [taskId]
+      'SELECT selected_distillation_ids FROM generation_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
     );
     
     const selectedIdsJson = taskDetailResult.rows[0]?.selected_distillation_ids;
@@ -225,14 +240,14 @@ articleGenerationRouter.get('/tasks/:id', async (req, res) => {
         if (selectedIds.length > 0) {
           // 批量查询蒸馏结果信息，优先使用任务表的快照字段
           const distillationsResult = await pool.query(
-            'SELECT id, keyword FROM distillations WHERE id = ANY($1)',
-            [selectedIds]
+            'SELECT id, keyword FROM distillations WHERE id = ANY($1) AND user_id = $2',
+            [selectedIds, userId]
           );
           
           // 同时查询任务的快照字段
           const taskSnapshotResult = await pool.query(
-            'SELECT distillation_keyword FROM generation_tasks WHERE id = $1',
-            [taskId]
+            'SELECT distillation_keyword FROM generation_tasks WHERE id = $1 AND user_id = $2',
+            [taskId, userId]
           );
           const snapshotKeyword = taskSnapshotResult.rows[0]?.distillation_keyword;
           
@@ -363,7 +378,7 @@ articleGenerationRouter.post('/tasks/:id/cancel', async (req, res) => {
     }
 
     // 将任务标记为失败
-    await service.updateTaskStatus(taskId, 'failed', task.generatedCount, '任务已被用户终止');
+    await service.updateTaskStatus(taskId, 'failed', task.generatedCount, '任务已被用户终止', userId);
 
     res.json({
       success: true,
@@ -399,11 +414,11 @@ articleGenerationRouter.delete('/tasks/:id', async (req, res) => {
     // 如果任务正在运行，需要先终止
     if (task.status === 'running' && force !== 'true') {
       // 先终止任务
-      await service.updateTaskStatus(taskId, 'failed', task.generatedCount, '任务已被用户终止');
+      await service.updateTaskStatus(taskId, 'failed', task.generatedCount, '任务已被用户终止', userId);
     }
 
     // 删除任务（会级联删除关联的文章）
-    await pool.query('DELETE FROM generation_tasks WHERE id = $1', [taskId]);
+    await pool.query('DELETE FROM generation_tasks WHERE id = $1 AND user_id = $2', [taskId, userId]);
 
     res.json({
       success: true,

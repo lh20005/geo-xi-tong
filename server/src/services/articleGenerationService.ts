@@ -376,10 +376,12 @@ export class ArticleGenerationService {
   /**
    * 获取任务状态
    */
-  async getTaskStatus(taskId: number): Promise<string | null> {
+  async getTaskStatus(taskId: number, userId?: number): Promise<string | null> {
     const result = await pool.query(
-      'SELECT status FROM generation_tasks WHERE id = $1',
-      [taskId]
+      userId !== undefined
+        ? 'SELECT status FROM generation_tasks WHERE id = $1 AND user_id = $2'
+        : 'SELECT status FROM generation_tasks WHERE id = $1',
+      userId !== undefined ? [taskId, userId] : [taskId]
     );
     if (result.rows.length === 0) {
       return null;
@@ -587,7 +589,8 @@ export class ArticleGenerationService {
     taskId: number,
     status: 'pending' | 'running' | 'completed' | 'failed',
     generatedCount?: number,
-    errorMessage?: string
+    errorMessage?: string,
+    userId?: number
   ): Promise<void> {
     const updates: string[] = ['status = $2', 'updated_at = CURRENT_TIMESTAMP'];
     const values: any[] = [taskId, status];
@@ -605,8 +608,16 @@ export class ArticleGenerationService {
       paramIndex++;
     }
 
+    const whereClause = userId !== undefined
+      ? `WHERE id = $1 AND user_id = $${paramIndex}`
+      : 'WHERE id = $1';
+
+    if (userId !== undefined) {
+      values.push(userId);
+    }
+
     await pool.query(
-      `UPDATE generation_tasks SET ${updates.join(', ')} WHERE id = $1`,
+      `UPDATE generation_tasks SET ${updates.join(', ')} ${whereClause}`,
       values
     );
   }
@@ -614,14 +625,25 @@ export class ArticleGenerationService {
   /**
    * 更新任务进度
    */
-  async updateTaskProgress(taskId: number, generatedCount: number, requestedCount: number): Promise<void> {
+  async updateTaskProgress(
+    taskId: number,
+    generatedCount: number,
+    requestedCount: number,
+    userId?: number
+  ): Promise<void> {
     const progress = Math.round((generatedCount / requestedCount) * 100);
 
     await pool.query(
-      `UPDATE generation_tasks 
-       SET generated_count = $2, progress = $3, updated_at = CURRENT_TIMESTAMP 
-       WHERE id = $1`,
-      [taskId, generatedCount, progress]
+      userId !== undefined
+        ? `UPDATE generation_tasks 
+           SET generated_count = $2, progress = $3, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1 AND user_id = $4`
+        : `UPDATE generation_tasks 
+           SET generated_count = $2, progress = $3, updated_at = CURRENT_TIMESTAMP 
+           WHERE id = $1`,
+      userId !== undefined
+        ? [taskId, generatedCount, progress, userId]
+        : [taskId, generatedCount, progress]
     );
   }
 

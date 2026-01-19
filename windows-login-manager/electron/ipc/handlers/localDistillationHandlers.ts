@@ -311,7 +311,7 @@ export function registerLocalDistillationHandlers(): void {
           t.created_at as "createdAt",
           d.keyword,
           COALESCE(
-            (SELECT COUNT(*) FROM articles a WHERE a.topic_id = t.id),
+            (SELECT COUNT(*) FROM articles a WHERE a.topic_id = t.id AND a.user_id = t.user_id),
             0
           ) as "referenceCount"
         FROM topics t
@@ -329,7 +329,7 @@ export function registerLocalDistillationHandlers(): void {
           COUNT(DISTINCT t.id) as "totalTopics",
           COUNT(DISTINCT d.id) as "totalKeywords",
           COALESCE(SUM(
-            (SELECT COUNT(*) FROM articles a WHERE a.topic_id = t.id)
+            (SELECT COUNT(*) FROM articles a WHERE a.topic_id = t.id AND a.user_id = t.user_id)
           ), 0) as "totalReferences"
         FROM topics t
         JOIN distillations d ON t.distillation_id = d.id

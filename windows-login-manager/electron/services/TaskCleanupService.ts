@@ -97,7 +97,7 @@ export class TaskCleanupService {
   /**
    * 手动触发清理（供用户主动调用）
    */
-  async manualCleanup(retentionDays?: number): Promise<{
+  async manualCleanup(retentionDays?: number, userId?: number): Promise<{
     success: boolean;
     deletedPublishingTasks: number;
     deletedPublishingRecords: number;
@@ -112,21 +112,32 @@ export class TaskCleanupService {
 
       // 清理发布任务
       const publishingTasksResult = await pool.query(
-        `DELETE FROM publishing_tasks 
-         WHERE created_at < $1 
-         AND status IN ('success', 'failed', 'cancelled')
-         RETURNING id`,
-        [cutoffDate]
+        userId !== undefined
+          ? `DELETE FROM publishing_tasks 
+             WHERE created_at < $1 
+             AND status IN ('success', 'failed', 'cancelled')
+             AND user_id = $2
+             RETURNING id`
+          : `DELETE FROM publishing_tasks 
+             WHERE created_at < $1 
+             AND status IN ('success', 'failed', 'cancelled')
+             RETURNING id`,
+        userId !== undefined ? [cutoffDate, userId] : [cutoffDate]
       );
 
       const deletedPublishingTasks = publishingTasksResult.rowCount || 0;
 
       // 清理发布记录
       const publishingRecordsResult = await pool.query(
-        `DELETE FROM publishing_records 
-         WHERE created_at < $1
-         RETURNING id`,
-        [cutoffDate]
+        userId !== undefined
+          ? `DELETE FROM publishing_records 
+             WHERE created_at < $1
+             AND user_id = $2
+             RETURNING id`
+          : `DELETE FROM publishing_records 
+             WHERE created_at < $1
+             RETURNING id`,
+        userId !== undefined ? [cutoffDate, userId] : [cutoffDate]
       );
 
       const deletedPublishingRecords = publishingRecordsResult.rowCount || 0;
@@ -160,7 +171,7 @@ export class TaskCleanupService {
   /**
    * 获取可清理的记录统计
    */
-  async getCleanupStats(retentionDays?: number): Promise<{
+  async getCleanupStats(retentionDays?: number, userId?: number): Promise<{
     success: boolean;
     publishingTasks: number;
     publishingRecords: number;
@@ -174,17 +185,26 @@ export class TaskCleanupService {
 
       // 统计可清理的发布任务
       const tasksResult = await pool.query(
-        `SELECT COUNT(*) as count FROM publishing_tasks 
-         WHERE created_at < $1 
-         AND status IN ('success', 'failed', 'cancelled')`,
-        [cutoffDate]
+        userId !== undefined
+          ? `SELECT COUNT(*) as count FROM publishing_tasks 
+             WHERE created_at < $1 
+             AND status IN ('success', 'failed', 'cancelled')
+             AND user_id = $2`
+          : `SELECT COUNT(*) as count FROM publishing_tasks 
+             WHERE created_at < $1 
+             AND status IN ('success', 'failed', 'cancelled')`,
+        userId !== undefined ? [cutoffDate, userId] : [cutoffDate]
       );
 
       // 统计可清理的发布记录
       const recordsResult = await pool.query(
-        `SELECT COUNT(*) as count FROM publishing_records 
-         WHERE created_at < $1`,
-        [cutoffDate]
+        userId !== undefined
+          ? `SELECT COUNT(*) as count FROM publishing_records 
+             WHERE created_at < $1
+             AND user_id = $2`
+          : `SELECT COUNT(*) as count FROM publishing_records 
+             WHERE created_at < $1`,
+        userId !== undefined ? [cutoffDate, userId] : [cutoffDate]
       );
 
       return {

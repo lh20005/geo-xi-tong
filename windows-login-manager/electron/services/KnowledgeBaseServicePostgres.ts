@@ -160,7 +160,7 @@ export class KnowledgeBaseServicePostgres extends BaseServicePostgres<KnowledgeB
       const result = await this.pool.query(
         `SELECT kb.*, COUNT(kd.id) as document_count
          FROM knowledge_bases kb
-         LEFT JOIN knowledge_documents kd ON kd.knowledge_base_id = kb.id
+         LEFT JOIN knowledge_documents kd ON kd.knowledge_base_id = kb.id AND kd.user_id = kb.user_id
          WHERE kb.user_id = $1
          GROUP BY kb.id
          ORDER BY kb.created_at DESC`,

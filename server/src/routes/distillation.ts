@@ -3,7 +3,7 @@ import { pool } from '../db/database';
 import { AIService } from '../services/aiService';
 import { ConfigHelper } from '../services/ConfigHelper';
 import { DistillationService } from '../services/distillationService';
-import { authenticate } from '../middleware/adminAuth';
+import { authenticate, requireAdmin } from '../middleware/adminAuth';
 import { setTenantContext, requireTenantContext, getCurrentTenantId } from '../middleware/tenantContext';
 import { usageTrackingService } from '../services/UsageTrackingService';
 
@@ -74,8 +74,8 @@ distillationRouter.post('/', async (req, res) => {
     // 保存话题
     for (const question of questions) {
       await pool.query(
-        'INSERT INTO topics (distillation_id, question) VALUES ($1, $2)',
-        [distillationId, question]
+        'INSERT INTO topics (distillation_id, keyword, question, user_id) VALUES ($1, $2, $3, $4)',
+        [distillationId, keyword, question, userId]
       );
     }
     
@@ -157,8 +157,8 @@ distillationRouter.post('/manual', async (req, res) => {
       // 批量保存话题
       for (const question of validQuestions) {
         await client.query(
-          'INSERT INTO topics (distillation_id, question) VALUES ($1, $2)',
-          [distillationId, question]
+          'INSERT INTO topics (distillation_id, keyword, question, user_id) VALUES ($1, $2, $3, $4)',
+          [distillationId, keyword.trim(), question, userId]
         );
       }
       
@@ -426,7 +426,7 @@ distillationRouter.get('/recommended', async (req, res) => {
 });
 
 // 修复使用计数API
-distillationRouter.post('/fix-usage-count', async (req, res) => {
+distillationRouter.post('/fix-usage-count', requireAdmin, async (req, res) => {
   try {
     const { distillationId } = req.body;
 
@@ -535,6 +535,7 @@ distillationRouter.post('/fix-usage-count', async (req, res) => {
 // 批量删除话题
 distillationRouter.delete('/topics', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { topicIds } = req.body;
 
     // 参数验证
@@ -570,7 +571,7 @@ distillationRouter.delete('/topics', async (req, res) => {
     const validIds = convertedIds.map(({ converted }) => converted);
 
     // 调用服务层方法
-    const result = await distillationService.deleteTopics(validIds);
+    const result = await distillationService.deleteTopics(validIds, userId);
 
     res.json(result);
   } catch (error: any) {
@@ -585,6 +586,7 @@ distillationRouter.delete('/topics', async (req, res) => {
 // 按关键词删除所有蒸馏结果
 distillationRouter.delete('/topics/by-keyword', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { keyword } = req.body;
 
     // 参数验证
@@ -593,7 +595,7 @@ distillationRouter.delete('/topics/by-keyword', async (req, res) => {
     }
 
     // 调用服务层方法
-    const result = await distillationService.deleteTopicsByKeyword(keyword.trim());
+    const result = await distillationService.deleteTopicsByKeyword(keyword.trim(), userId);
 
     res.json(result);
   } catch (error: any) {
@@ -608,6 +610,7 @@ distillationRouter.delete('/topics/by-keyword', async (req, res) => {
 // 删除当前筛选条件下的所有话题
 distillationRouter.delete('/topics/by-filter', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const { keyword, provider, search } = req.body;
 
     // 至少需要一个筛选条件
@@ -623,7 +626,7 @@ distillationRouter.delete('/topics/by-filter', async (req, res) => {
       keyword,
       provider,
       search
-    });
+    }, userId);
 
     res.json(result);
   } catch (error: any) {
@@ -921,6 +924,7 @@ distillationRouter.get('/:id/usage', async (req, res) => {
 // 保留旧的API路径以保持向后兼容
 distillationRouter.get('/:id/usage-history', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const distillationId = parseInt(req.params.id);
     if (isNaN(distillationId) || distillationId <= 0) {
       return res.status(400).json({ error: '无效的记录ID' });
@@ -933,7 +937,7 @@ distillationRouter.get('/:id/usage-history', async (req, res) => {
       return res.status(400).json({ error: '无效的分页参数' });
     }
 
-    const result = await distillationService.getUsageHistory(distillationId, page, pageSize);
+    const result = await distillationService.getUsageHistory(distillationId, page, pageSize, userId);
     
     res.json(result);
   } catch (error: any) {
@@ -948,6 +952,7 @@ distillationRouter.get('/:id/usage-history', async (req, res) => {
 // 重置单条蒸馏结果的使用统计
 distillationRouter.post('/:id/reset-usage', async (req, res) => {
   try {
+    const userId = getCurrentTenantId(req);
     const distillationId = parseInt(req.params.id);
     if (isNaN(distillationId) || distillationId <= 0) {
       return res.status(400).json({ error: '无效的记录ID' });
@@ -955,15 +960,15 @@ distillationRouter.post('/:id/reset-usage', async (req, res) => {
 
     // 检查记录是否存在
     const checkResult = await pool.query(
-      'SELECT id FROM distillations WHERE id = $1',
-      [distillationId]
+      'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
+      [distillationId, userId]
     );
 
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: '记录不存在' });
     }
 
-    await distillationService.resetUsageStats(distillationId);
+    await distillationService.resetUsageStats(distillationId, userId);
     
     res.json({
       success: true,
@@ -979,7 +984,7 @@ distillationRouter.post('/:id/reset-usage', async (req, res) => {
 });
 
 // 重置所有蒸馏结果的使用统计
-distillationRouter.post('/reset-all-usage', async (req, res) => {
+distillationRouter.post('/reset-all-usage', requireAdmin, async (req, res) => {
   try {
     await distillationService.resetAllUsageStats();
     
@@ -997,7 +1002,7 @@ distillationRouter.post('/reset-all-usage', async (req, res) => {
 });
 
 // 修复使用统计（重新计算usage_count）
-distillationRouter.post('/repair-usage-stats', async (req, res) => {
+distillationRouter.post('/repair-usage-stats', requireAdmin, async (req, res) => {
   try {
     const result = await distillationService.repairUsageStats();
     

@@ -117,23 +117,38 @@ export class DistillationService {
    * Task 3.2: 扩展getDistillationDetail方法
    */
   async getDistillationDetail(
-    distillationId: number
+    distillationId: number,
+    userId?: number
   ): Promise<DistillationUsageStats | null> {
     const result = await pool.query(
-      `SELECT 
-        d.id as distillation_id,
-        d.keyword,
-        d.provider,
-        d.usage_count,
-        d.created_at,
-        COUNT(t.id) as topic_count,
-        MAX(du.used_at) as last_used_at
-       FROM distillations d
-       LEFT JOIN topics t ON d.id = t.distillation_id
-       LEFT JOIN distillation_usage du ON d.id = du.distillation_id
-       WHERE d.id = $1
-       GROUP BY d.id, d.keyword, d.provider, d.usage_count, d.created_at`,
-      [distillationId]
+      userId !== undefined
+        ? `SELECT 
+            d.id as distillation_id,
+            d.keyword,
+            d.provider,
+            d.usage_count,
+            d.created_at,
+            COUNT(t.id) as topic_count,
+            MAX(du.used_at) as last_used_at
+           FROM distillations d
+           LEFT JOIN topics t ON d.id = t.distillation_id
+           LEFT JOIN distillation_usage du ON d.id = du.distillation_id
+           WHERE d.id = $1 AND d.user_id = $2
+           GROUP BY d.id, d.keyword, d.provider, d.usage_count, d.created_at`
+        : `SELECT 
+            d.id as distillation_id,
+            d.keyword,
+            d.provider,
+            d.usage_count,
+            d.created_at,
+            COUNT(t.id) as topic_count,
+            MAX(du.used_at) as last_used_at
+           FROM distillations d
+           LEFT JOIN topics t ON d.id = t.distillation_id
+           LEFT JOIN distillation_usage du ON d.id = du.distillation_id
+           WHERE d.id = $1
+           GROUP BY d.id, d.keyword, d.provider, d.usage_count, d.created_at`,
+      userId !== undefined ? [distillationId, userId] : [distillationId]
     );
 
     if (result.rows.length === 0) {
@@ -159,14 +174,32 @@ export class DistillationService {
   async getUsageHistory(
     distillationId: number,
     page: number = 1,
-    pageSize: number = 10
+    pageSize: number = 10,
+    userId?: number
   ): Promise<{ history: DistillationUsageHistory[]; total: number }> {
+    if (userId === undefined) {
+      throw new Error('用户未登录或无权限访问');
+    }
+
     const offset = (page - 1) * pageSize;
+
+    // 校验蒸馏记录归属
+    const distCheck = await pool.query(
+      'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
+      [distillationId, userId]
+    );
+
+    if (distCheck.rows.length === 0) {
+      throw new Error('蒸馏结果不存在或无权访问');
+    }
 
     // 获取总数
     const countResult = await pool.query(
-      'SELECT COUNT(*) FROM distillation_usage WHERE distillation_id = $1',
-      [distillationId]
+      `SELECT COUNT(*)
+       FROM distillation_usage du
+       INNER JOIN distillations d ON du.distillation_id = d.id
+       WHERE du.distillation_id = $1 AND d.user_id = $2`,
+      [distillationId, userId]
     );
     const total = parseInt(countResult.rows[0].count);
 
@@ -179,11 +212,12 @@ export class DistillationService {
         du.used_at,
         a.title as article_title
        FROM distillation_usage du
+       INNER JOIN distillations d ON du.distillation_id = d.id
        LEFT JOIN articles a ON du.article_id = a.id
-       WHERE du.distillation_id = $1
+       WHERE du.distillation_id = $1 AND d.user_id = $2
        ORDER BY du.used_at DESC
-       LIMIT $2 OFFSET $3`,
-      [distillationId, pageSize, offset]
+       LIMIT $3 OFFSET $4`,
+      [distillationId, userId, pageSize, offset]
     );
 
     return {
@@ -250,10 +284,24 @@ export class DistillationService {
    * 重置单条蒸馏结果的使用统计
    * 将usage_count设为0并删除所有使用记录
    */
-  async resetUsageStats(distillationId: number): Promise<void> {
+  async resetUsageStats(distillationId: number, userId?: number): Promise<void> {
+    if (userId === undefined) {
+      throw new Error('用户未登录或无权限访问');
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+
+      // 校验蒸馏记录归属
+      const distCheck = await client.query(
+        'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
+        [distillationId, userId]
+      );
+
+      if (distCheck.rows.length === 0) {
+        throw new Error('蒸馏结果不存在或无权访问');
+      }
 
       // 删除使用记录
       await client.query(
@@ -261,10 +309,10 @@ export class DistillationService {
         [distillationId]
       );
 
-      // 重置usage_count
+      // 重置usage_count（限定用户）
       await client.query(
-        'UPDATE distillations SET usage_count = 0 WHERE id = $1',
-        [distillationId]
+        'UPDATE distillations SET usage_count = 0 WHERE id = $1 AND user_id = $2',
+        [distillationId, userId]
       );
 
       await client.query('COMMIT');
@@ -385,12 +433,16 @@ export class DistillationService {
    * 减少使用计数（删除文章时调用）
    * Task 3.5: 实现decrementUsageCount方法
    */
-  async decrementUsageCount(distillationId: number): Promise<void> {
+  async decrementUsageCount(distillationId: number, userId?: number): Promise<void> {
     await pool.query(
-      `UPDATE distillations 
-       SET usage_count = GREATEST(usage_count - 1, 0) 
-       WHERE id = $1`,
-      [distillationId]
+      userId !== undefined
+        ? `UPDATE distillations 
+           SET usage_count = GREATEST(usage_count - 1, 0) 
+           WHERE id = $1 AND user_id = $2`
+        : `UPDATE distillations 
+           SET usage_count = GREATEST(usage_count - 1, 0) 
+           WHERE id = $1`,
+      userId !== undefined ? [distillationId, userId] : [distillationId]
     );
   }
 
@@ -469,7 +521,7 @@ export class DistillationService {
    * @param topicIds 要删除的话题ID数组
    * @returns 删除结果
    */
-  async deleteTopics(topicIds: number[]): Promise<{ 
+  async deleteTopics(topicIds: number[], userId?: number): Promise<{ 
     success: boolean; 
     deletedCount: number 
   }> {
@@ -478,7 +530,11 @@ export class DistillationService {
         return { success: true, deletedCount: 0 };
       }
 
-      const deletedCount = await deleteTopicsByIds(topicIds);
+      if (userId === undefined) {
+        throw new Error('用户未登录或无权限访问');
+      }
+
+      const deletedCount = await deleteTopicsByIds(topicIds, userId);
 
       return {
         success: true,
@@ -497,7 +553,7 @@ export class DistillationService {
    * @param keyword 关键词
    * @returns 删除结果
    */
-  async deleteTopicsByKeyword(keyword: string): Promise<{
+  async deleteTopicsByKeyword(keyword: string, userId?: number): Promise<{
     success: boolean;
     deletedCount: number;
     keyword: string;
@@ -506,12 +562,16 @@ export class DistillationService {
     try {
       await client.query('BEGIN');
 
+      if (userId === undefined) {
+        throw new Error('用户未登录或无权限访问');
+      }
+
       // 查询该关键词下的所有distillation ID和话题ID
       const distillationsResult = await client.query(
         `SELECT DISTINCT d.id as distillation_id
          FROM distillations d
-         WHERE d.keyword = $1`,
-        [keyword]
+         WHERE d.keyword = $1 AND d.user_id = $2`,
+        [keyword, userId]
       );
 
       const distillationIds = distillationsResult.rows.map(row => row.distillation_id);
@@ -529,8 +589,8 @@ export class DistillationService {
       const topicsResult = await client.query(
         `SELECT t.id 
          FROM topics t
-         WHERE t.distillation_id = ANY($1::int[])`,
-        [distillationIds]
+         WHERE t.distillation_id = ANY($1::int[]) AND t.user_id = $2`,
+        [distillationIds, userId]
       );
 
       const topicIds = topicsResult.rows.map(row => row.id);
@@ -539,8 +599,8 @@ export class DistillationService {
       // 删除话题
       if (topicIds.length > 0) {
         const deleteTopicsResult = await client.query(
-          'DELETE FROM topics WHERE id = ANY($1::int[])',
-          [topicIds]
+          'DELETE FROM topics WHERE id = ANY($1::int[]) AND user_id = $2',
+          [topicIds, userId]
         );
         deletedTopicCount = deleteTopicsResult.rowCount || 0;
       }
@@ -549,10 +609,11 @@ export class DistillationService {
       await client.query(
         `DELETE FROM distillations 
          WHERE id = ANY($1::int[]) 
+         AND user_id = $2
          AND NOT EXISTS (
            SELECT 1 FROM topics WHERE distillation_id = distillations.id
          )`,
-        [distillationIds]
+        [distillationIds, userId]
       );
 
       await client.query('COMMIT');
@@ -582,7 +643,7 @@ export class DistillationService {
     keyword?: string;
     provider?: string;
     search?: string;
-  }): Promise<{
+  }, userId?: number): Promise<{
     success: boolean;
     deletedCount: number;
     filters: typeof filters;
@@ -591,10 +652,18 @@ export class DistillationService {
     try {
       await client.query('BEGIN');
 
+      if (userId === undefined) {
+        throw new Error('用户未登录或无权限访问');
+      }
+
       // 构建查询条件
       const conditions: string[] = [];
       const params: any[] = [];
       let paramIndex = 1;
+
+      conditions.push(`d.user_id = $${paramIndex}`);
+      params.push(userId);
+      paramIndex++;
 
       if (filters.keyword) {
         conditions.push(`d.keyword = $${paramIndex}`);
@@ -647,8 +716,8 @@ export class DistillationService {
 
       // 删除话题
       const deleteResult = await client.query(
-        'DELETE FROM topics WHERE id = ANY($1::int[])',
-        [topicIds]
+        'DELETE FROM topics WHERE id = ANY($1::int[]) AND user_id = $2',
+        [topicIds, userId]
       );
 
       await client.query('COMMIT');

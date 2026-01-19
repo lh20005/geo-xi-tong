@@ -265,9 +265,10 @@ export async function getTopicsStatistics(
  * 使用事务确保数据一致性
  * 
  * @param topicIds 要删除的话题ID数组
+ * @param userId 当前用户ID（用于隔离）
  * @returns 删除的记录数
  */
-export async function deleteTopicsByIds(topicIds: number[]): Promise<number> {
+export async function deleteTopicsByIds(topicIds: number[], userId: number): Promise<number> {
   if (!topicIds || topicIds.length === 0) {
     return 0;
   }
@@ -277,30 +278,31 @@ export async function deleteTopicsByIds(topicIds: number[]): Promise<number> {
   try {
     await client.query('BEGIN');
 
-    // 查询这些话题关联的distillation IDs
+    // 查询这些话题关联的distillation IDs（限定用户）
     const distillationsResult = await client.query(
-      'SELECT DISTINCT distillation_id FROM topics WHERE id = ANY($1::int[])',
-      [topicIds]
+      'SELECT DISTINCT distillation_id FROM topics WHERE id = ANY($1::int[]) AND user_id = $2',
+      [topicIds, userId]
     );
     const distillationIds = distillationsResult.rows
       .map(row => row.distillation_id)
       .filter(id => id !== null);
 
-    // 删除话题
+    // 删除话题（限定用户）
     const result = await client.query(
-      'DELETE FROM topics WHERE id = ANY($1::int[])',
-      [topicIds]
+      'DELETE FROM topics WHERE id = ANY($1::int[]) AND user_id = $2',
+      [topicIds, userId]
     );
 
-    // 删除没有话题的distillation记录
+    // 删除没有话题的distillation记录（限定用户）
     if (distillationIds.length > 0) {
       await client.query(
         `DELETE FROM distillations 
          WHERE id = ANY($1::int[]) 
+         AND user_id = $2
          AND NOT EXISTS (
            SELECT 1 FROM topics WHERE distillation_id = distillations.id
          )`,
-        [distillationIds]
+        [distillationIds, userId]
       );
     }
 

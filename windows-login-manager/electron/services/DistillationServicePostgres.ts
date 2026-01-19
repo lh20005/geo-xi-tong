@@ -202,7 +202,7 @@ export class DistillationServicePostgres extends BaseServicePostgres<Distillatio
       await this.pool.query(
         `UPDATE distillations 
          SET topics_count = (
-           SELECT COUNT(*) FROM topics WHERE distillation_id = $1
+           SELECT COUNT(*) FROM topics WHERE distillation_id = $1 AND user_id = $2
          )
          WHERE id = $1 AND user_id = $2`,
         [id, this.userId]

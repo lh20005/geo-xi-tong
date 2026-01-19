@@ -196,7 +196,7 @@ router.get('/:orderNo', authenticate, async (req, res) => {
     const userId = (req as any).user.userId;
 
     // 获取订单
-    const order = await orderService.getOrderByNo(orderNo);
+    const order = await orderService.getOrderByNo(orderNo, userId);
     if (!order) {
       return res.status(404).json({
         success: false,
@@ -235,7 +235,7 @@ router.get('/:orderNo/status', authenticate, async (req, res) => {
     const userId = (req as any).user.userId;
 
     // 获取订单
-    const order = await orderService.getOrderByNo(orderNo);
+    const order = await orderService.getOrderByNo(orderNo, userId);
     if (!order) {
       return res.status(404).json({
         success: false,
