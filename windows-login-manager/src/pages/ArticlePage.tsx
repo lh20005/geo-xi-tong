@@ -149,10 +149,19 @@ export default function ArticlePage() {
         const selectedArticleSetting = articleSettings.find(s => s.id === selectedArticleSettingId);
         const selectedConversionTarget = conversionTargets.find(t => t.id === selectedConversionTargetId);
         const conversionTargetName = selectedConversionTarget 
-          ? `${selectedConversionTarget.company_name} (${selectedConversionTarget.industry})` 
-          : undefined;
+            ? `${selectedConversionTarget.company_name} (${selectedConversionTarget.industry})` 
+            : undefined;
 
-        const saveResult = await localArticleApi.create({
+          // DEBUG: 打印保存前的参数
+          console.log('保存文章参数 DEBUG:', {
+            title: generatedArticle.title,
+            articleSettingId: selectedArticleSettingId,
+            articleSettingSnapshot: selectedArticleSetting?.name,
+            conversionTargetId: selectedConversionTargetId,
+            conversionTargetSnapshot: conversionTargetName
+          });
+
+          const saveResult = await localArticleApi.create({
           userId,
           title: generatedArticle.title,
           keyword: detail.keyword || keyword,

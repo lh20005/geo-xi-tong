@@ -124,6 +124,13 @@ export default function ArticleGenerationPage() {
           const content = articleResponse.data?.content || '';
 
           // 同步到本地
+          console.log('自动同步文章:', { 
+            title: article.title, 
+            taskId: detail.id,
+            articleSetting: detail.articleSettingName,
+            conversionTarget: detail.conversionTargetName
+          });
+
           const result = await localArticleApi.create({
             userId,
             title: article.title,
@@ -135,6 +142,10 @@ export default function ArticleGenerationPage() {
             distillationKeywordSnapshot: detail.keyword,
             topicQuestionSnapshot: detail.distillationResult || undefined,
             taskId: detail.id,
+            articleSettingId: detail.articleSettingId,
+            articleSettingSnapshot: detail.articleSettingName || undefined,
+            conversionTargetId: detail.conversionTargetId || undefined,
+            conversionTargetSnapshot: detail.conversionTargetName || undefined,
             isPublished: false,
           });
 

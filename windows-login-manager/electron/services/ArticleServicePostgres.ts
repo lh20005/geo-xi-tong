@@ -107,6 +107,10 @@ export interface UpdateArticleInput {
   topicQuestionSnapshot?: string;
   taskId?: number;
   imageId?: number;
+  articleSettingId?: number;
+  articleSettingSnapshot?: string;
+  conversionTargetId?: number;
+  conversionTargetSnapshot?: string;
 }
 
 /**
@@ -286,6 +290,8 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
     this.validateUserId();
 
     try {
+      log.info('ArticleService: createArticle input:', JSON.stringify(input, null, 2));
+
       const articleData = {
         user_id: this.userId,
         title: input.title,
@@ -383,6 +389,10 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
     if (input.taskId !== undefined) updateData.task_id = input.taskId;
     if (input.imageId !== undefined) updateData.image_id = input.imageId;
     if (input.requirements !== undefined) updateData.requirements = input.requirements;
+    if (input.articleSettingId !== undefined) updateData.article_setting_id = input.articleSettingId;
+    if (input.articleSettingSnapshot !== undefined) updateData.article_setting_snapshot = input.articleSettingSnapshot;
+    if (input.conversionTargetId !== undefined) updateData.conversion_target_id = input.conversionTargetId;
+    if (input.conversionTargetSnapshot !== undefined) updateData.conversion_target_snapshot = input.conversionTargetSnapshot;
 
     return await this.update(id, updateData);
   }

@@ -65,6 +65,8 @@ export function registerArticleHandlers(): void {
       serviceFactory.setUserId(user.id);
       const articleService = serviceFactory.getArticleService();
 
+      log.info('IPC: article:create params:', JSON.stringify(params, null, 2));
+
       const article = await articleService.createArticle(params);
 
       return { success: true, data: transformArticle(article) };
@@ -140,6 +142,8 @@ export function registerArticleHandlers(): void {
       // 设置用户 ID 并获取服务
       serviceFactory.setUserId(user.id);
       const articleService = serviceFactory.getArticleService();
+
+      log.info(`IPC: article:update params for ${id}:`, JSON.stringify(params, null, 2));
 
       const article = await articleService.updateArticle(parseInt(id), params);
       
