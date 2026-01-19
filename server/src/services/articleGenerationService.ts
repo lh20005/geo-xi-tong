@@ -115,6 +115,7 @@ export interface TaskConfig {
   userId: number; // 用户ID，用于多租户隔离
   resourceSource?: 'local' | 'server';
   knowledgeSummary?: string;
+  articleSettingSnapshot?: string; // 本地文章设置快照
 }
 
 export interface GenerationTask {
@@ -122,7 +123,7 @@ export interface GenerationTask {
   distillationId: number;
   albumId: number;
   knowledgeBaseId: number;
-  articleSettingId: number;
+  articleSettingId: number | null;
   conversionTargetId?: number | null;
   requestedCount: number;
   generatedCount: number;
@@ -132,7 +133,11 @@ export interface GenerationTask {
   createdAt: string;
   updatedAt: string;
   conversionTargetName?: string | null;
+  conversionTargetIndustry?: string | null;
+  conversionTargetWebsite?: string | null;
+  conversionTargetAddress?: string | null;
   articleSettingName?: string | null;  // 添加文章设置名称
+  articleSettingPrompt?: string | null;
   albumName?: string | null;  // 企业图库名称
   knowledgeBaseName?: string | null;  // 企业知识库名称
   keyword: string;
@@ -319,6 +324,23 @@ export class ArticleGenerationService {
     // 2. 为每篇文章创建一个独立的任务，并保存预选的话题ID
     const taskIds: number[] = [];
     
+    // 解析文章设置快照（如果是本地资源）
+    let articleSettingName: string | null = null;
+    let articleSettingPrompt: string | null = null;
+    const isLocalResource = config.resourceSource === 'local';
+    
+    if (isLocalResource && config.articleSettingSnapshot) {
+      try {
+        const snapshot = JSON.parse(config.articleSettingSnapshot);
+        articleSettingName = snapshot.name || null;
+        // 组合 prompt，类似 ArticleSettingService 中的逻辑
+        articleSettingPrompt = snapshot.prompt || null; 
+        // 注意：这里我们只取 prompt 字段，如果有其他组合逻辑需要在客户端处理好快照
+      } catch (e) {
+        console.warn('[任务创建] 解析文章设置快照失败:', e);
+      }
+    }
+
     for (let i = 0; i < selectedTopics.length; i++) {
       const topic = selectedTopics[i];
       
@@ -333,8 +355,9 @@ export class ArticleGenerationService {
       // 创建独立任务
       const result = await pool.query(
         `INSERT INTO generation_tasks 
-         (distillation_id, album_id, knowledge_base_id, resource_source, knowledge_summary, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, user_id, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending') 
+         (distillation_id, album_id, knowledge_base_id, resource_source, knowledge_summary, article_setting_id, 
+          article_setting_name, article_setting_prompt, conversion_target_id, requested_count, selected_distillation_ids, user_id, status) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending') 
          RETURNING id`,
         [
           config.distillationId,
@@ -342,7 +365,9 @@ export class ArticleGenerationService {
           config.knowledgeBaseId,
           config.resourceSource || 'server',
           config.knowledgeSummary || null,
-          config.articleSettingId,
+          isLocalResource ? null : config.articleSettingId, // 本地资源设为 NULL
+          articleSettingName, // 存入快照名称
+          articleSettingPrompt, // 存入快照 Prompt
           config.conversionTargetId || null,
           1, // 每个任务只生成1篇文章
           selectedIdsJson,
@@ -409,7 +434,11 @@ export class ArticleGenerationService {
         gt.knowledge_base_id, 
         gt.knowledge_summary,
         gt.article_setting_id, 
+        gt.article_setting_prompt,
         gt.conversion_target_id,
+        gt.conversion_target_industry,
+        gt.conversion_target_website,
+        gt.conversion_target_address,
         gt.requested_count, 
         gt.generated_count, 
         gt.status, 
@@ -508,7 +537,11 @@ export class ArticleGenerationService {
         gt.knowledge_base_id, 
         gt.knowledge_summary,
         gt.article_setting_id, 
+        gt.article_setting_prompt,
         gt.conversion_target_id,
+        gt.conversion_target_industry,
+        gt.conversion_target_website,
+        gt.conversion_target_address,
         gt.requested_count, 
         gt.generated_count, 
         gt.status, 
@@ -565,6 +598,7 @@ export class ArticleGenerationService {
       knowledgeBaseId: row.knowledge_base_id,
       knowledgeSummary: row.knowledge_summary || null,
       articleSettingId: row.article_setting_id,
+      articleSettingPrompt: row.article_setting_prompt || null,
       conversionTargetId: row.conversion_target_id,
       requestedCount: row.requested_count,
       generatedCount: row.generated_count,
@@ -576,6 +610,9 @@ export class ArticleGenerationService {
       userId: row.user_id,
       resourceSource: row.resource_source || 'server',
       conversionTargetName: row.conversion_target_name || null,
+      conversionTargetIndustry: row.conversion_target_industry || null,
+      conversionTargetWebsite: row.conversion_target_website || null,
+      conversionTargetAddress: row.conversion_target_address || null,
       albumName: row.album_name || null,
       knowledgeBaseName: row.knowledge_base_name || null,
       articleSettingName: row.article_setting_name || null,
@@ -770,7 +807,12 @@ export class ArticleGenerationService {
 
       // 获取文章设置提示词
       console.log(`[任务 ${taskId}] 加载文章设置...`);
-      const articlePrompt = await this.getArticleSettingPrompt(task.articleSettingId);
+      const articlePrompt = task.resourceSource === 'local'
+        ? (task.articleSettingPrompt || '')
+        : await this.getArticleSettingPrompt(task.articleSettingId ?? (() => { throw new Error('文章设置ID缺失'); })());
+      if (task.resourceSource === 'local' && !articlePrompt) {
+        throw new Error('本地文章设置快照缺失，无法生成文章');
+      }
 
       // 获取转化目标（公司名称、行业、网站、地址）
       let companyName: string | undefined;
@@ -789,6 +831,11 @@ export class ArticleGenerationService {
           companyWebsite = targetResult.rows[0].website;
           companyAddress = targetResult.rows[0].address;
           console.log(`[任务 ${taskId}] 转化目标: ${companyName}${companyAddress ? ` (地址: ${companyAddress})` : ''}`);
+        } else {
+          companyName = task.conversionTargetName || undefined;
+          companyIndustry = task.conversionTargetIndustry || undefined;
+          companyWebsite = task.conversionTargetWebsite || undefined;
+          companyAddress = task.conversionTargetAddress || undefined;
         }
       }
 
@@ -948,7 +995,12 @@ export class ArticleGenerationService {
 
     // 获取文章设置提示词
     console.log(`[任务 ${taskId}] 加载文章设置...`);
-    const articlePrompt = await this.getArticleSettingPrompt(task.articleSettingId);
+    const articlePrompt = task.resourceSource === 'local'
+      ? (task.articleSettingPrompt || '')
+      : await this.getArticleSettingPrompt(task.articleSettingId ?? (() => { throw new Error('文章设置ID缺失'); })());
+    if (task.resourceSource === 'local' && !articlePrompt) {
+      throw new Error('本地文章设置快照缺失，无法生成文章');
+    }
 
     // 获取转化目标（公司名称、行业、网站、地址）
     let companyName: string | undefined;
@@ -967,6 +1019,11 @@ export class ArticleGenerationService {
         companyWebsite = targetResult.rows[0].website;
         companyAddress = targetResult.rows[0].address;
         console.log(`[任务 ${taskId}] 转化目标: ${companyName}${companyAddress ? ` (地址: ${companyAddress})` : ''}`);
+      } else {
+        companyName = task.conversionTargetName || undefined;
+        companyIndustry = task.conversionTargetIndustry || undefined;
+        companyWebsite = task.conversionTargetWebsite || undefined;
+        companyAddress = task.conversionTargetAddress || undefined;
       }
     }
 
@@ -1972,12 +2029,21 @@ export class ArticleGenerationService {
     }
 
     // 验证文章设置
-    const settingResult = await pool.query(
-      'SELECT id FROM article_settings WHERE id = $1',
-      [task.articleSettingId]
-    );
-    if (settingResult.rows.length === 0) {
-      throw new Error(`文章设置ID ${task.articleSettingId} 不存在`);
+    if (isLocalResource) {
+      if (!task.articleSettingPrompt) {
+        throw new Error('本地文章设置快照缺失，无法生成文章');
+      }
+    } else {
+      if (!task.articleSettingId) {
+        throw new Error('文章设置ID缺失，无法生成文章');
+      }
+      const settingResult = await pool.query(
+        'SELECT id FROM article_settings WHERE id = $1',
+        [task.articleSettingId]
+      );
+      if (settingResult.rows.length === 0) {
+        throw new Error(`文章设置ID ${task.articleSettingId} 不存在`);
+      }
     }
 
     // 验证系统级AI配置
@@ -2021,6 +2087,7 @@ export class ArticleGenerationService {
       aiConfigExists: false,
       aiConfigValid: false
     };
+    const isLocalResource = task.resourceSource === 'local';
 
     // 检查蒸馏记录
     try {
@@ -2050,59 +2117,78 @@ export class ArticleGenerationService {
     }
 
     // 检查图库
-    try {
-      const albumResult = await pool.query(
-        'SELECT id FROM albums WHERE id = $1',
-        [task.albumId]
-      );
-      checks.albumExists = albumResult.rows.length > 0;
-      
-      if (!checks.albumExists) {
-        recommendations.push(`图库ID ${task.albumId} 不存在`);
-      } else {
-        // 检查图片数量
-        const imagesResult = await pool.query(
-          'SELECT COUNT(*) as count FROM images WHERE album_id = $1',
+    if (isLocalResource) {
+      checks.albumExists = true;
+    } else {
+      try {
+        const albumResult = await pool.query(
+          'SELECT id FROM albums WHERE id = $1',
           [task.albumId]
         );
-        checks.imageCount = parseInt(imagesResult.rows[0].count);
+        checks.albumExists = albumResult.rows.length > 0;
         
-        if (checks.imageCount === 0) {
-          recommendations.push('图库中没有图片，将使用默认占位图');
+        if (!checks.albumExists) {
+          recommendations.push(`图库ID ${task.albumId} 不存在`);
+        } else {
+          // 检查图片数量
+          const imagesResult = await pool.query(
+            'SELECT COUNT(*) as count FROM images WHERE album_id = $1',
+            [task.albumId]
+          );
+          checks.imageCount = parseInt(imagesResult.rows[0].count);
+          
+          if (checks.imageCount === 0) {
+            recommendations.push('图库中没有图片，将使用默认占位图');
+          }
         }
+      } catch (error: any) {
+        recommendations.push(`检查图库时出错: ${error.message}`);
       }
-    } catch (error: any) {
-      recommendations.push(`检查图库时出错: ${error.message}`);
     }
 
     // 检查知识库
-    try {
-      const kbResult = await pool.query(
-        'SELECT id FROM knowledge_bases WHERE id = $1',
-        [task.knowledgeBaseId]
-      );
-      checks.knowledgeBaseExists = kbResult.rows.length > 0;
-      
-      if (!checks.knowledgeBaseExists) {
-        recommendations.push(`知识库ID ${task.knowledgeBaseId} 不存在`);
+    if (isLocalResource) {
+      checks.knowledgeBaseExists = true;
+    } else {
+      try {
+        const kbResult = await pool.query(
+          'SELECT id FROM knowledge_bases WHERE id = $1',
+          [task.knowledgeBaseId]
+        );
+        checks.knowledgeBaseExists = kbResult.rows.length > 0;
+        
+        if (!checks.knowledgeBaseExists) {
+          recommendations.push(`知识库ID ${task.knowledgeBaseId} 不存在`);
+        }
+      } catch (error: any) {
+        recommendations.push(`检查知识库时出错: ${error.message}`);
       }
-    } catch (error: any) {
-      recommendations.push(`检查知识库时出错: ${error.message}`);
     }
 
     // 检查文章设置
-    try {
-      const settingResult = await pool.query(
-        'SELECT id FROM article_settings WHERE id = $1',
-        [task.articleSettingId]
-      );
-      checks.articleSettingExists = settingResult.rows.length > 0;
-      
+    if (isLocalResource) {
+      checks.articleSettingExists = !!task.articleSettingPrompt;
       if (!checks.articleSettingExists) {
-        recommendations.push(`文章设置ID ${task.articleSettingId} 不存在`);
+        recommendations.push('本地文章设置快照缺失，无法生成文章');
       }
-    } catch (error: any) {
-      recommendations.push(`检查文章设置时出错: ${error.message}`);
+    } else {
+      try {
+        if (task.articleSettingId) {
+          const settingResult = await pool.query(
+            'SELECT id FROM article_settings WHERE id = $1',
+            [task.articleSettingId]
+          );
+          checks.articleSettingExists = settingResult.rows.length > 0;
+          
+          if (!checks.articleSettingExists) {
+            recommendations.push(`文章设置ID ${task.articleSettingId} 不存在`);
+          }
+        } else {
+          recommendations.push('文章设置ID缺失');
+        }
+      } catch (error: any) {
+        recommendations.push(`检查文章设置时出错: ${error.message}`);
+      }
     }
 
     // 检查系统级AI配置

@@ -55,6 +55,7 @@ export interface CreateArticleParams {
   conversionTargetSnapshot?: string;
   taskId?: number;
   imageId?: number;
+  albumId?: number; // 新增：用于自动选择图片
   requirements?: string;
   isPublished?: boolean;
   publishingStatus?: string;
@@ -691,6 +692,79 @@ export const localGalleryApi = {
   readImageFile: async (imageId: number) => {
     return window.electron.gallery.readImageFile(imageId);
   },
+};
+
+// ==================== 本地转化目标管理 ====================
+
+export interface LocalConversionTarget {
+  id: number;
+  name: string;
+  type: string;
+  url?: string;
+  qr_code_url?: string;
+  description?: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateConversionTargetParams {
+  name: string;
+  type: string;
+  url?: string;
+  qr_code_url?: string;
+  description?: string;
+  is_default?: boolean;
+}
+
+export const localConversionTargetApi = {
+  create: async (params: CreateConversionTargetParams) => {
+    return window.electron.invoke('conversionTarget:local:create', params);
+  },
+
+  findAll: async (params?: { page?: number; pageSize?: number }) => {
+    return window.electron.invoke('conversionTarget:local:findAll', params);
+  },
+
+  findById: async (id: number) => {
+    return window.electron.invoke('conversionTarget:local:findById', id);
+  },
+
+  update: async (id: number, params: Partial<CreateConversionTargetParams>) => {
+    return window.electron.invoke('conversionTarget:local:update', id, params);
+  },
+
+  delete: async (id: number) => {
+    return window.electron.invoke('conversionTarget:local:delete', id);
+  },
+
+  deleteBatch: async (ids: number[]) => {
+    return window.electron.invoke('conversionTarget:local:deleteBatch', ids);
+  },
+
+  getByType: async (type: string) => {
+    return window.electron.invoke('conversionTarget:local:getByType', type);
+  },
+
+  getDefault: async () => {
+    return window.electron.invoke('conversionTarget:local:getDefault');
+  },
+
+  setDefault: async (id: number) => {
+    return window.electron.invoke('conversionTarget:local:setDefault', id);
+  },
+
+  search: async (searchTerm: string) => {
+    return window.electron.invoke('conversionTarget:local:search', searchTerm);
+  },
+
+  getStats: async () => {
+    return window.electron.invoke('conversionTarget:local:getStats');
+  },
+
+  exists: async (id: number) => {
+    return window.electron.invoke('conversionTarget:local:exists', id);
+  }
 };
 
 // ==================== 数据同步 ====================

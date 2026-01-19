@@ -132,6 +132,28 @@ export class ImageServicePostgres extends BaseServicePostgres<Image> {
   }
 
   /**
+   * 选择相册中使用次数最少的图片
+   */
+  async selectLeastUsedImage(albumId: number): Promise<Image | null> {
+    this.validateUserId();
+
+    try {
+      const result = await this.pool.query(
+        `SELECT * FROM images 
+         WHERE user_id = $1 AND album_id = $2 AND deleted_at IS NULL
+         ORDER BY usage_count ASC, created_at ASC
+         LIMIT 1`,
+        [this.userId, albumId]
+      );
+
+      return (result.rows[0] as Image) || null;
+    } catch (error) {
+      log.error('ImageService: selectLeastUsedImage 失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 增加图片引用计数
    */
   async incrementReference(id: number): Promise<void> {

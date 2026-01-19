@@ -135,26 +135,39 @@ const ArticleContent: React.FC<ArticleContentProps> = ({
         components={{
         // 自定义图片组件，应用统一样式
         // Feature: article-image-embedding, Property 17: 自定义图片组件应用
-        img: ({ node, ...props }) => (
-          <img
-            {...props}
-            style={{
-              width: '100%',
-              maxHeight: 400,
-              objectFit: 'cover',
-              borderRadius: 6,
-              border: '1px solid #e2e8f0',
-              margin: '16px 0',
-              display: 'block',
-            }}
-            onError={(e) => {
-              // 图片加载失败时显示占位图
-              (e.target as HTMLImageElement).src =
-                'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E图片加载失败%3C/text%3E%3C/svg%3E';
-            }}
-            alt={props.alt || '文章配图'}
-          />
-        ),
+        img: ({ node, src, alt, ...rest }: any) => {
+          let imageSrc = src;
+          // 处理本地图片路径，转换为 local-file 协议
+          if (imageSrc && !imageSrc.startsWith('http') && !imageSrc.startsWith('data:')) {
+             if ((window as any).electronAPI?.utils?.getLocalFileUrl) {
+                 imageSrc = (window as any).electronAPI.utils.getLocalFileUrl(imageSrc);
+             } else if ((window as any).electron?.utils?.getLocalFileUrl) {
+                 imageSrc = (window as any).electron.utils.getLocalFileUrl(imageSrc);
+             }
+          }
+
+          return (
+            <img
+              {...rest}
+              src={imageSrc}
+              style={{
+                width: '100%',
+                maxHeight: 400,
+                objectFit: 'cover',
+                borderRadius: 6,
+                border: '1px solid #e2e8f0',
+                margin: '16px 0',
+                display: 'block',
+              }}
+              onError={(e) => {
+                // 图片加载失败时显示占位图
+                (e.target as HTMLImageElement).src =
+                  'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100"%3E%3Crect fill="%23f0f0f0" width="100" height="100"/%3E%3Ctext fill="%23999" x="50%25" y="50%25" text-anchor="middle" dy=".3em"%3E图片加载失败%3C/text%3E%3C/svg%3E';
+              }}
+              alt={alt || '文章配图'}
+            />
+          );
+        },
       }}
       >
         {finalContent}

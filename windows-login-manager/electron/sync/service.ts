@@ -119,6 +119,94 @@ class SyncService {
   }
 
   /**
+   * 拉取并同步转化目标
+   */
+  async pullConversionTargets(): Promise<void> {
+    if (!this.isOnline) return;
+    
+    try {
+      // 确保 ServiceFactory 有正确的 UserID
+      let user = await storageManager.getUser();
+      if (!user) {
+        log.warn('[SyncService] User not found during pullConversionTargets, attempting recovery...');
+        // 尝试简单的恢复逻辑，或跳过
+        try {
+          const pool = getPool();
+          const result = await pool.query('SELECT user_id FROM platform_accounts ORDER BY updated_at DESC LIMIT 1');
+          if (result.rows[0]?.user_id) {
+             user = { id: result.rows[0].user_id, username: 'recovered', role: 'user' };
+          } else {
+             user = { id: 1, username: 'default', role: 'user' };
+          }
+        } catch (e) {
+          user = { id: 1, username: 'default', role: 'user' };
+        }
+      }
+      serviceFactory.setUserId(user.id);
+
+      log.info('Pulling conversion targets from server...');
+      // 获取所有转化目标（pageSize 设大一点以获取全部）
+      const response = await apiClient.getConversionTargets({ pageSize: 1000 });
+      const targets = response.data?.targets || [];
+      
+      const service = serviceFactory.getConversionTargetService();
+      let syncedCount = 0;
+
+      // 记录所有同步的 ID
+      const syncedIds: number[] = [];
+
+      for (const target of targets) {
+        // 服务器字段: company_name, industry, website, address, id
+        // 本地字段: company_name, industry, website, address, id (已修正为一致)
+        
+        // 检查是否存在
+        const exists = await service.exists(target.id);
+        
+        const targetData: any = {
+          company_name: target.company_name,
+          industry: target.industry || '',
+          website: target.website,
+          address: target.address,
+          company_size: target.company_size,
+          features: target.features,
+          contact_info: target.contact_info,
+          target_audience: target.target_audience,
+          core_products: target.core_products
+        };
+
+        if (exists) {
+          await service.update(target.id, targetData);
+        } else {
+          // 强制使用服务器 ID 创建
+          await service.create({
+             id: target.id, 
+             ...targetData,
+             is_default: false
+          } as any); 
+        }
+        syncedIds.push(target.id);
+        syncedCount++;
+      }
+
+      // 删除本地存在但服务器已不存在的记录
+      // 注意：只有在成功拉取到数据列表（即使为空）时才执行删除
+      // 这里假设 pageSize: 1000 能拉取所有数据，如果是分页拉取则不能这样做
+      const localTargets = await service.findAll({});
+      const localIds = localTargets.map(t => t.id);
+      const idsToDelete = localIds.filter(id => !syncedIds.includes(id));
+      
+      if (idsToDelete.length > 0) {
+        await service.deleteMany(idsToDelete);
+        log.info(`Deleted ${idsToDelete.length} obsolete conversion targets: ${idsToDelete.join(', ')}`);
+      }
+
+      log.info(`Synced ${syncedCount} conversion targets.`);
+    } catch (error) {
+      log.error('Failed to pull conversion targets:', error);
+    }
+  }
+
+  /**
    * 启动定期同步
    */
   private startPeriodicSync(): void {
@@ -126,9 +214,19 @@ class SyncService {
       return;
     }
 
+    // 初始同步
+    if (this.isOnline) {
+      this.pullAccounts().catch(err => log.error('Initial account pull failed:', err));
+      this.pullConversionTargets().catch(err => log.error('Initial conversion target pull failed:', err));
+    }
+
     this.syncInterval = setInterval(async () => {
-      if (this.isOnline && this.syncQueue.length > 0) {
-        await this.processSyncQueue();
+      if (this.isOnline) {
+        if (this.syncQueue.length > 0) {
+          await this.processSyncQueue();
+        }
+        // 定期拉取更新
+        await this.pullConversionTargets();
       }
     }, this.SYNC_INTERVAL_MS);
 

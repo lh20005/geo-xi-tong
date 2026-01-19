@@ -17,38 +17,44 @@ import log from 'electron-log';
 export interface ConversionTarget {
   id: number;
   user_id: number;
-  name: string;
-  type: string;
-  url?: string;
-  qr_code_url?: string;
-  description?: string;
+  company_name: string;
+  industry: string;
+  company_size?: string;
+  features?: string;
+  contact_info?: string;
+  website?: string;
+  target_audience?: string;
+  core_products?: string;
+  address?: string;
   is_default: boolean;
   usage_count: number;
   created_at: Date;
   updated_at: Date;
 }
 
-/**
- * 创建转化目标输入
- */
 export interface CreateConversionTargetInput {
-  name: string;
-  type: string;
-  url?: string;
-  qr_code_url?: string;
-  description?: string;
+  company_name: string;
+  industry?: string;
+  company_size?: string;
+  features?: string;
+  contact_info?: string;
+  website?: string;
+  target_audience?: string;
+  core_products?: string;
+  address?: string;
   is_default?: boolean;
 }
 
-/**
- * 更新转化目标输入
- */
 export interface UpdateConversionTargetInput {
-  name?: string;
-  type?: string;
-  url?: string;
-  qr_code_url?: string;
-  description?: string;
+  company_name?: string;
+  industry?: string;
+  company_size?: string;
+  features?: string;
+  contact_info?: string;
+  website?: string;
+  target_audience?: string;
+  core_products?: string;
+  address?: string;
   is_default?: boolean;
 }
 
@@ -93,7 +99,7 @@ export class ConversionTargetServicePostgres extends BaseServicePostgres<Convers
 
     try {
       const result = await this.pool.query(
-        'SELECT * FROM conversion_targets WHERE user_id = $1 AND type = $2 ORDER BY created_at DESC',
+        'SELECT * FROM conversion_targets WHERE user_id = $1 AND industry = $2 ORDER BY created_at DESC',
         [this.userId, type]
       );
 
@@ -180,7 +186,7 @@ export class ConversionTargetServicePostgres extends BaseServicePostgres<Convers
       const result = await this.pool.query(
         `SELECT * FROM conversion_targets 
          WHERE user_id = $1 
-         AND (name ILIKE $2 OR description ILIKE $2)
+         AND (company_name ILIKE $2 OR address ILIKE $2)
          ORDER BY created_at DESC`,
         [this.userId, `%${searchTerm}%`]
       );
@@ -209,7 +215,7 @@ export class ConversionTargetServicePostgres extends BaseServicePostgres<Convers
       );
 
       const byTypeResult = await this.pool.query(
-        'SELECT type, COUNT(*) as count FROM conversion_targets WHERE user_id = $1 GROUP BY type',
+        'SELECT industry as type, COUNT(*) as count FROM conversion_targets WHERE user_id = $1 GROUP BY industry',
         [this.userId]
       );
 
@@ -220,7 +226,9 @@ export class ConversionTargetServicePostgres extends BaseServicePostgres<Convers
 
       const byType: Record<string, number> = {};
       byTypeResult.rows.forEach(row => {
-        byType[row.type] = parseInt(row.count);
+        if (row.type) {
+          byType[row.type] = parseInt(row.count);
+        }
       });
 
       return {

@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { localArticleSettingApi, localKnowledgeApi } from './local';
+import { localArticleSettingApi, localKnowledgeApi, localConversionTargetApi } from './local';
 import type {
   TaskConfig,
   CreateTaskResponse,
@@ -16,7 +16,7 @@ import type {
  * 检查是否在 Electron 环境中
  */
 function isElectron(): boolean {
-  return !!(window as any).electronAPI || !!(window as any).electron;
+  return !!(window as any).electronAPI || !!(window as any).electron || navigator.userAgent.toLowerCase().includes('electron');
 }
 
 /**
@@ -68,14 +68,31 @@ async function buildLocalKnowledgeSummary(knowledgeBaseId: number): Promise<stri
  * 创建文章生成任务
  */
 export async function createTask(config: TaskConfig): Promise<CreateTaskResponse> {
-  const knowledgeSummary = isElectron()
+  const isEle = isElectron();
+  
+  // 1. 处理知识库摘要
+  const knowledgeSummary = isEle
     ? (config.knowledgeSummary ?? await buildLocalKnowledgeSummary(config.knowledgeBaseId))
     : config.knowledgeSummary;
+
+  // 2. 处理文章设置快照（本地模式下需要发送给服务器）
+  let articleSettingSnapshot: string | undefined;
+  if (isEle && config.articleSettingId) {
+    try {
+      const result = await localArticleSettingApi.findById(config.articleSettingId);
+      if (result.success && result.data) {
+        articleSettingSnapshot = JSON.stringify(result.data);
+      }
+    } catch (e) {
+      console.warn('[ArticleGeneration] 获取本地文章设置快照失败:', e);
+    }
+  }
 
   const response = await apiClient.post('/article-generation/tasks', {
     ...config,
     knowledgeSummary,
-    resourceSource: isElectron() ? 'local' : config.resourceSource
+    articleSettingSnapshot,
+    resourceSource: isEle ? 'local' : config.resourceSource
   });
   return response.data;
 }
@@ -173,6 +190,19 @@ export async function fetchArticleSettings(): Promise<ArticleSetting[]> {
  * 获取转化目标列表
  */
 export async function fetchConversionTargets(): Promise<ConversionTarget[]> {
+  if (isElectron()) {
+    try {
+      const result = await localConversionTargetApi.findAll({ page: 1, pageSize: 1000 });
+      if (result.success && result.data) {
+        // 直接返回本地数据，Service 层已修正为使用 company_name 和 industry
+        return result.data.data || [];
+      }
+      return [];
+    } catch (error) {
+      console.warn('获取本地转化目标失败:', error);
+      return [];
+    }
+  }
   const response = await apiClient.get('/conversion-targets');
   return response.data.data?.targets || [];
 }

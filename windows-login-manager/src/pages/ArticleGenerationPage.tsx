@@ -26,7 +26,6 @@ import {
   deleteAllTasks,
   cancelTask
 } from '../api/articleGenerationApi';
-import { saveGeneratedArticleToLocal } from '../utils/articleUtils';
 import type { GenerationTask, TaskConfig } from '../types/articleGeneration';
 import { useCachedData } from '../hooks/useCachedData';
 import { useCacheStore } from '../stores/cacheStore';
@@ -143,6 +142,7 @@ export default function ArticleGenerationPage() {
             distillationKeywordSnapshot: detail.keyword,
             topicQuestionSnapshot: detail.distillationResult || undefined,
             taskId: detail.id,
+            albumId: typeof detail.albumId === 'string' ? parseInt(detail.albumId) : detail.albumId,
             articleSettingId: detail.articleSettingId,
             articleSettingSnapshot: detail.articleSettingName || undefined,
             conversionTargetId: detail.conversionTargetId || undefined,

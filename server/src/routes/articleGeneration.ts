@@ -32,7 +32,8 @@ const createTaskSchema = z.object({
   conversionTargetId: z.number().int().positive('转化目标ID必须是正整数').optional(),
   articleCount: z.number().int().positive('文章数量必须是正整数').max(100, '文章数量不能超过100'),
   resourceSource: z.enum(['local', 'server']).optional(),
-  knowledgeSummary: z.string().max(3000, '知识库摘要不能超过3000字符').optional()
+  knowledgeSummary: z.string().max(3000, '知识库摘要不能超过3000字符').optional(),
+  articleSettingSnapshot: z.string().optional() // 本地文章设置快照
 });
 
 /**
@@ -82,7 +83,10 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       return res.status(404).json({ error: '蒸馏历史不存在' });
     }
 
-    const isLocalResource = validatedData.resourceSource === 'local';
+    const isLocalResource = (validatedData.resourceSource && validatedData.resourceSource.toLowerCase() === 'local')
+      || typeof validatedData.albumId === 'string'
+      || typeof validatedData.knowledgeBaseId === 'string'
+      || !!validatedData.articleSettingSnapshot;
 
     // 如果 albumId 是数字，验证服务器数据库中是否存在（本地资源跳过验证）
     // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
@@ -108,16 +112,28 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       }
     }
 
-    const articleSettingCheck = await pool.query(
-      'SELECT id FROM article_settings WHERE id = $1 AND user_id = $2',
-      [validatedData.articleSettingId, userId]
-    );
-    if (articleSettingCheck.rows.length === 0) {
-      return res.status(404).json({ error: '文章设置不存在' });
+    if (!isLocalResource) {
+      const articleSettingCheck = await pool.query(
+        'SELECT id FROM article_settings WHERE id = $1 AND user_id = $2',
+        [validatedData.articleSettingId, userId]
+      );
+      if (articleSettingCheck.rows.length === 0) {
+        // 添加详细调试信息
+        console.error(`文章设置不存在: ID=${validatedData.articleSettingId}, UserID=${userId}, ResourceSource=${validatedData.resourceSource}`);
+        return res.status(404).json({ 
+          error: '文章设置不存在',
+          details: {
+            id: validatedData.articleSettingId,
+            resourceSource: validatedData.resourceSource,
+            isLocal: isLocalResource,
+            message: '请确认文章设置是否已被删除，或尝试刷新页面'
+          }
+        });
+      }
     }
 
-    // 验证转化目标是否存在（如果提供了）
-    if (validatedData.conversionTargetId) {
+    // 验证转化目标是否存在（如果提供了，本地资源跳过验证）
+    if (!isLocalResource && validatedData.conversionTargetId) {
       const conversionTargetCheck = await pool.query(
         'SELECT id FROM conversion_targets WHERE id = $1 AND user_id = $2',
         [validatedData.conversionTargetId, userId]
@@ -136,8 +152,9 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       conversionTargetId: validatedData.conversionTargetId,
       articleCount: validatedData.articleCount,
       userId,
-      resourceSource: validatedData.resourceSource,
-      knowledgeSummary: validatedData.knowledgeSummary
+      resourceSource: isLocalResource ? 'local' : validatedData.resourceSource,
+      knowledgeSummary: validatedData.knowledgeSummary,
+      articleSettingSnapshot: validatedData.articleSettingSnapshot
     });
 
     // 获取任务详情（包含selected_distillation_ids）

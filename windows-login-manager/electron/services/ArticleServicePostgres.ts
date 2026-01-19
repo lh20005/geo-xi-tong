@@ -75,6 +75,7 @@ export interface CreateArticleInput {
   distillationId?: number;
   topicId?: number;
   imageId?: number;
+  albumId?: number;
   taskId?: number;
   requirements?: string;
   imageUrl?: string;
@@ -149,6 +150,68 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
     try {
       log.info('ArticleService: 保存 AI 生成的文章...');
 
+      // ---------------------------------------------------------
+      // 修复：强制从本地图库选择图片
+      // 原因：图片只存储在 Windows 端本地数据库，服务器不负责图片管理
+      // ---------------------------------------------------------
+      let imageId: number | null = null;
+      let imageUrl: string | null = null;
+      let imageSizeBytes = 0;
+
+      // 1. 获取相册 ID
+      let albumId: number | null = null;
+      
+      // 尝试从 articleSettingId 获取
+      if (article.articleSettingId) {
+          const settingResult = await this.pool.query(
+            'SELECT setting_value FROM article_settings WHERE id = $1',
+            [article.articleSettingId]
+          );
+          if (settingResult.rows.length > 0) {
+            try {
+              const config = JSON.parse(settingResult.rows[0].setting_value);
+              if (config.albumId) {
+                albumId = parseInt(config.albumId);
+              }
+            } catch (e) {
+              log.warn('ArticleService: 解析文章设置失败', e);
+            }
+          }
+      }
+
+      // 2. 如果有相册 ID，选择图片
+      if (albumId) {
+        // 选择使用次数最少的图片
+        const imageResult = await this.pool.query(
+          `SELECT * FROM images 
+            WHERE user_id = $1 AND album_id = $2 AND deleted_at IS NULL
+            ORDER BY usage_count ASC, created_at ASC
+            LIMIT 1`,
+          [this.userId, albumId]
+        );
+
+        if (imageResult.rows.length > 0) {
+          const image = imageResult.rows[0];
+          log.info(`ArticleService: 为文章自动选择本地图片 ID: ${image.id}`);
+          
+          imageId = image.id;
+          // 使用绝对路径，ArticlePreview 组件会通过 local-file 协议处理
+          imageUrl = image.filepath;
+          imageSizeBytes = image.size;
+
+          // 更新图片引用计数
+          await this.pool.query(
+            `UPDATE images 
+              SET usage_count = usage_count + 1, reference_count = reference_count + 1 
+              WHERE id = $1`,
+            [imageId]
+          );
+        } else {
+          log.warn(`ArticleService: 相册 ID ${albumId} 中没有可用图片`);
+        }
+      }
+      // ---------------------------------------------------------
+
       const articleData = {
         user_id: this.userId,
         title: article.title,
@@ -157,11 +220,11 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
         provider: article.provider,
         distillation_id: article.distillationId || null,
         topic_id: article.topicId || null,
-        image_id: article.imageId || null,
+        image_id: imageId,
         task_id: null,  // ⭐ 始终设为 NULL（generation_tasks 表在服务器）
         requirements: article.requirements || null,
-        image_url: article.imageUrl || null,
-        image_size_bytes: article.imageSizeBytes || 0,
+        image_url: imageUrl,
+        image_size_bytes: imageSizeBytes,
         is_published: false,
         publishing_status: null,
         published_at: null,
@@ -292,6 +355,67 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
     try {
       log.info('ArticleService: createArticle input:', JSON.stringify(input, null, 2));
 
+      // ---------------------------------------------------------
+      // 修复：如果未提供图片，尝试从本地图库自动选择
+      // ---------------------------------------------------------
+      let imageId = input.imageId || null;
+      let imageUrl = input.imageUrl || null;
+      let imageSizeBytes = input.imageSizeBytes || 0;
+
+      if (!imageId) {
+        let albumId: number | null = input.albumId || null;
+        
+        // 尝试从 articleSettingId 获取 (如果 albumId 未提供)
+        if (!albumId && input.articleSettingId) {
+            const settingResult = await this.pool.query(
+              'SELECT setting_value FROM article_settings WHERE id = $1',
+              [input.articleSettingId]
+            );
+            if (settingResult.rows.length > 0) {
+              try {
+                const config = JSON.parse(settingResult.rows[0].setting_value);
+                if (config.albumId) {
+                  albumId = parseInt(config.albumId);
+                }
+              } catch (e) {
+                log.warn('ArticleService: 解析文章设置失败', e);
+              }
+            }
+        }
+
+        // 2. 如果有相册 ID，选择图片
+        if (albumId) {
+          // 选择使用次数最少的图片
+          const imageResult = await this.pool.query(
+            `SELECT * FROM images 
+              WHERE user_id = $1 AND album_id = $2 AND deleted_at IS NULL
+              ORDER BY usage_count ASC, created_at ASC
+              LIMIT 1`,
+            [this.userId, albumId]
+          );
+
+          if (imageResult.rows.length > 0) {
+            const image = imageResult.rows[0];
+            log.info(`ArticleService: 为文章自动选择本地图片 ID: ${image.id}`);
+            
+            imageId = image.id;
+            imageUrl = image.filepath;
+            imageSizeBytes = image.size;
+
+            // 更新图片引用计数
+            await this.pool.query(
+              `UPDATE images 
+                SET usage_count = usage_count + 1, reference_count = reference_count + 1 
+                WHERE id = $1`,
+              [imageId]
+            );
+          } else {
+            log.warn(`ArticleService: 相册 ID ${albumId} 中没有可用图片`);
+          }
+        }
+      }
+      // ---------------------------------------------------------
+
       const articleData = {
         user_id: this.userId,
         title: input.title,
@@ -300,11 +424,11 @@ export class ArticleServicePostgres extends BaseServicePostgres<Article> {
         provider: input.provider,
         distillation_id: input.distillationId || null,
         topic_id: input.topicId || null,
-        image_id: input.imageId || null,
+        image_id: imageId,
         task_id: input.taskId || null,
         requirements: input.requirements || null,
-        image_url: input.imageUrl || null,
-        image_size_bytes: input.imageSizeBytes || 0,
+        image_url: imageUrl,
+        image_size_bytes: imageSizeBytes,
         is_published: false,
         publishing_status: null,
         published_at: null,

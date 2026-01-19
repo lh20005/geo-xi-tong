@@ -25,26 +25,6 @@ const ArticlePreview: React.FC<ArticlePreviewProps> = ({
   showTitle = true,
   showImage = true
 }) => {
-  const [serverUrl, setServerUrl] = useState<string>('http://localhost:3000');
-
-  useEffect(() => {
-    // 从 IPC 获取服务器配置
-    const loadServerUrl = async () => {
-      try {
-        if (window.electron?.getConfig) {
-          const config = await window.electron.getConfig();
-          if (config?.serverUrl) {
-            setServerUrl(config.serverUrl);
-          }
-        }
-      } catch (error) {
-        console.error('获取服务器配置失败:', error);
-      }
-    };
-    
-    loadServerUrl();
-  }, []);
-
   if (!content) {
     return <Empty description="暂无文章内容" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
@@ -57,8 +37,19 @@ const ArticlePreview: React.FC<ArticlePreviewProps> = ({
     if (url.startsWith('http://') || url.startsWith('https://')) {
       return url;
     }
+
+    // 优先使用本地文件协议加载Windows端图片
+    if (window.electron?.utils?.getLocalFileUrl) {
+      if (url.startsWith('local-file://')) {
+        return url;
+      }
+      // 如果是绝对路径（Windows 或 macOS），尝试转换
+      if (url.startsWith('/') || url.match(/^[a-zA-Z]:\\/)) {
+        return window.electron.utils.getLocalFileUrl(url);
+      }
+    }
     
-    // 如果是相对路径，添加服务器地址
+    // 如果是相对路径，添加服务器地址（回退方案）
     const path = url.startsWith('/') ? url : `/${url}`;
     return `${serverUrl}${path}`;
   };
