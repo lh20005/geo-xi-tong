@@ -7,6 +7,7 @@ export interface TaskConfig {
   conversionTargetId?: number;  // 可选：转化目标ID
   articleCount: number;
   resourceSource?: 'local' | 'server';
+  knowledgeSummary?: string;
 }
 
 // 生成任务

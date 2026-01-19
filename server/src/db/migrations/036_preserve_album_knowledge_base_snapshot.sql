@@ -59,16 +59,20 @@ BEGIN
   
   -- 同步图库名称快照
   IF NEW.album_id IS NOT NULL AND NEW.album_name IS NULL THEN
-    SELECT name INTO NEW.album_name
-    FROM albums
-    WHERE id = NEW.album_id;
+    IF NEW.album_id::text ~ '^[0-9]+$' THEN
+      SELECT name INTO NEW.album_name
+      FROM albums
+      WHERE id = NEW.album_id::INTEGER;
+    END IF;
   END IF;
   
   -- 同步知识库名称快照
   IF NEW.knowledge_base_id IS NOT NULL AND NEW.knowledge_base_name IS NULL THEN
-    SELECT name INTO NEW.knowledge_base_name
-    FROM knowledge_bases
-    WHERE id = NEW.knowledge_base_id;
+    IF NEW.knowledge_base_id::text ~ '^[0-9]+$' THEN
+      SELECT name INTO NEW.knowledge_base_name
+      FROM knowledge_bases
+      WHERE id = NEW.knowledge_base_id::INTEGER;
+    END IF;
   END IF;
   
   RETURN NEW;

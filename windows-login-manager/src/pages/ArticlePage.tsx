@@ -18,6 +18,8 @@ import {
   BookOutlined,
 } from '@ant-design/icons';
 import { apiClient } from '../api/client';
+import { localArticleApi } from '../api/local';
+import { getCurrentUserId } from '../api';
 import { localDistillationApi } from '../api/localDistillationApi';
 import {
   createTask,
@@ -138,7 +140,32 @@ export default function ArticlePage() {
       }
 
       const articleResponse = await apiClient.get(`/article-generation/articles/${generatedArticle.id}`);
-      setArticle(articleResponse.data?.content || '');
+      const content = articleResponse.data?.content || '';
+      setArticle(content);
+
+      const userId = await getCurrentUserId();
+      if (userId) {
+        const saveResult = await localArticleApi.create({
+          userId,
+          title: generatedArticle.title,
+          keyword: detail.keyword || keyword,
+          content,
+          imageUrl: generatedArticle.imageUrl || undefined,
+          provider: detail.provider,
+          distillationId: detail.distillationId,
+          distillationKeywordSnapshot: detail.keyword || keyword,
+          topicQuestionSnapshot: detail.distillationResult || undefined,
+          taskId: task.taskId,
+          isPublished: false,
+        });
+
+        if (!saveResult.success) {
+          message.warning(saveResult.error || '文章已生成，但保存到本地失败');
+        }
+      } else {
+        message.warning('文章已生成，但未获取到本地用户信息，无法保存');
+      }
+
       message.success('文章生成成功！');
     } catch (error: any) {
       message.error(error.response?.data?.error || error.message || '文章生成失败');

@@ -20,6 +20,7 @@ import ResizableTable from '../components/ResizableTable';
 import { 
   createTask, 
   fetchTasks, 
+  fetchTaskDetail,
   deleteTask, 
   batchDeleteTasks, 
   deleteAllTasks,
@@ -28,6 +29,9 @@ import {
 import type { GenerationTask, TaskConfig } from '../types/articleGeneration';
 import { useCachedData } from '../hooks/useCachedData';
 import { useCacheStore } from '../stores/cacheStore';
+import { apiClient } from '../api/client';
+import { localArticleApi } from '../api/local';
+import { getCurrentUserId } from '../api';
 
 const { Search } = Input;
 const { Option } = Select;
@@ -226,6 +230,63 @@ export default function ArticleGenerationPage() {
     const config = statusMap[status];
     if (!config) return <Tag>{status}</Tag>;
     return <Tag color={config.color}>{config.text}</Tag>;
+  };
+
+  const isElectron = () => !!(window as any).electron || !!(window as any).electronAPI;
+
+  const handleSyncTask = async (taskId: number) => {
+    if (!isElectron()) {
+      message.warning('仅本地客户端可用');
+      return;
+    }
+
+    try {
+      setDeleting(true);
+      const detail = await fetchTaskDetail(taskId);
+      const articles = detail.generatedArticles || [];
+
+      if (articles.length === 0) {
+        message.info('未找到可同步的文章');
+        return;
+      }
+
+      const userId = await getCurrentUserId();
+      if (!userId) {
+        message.warning('未获取到本地用户信息，无法保存');
+        return;
+      }
+
+      let successCount = 0;
+
+      for (const article of articles) {
+        const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
+        const content = articleResponse.data?.content || '';
+
+        const saveResult = await localArticleApi.create({
+          userId,
+          title: article.title,
+          keyword: detail.keyword,
+          content,
+          imageUrl: article.imageUrl || undefined,
+          provider: detail.provider,
+          distillationId: detail.distillationId,
+          distillationKeywordSnapshot: detail.keyword,
+          topicQuestionSnapshot: detail.distillationResult || undefined,
+          taskId: detail.id,
+          isPublished: false,
+        });
+
+        if (saveResult.success) {
+          successCount += 1;
+        }
+      }
+
+      message.success(`已同步 ${successCount}/${articles.length} 篇文章到本地`);
+    } catch (error: any) {
+      message.error(error.response?.data?.error || error.message || '同步失败');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   // 终止任务
@@ -493,6 +554,19 @@ export default function ArticleGenerationPage() {
       fixed: 'right' as const,
       render: (_: any, record: GenerationTask) => (
         <Space size="small">
+          {record.status === 'completed' && (
+            <Tooltip title="同步到本地">
+              <Button
+                type="text"
+                icon={<CloudSyncOutlined />}
+                size="small"
+                loading={deleting}
+                onClick={() => handleSyncTask(record.id)}
+              >
+                同步
+              </Button>
+            </Tooltip>
+          )}
           {(record.status === 'running' || record.status === 'pending') && (
             <Popconfirm
               title="确认终止"

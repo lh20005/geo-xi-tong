@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { localArticleSettingApi } from './local';
+import { localArticleSettingApi, localKnowledgeApi } from './local';
 import type {
   TaskConfig,
   CreateTaskResponse,
@@ -26,12 +26,55 @@ function getElectronAPI() {
   return (window as any).electronAPI || (window as any).electron;
 }
 
+const MAX_KNOWLEDGE_SUMMARY_LENGTH = 3000;
+const MAX_KNOWLEDGE_DOCS = 3;
+const MAX_DOC_SNIPPET_LENGTH = 800;
+
+async function buildLocalKnowledgeSummary(knowledgeBaseId: number): Promise<string> {
+  try {
+    const result = await localKnowledgeApi.getDocuments(String(knowledgeBaseId));
+    if (!result.success || !Array.isArray(result.data)) {
+      return '';
+    }
+
+    const docs = result.data.slice(0, MAX_KNOWLEDGE_DOCS);
+    let summary = '';
+
+    for (const doc of docs) {
+      const rawContent = (doc.content || doc.content_preview || '').toString();
+      if (!rawContent.trim()) continue;
+
+      const filename = doc.filename || doc.name || '文档';
+      const cleaned = rawContent.replace(/\s+/g, ' ').trim();
+      const snippet = cleaned.slice(0, MAX_DOC_SNIPPET_LENGTH);
+      const block = `【${filename}】${snippet}`;
+
+      if (summary.length + block.length + 1 > MAX_KNOWLEDGE_SUMMARY_LENGTH) {
+        summary += block.slice(0, Math.max(0, MAX_KNOWLEDGE_SUMMARY_LENGTH - summary.length));
+        break;
+      }
+
+      summary += (summary ? '\n' : '') + block;
+    }
+
+    return summary;
+  } catch (error) {
+    console.warn('[ArticleGeneration] 构建知识库摘要失败:', error);
+    return '';
+  }
+}
+
 /**
  * 创建文章生成任务
  */
 export async function createTask(config: TaskConfig): Promise<CreateTaskResponse> {
+  const knowledgeSummary = isElectron()
+    ? (config.knowledgeSummary ?? await buildLocalKnowledgeSummary(config.knowledgeBaseId))
+    : config.knowledgeSummary;
+
   const response = await apiClient.post('/article-generation/tasks', {
     ...config,
+    knowledgeSummary,
     resourceSource: isElectron() ? 'local' : config.resourceSource
   });
   return response.data;

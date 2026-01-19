@@ -510,6 +510,8 @@ CREATE TABLE IF NOT EXISTS generation_tasks (
   distillation_id INTEGER REFERENCES distillations(id) ON DELETE SET NULL,
   album_id INTEGER, -- 相册 ID（服务器端不存储相册，仅记录引用）
   knowledge_base_id INTEGER, -- 知识库 ID（服务器端不存储知识库，仅记录引用）
+  knowledge_summary TEXT, -- 本地知识库摘要（仅用于生成，不持久化本地数据）
+  resource_source VARCHAR(10) NOT NULL DEFAULT 'server',
   article_setting_id INTEGER REFERENCES article_settings(id) ON DELETE SET NULL,
   conversion_target_id INTEGER REFERENCES conversion_targets(id) ON DELETE SET NULL,
   requested_count INTEGER NOT NULL CHECK (requested_count > 0),

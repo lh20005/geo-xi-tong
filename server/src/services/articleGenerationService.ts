@@ -1,9 +1,7 @@
 import { pool } from '../db/database';
 import { AIService } from './aiService';
 import { ContentCleaner } from './contentCleaner';
-// [已迁移到 Windows 端] 话题和图片选择已在 Windows 端完成，服务器端只负责 AI 生成
-// 保留导入仅用于编译通过，实际调用会抛出错误
-import { TopicSelectionService } from './topicSelectionService';
+// 图片选择仍由服务器端处理（仅用于 server 资源）
 import { ImageSelectionService } from './imageSelectionService';
 
 /**
@@ -115,6 +113,8 @@ export interface TaskConfig {
   conversionTargetId?: number;
   articleCount: number;
   userId: number; // 用户ID，用于多租户隔离
+  resourceSource?: 'local' | 'server';
+  knowledgeSummary?: string;
 }
 
 export interface GenerationTask {
@@ -139,6 +139,8 @@ export interface GenerationTask {
   provider: string;
   distillationResult?: string | null;
   userId: number; // 添加用户ID
+  resourceSource?: 'local' | 'server';
+  knowledgeSummary?: string | null;
 }
 
 export interface KeywordTopicPair {
@@ -202,8 +204,7 @@ export class ArticleGenerationService {
       keywordMap.set(row.id, row.keyword);
     }
     
-    // 3. 为每个蒸馏结果ID（包括重复的）选择话题
-    const topicService = new TopicSelectionService();
+    // 3. 为每个蒸馏结果ID（包括重复的）选择话题（服务器端直接 SQL 选择）
     const dataArray: Array<{ distillationId: number; keyword: string; topicId: number; topic: string }> = [];
     
     // 跟踪每个蒸馏结果已使用的话题ID，避免重复
@@ -224,35 +225,25 @@ export class ArticleGenerationService {
       }
       const usedIds = usedTopicIds.get(distillationId)!;
       
-      // 选择一个未使用的话题
-      const topicData = await topicService.selectLeastUsedTopic(distillationId);
+      const nextTopicResult = await pool.query(
+        `SELECT id, question, usage_count
+         FROM topics
+         WHERE distillation_id = $1 ${usedIds.size > 0 ? `AND id NOT IN (${Array.from(usedIds).join(',')})` : ''}
+         ORDER BY usage_count ASC, created_at ASC
+         LIMIT 1`,
+        [distillationId]
+      );
       
-      if (!topicData) {
+      if (nextTopicResult.rows.length === 0) {
         console.warn(`[批量加载] 警告：蒸馏结果ID ${distillationId} 没有可用话题`);
         continue;
       }
       
-      // 如果这个话题已经在本次任务中使用过，尝试选择下一个
-      let selectedTopic = topicData;
-      if (usedIds.has(topicData.topicId)) {
-        // 查询下一个未使用的话题
-        const nextTopicResult = await pool.query(
-          `SELECT id, question, usage_count
-           FROM topics
-           WHERE distillation_id = $1 AND id NOT IN (${Array.from(usedIds).join(',') || '0'})
-           ORDER BY usage_count ASC, created_at ASC
-           LIMIT 1`,
-          [distillationId]
-        );
-        
-        if (nextTopicResult.rows.length > 0) {
-          selectedTopic = {
-            topicId: nextTopicResult.rows[0].id,
-            question: nextTopicResult.rows[0].question,
-            usageCount: nextTopicResult.rows[0].usage_count || 0
-          };
-        }
-      }
+      const selectedTopic = {
+        topicId: nextTopicResult.rows[0].id,
+        question: nextTopicResult.rows[0].question,
+        usageCount: nextTopicResult.rows[0].usage_count || 0
+      };
       
       // 记录已使用的话题
       usedIds.add(selectedTopic.topicId);
@@ -288,7 +279,7 @@ export class ArticleGenerationService {
     
     // 1. 预先为每篇文章选择不同的话题（一次性选择，避免并发冲突）
     console.log(`[任务创建] 预先选择 ${config.articleCount} 个不同的话题...`);
-    const topicService = new TopicSelectionService();
+    // [已修复] 不再实例化 TopicSelectionService，直接使用 SQL 查询
     const selectedTopics: Array<{ topicId: number; question: string }> = [];
     const usedTopicIds = new Set<number>();
     
@@ -342,13 +333,15 @@ export class ArticleGenerationService {
       // 创建独立任务
       const result = await pool.query(
         `INSERT INTO generation_tasks 
-         (distillation_id, album_id, knowledge_base_id, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, user_id, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') 
+         (distillation_id, album_id, knowledge_base_id, resource_source, knowledge_summary, article_setting_id, conversion_target_id, requested_count, selected_distillation_ids, user_id, status) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending') 
          RETURNING id`,
         [
           config.distillationId,
           config.albumId,
           config.knowledgeBaseId,
+          config.resourceSource || 'server',
+          config.knowledgeSummary || null,
           config.articleSettingId,
           config.conversionTargetId || null,
           1, // 每个任务只生成1篇文章
@@ -414,6 +407,7 @@ export class ArticleGenerationService {
         gt.distillation_id, 
         gt.album_id, 
         gt.knowledge_base_id, 
+        gt.knowledge_summary,
         gt.article_setting_id, 
         gt.conversion_target_id,
         gt.requested_count, 
@@ -425,6 +419,7 @@ export class ArticleGenerationService {
         gt.updated_at,
         gt.user_id,
         gt.selected_distillation_ids,
+        gt.resource_source,
         gt.conversion_target_name,
         gt.album_name,
         gt.knowledge_base_name,
@@ -432,7 +427,8 @@ export class ArticleGenerationService {
         gt.distillation_keyword as keyword,
         d.provider,
         (
-          SELECT STRING_AGG(COALESCE(a.topic_question_snapshot, t.question), '|||' ORDER BY a.id)
+          SELECT STRING_AGG(COALESCE(a.topic_question_snapshot, t.question), '|||'
+ ORDER BY a.id)
           FROM articles a
           LEFT JOIN topics t ON a.topic_id = t.id
           WHERE a.task_id = gt.id
@@ -471,6 +467,7 @@ export class ArticleGenerationService {
           distillationId: row.distillation_id,
           albumId: row.album_id,
           knowledgeBaseId: row.knowledge_base_id,
+          knowledgeSummary: row.knowledge_summary || null,
           articleSettingId: row.article_setting_id,
           conversionTargetId: row.conversion_target_id,
           requestedCount: row.requested_count,
@@ -481,6 +478,7 @@ export class ArticleGenerationService {
           createdAt: row.created_at,
           updatedAt: row.updated_at,
           userId: row.user_id,
+          resourceSource: row.resource_source || 'server',
           conversionTargetName: row.conversion_target_name || null,
           albumName: row.album_name || null,
           knowledgeBaseName: row.knowledge_base_name || null,
@@ -508,6 +506,7 @@ export class ArticleGenerationService {
         gt.distillation_id, 
         gt.album_id, 
         gt.knowledge_base_id, 
+        gt.knowledge_summary,
         gt.article_setting_id, 
         gt.conversion_target_id,
         gt.requested_count, 
@@ -519,6 +518,7 @@ export class ArticleGenerationService {
         gt.updated_at,
         gt.user_id,
         gt.selected_distillation_ids,
+        gt.resource_source,
         gt.conversion_target_name,
         gt.album_name,
         gt.knowledge_base_name,
@@ -526,7 +526,8 @@ export class ArticleGenerationService {
         gt.distillation_keyword as keyword,
         d.provider,
         (
-          SELECT STRING_AGG(DISTINCT COALESCE(a.topic_question_snapshot, t.question), ', ' ORDER BY COALESCE(a.topic_question_snapshot, t.question))
+          SELECT STRING_AGG(DISTINCT COALESCE(a.topic_question_snapshot, t.question), ', '
+ ORDER BY COALESCE(a.topic_question_snapshot, t.question))
           FROM articles a
           LEFT JOIN topics t ON a.topic_id = t.id
           WHERE a.task_id = gt.id
@@ -562,6 +563,7 @@ export class ArticleGenerationService {
       distillationId: row.distillation_id,
       albumId: row.album_id,
       knowledgeBaseId: row.knowledge_base_id,
+      knowledgeSummary: row.knowledge_summary || null,
       articleSettingId: row.article_setting_id,
       conversionTargetId: row.conversion_target_id,
       requestedCount: row.requested_count,
@@ -572,6 +574,7 @@ export class ArticleGenerationService {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       userId: row.user_id,
+      resourceSource: row.resource_source || 'server',
       conversionTargetName: row.conversion_target_name || null,
       albumName: row.album_name || null,
       knowledgeBaseName: row.knowledge_base_name || null,
@@ -756,9 +759,13 @@ export class ArticleGenerationService {
         console.log(`[任务 ${taskId}] [文章 ${i + 1}] 蒸馏结果 ID=${data.distillationId}, 关键词="${data.keyword}", 话题ID=${data.topicId}, 话题="${data.topic.substring(0, 30)}..."`);
       }
 
+      const isLocalResource = task.resourceSource === 'local';
+
       // 获取知识库内容
       console.log(`[任务 ${taskId}] 加载知识库内容...`);
-      const knowledgeContent = await this.getKnowledgeBaseContent(task.knowledgeBaseId);
+      const knowledgeContent = isLocalResource
+        ? (task.knowledgeSummary || '')
+        : await this.getKnowledgeBaseContent(task.knowledgeBaseId);
       console.log(`[任务 ${taskId}] 知识库内容长度: ${knowledgeContent.length} 字符`);
 
       // 获取文章设置提示词
@@ -820,7 +827,9 @@ export class ArticleGenerationService {
           let imageSize: number = 0;
           
           try {
-            const imageData = await this.selectBalancedImage(task.albumId);
+            const imageData = task.resourceSource === 'local'
+              ? null
+              : await this.selectBalancedImage(task.albumId);
             
             if (imageData) {
               imageUrl = imageData.imageUrl;
@@ -928,9 +937,13 @@ export class ArticleGenerationService {
     const keywordTopicPairs = await this.extractKeywordTopicPairs(task.distillationId);
     console.log(`[任务 ${taskId}] 找到 ${keywordTopicPairs.length} 个关键词-话题对`);
 
+    const isLocalResource = task.resourceSource === 'local';
+
     // 获取知识库内容
     console.log(`[任务 ${taskId}] 加载知识库内容...`);
-    const knowledgeContent = await this.getKnowledgeBaseContent(task.knowledgeBaseId);
+    const knowledgeContent = isLocalResource
+      ? (task.knowledgeSummary || '')
+      : await this.getKnowledgeBaseContent(task.knowledgeBaseId);
     console.log(`[任务 ${taskId}] 知识库内容长度: ${knowledgeContent.length} 字符`);
 
     // 获取文章设置提示词
@@ -981,7 +994,9 @@ export class ArticleGenerationService {
         let imageSize: number = 0;
         
         try {
-          const imageData = await this.selectBalancedImage(task.albumId);
+          const imageData = task.resourceSource === 'local'
+            ? null
+            : await this.selectBalancedImage(task.albumId);
           
           if (imageData) {
             imageUrl = imageData.imageUrl;
@@ -1683,7 +1698,6 @@ export class ArticleGenerationService {
     imageSize: number = 0
   ): Promise<number> {
     const client = await pool.connect();
-    const topicService = new TopicSelectionService();
     
     try {
       await client.query('BEGIN');
@@ -1706,7 +1720,15 @@ export class ArticleGenerationService {
       console.log(`[保存文章] 蒸馏使用记录已创建`);
 
       // 3. 创建话题使用记录并更新话题usage_count
-      await topicService.recordTopicUsage(topicId, distillationId, articleId, taskId, client);
+      await client.query(
+        `INSERT INTO topic_usage (topic_id, distillation_id, article_id, task_id)
+         VALUES ($1, $2, $3, $4)`,
+        [topicId, distillationId, articleId, taskId]
+      );
+      await client.query(
+        `UPDATE topics SET usage_count = COALESCE(usage_count, 0) + 1 WHERE id = $1`,
+        [topicId]
+      );
       console.log(`[保存文章] 话题使用记录已创建，话题usage_count已更新`);
 
       // 4. 更新蒸馏usage_count
@@ -1925,8 +1947,10 @@ export class ArticleGenerationService {
       throw new Error('蒸馏记录没有关联的话题，无法生成文章');
     }
 
-    // 验证图库（如果是 UUID 格式，说明来自 Windows 端本地数据，跳过验证）
-    if (typeof task.albumId === 'number') {
+    const isLocalResource = task.resourceSource === 'local';
+
+    // 验证图库（本地资源跳过验证）
+    if (!isLocalResource && typeof task.albumId === 'number') {
       const albumResult = await pool.query(
         'SELECT id FROM albums WHERE id = $1',
         [task.albumId]
@@ -1934,12 +1958,10 @@ export class ArticleGenerationService {
       if (albumResult.rows.length === 0) {
         throw new Error(`图库ID ${task.albumId} 不存在`);
       }
-    } else {
-      console.log(`[任务 ${taskId}] 图库ID是UUID格式，跳过服务器验证（来自Windows端本地数据）`);
     }
 
-    // 验证知识库（如果是 UUID 格式，说明来自 Windows 端本地数据，跳过验证）
-    if (typeof task.knowledgeBaseId === 'number') {
+    // 验证知识库（本地资源跳过验证）
+    if (!isLocalResource && typeof task.knowledgeBaseId === 'number') {
       const kbResult = await pool.query(
         'SELECT id FROM knowledge_bases WHERE id = $1',
         [task.knowledgeBaseId]
@@ -1947,8 +1969,6 @@ export class ArticleGenerationService {
       if (kbResult.rows.length === 0) {
         throw new Error(`知识库ID ${task.knowledgeBaseId} 不存在`);
       }
-    } else {
-      console.log(`[任务 ${taskId}] 知识库ID是UUID格式，跳过服务器验证（来自Windows端本地数据）`);
     }
 
     // 验证文章设置

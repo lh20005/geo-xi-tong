@@ -31,7 +31,8 @@ const createTaskSchema = z.object({
   articleSettingId: z.number().int().positive('文章设置ID必须是正整数'),
   conversionTargetId: z.number().int().positive('转化目标ID必须是正整数').optional(),
   articleCount: z.number().int().positive('文章数量必须是正整数').max(100, '文章数量不能超过100'),
-  resourceSource: z.enum(['local', 'server']).optional()
+  resourceSource: z.enum(['local', 'server']).optional(),
+  knowledgeSummary: z.string().max(3000, '知识库摘要不能超过3000字符').optional()
 });
 
 /**
@@ -134,7 +135,9 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       articleSettingId: validatedData.articleSettingId,
       conversionTargetId: validatedData.conversionTargetId,
       articleCount: validatedData.articleCount,
-      userId
+      userId,
+      resourceSource: validatedData.resourceSource,
+      knowledgeSummary: validatedData.knowledgeSummary
     });
 
     // 获取任务详情（包含selected_distillation_ids）
