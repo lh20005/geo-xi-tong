@@ -21,7 +21,6 @@ import {
   ReloadOutlined,
   CloudSyncOutlined,
 } from '@ant-design/icons';
-import axios from 'axios';
 import { useCachedData } from '../hooks/useCachedData';
 import { useCacheStore } from '../stores/cacheStore';
 
@@ -41,8 +40,18 @@ export default function TopicsPage() {
 
   // 使用缓存加载话题
   const fetchTopics = useCallback(async () => {
-    const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
-    return response.data.topics;
+    if (!distillationId) return [];
+    const result = await window.electron.topic.getByDistillation(Number(distillationId));
+    if (!result.success) {
+      throw new Error(result.error || '加载话题失败');
+    }
+    return (result.data || []).map((topic: any) => ({
+      topicId: topic.id,
+      keyword: topic.keyword,
+      question: topic.question,
+      usageCount: topic.usage_count ?? topic.usageCount ?? 0,
+      lastUsedAt: topic.last_used_at ?? null
+    }));
   }, [distillationId]);
 
   const {
@@ -69,9 +78,10 @@ export default function TopicsPage() {
 
   const handleSaveEdit = async () => {
     try {
-      await axios.put(`/api/topics/${editModal.topicId}`, {
-        question: editValue,
-      });
+      const result = await window.electron.topic.update(editModal.topicId, { question: editValue });
+      if (!result.success) {
+        throw new Error(result.error || '更新失败');
+      }
       message.success('话题更新成功');
       setEditModal(null);
       invalidateAndRefresh();
@@ -86,7 +96,10 @@ export default function TopicsPage() {
       content: '确定要删除这个话题吗？',
       onOk: async () => {
         try {
-          await axios.delete(`/api/topics/${topicId}`);
+          const result = await window.electron.topic.delete(topicId);
+          if (!result.success) {
+            throw new Error(result.error || '删除失败');
+          }
           message.success('删除成功');
           invalidateAndRefresh();
         } catch (error) {

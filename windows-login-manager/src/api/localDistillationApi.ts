@@ -29,6 +29,25 @@ export interface UpdateDistillationInput {
   target_audience?: string;
 }
 
+export interface LocalDistillationUsageStats {
+  distillationId: number;
+  keyword: string;
+  provider: string;
+  usageCount: number;
+  lastUsedAt: string | null;
+  topicCount: number;
+  createdAt: string;
+}
+
+export interface LocalUsageHistoryRecord {
+  id: number;
+  taskId: number | null;
+  articleId: number;
+  articleTitle: string;
+  articleDeleted: boolean;
+  usedAt: string;
+}
+
 /**
  * 本地蒸馏记录操作 API
  */
@@ -106,6 +125,29 @@ export const localDistillationApi = {
    */
   getStats: async (): Promise<{ success: boolean; data?: any; error?: string }> => {
     return window.electron.invoke('distillation:local:getStats');
+  },
+
+  /**
+   * 获取蒸馏使用统计（本地）
+   */
+  getUsageStats: async (params?: {
+    page?: number;
+    pageSize?: number;
+    sortBy?: 'created_at' | 'usage_count';
+    sortOrder?: 'asc' | 'desc';
+    filterUsage?: 'all' | 'used' | 'unused';
+  }): Promise<{ success: boolean; data?: { distillations: LocalDistillationUsageStats[]; total: number; page: number; pageSize: number }; error?: string }> => {
+    return window.electron.invoke('distillation:local:getUsageStats', params);
+  },
+
+  /**
+   * 获取蒸馏使用历史（本地）
+   */
+  getUsageHistory: async (
+    distillationId: number,
+    params?: { page?: number; pageSize?: number }
+  ): Promise<{ success: boolean; data?: { distillationId: number; keyword: string; totalUsageCount: number; usageHistory: LocalUsageHistoryRecord[]; total: number; page: number; pageSize: number }; error?: string }> => {
+    return window.electron.invoke('distillation:local:getUsageHistory', distillationId, params);
   },
 
   /**

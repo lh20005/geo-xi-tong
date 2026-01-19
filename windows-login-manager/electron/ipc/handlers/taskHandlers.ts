@@ -337,5 +337,113 @@ export function registerTaskHandlers(): void {
     }
   });
 
+  // 获取发布记录列表（分页）
+  ipcMain.handle('publishingRecord:findAll', async (_event, params?: any) => {
+    try {
+      log.info('IPC: publishingRecord:findAll');
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      const result = await recordService.findPaginatedRecords(params || {});
+      return { success: true, data: result };
+    } catch (error: any) {
+      log.error('IPC: publishingRecord:findAll failed:', error);
+      return { success: false, error: error.message || '获取发布记录失败' };
+    }
+  });
+
+  // 获取发布记录详情
+  ipcMain.handle('publishingRecord:findById', async (_event, id: number) => {
+    try {
+      log.info(`IPC: publishingRecord:findById - ${id}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      const record = await recordService.findById(id);
+      if (!record) {
+        return { success: false, error: '发布记录不存在' };
+      }
+
+      return { success: true, data: record };
+    } catch (error: any) {
+      log.error('IPC: publishingRecord:findById failed:', error);
+      return { success: false, error: error.message || '获取发布记录详情失败' };
+    }
+  });
+
+  // 删除发布记录
+  ipcMain.handle('publishingRecord:delete', async (_event, id: number) => {
+    try {
+      log.info(`IPC: publishingRecord:delete - ${id}`);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      await recordService.deleteRecord(id);
+      return { success: true };
+    } catch (error: any) {
+      log.error('IPC: publishingRecord:delete failed:', error);
+      return { success: false, error: error.message || '删除发布记录失败' };
+    }
+  });
+
+  // 批量删除发布记录
+  ipcMain.handle('publishingRecord:batchDelete', async (_event, ids: number[]) => {
+    try {
+      log.info('IPC: publishingRecord:batchDelete');
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return { success: true, data: { deletedCount: 0 } };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      const deletedCount = await recordService.deleteMany(ids);
+      return { success: true, data: { deletedCount } };
+    } catch (error: any) {
+      log.error('IPC: publishingRecord:batchDelete failed:', error);
+      return { success: false, error: error.message || '批量删除发布记录失败' };
+    }
+  });
+
+  // 获取发布记录统计
+  ipcMain.handle('publishingRecord:getStats', async () => {
+    try {
+      log.info('IPC: publishingRecord:getStats');
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      serviceFactory.setUserId(user.id);
+      const recordService = serviceFactory.getPublishingRecordService();
+
+      const stats = await recordService.getTimeStats();
+      return { success: true, data: stats };
+    } catch (error: any) {
+      log.error('IPC: publishingRecord:getStats failed:', error);
+      return { success: false, error: error.message || '获取发布统计失败' };
+    }
+  });
+
   log.info('Task IPC handlers registered (PostgreSQL)');
 }

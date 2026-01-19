@@ -213,6 +213,59 @@ export const localTaskApi = {
   },
 };
 
+// ==================== 发布记录管理 ====================
+
+export interface LocalPublishingRecord {
+  id: number;
+  article_id?: number | null;
+  task_id?: number | null;
+  platform_id: string;
+  account_id?: number | string;
+  account_name?: string | null;
+  platform_article_id?: string | null;
+  platform_url?: string | null;
+  status?: string;
+  publishing_status?: string;
+  published_at?: string | null;
+  created_at?: string;
+  article_title?: string | null;
+  article_keyword?: string | null;
+  article_content?: string | null;
+  article_image_url?: string | null;
+  topic_question?: string | null;
+  article_setting_name?: string | null;
+  distillation_keyword?: string | null;
+}
+
+export interface LocalPublishingStats {
+  total: number;
+  today: number;
+  week: number;
+  month: number;
+}
+
+export const localPublishingRecordApi = {
+  findAll: async (params?: { page?: number; pageSize?: number; platform_id?: string }) => {
+    return window.electron.publishingRecord.findAll(params);
+  },
+
+  findById: async (id: number) => {
+    return window.electron.publishingRecord.findById(id);
+  },
+
+  delete: async (id: number) => {
+    return window.electron.publishingRecord.delete(id);
+  },
+
+  batchDelete: async (ids: number[]) => {
+    return window.electron.publishingRecord.batchDelete(ids);
+  },
+
+  getStats: async () => {
+    return window.electron.publishingRecord.getStats();
+  }
+};
+
 // ==================== 发布执行 ====================
 
 export const localPublishApi = {

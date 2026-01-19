@@ -6,6 +6,7 @@ import DOMPurify from 'dompurify';
 import 'react-quill/dist/quill.snow.css';
 import ArticleContent from './ArticleContent';
 import { apiClient } from '../api/client';
+import { localArticleApi } from '../api';
 import { logArticleFormat } from '../utils/debugArticleFormat';
 
 const { TabPane } = Tabs;
@@ -133,11 +134,15 @@ export default function ArticleEditorModal({ visible, article, onClose, onSave }
         ALLOWED_ATTR: ['href', 'src', 'alt', 'style', 'class', 'width', 'height']
       });
 
-      await apiClient.put(`/articles/${article.id}`, {
+      const result = await localArticleApi.update(article.id, {
         title: values.title,
         content: cleanContent,
         imageUrl: article.imageUrl
       });
+
+      if (!result.success) {
+        throw new Error(result.error || '保存失败');
+      }
 
       message.success('文章保存成功');
       onSave();

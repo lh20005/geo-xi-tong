@@ -1,3 +1,5 @@
+cd windows - login - manager
+npm run build: electron
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Card, Tag, Button, Space, Modal, Typography, message, 
@@ -8,17 +10,8 @@ import {
   CheckCircleOutlined, CalendarOutlined, ExclamationCircleOutlined,
   CloudSyncOutlined
 } from '@ant-design/icons';
-import { 
-  getPublishingRecords,
-  getPublishingStats,
-  getPlatforms,
-  getPublishingRecordById,
-  deletePublishingRecord,
-  batchDeletePublishingRecords,
-  PublishingRecord,
-  PublishingStats,
-  Platform
-} from '../api/publishing';
+import { localPublishingRecordApi, type LocalPublishingRecord, type LocalPublishingStats } from '../api';
+import { ipcBridge } from '../services/ipc';
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
@@ -28,13 +21,18 @@ import { useCacheStore } from '../stores/cacheStore';
 const { Text } = Typography;
 const { Option } = Select;
 
+interface Platform {
+  platform_id: string;
+  platform_name: string;
+}
+
 export default function PublishingRecordsPage() {
   const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
-  const [viewModal, setViewModal] = useState<PublishingRecord | null>(null);
+  const [viewModal, setViewModal] = useState<LocalPublishingRecord | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
 
   // 缓存 key
@@ -49,19 +47,26 @@ export default function PublishingRecordsPage() {
     if (platformFilter !== 'all') {
       filters.platform_id = platformFilter;
     }
-    const response = await getPublishingRecords(page, pageSize, filters);
-    setTotal(response.total || 0);
-    return response.records || [];
+    const response = await localPublishingRecordApi.findAll({ page, pageSize, ...filters });
+    if (!response.success) {
+      throw new Error(response.error || '加载发布记录失败');
+    }
+    setTotal(response.data.total || 0);
+    return response.data.records || [];
   }, [page, pageSize, platformFilter]);
 
   // 获取统计数据
   const fetchStats = useCallback(async () => {
-    return await getPublishingStats();
+    const response = await localPublishingRecordApi.getStats();
+    if (!response.success) {
+      throw new Error(response.error || '加载统计数据失败');
+    }
+    return response.data as LocalPublishingStats;
   }, []);
 
   // 获取平台列表
   const fetchPlatforms = useCallback(async () => {
-    return await getPlatforms();
+    return await ipcBridge.getPlatforms();
   }, []);
 
   // 使用缓存
@@ -71,12 +76,12 @@ export default function PublishingRecordsPage() {
     refreshing,
     refresh: refreshRecords,
     isFromCache
-  } = useCachedData<PublishingRecord[]>(recordsCacheKey, fetchRecords, {
+  } = useCachedData<LocalPublishingRecord[]>(recordsCacheKey, fetchRecords, {
     deps: [page, pageSize, platformFilter],
     onError: (error) => message.error(error.message || '加载发布记录失败'),
   });
 
-  const { data: stats, refresh: refreshStats } = useCachedData<PublishingStats>(
+  const { data: stats, refresh: refreshStats } = useCachedData<LocalPublishingStats>(
     'publishingRecords:stats',
     fetchStats,
     { onError: (error) => console.error('加载统计数据失败:', error) }
@@ -94,10 +99,14 @@ export default function PublishingRecordsPage() {
     await Promise.all([refreshRecords(true), refreshStats(true)]);
   }, [invalidateCacheByPrefix, refreshRecords, refreshStats]);
 
-  const handleView = async (record: PublishingRecord) => {
+  const handleView = async (record: LocalPublishingRecord) => {
     try {
-      const detail = await getPublishingRecordById(record.id);
-      setViewModal(detail);
+      const detail = await localPublishingRecordApi.findById(record.id);
+      if (detail.success) {
+        setViewModal(detail.data);
+      } else {
+        message.error(detail.error || '加载详情失败');
+      }
     } catch (error: any) {
       message.error('加载详情失败');
     }
@@ -111,9 +120,13 @@ export default function PublishingRecordsPage() {
 
   const handleDelete = async (id: number) => {
     try {
-      await deletePublishingRecord(id);
-      message.success('删除成功');
-      invalidateAndRefresh();
+      const result = await localPublishingRecordApi.delete(id);
+      if (result.success) {
+        message.success('删除成功');
+        invalidateAndRefresh();
+      } else {
+        message.error(result.error || '删除失败');
+      }
     } catch (error: any) {
       message.error(error.message || '删除失败');
     }
@@ -125,10 +138,14 @@ export default function PublishingRecordsPage() {
       return;
     }
     try {
-      await batchDeletePublishingRecords(selectedRowKeys);
-      message.success(`已删除 ${selectedRowKeys.length} 条记录`);
-      setSelectedRowKeys([]);
-      invalidateAndRefresh();
+      const result = await localPublishingRecordApi.batchDelete(selectedRowKeys);
+      if (result.success) {
+        message.success(`已删除 ${selectedRowKeys.length} 条记录`);
+        setSelectedRowKeys([]);
+        invalidateAndRefresh();
+      } else {
+        message.error(result.error || '批量删除失败');
+      }
     } catch (error: any) {
       message.error(error.message || '批量删除失败');
     }
@@ -149,9 +166,11 @@ export default function PublishingRecordsPage() {
       key: 'platform_name',
       width: 100,
       align: 'center' as const,
-      render: (text: string, record: PublishingRecord) => (
-        <Tag color="blue">{text || record.platform_id}</Tag>
-      )
+      render: (_: string, record: LocalPublishingRecord) => {
+        const platformId = (record as any).platform_id || (record as any).platformId;
+        const platformName = (record as any).platform_name || (record as any).platformName || (platforms || []).find(p => p.platform_id === platformId)?.platform_name;
+        return <Tag color="blue">{platformName || platformId || '-'}</Tag>;
+      }
     },
     {
       title: '账号',
@@ -159,9 +178,10 @@ export default function PublishingRecordsPage() {
       key: 'real_username',
       width: 120,
       align: 'center' as const,
-      render: (text: string, record: PublishingRecord) => (
-        <span style={{ fontSize: 14 }}>{text || record.account_name || '-'}</span>
-      )
+      render: (_: string, record: LocalPublishingRecord) => {
+        const accountName = (record as any).real_username || (record as any).realUsername || (record as any).account_name || (record as any).accountName || '-';
+        return <span style={{ fontSize: 14 }}>{accountName}</span>;
+      }
     },
     {
       title: '关键词',
@@ -169,7 +189,10 @@ export default function PublishingRecordsPage() {
       key: 'article_keyword',
       width: 100,
       align: 'center' as const,
-      render: (text: string) => text ? <Tag color="blue">{text}</Tag> : <Text type="secondary">-</Text>
+      render: (text: string, record: LocalPublishingRecord) => {
+        const keyword = text || (record as any).articleKeyword;
+        return keyword ? <Tag color="blue">{keyword}</Tag> : <Text type="secondary">-</Text>;
+      }
     },
     {
       title: '文章设置',
@@ -177,7 +200,10 @@ export default function PublishingRecordsPage() {
       key: 'article_setting_name',
       width: 100,
       align: 'center' as const,
-      render: (text: string) => text ? <Tag color="purple">{text}</Tag> : <Text type="secondary">-</Text>
+      render: (text: string, record: LocalPublishingRecord) => {
+        const settingName = text || (record as any).articleSettingName;
+        return settingName ? <Tag color="purple">{settingName}</Tag> : <Text type="secondary">-</Text>;
+      }
     },
     {
       title: '蒸馏结果',
@@ -186,7 +212,10 @@ export default function PublishingRecordsPage() {
       width: 180,
       align: 'center' as const,
       ellipsis: true,
-      render: (text: string) => text ? <Tag color="green">{text}</Tag> : <Text type="secondary">-</Text>
+      render: (text: string, record: LocalPublishingRecord) => {
+        const question = text || (record as any).topicQuestion || (record as any).topicQuestionSnapshot;
+        return question ? <Tag color="green">{question}</Tag> : <Text type="secondary">-</Text>;
+      }
     },
     {
       title: '标题',
@@ -195,7 +224,10 @@ export default function PublishingRecordsPage() {
       width: 220,
       align: 'center' as const,
       ellipsis: true,
-      render: (text: string) => text || <Text type="secondary">无标题</Text>
+      render: (text: string, record: LocalPublishingRecord) => {
+        const title = text || (record as any).articleTitle;
+        return title || <Text type="secondary">无标题</Text>;
+      }
     },
     {
       title: '发布时间',
@@ -203,7 +235,10 @@ export default function PublishingRecordsPage() {
       key: 'published_at',
       width: 160,
       align: 'center' as const,
-      render: (time: string) => new Date(time).toLocaleString('zh-CN')
+      render: (time: string, record: LocalPublishingRecord) => {
+        const publishedAt = time || (record as any).publishedAt;
+        return publishedAt ? new Date(publishedAt).toLocaleString('zh-CN') : '-';
+      }
     },
     {
       title: '操作',
@@ -211,7 +246,7 @@ export default function PublishingRecordsPage() {
       width: 140,
       align: 'center' as const,
       fixed: 'right' as const,
-      render: (_: any, record: PublishingRecord) => (
+      render: (_: any, record: LocalPublishingRecord) => (
         <Space>
           <Tooltip title="查看详情">
             <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleView(record)}>
@@ -305,7 +340,7 @@ export default function PublishingRecordsPage() {
         {(records || []).length === 0 && !loading ? (
           <Empty description="暂无发布记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
-          <ResizableTable<PublishingRecord>
+          <ResizableTable<LocalPublishingRecord>
             tableId="publishing-records-list"
             columns={columns} 
             dataSource={records || []} 
@@ -330,12 +365,32 @@ export default function PublishingRecordsPage() {
 
       {/* 文章详情模态框 */}
       <Modal
-        title={<Space><span>发布详情</span>{viewModal && <Tag color="blue">{viewModal.platform_name || viewModal.platform_id}</Tag>}</Space>}
+        title={
+          <Space>
+            <span>发布详情</span>
+            {viewModal && (
+              <Tag color="blue">
+                {viewModal.platform_name || (viewModal as any).platformName || viewModal.platform_id || (viewModal as any).platformId}
+              </Tag>
+            )}
+          </Space>
+        }
         open={!!viewModal}
         onCancel={() => setViewModal(null)}
         width={900}
         footer={[
-          <Button key="copy" icon={<CopyOutlined />} onClick={() => viewModal?.article_content && handleCopy(viewModal.article_content, viewModal.article_image_url)} disabled={!viewModal?.article_content}>复制文章</Button>,
+          <Button
+            key="copy"
+            icon={<CopyOutlined />}
+            onClick={() => {
+              const content = (viewModal as any)?.article_content || (viewModal as any)?.articleContent;
+              const imageUrl = (viewModal as any)?.article_image_url || (viewModal as any)?.articleImageUrl;
+              if (content) handleCopy(content, imageUrl);
+            }}
+            disabled={!((viewModal as any)?.article_content || (viewModal as any)?.articleContent)}
+          >
+            复制文章
+          </Button>,
           <Button key="close" type="primary" onClick={() => setViewModal(null)}>关闭</Button>
         ]}
       >
@@ -343,16 +398,33 @@ export default function PublishingRecordsPage() {
           <div style={{ maxHeight: 600, overflow: 'auto' }}>
             <Card size="small" style={{ marginBottom: 16 }}>
               <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <div><Text type="secondary">发布平台：</Text><Tag color="blue">{viewModal.platform_name || viewModal.platform_id}</Tag></div>
-                <div><Text type="secondary">发布账号：</Text><Text>{viewModal.real_username || viewModal.account_name || '-'}</Text></div>
-                <div><Text type="secondary">发布时间：</Text><Text>{new Date(viewModal.published_at).toLocaleString('zh-CN')}</Text></div>
-                {viewModal.article_keyword && <div><Text type="secondary">关键词：</Text><Tag color="purple">{viewModal.article_keyword}</Tag></div>}
-                {viewModal.article_setting_name && <div><Text type="secondary">文章设置：</Text><Tag color="cyan">{viewModal.article_setting_name}</Tag></div>}
-                {viewModal.topic_question && <div><Text type="secondary">蒸馏结果：</Text><Tag color="green">{viewModal.topic_question}</Tag></div>}
+                <div>
+                  <Text type="secondary">发布平台：</Text>
+                  <Tag color="blue">
+                    {viewModal.platform_name || (viewModal as any).platformName || viewModal.platform_id || (viewModal as any).platformId}
+                  </Tag>
+                </div>
+                <div><Text type="secondary">发布账号：</Text><Text>{(viewModal as any).real_username || (viewModal as any).realUsername || (viewModal as any).account_name || (viewModal as any).accountName || '-'}</Text></div>
+                <div>
+                  <Text type="secondary">发布时间：</Text>
+                  <Text>
+                    {(() => {
+                      const publishedAt = (viewModal as any).published_at || (viewModal as any).publishedAt || (viewModal as any).created_at || (viewModal as any).createdAt;
+                      return publishedAt ? new Date(publishedAt).toLocaleString('zh-CN') : '-';
+                    })()}
+                  </Text>
+                </div>
+                {(viewModal as any).article_keyword && <div><Text type="secondary">关键词：</Text><Tag color="purple">{(viewModal as any).article_keyword}</Tag></div>}
+                {(viewModal as any).article_setting_name && <div><Text type="secondary">文章设置：</Text><Tag color="cyan">{(viewModal as any).article_setting_name}</Tag></div>}
+                {(viewModal as any).topic_question && <div><Text type="secondary">蒸馏结果：</Text><Tag color="green">{(viewModal as any).topic_question}</Tag></div>}
               </Space>
             </Card>
-            {viewModal.article_content ? (
-              <ArticlePreview content={viewModal.article_content} title={viewModal.article_title} imageUrl={viewModal.article_image_url} />
+            {((viewModal as any).article_content || (viewModal as any).articleContent) ? (
+              <ArticlePreview
+                content={(viewModal as any).article_content || (viewModal as any).articleContent}
+                title={(viewModal as any).article_title || (viewModal as any).articleTitle}
+                imageUrl={(viewModal as any).article_image_url || (viewModal as any).articleImageUrl}
+              />
             ) : (
               <Empty description="文章内容不可用（旧版记录）" />
             )}

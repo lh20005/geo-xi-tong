@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { Modal, Table, Empty, message, Spin } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { localDistillationApi } from '../api/localDistillationApi';
 
 interface UsageRecord {
   id: number;
-  taskId: number;
+  taskId: number | null;
   articleId: number;
   articleTitle: string;
   articleDeleted: boolean;
@@ -56,21 +56,18 @@ const UsageHistoryModal: React.FC<UsageHistoryModalProps> = ({
 
     setLoading(true);
     try {
-      const response = await axios.get(
-        `/api/distillation/${distillationId}/usage`,
-        {
-          params: { page, pageSize },
-        }
-      );
-
-      const data = response.data;
-      setUsageHistory(data.usageHistory || []);
-      setKeyword(data.keyword || '');
-      setTotalUsageCount(data.totalUsageCount || 0);
-      setTotal(data.total || 0);
+      const result = await localDistillationApi.getUsageHistory(distillationId, { page, pageSize });
+      if (!result.success) {
+        throw new Error(result.error || '加载使用历史失败');
+      }
+      const data = result.data;
+      setUsageHistory(data?.usageHistory || []);
+      setKeyword(data?.keyword || '');
+      setTotalUsageCount(data?.totalUsageCount || 0);
+      setTotal(data?.total || 0);
     } catch (error: any) {
       console.error('加载使用历史失败:', error);
-      message.error(error.response?.data?.error || '加载使用历史失败');
+      message.error(error.message || '加载使用历史失败');
     } finally {
       setLoading(false);
     }

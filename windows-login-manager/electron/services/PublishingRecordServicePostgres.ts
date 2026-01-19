@@ -205,6 +205,124 @@ export class PublishingRecordServicePostgres extends BaseServicePostgres<Publish
   }
 
   /**
+   * 分页获取发布记录（支持过滤）
+   */
+  async findPaginatedRecords(params: {
+    page?: number;
+    pageSize?: number;
+    platform_id?: string;
+    article_id?: number;
+    account_id?: number;
+    status?: string;
+  }): Promise<{ records: PublishingRecord[]; total: number; page: number; pageSize: number }> {
+    this.validateUserId();
+
+    try {
+      const page = params.page || 1;
+      const pageSize = params.pageSize || 20;
+      const offset = (page - 1) * pageSize;
+
+      const whereClauses: string[] = ['user_id = $1'];
+      const values: any[] = [this.userId];
+      let paramIndex = 2;
+
+      if (params.platform_id) {
+        whereClauses.push(`platform_id = $${paramIndex}`);
+        values.push(params.platform_id);
+        paramIndex++;
+      }
+
+      if (params.article_id) {
+        whereClauses.push(`article_id = $${paramIndex}`);
+        values.push(params.article_id);
+        paramIndex++;
+      }
+
+      if (params.account_id) {
+        whereClauses.push(`account_id = $${paramIndex}`);
+        values.push(params.account_id);
+        paramIndex++;
+      }
+
+      if (params.status) {
+        whereClauses.push(`status = $${paramIndex}`);
+        values.push(params.status);
+        paramIndex++;
+      }
+
+      const whereClause = whereClauses.join(' AND ');
+
+      const countSql = `SELECT COUNT(*) as total FROM publishing_records WHERE ${whereClause}`;
+      const countResult = await this.pool.query(countSql, values);
+      const total = parseInt(countResult.rows[0].total);
+
+      const dataSql = `
+        SELECT * FROM publishing_records
+        WHERE ${whereClause}
+        ORDER BY created_at DESC
+        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}
+      `;
+      const dataResult = await this.pool.query(dataSql, [...values, pageSize, offset]);
+
+      return {
+        records: dataResult.rows as PublishingRecord[],
+        total,
+        page,
+        pageSize
+      };
+    } catch (error) {
+      log.error('PublishingRecordService: findPaginatedRecords 失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取发布记录时间统计
+   */
+  async getTimeStats(): Promise<{ total: number; today: number; week: number; month: number }> {
+    this.validateUserId();
+
+    try {
+      const totalResult = await this.pool.query(
+        'SELECT COUNT(*) as count FROM publishing_records WHERE user_id = $1',
+        [this.userId]
+      );
+
+      const todayResult = await this.pool.query(
+        `SELECT COUNT(*) as count FROM publishing_records
+         WHERE user_id = $1
+           AND COALESCE(published_at, created_at) >= CURRENT_DATE
+           AND COALESCE(published_at, created_at) < CURRENT_DATE + INTERVAL '1 day'`,
+        [this.userId]
+      );
+
+      const weekResult = await this.pool.query(
+        `SELECT COUNT(*) as count FROM publishing_records
+         WHERE user_id = $1
+           AND COALESCE(published_at, created_at) >= date_trunc('week', NOW())`,
+        [this.userId]
+      );
+
+      const monthResult = await this.pool.query(
+        `SELECT COUNT(*) as count FROM publishing_records
+         WHERE user_id = $1
+           AND COALESCE(published_at, created_at) >= date_trunc('month', NOW())`,
+        [this.userId]
+      );
+
+      return {
+        total: parseInt(totalResult.rows[0].count),
+        today: parseInt(todayResult.rows[0].count),
+        week: parseInt(weekResult.rows[0].count),
+        month: parseInt(monthResult.rows[0].count)
+      };
+    } catch (error) {
+      log.error('PublishingRecordService: getTimeStats 失败:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 获取发布记录统计
    */
   async getStats(): Promise<{

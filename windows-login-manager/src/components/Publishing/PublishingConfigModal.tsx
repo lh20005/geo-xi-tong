@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react';
 import { Modal, Form, Select, DatePicker, Input, Space, message, Alert, Tag, Table, Checkbox, Typography } from 'antd';
 import { ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
-import { 
-  getPlatforms, 
-  getAccounts, 
-  createPublishingTask,
-  Platform, 
-  Account 
-} from '../../api/publishing';
-import { getArticles, Article } from '../../api/articles';
+import { localAccountApi, localArticleApi, localTaskApi, type LocalAccount, type LocalArticle } from '../../api';
+import { ipcBridge } from '../../services/ipc';
 
 const { Option } = Select;
 const { Text } = Typography;
+
+interface Platform {
+  platform_id: string;
+  platform_name: string;
+  icon_url?: string;
+  is_enabled?: boolean;
+}
 
 interface PublishingConfigModalProps {
   visible: boolean;
@@ -27,15 +28,15 @@ export default function PublishingConfigModal({
 }: PublishingConfigModalProps) {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<LocalAccount[]>([]);
   const [boundPlatforms, setBoundPlatforms] = useState<Platform[]>([]);
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [platformAccounts, setPlatformAccounts] = useState<Account[]>([]);
+  const [platformAccounts, setPlatformAccounts] = useState<LocalAccount[]>([]);
   const [publishType, setPublishType] = useState<'immediate' | 'scheduled'>('immediate');
   
   // 文章列表相关状态
-  const [articles, setArticles] = useState<Article[]>([]);
-  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
+  const [articles, setArticles] = useState<LocalArticle[]>([]);
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [articlePage, setArticlePage] = useState(1);
   const [articlePageSize, setArticlePageSize] = useState(5);
   const [articleTotal, setArticleTotal] = useState(0);
@@ -60,11 +61,11 @@ export default function PublishingConfigModal({
 
   useEffect(() => {
     if (selectedPlatform) {
-      const filtered = accounts.filter(acc => acc.platform_id === selectedPlatform);
+      const filtered = accounts.filter(acc => (acc.platformId || acc.platform) === selectedPlatform);
       setPlatformAccounts(filtered);
       
       // 自动选择默认账号
-      const defaultAccount = filtered.find(acc => acc.is_default);
+      const defaultAccount = filtered.find(acc => acc.isDefault);
       if (defaultAccount) {
         form.setFieldsValue({ account_id: defaultAccount.id });
       }
@@ -75,18 +76,22 @@ export default function PublishingConfigModal({
 
   const loadData = async () => {
     try {
-      const [platformsData, accountsData] = await Promise.all([
-        getPlatforms(),
-        getAccounts()
+      const [platformsData, accountsResult] = await Promise.all([
+        ipcBridge.getPlatforms(),
+        localAccountApi.findAll()
       ]);
-      
+
+      const accountsData = accountsResult.success ? (accountsResult.data || []) : [];
       setAccounts(accountsData);
-      
+
       // 筛选已绑定账号的平台
-      const boundPlatformIds = new Set(accountsData.map(acc => acc.platform_id));
-      const bound = platformsData.filter(p => boundPlatformIds.has(p.platform_id));
+      const boundPlatformIds = new Set(
+        accountsData
+          .map(acc => acc.platformId || acc.platform)
+          .filter(Boolean)
+      );
+      const bound = (platformsData || []).filter(p => boundPlatformIds.has(p.platform_id));
       setBoundPlatforms(bound);
-      
     } catch (error) {
       message.error('加载数据失败');
       console.error('加载数据失败:', error);
@@ -96,9 +101,13 @@ export default function PublishingConfigModal({
   const loadArticles = async () => {
     setArticleLoading(true);
     try {
-      const response = await getArticles(articlePage, articlePageSize, {});
-      setArticles(response.articles || []);
-      setArticleTotal(response.total || 0);
+      const response = await localArticleApi.findAll({ page: articlePage, pageSize: articlePageSize });
+      if (response.success) {
+        setArticles(response.data.articles || []);
+        setArticleTotal(response.data.total || 0);
+      } else {
+        message.error(response.error || '加载文章列表失败');
+      }
     } catch (error: any) {
       message.error(error.message || '加载文章列表失败');
     } finally {
@@ -116,23 +125,43 @@ export default function PublishingConfigModal({
       const values = await form.validateFields();
       setLoading(true);
 
+      const userStr = localStorage.getItem('user');
+      const userId = userStr ? JSON.parse(userStr).id : 1;
+
       // 为每篇文章创建发布任务
-      const tasks = Array.from(selectedArticleIds).map(articleId => ({
-        article_id: articleId,
-        platform_id: values.platform_id,
-        account_id: values.account_id,
-        scheduled_time: publishType === 'scheduled' && values.scheduled_time 
-          ? values.scheduled_time.toISOString() 
-          : null,
-        config: {
-          title: values.custom_title || undefined,
-          category: values.category || undefined,
-          tags: values.tags ? values.tags.split(',').map((t: string) => t.trim()) : undefined,
-        }
-      }));
+      const tasks = Array.from(selectedArticleIds).map(articleId => {
+        const article = articles.find(a => String(a.id) === String(articleId));
+        const articleTitle = (article as any)?.title || (article as any)?.article_title;
+        const articleContent = (article as any)?.content || (article as any)?.article_content;
+        const articleKeyword = (article as any)?.keyword || (article as any)?.article_keyword;
+        const articleImageUrl = (article as any)?.imageUrl || (article as any)?.image_url || (article as any)?.article_image_url;
+
+        return {
+          userId,
+          articleId: String(articleId),
+          platformId: values.platform_id,
+          accountId: values.account_id,
+          scheduledAt: publishType === 'scheduled' && values.scheduled_time 
+            ? values.scheduled_time.toISOString() 
+            : undefined,
+          config: {
+            title: values.custom_title || undefined,
+            category: values.category || undefined,
+            tags: values.tags ? values.tags.split(',').map((t: string) => t.trim()) : undefined,
+          },
+          articleTitle,
+          articleContent,
+          articleKeyword,
+          articleImageUrl
+        };
+      });
 
       // 批量创建任务
-      await Promise.all(tasks.map(task => createPublishingTask(task)));
+      const results = await Promise.all(tasks.map(task => localTaskApi.create(task)));
+      const failed = results.filter(r => !r.success);
+      if (failed.length > 0) {
+        throw new Error(failed[0].error || '创建发布任务失败');
+      }
 
       message.success(`成功创建 ${tasks.length} 个发布任务`);
       form.resetFields();
@@ -160,15 +189,15 @@ export default function PublishingConfigModal({
 
   const handleSelectAllArticles = (checked: boolean) => {
     if (checked) {
-      const currentPageIds = articles.map(a => a.id);
+      const currentPageIds = articles.map(a => String(a.id));
       setSelectedArticleIds(new Set([...selectedArticleIds, ...currentPageIds]));
     } else {
-      const currentPageIds = new Set(articles.map(a => a.id));
+      const currentPageIds = new Set(articles.map(a => String(a.id)));
       setSelectedArticleIds(new Set([...selectedArticleIds].filter(id => !currentPageIds.has(id))));
     }
   };
 
-  const handleSelectOneArticle = (id: number, checked: boolean) => {
+  const handleSelectOneArticle = (id: string, checked: boolean) => {
     const newSelected = new Set(selectedArticleIds);
     if (checked) {
       newSelected.add(id);
@@ -202,8 +231,8 @@ export default function PublishingConfigModal({
     return {};
   };
 
-  const isAllSelected = articles.length > 0 && articles.every(a => selectedArticleIds.has(a.id));
-  const isSomeSelected = articles.some(a => selectedArticleIds.has(a.id)) && !isAllSelected;
+  const isAllSelected = articles.length > 0 && articles.every(a => selectedArticleIds.has(String(a.id)));
+  const isSomeSelected = articles.some(a => selectedArticleIds.has(String(a.id))) && !isAllSelected;
 
   const articleColumns = [
     {
@@ -217,10 +246,10 @@ export default function PublishingConfigModal({
       key: 'checkbox',
       width: 50,
       align: 'center' as const,
-      render: (_: any, record: Article) => (
+      render: (_: any, record: LocalArticle) => (
         <Checkbox
-          checked={selectedArticleIds.has(record.id)}
-          onChange={(e) => handleSelectOneArticle(record.id, e.target.checked)}
+          checked={selectedArticleIds.has(String(record.id))}
+          onChange={(e) => handleSelectOneArticle(String(record.id), e.target.checked)}
         />
       ),
     },
@@ -250,14 +279,18 @@ export default function PublishingConfigModal({
       dataIndex: 'topicQuestion',
       key: 'topicQuestion',
       align: 'center' as const,
-      render: (text: string) => text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>,
+      render: (_: string, record: LocalArticle) => {
+        const text = (record as any).topicQuestion || (record as any).topicQuestionSnapshot || (record as any).topic_question;
+        return text ? <Tag color="green">{text}</Tag> : <span style={{ color: '#999' }}>-</span>;
+      },
     },
     {
       title: '发布状态',
       dataIndex: 'isPublished',
       key: 'isPublished',
       align: 'center' as const,
-      render: (isPublished: boolean) => {
+      render: (_: boolean, record: LocalArticle) => {
+        const isPublished = (record as any).isPublished ?? (record as any).is_published;
         if (isPublished) {
           return <Tag color="success">已发布</Tag>;
         }
@@ -269,12 +302,15 @@ export default function PublishingConfigModal({
       dataIndex: 'createdAt',
       key: 'createdAt',
       align: 'center' as const,
-      render: (text: string) => new Date(text).toLocaleString('zh-CN', {
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
+      render: (_: string, record: LocalArticle) => {
+        const createdAt = (record as any).createdAt || (record as any).created_at;
+        return createdAt ? new Date(createdAt).toLocaleString('zh-CN', {
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        }) : '-';
+      },
     },
   ];
 
@@ -389,8 +425,8 @@ export default function PublishingConfigModal({
               {platformAccounts.map(account => (
                 <Option key={account.id} value={account.id}>
                   <Space>
-                    {account.account_name}
-                    {account.is_default && <Tag color="gold">默认</Tag>}
+                    {account.accountName || account.realUsername || '未命名'}
+                    {account.isDefault && <Tag color="gold">默认</Tag>}
                   </Space>
                 </Option>
               ))}

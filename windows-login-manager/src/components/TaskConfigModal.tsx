@@ -8,7 +8,7 @@ import {
   fetchArticleSettings,
   fetchConversionTargets
 } from '../api/articleGenerationApi';
-import { getDistillationsWithStats, type DistillationUsageStats } from '../api/distillationApi';
+import { localDistillationApi, type LocalDistillationUsageStats } from '../api/localDistillationApi';
 
 interface TaskConfigModalProps {
   visible: boolean;
@@ -21,7 +21,7 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
   const [dataLoading, setDataLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const [distillations, setDistillations] = useState<DistillationUsageStats[]>([]);
+  const [distillations, setDistillations] = useState<LocalDistillationUsageStats[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [articleSettings, setArticleSettings] = useState<ArticleSetting[]>([]);
@@ -40,9 +40,18 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
       console.log('🔄 开始加载下拉列表数据...');
       
       const [distillationsData, albumsData, knowledgeBasesData, articleSettingsData, conversionTargetsData] = await Promise.all([
-        getDistillationsWithStats(1, 100).then(data => {
-          console.log('✅ 蒸馏数据加载成功:', data);
-          return data;
+        localDistillationApi.getUsageStats({
+          page: 1,
+          pageSize: 100,
+          sortBy: 'usage_count',
+          sortOrder: 'asc',
+          filterUsage: 'all'
+        }).then(result => {
+          if (!result.success) {
+            throw new Error(result.error || '蒸馏数据加载失败');
+          }
+          console.log('✅ 蒸馏数据加载成功:', result.data);
+          return result.data;
         }).catch(err => {
           console.error('❌ 蒸馏数据加载失败:', err);
           throw err;
@@ -78,13 +87,13 @@ export default function TaskConfigModal({ visible, onSubmit, onCancel }: TaskCon
       ]);
 
       console.log('📊 设置状态数据...');
-      console.log('  - 蒸馏记录数:', distillationsData.distillations?.length || 0);
+      console.log('  - 蒸馏记录数:', distillationsData?.distillations?.length || 0);
       console.log('  - 相册数:', albumsData?.length || 0);
       console.log('  - 知识库数:', knowledgeBasesData?.length || 0);
       console.log('  - 文章设置数:', articleSettingsData?.length || 0);
       console.log('  - 转化目标数:', conversionTargetsData?.length || 0);
 
-      setDistillations(distillationsData.distillations || []);
+      setDistillations(distillationsData?.distillations || []);
       setAlbums(albumsData || []);
       setKnowledgeBases(knowledgeBasesData || []);
       setArticleSettings(articleSettingsData || []);

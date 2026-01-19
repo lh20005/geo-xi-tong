@@ -8,7 +8,7 @@ import {
   FilterOutlined, EyeOutlined 
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { localDistillationApi } from '../api/localDistillationApi';
 import ResizableTable from '../components/ResizableTable';
 import UsageCountBadge from '../components/UsageCountBadge';
 import UsageHistoryModal from '../components/UsageHistoryModal';
@@ -56,20 +56,30 @@ export default function DistillationHistoryEnhancedPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get('/api/distillation/stats', {
-        params: {
-          page: currentPage,
-          pageSize,
-          sortBy,
-          sortOrder,
-          filterUsage
-        }
+      const result = await localDistillationApi.getUsageStats({
+        page: currentPage,
+        pageSize,
+        sortBy,
+        sortOrder,
+        filterUsage
       });
-      
-      setData(response.data.distillations || []);
-      setTotal(response.data.total || 0);
+
+      if (!result.success) {
+        throw new Error(result.error || '加载数据失败');
+      }
+
+      setData((result.data?.distillations || []).map(item => ({
+        id: item.distillationId,
+        keyword: item.keyword,
+        provider: item.provider,
+        topicCount: item.topicCount,
+        usageCount: item.usageCount,
+        lastUsedAt: item.lastUsedAt,
+        createdAt: item.createdAt
+      })));
+      setTotal(result.data?.total || 0);
     } catch (error: any) {
-      message.error(error.response?.data?.error || '加载数据失败');
+      message.error(error.message || '加载数据失败');
     } finally {
       setLoading(false);
     }
@@ -114,12 +124,13 @@ export default function DistillationHistoryEnhancedPage() {
   // 查看蒸馏结果详情
   const handleViewDetail = async (record: DistillationWithUsage) => {
     try {
-      await axios.get(`/api/distillation/${record.id}`);
-      // 这里可以导航到详情页或显示详情弹窗
+      const result = await localDistillationApi.findById(record.id);
+      if (!result.success) {
+        throw new Error(result.error || '加载详情失败');
+      }
       message.success('加载详情成功');
-      // navigate(`/distillation/${record.id}`);
     } catch (error: any) {
-      message.error(error.response?.data?.error || '加载详情失败');
+      message.error(error.message || '加载详情失败');
     }
   };
 
@@ -133,11 +144,14 @@ export default function DistillationHistoryEnhancedPage() {
       okType: 'danger',
       onOk: async () => {
         try {
-          await axios.delete(`/api/distillation/${id}`);
+          const result = await localDistillationApi.delete(id);
+          if (!result.success) {
+            throw new Error(result.error || '删除失败');
+          }
           message.success('删除成功');
           loadData();
         } catch (error: any) {
-          message.error(error.response?.data?.error || '删除失败');
+          message.error(error.message || '删除失败');
         }
       }
     });

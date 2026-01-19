@@ -17,7 +17,8 @@ import {
   ArrowRightOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '../../api/client';
+import { localArticleApi, localTaskApi } from '../../api';
+import { localDistillationApi } from '../../api/localDistillationApi';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import 'dayjs/locale/zh-cn';
@@ -28,7 +29,7 @@ dayjs.locale('zh-cn');
 const { Text } = Typography;
 
 interface Activity {
-  id: number;
+  id: string | number;
   type: 'article' | 'publish' | 'distillation';
   title: string;
   status: string;
@@ -48,55 +49,55 @@ export const RecentActivityList: React.FC = () => {
   const fetchActivities = async () => {
     setLoading(true);
     try {
-      // 并行获取最近的文章、发布任务、蒸馏
+      // 并行获取最近的文章、发布任务、蒸馏（本地数据库）
       const [articlesRes, tasksRes, distillationsRes] = await Promise.all([
-        apiClient.get('/articles', { params: { page: 1, pageSize: 5 } }).catch(() => ({ data: { articles: [] } })),
-        apiClient.get('/publishing/tasks', { params: { page: 1, pageSize: 5 } }).catch(() => ({ data: { data: { tasks: [] } } })),
-        apiClient.get('/distillations', { params: { page: 1, pageSize: 5 } }).catch(() => ({ data: { distillations: [] } }))
+        localArticleApi.findAll({ page: 1, pageSize: 5 }).catch(() => ({ success: false } as any)),
+        localTaskApi.findAll({ page: 1, pageSize: 5 }).catch(() => ({ success: false } as any)),
+        localDistillationApi.findRecent(5).catch(() => ({ success: false } as any)),
       ]);
 
       const allActivities: Activity[] = [];
 
       // 处理文章
-      const articles = articlesRes.data?.articles || [];
+      const articles = articlesRes?.success ? (articlesRes.data?.articles || []) : [];
       articles.forEach((a: any) => {
         allActivities.push({
           id: a.id,
           type: 'article',
           title: a.title || '未命名文章',
-          status: a.is_published ? 'published' : 'draft',
-          createdAt: a.created_at
+          status: a.isPublished ? 'published' : 'draft',
+          createdAt: a.createdAt || a.created_at
         });
       });
 
       // 处理发布任务
-      const tasks = tasksRes.data?.data?.tasks || tasksRes.data?.tasks || [];
+      const tasks = tasksRes?.success ? (tasksRes.data?.tasks || []) : [];
       tasks.forEach((t: any) => {
         allActivities.push({
           id: t.id,
           type: 'publish',
-          title: t.article_title || '发布任务',
+          title: t.articleTitle || t.article_title || '发布任务',
           status: t.status,
-          createdAt: t.created_at,
-          platform: t.platform_name
+          createdAt: t.createdAt || t.created_at,
+          platform: t.platformName || t.platform_name
         });
       });
 
       // 处理蒸馏
-      const distillations = distillationsRes.data?.distillations || [];
+      const distillations = distillationsRes?.success ? (distillationsRes.data || []) : [];
       distillations.forEach((d: any) => {
         allActivities.push({
           id: d.id,
           type: 'distillation',
           title: d.keyword || '关键词蒸馏',
-          status: d.status,
-          createdAt: d.created_at
+          status: 'success',
+          createdAt: d.created_at || d.createdAt
         });
       });
 
       // 按时间排序，取最近10条
       allActivities.sort((a, b) => 
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
       );
 
       setActivities(allActivities.slice(0, 8));

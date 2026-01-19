@@ -11,18 +11,11 @@ import {
   PlusOutlined
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '../../api/client';
+import { localAccountApi, type LocalAccount } from '../../api';
 
 const { Text } = Typography;
 
-interface PlatformAccount {
-  id: number;
-  platform_id: string;
-  platform_name: string;
-  account_name: string;
-  status: string;
-  last_login_at: string;
-}
+interface PlatformAccount extends LocalAccount {}
 
 // 平台图标映射
 const platformIcons: Record<string, string> = {
@@ -52,8 +45,12 @@ export const PlatformAccountsCard: React.FC = () => {
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const response = await apiClient.get('/platform-accounts');
-      setAccounts(response.data?.accounts || []);
+      const response = await localAccountApi.findAll();
+      if (response.success) {
+        setAccounts(response.data || []);
+      } else {
+        setAccounts([]);
+      }
     } catch (error) {
       console.error('获取平台账号失败:', error);
     } finally {
@@ -76,14 +73,14 @@ export const PlatformAccountsCard: React.FC = () => {
             type="link" 
             size="small" 
             icon={<PlusOutlined />}
-            onClick={() => navigate('/platform-accounts')}
+            onClick={() => navigate('/platform-management')}
           >
             添加
           </Button>
           <Button 
             type="link" 
             size="small"
-            onClick={() => navigate('/platform-accounts')}
+            onClick={() => navigate('/platform-management')}
           >
             管理 <ArrowRightOutlined />
           </Button>
@@ -104,7 +101,7 @@ export const PlatformAccountsCard: React.FC = () => {
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           style={{ padding: '24px 0' }}
         >
-          <Button type="primary" size="small" onClick={() => navigate('/platform-accounts')}>
+          <Button type="primary" size="small" onClick={() => navigate('/platform-management')}>
             去绑定
           </Button>
         </Empty>
@@ -112,7 +109,7 @@ export const PlatformAccountsCard: React.FC = () => {
         <Row gutter={[8, 8]}>
           {accounts.slice(0, 8).map((account) => (
             <Col xs={12} sm={8} md={6} key={account.id}>
-              <Tooltip title={`${account.platform_name} - ${account.account_name}`}>
+              <Tooltip title={`${account.platform} - ${account.accountName || account.realUsername || '未命名'}`}>
                 <div 
                   style={{ 
                     background: '#fafafa',
@@ -122,7 +119,7 @@ export const PlatformAccountsCard: React.FC = () => {
                     transition: 'all 0.2s',
                     border: '1px solid #f0f0f0'
                   }}
-                  onClick={() => navigate('/platform-accounts')}
+                  onClick={() => navigate('/platform-management')}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.background = '#f0f0f0';
                     e.currentTarget.style.borderColor = '#d9d9d9';
@@ -134,21 +131,21 @@ export const PlatformAccountsCard: React.FC = () => {
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 20 }}>
-                      {platformIcons[account.platform_id] || '📱'}
+                      {platformIcons[account.platform] || '📱'}
                     </span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <Text 
                         ellipsis 
                         style={{ fontSize: 12, display: 'block' }}
                       >
-                        {account.platform_name}
+                        {account.platform}
                       </Text>
                       <Text 
                         type="secondary" 
                         ellipsis 
                         style={{ fontSize: 11 }}
                       >
-                        {account.account_name}
+                        {account.accountName || account.realUsername || '未命名'}
                       </Text>
                     </div>
                   </div>
@@ -170,7 +167,7 @@ export const PlatformAccountsCard: React.FC = () => {
                   height: '100%',
                   minHeight: 52
                 }}
-                onClick={() => navigate('/platform-accounts')}
+                onClick={() => navigate('/platform-management')}
               >
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   +{accounts.length - 8} 更多

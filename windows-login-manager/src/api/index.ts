@@ -40,6 +40,7 @@ export {
   localKnowledgeApi,
   localGalleryApi,
   localSyncApi,
+  localPublishingRecordApi,
   // 类型
   type LocalArticle,
   type CreateArticleParams,
@@ -54,6 +55,8 @@ export {
   type LocalAlbum,
   type LocalImage,
   type CreateAlbumParams,
+  type LocalPublishingRecord,
+  type LocalPublishingStats,
   type SyncSnapshot as LocalSyncSnapshot,
 } from './local';
 

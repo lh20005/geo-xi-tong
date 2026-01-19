@@ -254,6 +254,168 @@ export function registerLocalDistillationHandlers(): void {
     }
   });
 
+  // 获取蒸馏使用统计（本地）
+  ipcMain.handle('distillation:local:getUsageStats', async (_event, params?: any) => {
+    try {
+      log.info('IPC: distillation:local:getUsageStats', params);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      const pool = getPool();
+      const page = Math.max(1, Number(params?.page) || 1);
+      const pageSize = Math.max(1, Number(params?.pageSize) || 10);
+      const offset = (page - 1) * pageSize;
+      const sortBy = params?.sortBy === 'usage_count' ? 'usage_count' : 'created_at';
+      const sortOrder = params?.sortOrder === 'asc' ? 'asc' : 'desc';
+      const filterUsage = params?.filterUsage === 'used' ? 'used' : params?.filterUsage === 'unused' ? 'unused' : 'all';
+
+      const usageFilter = filterUsage === 'used'
+        ? 'WHERE usage_count > 0'
+        : filterUsage === 'unused'
+          ? 'WHERE usage_count = 0'
+          : '';
+
+      const countQuery = `
+        WITH stats AS (
+          SELECT 
+            d.id,
+            d.keyword,
+            d.provider,
+            d.topic_count,
+            d.created_at,
+            COALESCE(COUNT(a.id), 0) as usage_count,
+            MAX(a.created_at) as last_used_at
+          FROM distillations d
+          LEFT JOIN topics t ON t.distillation_id = d.id AND t.user_id = d.user_id
+          LEFT JOIN articles a ON a.topic_id = t.id AND a.user_id = d.user_id
+          WHERE d.user_id = $1
+          GROUP BY d.id
+        )
+        SELECT COUNT(*) as total FROM stats
+        ${usageFilter}
+      `;
+
+      const countResult = await pool.query(countQuery, [user.id]);
+      const total = parseInt(countResult.rows[0].total) || 0;
+
+      const dataQuery = `
+        WITH stats AS (
+          SELECT 
+            d.id,
+            d.keyword,
+            d.provider,
+            d.topic_count,
+            d.created_at,
+            COALESCE(COUNT(a.id), 0) as usage_count,
+            MAX(a.created_at) as last_used_at
+          FROM distillations d
+          LEFT JOIN topics t ON t.distillation_id = d.id AND t.user_id = d.user_id
+          LEFT JOIN articles a ON a.topic_id = t.id AND a.user_id = d.user_id
+          WHERE d.user_id = $1
+          GROUP BY d.id
+        )
+        SELECT * FROM stats
+        ${usageFilter}
+        ORDER BY ${sortBy} ${sortOrder}
+        LIMIT $2 OFFSET $3
+      `;
+
+      const dataResult = await pool.query(dataQuery, [user.id, pageSize, offset]);
+
+      const distillations = dataResult.rows.map((row: any) => ({
+        distillationId: row.id,
+        keyword: row.keyword,
+        provider: row.provider,
+        usageCount: parseInt(row.usage_count) || 0,
+        lastUsedAt: row.last_used_at ? (row.last_used_at.toISOString ? row.last_used_at.toISOString() : row.last_used_at) : null,
+        topicCount: parseInt(row.topic_count) || 0,
+        createdAt: row.created_at
+      }));
+
+      return {
+        success: true,
+        data: {
+          distillations,
+          total,
+          page,
+          pageSize
+        }
+      };
+    } catch (error: any) {
+      log.error('IPC: distillation:local:getUsageStats failed:', error);
+      return { success: false, error: error.message || '获取蒸馏使用统计失败' };
+    }
+  });
+
+  // 获取蒸馏使用历史（本地）
+  ipcMain.handle('distillation:local:getUsageHistory', async (_event, distillationId: number, params?: any) => {
+    try {
+      log.info(`IPC: distillation:local:getUsageHistory - ${distillationId}`, params);
+      const user = await storageManager.getUser();
+      if (!user) {
+        return { success: false, error: '用户未登录' };
+      }
+
+      const pool = getPool();
+      const page = Math.max(1, Number(params?.page) || 1);
+      const pageSize = Math.max(1, Number(params?.pageSize) || 10);
+      const offset = (page - 1) * pageSize;
+
+      const keywordResult = await pool.query(
+        'SELECT keyword FROM distillations WHERE id = $1 AND user_id = $2',
+        [distillationId, user.id]
+      );
+
+      if (keywordResult.rows.length === 0) {
+        return { success: false, error: '蒸馏记录不存在' };
+      }
+
+      const keyword = keywordResult.rows[0].keyword;
+
+      const totalResult = await pool.query(
+        'SELECT COUNT(*) as total FROM articles WHERE user_id = $1 AND distillation_id = $2',
+        [user.id, distillationId]
+      );
+      const total = parseInt(totalResult.rows[0].total) || 0;
+
+      const historyResult = await pool.query(
+        `SELECT id, task_id, title, created_at
+         FROM articles
+         WHERE user_id = $1 AND distillation_id = $2
+         ORDER BY created_at DESC
+         LIMIT $3 OFFSET $4`,
+        [user.id, distillationId, pageSize, offset]
+      );
+
+      const usageHistory = historyResult.rows.map((row: any) => ({
+        id: row.id,
+        taskId: row.task_id || null,
+        articleId: row.id,
+        articleTitle: row.title,
+        articleDeleted: false,
+        usedAt: row.created_at
+      }));
+
+      return {
+        success: true,
+        data: {
+          distillationId,
+          keyword,
+          totalUsageCount: total,
+          usageHistory,
+          total,
+          page,
+          pageSize
+        }
+      };
+    } catch (error: any) {
+      log.error('IPC: distillation:local:getUsageHistory failed:', error);
+      return { success: false, error: error.message || '获取蒸馏使用历史失败' };
+    }
+  });
+
   // 获取蒸馏结果列表（用于结果页面）
   ipcMain.handle('distillation:local:getResults', async (_event, filters?: any) => {
     try {

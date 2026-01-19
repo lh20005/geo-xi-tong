@@ -151,6 +151,15 @@ export interface ElectronAPI {
     updateRecord: (id: string, params: any) => Promise<{ success: boolean; error?: string }>;
   };
 
+  // 发布记录（本地 PostgreSQL）
+  publishingRecord: {
+    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    findById: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+    delete: (id: number) => Promise<{ success: boolean; error?: string }>;
+    batchDelete: (ids: number[]) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+  };
+
   // 发布执行（本地 Playwright）
   publish: {
     executeSingle: (taskId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
@@ -443,6 +452,15 @@ const electronAPI = {
     getLogs: (taskId: string) => ipcRenderer.invoke('task:getLogs', taskId),
     createRecord: (params: any) => ipcRenderer.invoke('task:createRecord', params),
     updateRecord: (id: string, params: any) => ipcRenderer.invoke('task:updateRecord', id, params),
+  },
+
+  // 发布记录（本地 PostgreSQL）
+  publishingRecord: {
+    findAll: (params?: any) => ipcRenderer.invoke('publishingRecord:findAll', params),
+    findById: (id: number) => ipcRenderer.invoke('publishingRecord:findById', id),
+    delete: (id: number) => ipcRenderer.invoke('publishingRecord:delete', id),
+    batchDelete: (ids: number[]) => ipcRenderer.invoke('publishingRecord:batchDelete', ids),
+    getStats: () => ipcRenderer.invoke('publishingRecord:getStats'),
   },
 
   // 发布执行（本地 Playwright）
