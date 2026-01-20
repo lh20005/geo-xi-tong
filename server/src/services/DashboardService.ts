@@ -728,4 +728,305 @@ export class DashboardService {
       client.release();
     }
   }
+
+  /**
+   * 获取发布趋势数据
+   * 返回每日发布成功/失败数量和成功率
+   */
+  async getPublishingTrend(userId: number, startDate?: string, endDate?: string) {
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        WITH date_series AS (
+          SELECT generate_series(
+            DATE($1),
+            DATE($2),
+            '1 day'::interval
+          )::date AS date
+        ),
+        daily_stats AS (
+          SELECT 
+            DATE(created_at) AS date,
+            COUNT(*) FILTER (WHERE status = 'success' OR status = 'completed') AS success_count,
+            COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
+            COUNT(*) AS total_count
+          FROM publishing_records
+          WHERE user_id = $3 AND created_at >= $1 AND created_at <= $2
+          GROUP BY DATE(created_at)
+        )
+        SELECT 
+          ds.date,
+          COALESCE(s.success_count, 0) AS success_count,
+          COALESCE(s.failed_count, 0) AS failed_count,
+          CASE 
+            WHEN COALESCE(s.total_count, 0) > 0 
+            THEN ROUND((COALESCE(s.success_count, 0)::numeric / s.total_count) * 100, 1)
+            ELSE 0 
+          END AS success_rate
+        FROM date_series ds
+        LEFT JOIN daily_stats s ON ds.date = s.date
+        ORDER BY ds.date ASC
+      `;
+
+      const result = await client.query(query, [start.toISOString(), end.toISOString(), userId]);
+
+      return {
+        dates: result.rows.map(row => row.date),
+        successCounts: result.rows.map(row => parseInt(row.success_count)),
+        failedCounts: result.rows.map(row => parseInt(row.failed_count)),
+        successRates: result.rows.map(row => parseFloat(row.success_rate))
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取内容转化漏斗数据
+   * 展示从蒸馏到发布的完整转化流程
+   */
+  async getContentFunnel(userId: number, startDate?: string, endDate?: string) {
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        SELECT 
+          (SELECT COUNT(*) FROM distillations WHERE user_id = $1) AS distillations,
+          (SELECT COUNT(*) FROM topics WHERE user_id = $1) AS topics,
+          (SELECT COUNT(*) FROM articles WHERE user_id = $1) AS articles,
+          (SELECT COUNT(*) FROM articles WHERE user_id = $1 AND is_published = true) AS published_articles,
+          (SELECT COUNT(*) FROM publishing_records WHERE user_id = $1 AND (status = 'success' OR status = 'completed')) AS successful_publishes
+      `;
+
+      const result = await client.query(query, [userId]);
+      const row = result.rows[0];
+
+      return {
+        distillations: parseInt(row.distillations) || 0,
+        topics: parseInt(row.topics) || 0,
+        articles: parseInt(row.articles) || 0,
+        publishedArticles: parseInt(row.published_articles) || 0,
+        successfulPublishes: parseInt(row.successful_publishes) || 0
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取周环比对比数据
+   * 对比本周和上周的关键指标
+   */
+  async getWeeklyComparison(userId: number) {
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        WITH week_bounds AS (
+          SELECT 
+            date_trunc('week', CURRENT_DATE) AS this_week_start,
+            date_trunc('week', CURRENT_DATE) + interval '6 days' AS this_week_end,
+            date_trunc('week', CURRENT_DATE - interval '1 week') AS last_week_start,
+            date_trunc('week', CURRENT_DATE - interval '1 week') + interval '6 days' AS last_week_end
+        )
+        SELECT 
+          -- 本周数据
+          (SELECT COUNT(*) FROM distillations WHERE user_id = $1 
+           AND created_at >= (SELECT this_week_start FROM week_bounds) 
+           AND created_at <= (SELECT this_week_end FROM week_bounds)) AS this_week_distillations,
+          (SELECT COUNT(*) FROM articles WHERE user_id = $1 
+           AND created_at >= (SELECT this_week_start FROM week_bounds) 
+           AND created_at <= (SELECT this_week_end FROM week_bounds)) AS this_week_articles,
+          (SELECT COUNT(*) FROM publishing_records WHERE user_id = $1 
+           AND created_at >= (SELECT this_week_start FROM week_bounds) 
+           AND created_at <= (SELECT this_week_end FROM week_bounds)) AS this_week_publishes,
+          (SELECT CASE WHEN COUNT(*) > 0 
+            THEN ROUND((COUNT(*) FILTER (WHERE status = 'success' OR status = 'completed')::numeric / COUNT(*)) * 100, 1)
+            ELSE 0 END
+           FROM publishing_records WHERE user_id = $1 
+           AND created_at >= (SELECT this_week_start FROM week_bounds) 
+           AND created_at <= (SELECT this_week_end FROM week_bounds)) AS this_week_success_rate,
+          -- 上周数据
+          (SELECT COUNT(*) FROM distillations WHERE user_id = $1 
+           AND created_at >= (SELECT last_week_start FROM week_bounds) 
+           AND created_at <= (SELECT last_week_end FROM week_bounds)) AS last_week_distillations,
+          (SELECT COUNT(*) FROM articles WHERE user_id = $1 
+           AND created_at >= (SELECT last_week_start FROM week_bounds) 
+           AND created_at <= (SELECT last_week_end FROM week_bounds)) AS last_week_articles,
+          (SELECT COUNT(*) FROM publishing_records WHERE user_id = $1 
+           AND created_at >= (SELECT last_week_start FROM week_bounds) 
+           AND created_at <= (SELECT last_week_end FROM week_bounds)) AS last_week_publishes,
+          (SELECT CASE WHEN COUNT(*) > 0 
+            THEN ROUND((COUNT(*) FILTER (WHERE status = 'success' OR status = 'completed')::numeric / COUNT(*)) * 100, 1)
+            ELSE 0 END
+           FROM publishing_records WHERE user_id = $1 
+           AND created_at >= (SELECT last_week_start FROM week_bounds) 
+           AND created_at <= (SELECT last_week_end FROM week_bounds)) AS last_week_success_rate
+      `;
+
+      const result = await client.query(query, [userId]);
+      const row = result.rows[0];
+
+      return {
+        thisWeek: {
+          distillations: parseInt(row.this_week_distillations) || 0,
+          articles: parseInt(row.this_week_articles) || 0,
+          publishes: parseInt(row.this_week_publishes) || 0,
+          successRate: parseFloat(row.this_week_success_rate) || 0
+        },
+        lastWeek: {
+          distillations: parseInt(row.last_week_distillations) || 0,
+          articles: parseInt(row.last_week_articles) || 0,
+          publishes: parseInt(row.last_week_publishes) || 0,
+          successRate: parseFloat(row.last_week_success_rate) || 0
+        }
+      };
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取最近发布记录
+   * 返回最近的发布活动列表
+   */
+  async getRecentPublishing(userId: number) {
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        SELECT 
+          pr.id,
+          a.title AS article_title,
+          pc.platform_name,
+          pr.status,
+          pr.created_at,
+          pr.error_message
+        FROM publishing_records pr
+        LEFT JOIN articles a ON pr.article_id = a.id
+        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
+        WHERE pr.user_id = $1
+        ORDER BY pr.created_at DESC
+        LIMIT 10
+      `;
+
+      const result = await client.query(query, [userId]);
+
+      return result.rows.map(row => ({
+        id: row.id,
+        articleTitle: row.article_title || '未知文章',
+        platformName: row.platform_name || row.platform_id || '未知平台',
+        status: row.status,
+        createdAt: row.created_at,
+        errorMessage: row.error_message
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取各平台发布成功率
+   * 返回每个平台的发布成功率统计
+   */
+  async getPlatformSuccessRate(userId: number) {
+    const client = await pool.connect();
+    
+    try {
+      const query = `
+        SELECT 
+          pr.platform_id,
+          pc.platform_name,
+          COUNT(*) AS total_count,
+          COUNT(*) FILTER (WHERE pr.status = 'success' OR pr.status = 'completed') AS success_count,
+          CASE 
+            WHEN COUNT(*) > 0 
+            THEN ROUND((COUNT(*) FILTER (WHERE pr.status = 'success' OR pr.status = 'completed')::numeric / COUNT(*)) * 100, 1)
+            ELSE 0 
+          END AS success_rate
+        FROM publishing_records pr
+        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
+        WHERE pr.user_id = $1
+        GROUP BY pr.platform_id, pc.platform_name
+        HAVING COUNT(*) > 0
+        ORDER BY success_rate DESC, total_count DESC
+      `;
+
+      const result = await client.query(query, [userId]);
+
+      return result.rows.map(row => ({
+        platformName: row.platform_name || row.platform_id,
+        totalCount: parseInt(row.total_count),
+        successCount: parseInt(row.success_count),
+        successRate: parseFloat(row.success_rate)
+      }));
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * 获取平台账号状态
+   * 返回各平台账号的登录状态、活跃度和发布统计
+   */
+  async getPlatformAccountStatus(userId: number) {
+    const client = await pool.connect();
+    
+    try {
+      // 查询账号统计 - 使用 status 字段判断活跃状态
+      const accountsQuery = `
+        SELECT 
+          COUNT(*) AS total_accounts,
+          COUNT(*) FILTER (WHERE status = 'active' OR status = 'logged_in') AS active_accounts,
+          COUNT(*) FILTER (WHERE status = 'inactive' OR status = 'expired' OR status = 'error') AS expired_accounts
+        FROM platform_accounts
+        WHERE user_id = $1
+      `;
+      const accountsResult = await client.query(accountsQuery, [userId]);
+      const accountStats = accountsResult.rows[0];
+
+      // 查询各平台账号详情
+      const platformsQuery = `
+        SELECT 
+          pa.platform_id,
+          pc.platform_name,
+          COUNT(*) AS account_count,
+          COUNT(*) FILTER (WHERE pa.status = 'active' OR pa.status = 'logged_in') AS active_count,
+          MAX(pr.created_at) AS last_publish_time,
+          COALESCE(pub_stats.publish_count, 0) AS publish_count
+        FROM platform_accounts pa
+        LEFT JOIN platforms_config pc ON pa.platform_id = pc.platform_id
+        LEFT JOIN publishing_records pr ON pa.id = pr.account_id AND pr.user_id = $1
+        LEFT JOIN (
+          SELECT account_id, COUNT(*) AS publish_count
+          FROM publishing_records
+          WHERE user_id = $1
+          GROUP BY account_id
+        ) pub_stats ON pa.id = pub_stats.account_id
+        WHERE pa.user_id = $1
+        GROUP BY pa.platform_id, pc.platform_name, pub_stats.publish_count
+        ORDER BY publish_count DESC, account_count DESC
+      `;
+      const platformsResult = await client.query(platformsQuery, [userId]);
+
+      return {
+        totalAccounts: parseInt(accountStats.total_accounts) || 0,
+        activeAccounts: parseInt(accountStats.active_accounts) || 0,
+        expiredAccounts: parseInt(accountStats.expired_accounts) || 0,
+        platforms: platformsResult.rows.map(row => ({
+          platformName: row.platform_name || row.platform_id,
+          accountCount: parseInt(row.account_count) || 0,
+          activeCount: parseInt(row.active_count) || 0,
+          lastPublishTime: row.last_publish_time,
+          publishCount: parseInt(row.publish_count) || 0
+        }))
+      };
+    } finally {
+      client.release();
+    }
+  }
 }

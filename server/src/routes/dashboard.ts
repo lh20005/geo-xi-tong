@@ -189,3 +189,85 @@ dashboardRouter.get('/success-rates', async (req: Request, res: Response) => {
     res.status(500).json({ error: '获取成功率失败' });
   }
 });
+
+// 获取发布趋势数据
+dashboardRouter.get('/publishing-trend', async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const { startDate, endDate } = req.query;
+    const trend = await dashboardService.getPublishingTrend(
+      userId,
+      startDate as string,
+      endDate as string
+    );
+    res.json(trend);
+  } catch (error) {
+    console.error('获取发布趋势失败:', error);
+    res.status(500).json({ error: '获取发布趋势失败' });
+  }
+});
+
+// 获取内容转化漏斗数据
+dashboardRouter.get('/content-funnel', async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const { startDate, endDate } = req.query;
+    const funnel = await dashboardService.getContentFunnel(
+      userId,
+      startDate as string,
+      endDate as string
+    );
+    res.json(funnel);
+  } catch (error) {
+    console.error('获取内容漏斗失败:', error);
+    res.status(500).json({ error: '获取内容漏斗失败' });
+  }
+});
+
+// 获取周环比对比数据
+dashboardRouter.get('/weekly-comparison', async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const comparison = await dashboardService.getWeeklyComparison(userId);
+    res.json(comparison);
+  } catch (error) {
+    console.error('获取周环比失败:', error);
+    res.status(500).json({ error: '获取周环比失败' });
+  }
+});
+
+// 获取最近发布记录
+dashboardRouter.get('/recent-publishing', async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const records = await dashboardService.getRecentPublishing(userId);
+    res.json(records);
+  } catch (error) {
+    console.error('获取最近发布失败:', error);
+    res.status(500).json({ error: '获取最近发布失败' });
+  }
+});
+
+// 获取平台发布成功率
+dashboardRouter.get('/platform-success-rate', async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const rates = await dashboardService.getPlatformSuccessRate(userId);
+    res.json(rates);
+  } catch (error) {
+    console.error('获取平台成功率失败:', error);
+    res.status(500).json({ error: '获取平台成功率失败' });
+  }
+});
+
+// 获取平台账号状态
+dashboardRouter.get('/platform-account-status', async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const status = await dashboardService.getPlatformAccountStatus(userId);
+    res.json(status);
+  } catch (error) {
+    console.error('获取平台账号状态失败:', error);
+    res.status(500).json({ error: '获取平台账号状态失败' });
+  }
+});

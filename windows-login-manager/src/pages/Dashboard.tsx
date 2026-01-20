@@ -21,14 +21,11 @@ import dayjs, { Dayjs } from 'dayjs';
 import AgentDashboardPanel from '../components/Dashboard/AgentDashboardPanel';
 import SubscriptionOverview from '../components/Dashboard/SubscriptionOverview';
 import QuickStatsCards from '../components/Dashboard/QuickStatsCards';
-import TrendsChart from '../components/Dashboard/TrendsChart';
-import PublishingStatusChart from '../components/Dashboard/PublishingStatusChart';
-import PlatformDistributionChart from '../components/Dashboard/PlatformDistributionChart';
-import ResourceEfficiencyChart from '../components/Dashboard/ResourceEfficiencyChart';
-import ArticleStatsChart from '../components/Dashboard/ArticleStatsChart';
-import KeywordDistributionChart from '../components/Dashboard/KeywordDistributionChart';
-import MonthlyComparisonChart from '../components/Dashboard/MonthlyComparisonChart';
-import HourlyActivityChart from '../components/Dashboard/HourlyActivityChart';
+import PublishingTrendChart from '../components/Dashboard/PublishingTrendChart';
+import ContentFunnelChart from '../components/Dashboard/ContentFunnelChart';
+import WeeklyComparisonChart from '../components/Dashboard/WeeklyComparisonChart';
+import PlatformAccountStatus from '../components/Dashboard/PlatformAccountStatus';
+import PlatformSuccessRateChart from '../components/Dashboard/PlatformSuccessRateChart';
 
 import { getAllDashboardData } from '../api/dashboard';
 import type { TimeRange } from '../types/dashboard';
@@ -265,51 +262,30 @@ export default function Dashboard() {
           数据分析与趋势
         </Divider>
 
-        {/* 第一行：趋势图和文章统计 */}
+        {/* 第一行：发布趋势和内容转化漏斗 */}
         <Row gutter={[16, 16]}>
-          <Col xs={24} xl={16}>
-            <TrendsChart data={dashboardData?.trends} loading={loading} />
+          <Col xs={24} xl={14}>
+            <PublishingTrendChart data={dashboardData?.publishingTrend} loading={loading} />
           </Col>
-          <Col xs={24} xl={8}>
-            <ArticleStatsChart data={dashboardData?.articleStats} loading={loading} />
+          <Col xs={24} xl={10}>
+            <ContentFunnelChart data={dashboardData?.contentFunnel} loading={loading} />
           </Col>
         </Row>
 
-        {/* 第二行：月度对比 */}
+        {/* 第二行：周环比对比和平台账号状态 */}
+        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+          <Col xs={24} lg={14}>
+            <WeeklyComparisonChart data={dashboardData?.weeklyComparison} loading={loading} />
+          </Col>
+          <Col xs={24} lg={10}>
+            <PlatformAccountStatus data={dashboardData?.platformAccountStatus} loading={loading} />
+          </Col>
+        </Row>
+
+        {/* 第三行：平台发布成功率 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24}>
-            <MonthlyComparisonChart data={dashboardData?.monthlyComparison} loading={loading} />
-          </Col>
-        </Row>
-
-        {/* 第三行：资源效率 */}
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          <Col xs={24}>
-            <ResourceEfficiencyChart data={dashboardData?.resourceUsage} loading={loading} />
-          </Col>
-        </Row>
-
-        {/* 第四行：发布状态和平台分布 */}
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          <Col xs={24} lg={12}>
-            <PublishingStatusChart data={dashboardData?.publishingStatus} loading={loading} />
-          </Col>
-          <Col xs={24} lg={12}>
-            <PlatformDistributionChart data={dashboardData?.platformDistribution} loading={loading} />
-          </Col>
-        </Row>
-
-        {/* 第五行：关键词分布 */}
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          <Col xs={24}>
-            <KeywordDistributionChart data={dashboardData?.keywordDistribution} loading={loading} />
-          </Col>
-        </Row>
-
-        {/* 第六行：24小时活动热力图 */}
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-          <Col xs={24}>
-            <HourlyActivityChart data={dashboardData?.hourlyActivity} loading={loading} />
+            <PlatformSuccessRateChart data={dashboardData?.platformSuccessRate} loading={loading} />
           </Col>
         </Row>
       </div>

@@ -96,6 +96,71 @@ export interface TopResourcesData {
   }>;
 }
 
+// 发布趋势数据
+export interface PublishingTrendData {
+  dates: string[];
+  successCounts: number[];
+  failedCounts: number[];
+  successRates: number[];
+}
+
+// 内容转化漏斗数据
+export interface ContentFunnelData {
+  distillations: number;
+  topics: number;
+  articles: number;
+  publishedArticles: number;
+  successfulPublishes: number;
+}
+
+// 周环比对比数据
+export interface WeeklyComparisonData {
+  thisWeek: {
+    distillations: number;
+    articles: number;
+    publishes: number;
+    successRate: number;
+  };
+  lastWeek: {
+    distillations: number;
+    articles: number;
+    publishes: number;
+    successRate: number;
+  };
+}
+
+// 最近发布记录
+export interface RecentPublishingItem {
+  id: number;
+  articleTitle: string;
+  platformName: string;
+  status: string;
+  createdAt: string;
+  errorMessage?: string;
+}
+
+// 平台成功率数据
+export interface PlatformSuccessRateItem {
+  platformName: string;
+  totalCount: number;
+  successCount: number;
+  successRate: number;
+}
+
+// 平台账号状态数据
+export interface PlatformAccountStatusData {
+  totalAccounts: number;
+  activeAccounts: number;
+  expiredAccounts: number;
+  platforms: Array<{
+    platformName: string;
+    accountCount: number;
+    activeCount: number;
+    lastPublishTime?: string;
+    publishCount: number;
+  }>;
+}
+
 // Dashboard状态
 export interface DashboardState {
   timeRange: TimeRange;
@@ -109,4 +174,10 @@ export interface DashboardState {
   resourceUsage: ResourceUsageData | null;
   generationTasks: GenerationTasksData | null;
   topResources: TopResourcesData | null;
+  publishingTrend: PublishingTrendData | null;
+  contentFunnel: ContentFunnelData | null;
+  weeklyComparison: WeeklyComparisonData | null;
+  recentPublishing: RecentPublishingItem[] | null;
+  platformSuccessRate: PlatformSuccessRateItem[] | null;
+  platformAccountStatus: PlatformAccountStatusData | null;
 }
