@@ -18,7 +18,7 @@ import {
 import { 
   getPlatforms, getAccounts, Account,
   createPublishingTask, getPublishingTasks, getTaskLogs,
-  executeTask, cancelTask, terminateTask, deleteTask,
+  cancelTask, terminateTask, deleteTask,
   batchDeleteTasks, deleteAllTasks, PublishingTask, PublishingLog,
   stopBatch, deleteBatch,
   subscribeToTaskLogs
@@ -86,6 +86,12 @@ export default function PublishingTasksPage() {
   const [taskPageSize, setTaskPageSize] = useState(10);
   const [taskTotal, setTaskTotal] = useState(0);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<number>>(new Set());
+  
+  // 队列状态（本地发布）
+  const [queueStatus, setQueueStatus] = useState<{
+    isRunning: boolean;
+    executingBatches: string[];
+  }>({ isRunning: false, executingBatches: [] });
   
   // 批次选择
   const [selectedBatchIds, setSelectedBatchIds] = useState<Set<string>>(new Set());
@@ -215,6 +221,65 @@ export default function PublishingTasksPage() {
     return () => clearInterval(intervalId);
   }, [tasks]); // 依赖tasks，当tasks变化时重新设置定时器
 
+  // 监听本地发布队列状态和事件
+  useEffect(() => {
+    if (!window.publishing) return;
+
+    // 获取初始队列状态
+    window.publishing.getQueueStatus().then(setQueueStatus).catch(console.error);
+
+    // 监听队列状态变化
+    const unsubscribeQueueStatus = window.publishing.onQueueStatus((data) => {
+      setQueueStatus(data);
+    });
+
+    // 监听任务状态变化
+    const unsubscribeTaskStatus = window.publishing.onTaskStatus((data) => {
+      // 更新任务列表中的状态
+      setTasks(prev => prev.map(t => 
+        t.id === data.taskId ? { ...t, status: data.status as any, error_message: data.error_message } : t
+      ));
+      
+      // 如果任务完成，刷新列表
+      if (['success', 'failed', 'timeout', 'cancelled'].includes(data.status)) {
+        loadTasks();
+      }
+    });
+
+    return () => {
+      unsubscribeQueueStatus();
+      unsubscribeTaskStatus();
+    };
+  }, []);
+
+  // 监听实时日志（用于日志模态框）
+  useEffect(() => {
+    if (!window.publishing || !logsModal.visible || !logsModal.taskId || !logsModal.isLive) {
+      return;
+    }
+
+    const unsubscribeLog = window.publishing.onTaskLog((data) => {
+      if (data.taskId === logsModal.taskId) {
+        setLogsModal(prev => ({
+          ...prev,
+          logs: [...prev.logs, {
+            id: Date.now(),
+            task_id: data.taskId,
+            level: data.level,
+            message: data.message,
+            details: data.details,
+            timestamp: data.timestamp,
+            created_at: data.timestamp
+          } as PublishingLog]
+        }));
+      }
+    });
+
+    return () => {
+      unsubscribeLog();
+    };
+  }, [logsModal.visible, logsModal.taskId, logsModal.isLive]);
+
   // 保存静默模式设置到 localStorage
   useEffect(() => {
     localStorage.setItem('publishHeadlessMode', headlessMode.toString());
@@ -342,7 +407,7 @@ export default function PublishingTasksPage() {
           }
 
           await Promise.all(tasks);
-          message.success(`成功创建 ${tasks.length} 个发布任务，批次已开始执行`);
+          message.success(`成功创建 ${tasks.length} 个发布任务`);
           
           // 清空选择
           setSelectedArticleIds(new Set());
@@ -353,6 +418,21 @@ export default function PublishingTasksPage() {
           loadTasks();
           invalidateCacheByPrefix('publishingTasks:articles');
           refreshArticles(true);
+          
+          // 触发本地批次执行
+          if (window.publishing) {
+            try {
+              const result = await window.publishing.executeBatch(batchId);
+              if (result.success) {
+                message.success('批次已开始本地执行');
+              } else {
+                message.warning(result.error || '批次执行启动失败，请手动执行');
+              }
+            } catch (err) {
+              console.error('触发本地批次执行失败:', err);
+              message.warning('批次执行启动失败，请手动执行');
+            }
+          }
         } catch (error: any) {
           message.error(error.message || '创建任务失败');
         } finally {
@@ -444,18 +524,28 @@ export default function PublishingTasksPage() {
     }
   };
 
-  // 立即执行任务
+  // 立即执行任务（本地执行）
   const handleExecuteTask = async (taskId: number) => {
     Modal.confirm({
       title: '确认立即执行',
       content: '确定要立即执行这个发布任务吗？',
       onOk: async () => {
-        try {
-          await executeTask(taskId);
-          message.success('任务已开始执行');
-          loadTasks();
-        } catch (error: any) {
-          message.error(error.message || '执行失败');
+        if (window.publishing) {
+          // Electron 环境：本地执行
+          try {
+            const result = await window.publishing.executeTask(taskId);
+            if (result.success) {
+              message.success('任务已开始本地执行');
+            } else {
+              message.error(result.error || '执行失败');
+            }
+            loadTasks();
+          } catch (error: any) {
+            message.error(error.message || '执行失败');
+          }
+        } else {
+          // Web 环境：提示需要使用桌面客户端
+          message.warning('请使用桌面客户端执行发布任务');
         }
       }
     });
@@ -478,7 +568,7 @@ export default function PublishingTasksPage() {
     });
   };
 
-  // 终止任务
+  // 终止任务（本地执行）
   const handleTerminateTask = async (taskId: number) => {
     Modal.confirm({
       title: '确认终止任务',
@@ -487,12 +577,24 @@ export default function PublishingTasksPage() {
       okText: '确认终止',
       okType: 'danger',
       onOk: async () => {
-        try {
-          await terminateTask(taskId);
-          message.success('任务已终止');
-          loadTasks();
-        } catch (error: any) {
-          message.error(error.message || '终止失败');
+        if (window.publishing) {
+          // Electron 环境：本地终止
+          try {
+            await window.publishing.stopTask(taskId);
+            message.success('任务已终止');
+            loadTasks();
+          } catch (error: any) {
+            message.error(error.message || '终止失败');
+          }
+        } else {
+          // Web 环境：调用服务器 API
+          try {
+            await terminateTask(taskId);
+            message.success('任务已终止');
+            loadTasks();
+          } catch (error: any) {
+            message.error(error.message || '终止失败');
+          }
         }
       }
     });
@@ -575,7 +677,7 @@ export default function PublishingTasksPage() {
     });
   };
 
-  // 停止批次
+  // 停止批次（本地执行）
   const handleStopBatch = async (batchId: string) => {
     Modal.confirm({
       title: '确认停止批次',
@@ -584,19 +686,46 @@ export default function PublishingTasksPage() {
       okText: '确认停止',
       okType: 'danger',
       onOk: async () => {
-        try {
-          const result = await stopBatch(batchId);
-          const messages = [];
-          if (result.cancelledCount > 0) {
-            messages.push(`取消了 ${result.cancelledCount} 个待处理任务`);
+        // 优先使用本地停止
+        if (window.publishing) {
+          try {
+            await window.publishing.stopBatch(batchId);
+            message.success('批次已停止');
+            loadTasks();
+          } catch (error: any) {
+            console.error('本地停止批次失败:', error);
+            // 回退到服务器 API
+            try {
+              const result = await stopBatch(batchId);
+              const messages = [];
+              if (result.cancelledCount > 0) {
+                messages.push(`取消了 ${result.cancelledCount} 个待处理任务`);
+              }
+              if (result.terminatedCount > 0) {
+                messages.push(`终止了 ${result.terminatedCount} 个运行中任务`);
+              }
+              message.success(`成功停止批次${messages.length > 0 ? '，' + messages.join('，') : ''}`);
+              loadTasks();
+            } catch (err: any) {
+              message.error(err.message || '停止批次失败');
+            }
           }
-          if (result.terminatedCount > 0) {
-            messages.push(`终止了 ${result.terminatedCount} 个运行中任务`);
+        } else {
+          // Web 环境：调用服务器 API
+          try {
+            const result = await stopBatch(batchId);
+            const messages = [];
+            if (result.cancelledCount > 0) {
+              messages.push(`取消了 ${result.cancelledCount} 个待处理任务`);
+            }
+            if (result.terminatedCount > 0) {
+              messages.push(`终止了 ${result.terminatedCount} 个运行中任务`);
+            }
+            message.success(`成功停止批次${messages.length > 0 ? '，' + messages.join('，') : ''}`);
+            loadTasks();
+          } catch (error: any) {
+            message.error(error.message || '停止批次失败');
           }
-          message.success(`成功停止批次${messages.length > 0 ? '，' + messages.join('，') : ''}`);
-          loadTasks();
-        } catch (error: any) {
-          message.error(error.message || '停止批次失败');
         }
       }
     });
@@ -1340,6 +1469,20 @@ export default function PublishingTasksPage() {
           <Space>
             <HistoryOutlined style={{ color: '#722ed1' }} />
             <span>发布任务</span>
+            {/* 本地队列状态指示器 */}
+            {window.publishing && (
+              <Tag 
+                color={queueStatus.isRunning ? 'success' : 'default'}
+                icon={queueStatus.isRunning ? <SyncOutlined spin /> : <ClockCircleOutlined />}
+              >
+                本地队列: {queueStatus.isRunning ? '运行中' : '已停止'}
+              </Tag>
+            )}
+            {queueStatus.executingBatches.length > 0 && (
+              <Tag color="processing" icon={<SyncOutlined spin />}>
+                执行中批次: {queueStatus.executingBatches.length}
+              </Tag>
+            )}
             {selectedTaskIds.size > 0 && (
               <Tag color="purple">已选 {selectedTaskIds.size} 个任务</Tag>
             )}

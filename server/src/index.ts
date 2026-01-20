@@ -10,7 +10,7 @@ import { apiRouter } from './routes';
 import { errorHandler } from './middleware/errorHandler';
 import { sanitizeResponse } from './middleware/sanitizeResponse';
 import { encryptionService } from './services/EncryptionService';
-import { taskScheduler } from './services/TaskScheduler';
+// 本地发布迁移：TaskScheduler 已迁移到 Electron 桌面客户端，此处不再需要
 import { getWebSocketService } from './services/WebSocketService';
 import { rateLimitService } from './services/RateLimitService';
 import { tokenService } from './services/TokenService';
@@ -162,8 +162,10 @@ async function startServer() {
     // EncryptionService已在导入时初始化，无需调用initialize
     console.log('✅ 加密服务初始化成功');
     
-    // 启动任务调度器
-    taskScheduler.start();
+    // ========== 本地发布迁移：禁用服务器端任务调度 ==========
+    // 任务调度已迁移到 Electron 桌面客户端
+    // taskScheduler.start();
+    console.log('📌 任务调度已迁移到桌面客户端，服务器端调度器已禁用');
     
     // 启动订阅系统定时任务
     schedulerService.start();
@@ -339,7 +341,8 @@ async function startServer() {
 // 优雅关闭
 process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
-  taskScheduler.stop();
+  // 本地发布迁移：taskScheduler 已禁用
+  // taskScheduler.stop();
   schedulerService.stop();
   
   // 停止订阅到期检查服务
@@ -357,7 +360,8 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', () => {
   console.log('收到 SIGINT 信号，正在关闭服务器...');
-  taskScheduler.stop();
+  // 本地发布迁移：taskScheduler 已禁用
+  // taskScheduler.stop();
   schedulerService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();

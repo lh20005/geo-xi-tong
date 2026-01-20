@@ -1,24 +1,22 @@
 import { Page } from 'playwright';
-import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './PlatformAdapter';
+import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
 import path from 'path';
 import fs from 'fs';
 
 /**
- * 搜狐号适配器
+ * 头条适配器
  * 基于 Playwright 录制脚本优化
  */
-export class SohuAdapter extends PlatformAdapter {
-  platformId = 'souhu';
-  platformName = '搜狐号';
+export class ToutiaoAdapter extends PlatformAdapter {
+  platformId = 'toutiao';
+  platformName = '头条';
 
   getLoginUrl(): string {
-    return 'https://mp.sohu.com/mpfe/v4/login';
+    return 'https://mp.toutiao.com/auth/page/login';
   }
 
   getPublishUrl(): string {
-    // 使用v3版本的主页，与测试登录保持一致
-    // v4版本会重定向到clientAuth页面
-    return 'https://mp.sohu.com/mpfe/v3/main/index';
+    return 'https://mp.toutiao.com/profile_v4/graphic/publish';
   }
 
   getLoginSelectors(): LoginSelectors {
@@ -26,15 +24,15 @@ export class SohuAdapter extends PlatformAdapter {
       usernameInput: 'input[placeholder="请输入手机号"]',
       passwordInput: 'input[placeholder="请输入密码"]',
       submitButton: 'button:has-text("登录")',
-      successIndicator: 'text=发布内容'
+      successIndicator: 'text=发布'
     };
   }
 
   getPublishSelectors(): PublishSelectors {
     return {
-      titleInput: 'input[placeholder*="请输入标题"]',
-      contentEditor: '.ql-editor',
-      publishButton: 'button:has-text("发布")',
+      titleInput: 'input[placeholder*="请输入文章标题"]',
+      contentEditor: '.ProseMirror',
+      publishButton: 'button:has-text("预览并发布")',
       successIndicator: 'text=发布成功'
     };
   }
@@ -78,14 +76,14 @@ export class SohuAdapter extends PlatformAdapter {
    */
   async performLogin(page: Page, credentials: any): Promise<boolean> {
     try {
-      await this.log('info', '开始登录搜狐号');
+      await this.log('info', '开始登录头条');
 
       // 优先使用 Cookie 登录
       if (credentials.cookies && credentials.cookies.length > 0) {
         await this.log('info', '尝试使用 Cookie 登录');
         
-        // Cookie 已在 context 中设置，页面已导航到发布页面
-        // 这里只需要验证是否登录成功
+        // 导航到发布页面
+        await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
         // 检查是否已登录
@@ -100,7 +98,7 @@ export class SohuAdapter extends PlatformAdapter {
       }
 
       // Cookie 登录失败，需要手动登录
-      await this.log('warning', '搜狐号需要扫码或手动登录');
+      await this.log('warning', '头条需要扫码或手动登录');
       return false;
 
     } catch (error: any) {
@@ -110,38 +108,45 @@ export class SohuAdapter extends PlatformAdapter {
   }
 
   /**
-   * 检查登录状态（参考 sh.js 的检测逻辑）
+   * 检查登录状态（参考 tt.js 的检测逻辑）
    * 最佳实践：检查 URL 重定向 + 多指标验证 + 容错处理
    */
   private async checkLoginStatus(page: Page): Promise<boolean> {
     try {
-      await this.log('info', '🔍 检查搜狐号登录状态...');
+      await this.log('info', '🔍 检查头条登录状态...');
 
       // 首先检查 URL - 如果被重定向到登录页面，说明未登录
       const currentUrl = page.url();
-      if (currentUrl.includes('/login') || currentUrl.includes('clientAuth')) {
+      if (currentUrl.includes('/login') || currentUrl.includes('/auth/page')) {
         await this.log('warning', '❌ 已被重定向到登录页面，Cookie已失效');
         return false;
       }
 
-      // 方法1：检查用户名（参考 sh.js 中的 .user-name）
-      const hasName = await page.locator('.user-name').isVisible({ timeout: 3000 }).catch(() => false);
+      // 方法1：检查用户名（参考 tt.js 中的 .auth-avator-name）
+      const hasName = await page.locator('.auth-avator-name').isVisible({ timeout: 3000 }).catch(() => false);
       if (hasName) {
         await this.log('info', '✅ 检测到用户名，已登录');
         return true;
       }
 
-      // 方法2：检查用户头像（参考 sh.js 中的 .user-pic）
-      const hasAvatar = await page.locator('.user-pic').isVisible({ timeout: 3000 }).catch(() => false);
+      // 方法2：检查用户头像（参考 tt.js 中的 .auth-avator-img）
+      const hasAvatar = await page.locator('.auth-avator-img').isVisible({ timeout: 3000 }).catch(() => false);
       if (hasAvatar) {
         await this.log('info', '✅ 检测到用户头像，已登录');
         return true;
       }
 
-      // 方法3：检查"发布内容"按钮
-      const hasPublishButton = await page.getByRole('button', { name: '发布内容' }).isVisible({ timeout: 3000 }).catch(() => false);
-      if (hasPublishButton) {
-        await this.log('info', '✅ 检测到发布内容按钮，已登录');
+      // 方法3：检查"文章"链接
+      const hasArticleLink = await page.getByRole('link', { name: '文章' }).isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasArticleLink) {
+        await this.log('info', '✅ 检测到文章链接，已登录');
+        return true;
+      }
+
+      // 方法4：检查标题输入框（说明在发布页面且已登录）
+      const hasTitleInput = await page.getByRole('textbox', { name: '请输入文章标题（2～30个字）' }).isVisible({ timeout: 2000 }).catch(() => false);
+      if (hasTitleInput) {
+        await this.log('info', '✅ 检测到标题输入框，已登录');
         return true;
       }
 
@@ -151,6 +156,7 @@ export class SohuAdapter extends PlatformAdapter {
 
     } catch (error: any) {
       await this.log('error', '登录状态检查出错', { error: error.message });
+      // 出错时不要轻易判定为未登录
       return true;
     }
   }
@@ -161,93 +167,55 @@ export class SohuAdapter extends PlatformAdapter {
    */
   async performPublish(page: Page, article: Article, config: PublishingConfig): Promise<boolean> {
     try {
-      await this.log('info', '开始发布搜狐号文章', { title: article.title });
+      await this.log('info', '开始发布头条文章', { title: article.title });
 
-      // 检查当前URL，如果在clientAuth页面，需要等待跳转
-      const currentUrl = page.url();
-      await this.log('info', `当前页面: ${currentUrl}`);
+      // 第一步：关闭可能出现的抽屉遮罩，然后输入标题
+      await this.log('info', '第一步：准备输入标题');
       
-      if (currentUrl.includes('clientAuth') || currentUrl.includes('login')) {
-        await this.log('info', '检测到认证/登录页面，等待自动跳转到主页...');
-        
-        try {
-          // 等待页面自动跳转到主页（最多等待30秒）
-          await page.waitForFunction(
-            `window.location.href.includes('/main/') || 
-             window.location.href.includes('/index') ||
-             window.location.href.includes('contentManagement')`,
-            { timeout: 30000 }
-          );
-          
-          const newUrl = page.url();
-          await this.log('info', `✅ 已跳转到: ${newUrl}`);
-          
-          // 等待页面稳定
-          await this.randomWait(3000, 5000);
-        } catch (error) {
-          await this.log('warning', '页面未自动跳转，尝试手动导航到主页');
-          
-          // 手动导航到v3主页
-          await page.goto('https://mp.sohu.com/mpfe/v3/main/index', { waitUntil: 'networkidle' });
-          await this.randomWait(3000, 5000);
+      // 尝试关闭抽屉遮罩（如果存在）
+      try {
+        const drawerMask = page.locator('.byte-drawer-mask');
+        const isVisible = await drawerMask.isVisible({ timeout: 2000 }).catch(() => false);
+        if (isVisible) {
+          await this.humanClick(drawerMask, '关闭抽屉遮罩');
         }
-      }
-      
-      // 再次检查是否需要重新导航
-      const finalUrl = page.url();
-      if (!finalUrl.includes('/main/') && !finalUrl.includes('/index') && !finalUrl.includes('contentManagement')) {
-        await this.log('info', '当前不在主页，导航到主页...');
-        await page.goto('https://mp.sohu.com/mpfe/v3/main/index', { waitUntil: 'networkidle' });
-        await this.randomWait(3000, 5000);
+      } catch (e) {
+        // 忽略错误，继续执行
       }
 
-      // 第一步：点击"发布内容"按钮
-      await this.log('info', '第一步：点击发布内容按钮');
-      await this.humanClick(
-        page.getByRole('button', { name: '发布内容' }),
-        '发布内容按钮'
-      );
-
-      // 第二步：点击标题输入框并输入标题
-      await this.log('info', '第二步：输入标题');
-      const titleInput = page.getByRole('textbox', { name: '请输入标题（5-72字）' });
+      // 点击标题输入框
+      const titleInput = page.getByRole('textbox', { name: '请输入文章标题（2～30个字）' });
       await this.humanClick(titleInput, '标题输入框');
+      
+      // 输入标题
       await this.humanType(titleInput, article.title, '标题内容');
 
-      // 第三步：点击正文编辑器并输入正文
-      await this.log('info', '第三步：输入正文');
+      // 第二步：输入正文
+      await this.log('info', '第二步：输入正文');
+      
+      // 点击正文编辑器
+      await this.humanClick(page.getByRole('paragraph').first(), '正文编辑器');
+      
+      // 清理并输入正文
       const cleanContent = this.cleanArticleContent(article.content);
-      await this.humanClick(
-        page.getByRole('paragraph').filter({ hasText: /^$/ }),
-        '正文编辑器'
-      );
-      await this.humanType(page.locator('.ql-editor'), cleanContent, '正文内容');
+      const contentEditor = page.locator('.ProseMirror');
+      await this.humanType(contentEditor, cleanContent, '正文内容');
 
-      // 第四步：点击封面按钮
-      await this.log('info', '第四步：点击封面按钮');
-      await this.humanClick(
-        page.locator('div').filter({ hasText: /^上传图片$/ }),
-        '封面按钮'
-      );
-
-      // 第五步：点击本地上传
-      await this.log('info', '第五步：点击本地上传');
-      await this.humanClick(
-        page.getByRole('heading', { name: '本地上传' }),
-        '本地上传按钮'
-      );
-
-      // 第六步：上传图片（不触发对话框，直接设置文件）
-      await this.log('info', '第六步：上传图片');
+      // 第三步：点击上传图片按钮
+      await this.log('info', '第三步：点击上传图片按钮');
       const imagePath = await this.prepareImage(article);
+      await this.humanClick(page.locator('.article-cover-add'), '上传图片按钮');
+
+      // 第四步：选择本地上传并上传图片
+      await this.log('info', '第四步：选择本地上传并上传图片');
       
       // 监听文件选择器，自动设置文件（不显示对话框）
       const fileChooserPromise = page.waitForEvent('filechooser');
       
-      // 点击上传图片按钮（会触发文件选择器）
+      // 点击本地上传按钮（会触发文件选择器）
       await this.randomWait(3000, 5000); // 点击前等待 3-5秒
-      await page.getByRole('dialog', { name: 'dialog' }).locator('label').click();
-      await this.log('info', '已点击: 上传图片按钮');
+      await page.getByRole('button', { name: '本地上传 Choose File' }).locator('input[type="file"]').click();
+      await this.log('info', '已点击: 本地上传按钮');
       
       // 拦截文件选择器并自动设置文件
       const fileChooser = await fileChooserPromise;
@@ -255,25 +223,35 @@ export class SohuAdapter extends PlatformAdapter {
       await this.log('info', '已自动设置图片文件');
       await this.randomWait(3000, 5000); // 等待图片加载 3-5秒
 
-      // 第七步：点击确定按钮
-      await this.log('info', '第七步：点击确定按钮');
+      // 第五步：点击确定按钮
+      await this.log('info', '第五步：点击确定按钮');
+      await this.humanClick(page.getByRole('button', { name: '确定' }), '确定按钮');
+      await this.randomWait(3000, 5000); // 等待图片上传完成 3-5秒
+
+      // 第六步：选择第一个复选框
+      await this.log('info', '第六步：选择第一个复选框');
+      await this.humanClick(page.locator('.byte-checkbox-mask').first(), '第一个复选框');
+
+      // 第七步：选择第二个复选框
+      await this.log('info', '第七步：选择第二个复选框');
       await this.humanClick(
-        page.getByRole('paragraph').filter({ hasText: '确定' }),
-        '确定按钮'
+        page.locator('.byte-checkbox-group > span > .byte-checkbox > .byte-checkbox-wrapper > .byte-checkbox-mask').first(),
+        '第二个复选框'
       );
 
-      // 第八步：点击"发布"按钮
-      await this.log('info', '第八步：点击发布按钮');
-      await this.humanClick(
-        page.getByText('发布', { exact: true }),
-        '发布按钮'
-      );
+      // 第八步：点击"预览并发布"按钮
+      await this.log('info', '第八步：点击预览并发布');
+      await this.humanClick(page.getByRole('button', { name: '预览并发布' }), '预览并发布按钮');
+
+      // 第九步：点击"确认发布"按钮
+      await this.log('info', '第九步：点击确认发布');
+      await this.humanClick(page.getByRole('button', { name: '确认发布' }), '确认发布按钮');
 
       // 验证发布结果
       const success = await this.verifyPublishSuccess(page);
       
       if (success) {
-        await this.log('info', '✅ 搜狐号文章发布成功');
+        await this.log('info', '✅ 头条文章发布成功');
       } else {
         await this.log('warning', '⚠️ 发布可能未成功，请检查');
       }
@@ -294,13 +272,13 @@ export class SohuAdapter extends PlatformAdapter {
     const images = this.extractImagesFromContent(article.content);
     
     if (images.length === 0) {
-      await this.log('error', '❌ 搜狐号文章必须上传图片才能发布，但文章中没有找到图片');
-      throw new Error('搜狐号文章必须上传图片才能发布');
+      await this.log('error', '❌ 头条文章必须上传图片才能发布，但文章中没有找到图片');
+      throw new Error('头条文章必须上传图片才能发布');
     }
 
     await this.log('info', `找到 ${images.length} 张图片，准备上传第一张`);
 
-    // 搜狐号只上传第一张图片作为封面
+    // 头条只上传第一张图片作为封面
     const firstImage = images[0];
     const imagePath = this.resolveImagePath(firstImage);
 
@@ -346,9 +324,15 @@ export class SohuAdapter extends PlatformAdapter {
       }
 
       // 方法3：检查是否返回到内容管理页面
-      if (currentUrl.includes('/content') || 
-          currentUrl.includes('mp.sohu.com')) {
+      if (currentUrl.includes('/content/manage') || 
+          currentUrl.includes('/profile_v4')) {
         await this.log('info', '发布成功（页面验证）');
+        return true;
+      }
+
+      // 方法4：检查是否还在发布页面
+      if (currentUrl.includes('mp.toutiao.com')) {
+        await this.log('info', '发布成功（停留在头条平台）');
         return true;
       }
 
@@ -396,16 +380,16 @@ export class SohuAdapter extends PlatformAdapter {
       return imagePath;
     }
 
-    // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
-    const serverDir = path.resolve(__dirname, '../..');
-
     // 如果以 /uploads/ 开头，这是相对于 server 目录的路径
     if (imagePath.startsWith('/uploads/')) {
+      // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
+      const serverDir = path.resolve(__dirname, '../..');
       return path.resolve(serverDir, imagePath.substring(1));
     }
     
     // 如果以 uploads/ 开头，直接拼接到 server 目录
     if (imagePath.startsWith('uploads/')) {
+      const serverDir = path.resolve(__dirname, '../..');
       return path.resolve(serverDir, imagePath);
     }
 
@@ -415,6 +399,7 @@ export class SohuAdapter extends PlatformAdapter {
     }
 
     // 其他情况，尝试 server 目录
+    const serverDir = path.resolve(__dirname, '../..');
     return path.resolve(serverDir, imagePath);
   }
 }

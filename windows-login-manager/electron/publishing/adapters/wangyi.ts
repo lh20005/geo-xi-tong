@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './PlatformAdapter';
+import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
 import path from 'path';
 import fs from 'fs';
 

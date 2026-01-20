@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './PlatformAdapter';
+import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
 
 /**
  * 哔哩哔哩适配器
@@ -133,7 +133,7 @@ export class BilibiliAdapter extends PlatformAdapter {
             const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {
               credentials: 'include'
             });
-            const data = await response.json();
+            const data = await response.json() as { data?: { isLogin?: boolean; uname?: string } };
             return {
               isLogin: data.data?.isLogin || false,
               username: data.data?.uname || ''

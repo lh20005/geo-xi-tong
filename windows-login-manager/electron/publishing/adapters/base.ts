@@ -1,4 +1,15 @@
+/**
+ * 平台适配器抽象类 (Playwright)
+ * 本地发布模块 - 每个平台需要实现此类来定义特定的发布逻辑
+ */
+
 import { Page, BrowserContext } from 'playwright';
+import { Article, PublishingConfig, LogCallback } from '../types';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+
+// 重新导出类型，供适配器使用
+export { Article, PublishingConfig, LogCallback } from '../types';
 
 export interface LoginSelectors {
   usernameInput: string;
@@ -17,22 +28,6 @@ export interface PublishSelectors {
   successIndicator?: string;
 }
 
-export interface Article {
-  id: number;
-  title: string;
-  content: string;
-  keyword?: string;  // 文章关键词
-  images?: string[];
-}
-
-export interface PublishingConfig {
-  title?: string;
-  category?: string;
-  tags?: string[];
-  cover_image?: string;
-  [key: string]: any;
-}
-
 /**
  * 平台适配器抽象类 (Playwright)
  * 每个平台需要实现此类来定义特定的发布逻辑
@@ -43,6 +38,9 @@ export abstract class PlatformAdapter {
   
   // 当前任务ID（用于日志记录）
   protected currentTaskId?: number;
+  
+  // 日志回调
+  protected logCallback: LogCallback | null = null;
 
   /**
    * 获取登录页面URL
@@ -72,12 +70,18 @@ export abstract class PlatformAdapter {
   }
 
   /**
+   * 设置日志回调
+   */
+  setLogCallback(callback: LogCallback | null): void {
+    this.logCallback = callback;
+  }
+
+  /**
    * 记录日志到任务
    */
   protected async log(level: 'info' | 'warning' | 'error', message: string, details?: any): Promise<void> {
-    if (this.currentTaskId) {
-      const { publishingService } = require('../PublishingService');
-      await publishingService.logMessage(this.currentTaskId, level, message, details);
+    if (this.logCallback) {
+      this.logCallback(level, message, details);
     }
     
     // 同时输出到控制台
@@ -255,9 +259,6 @@ export abstract class PlatformAdapter {
     article: Article,
     serverBasePath: string
   ): Promise<string> {
-    const fs = require('fs').promises;
-    const path = require('path');
-
     // 提取Markdown中的图片
     const imageRegex = /!\[.*?\]\((.*?)\)/g;
     const images: string[] = [];

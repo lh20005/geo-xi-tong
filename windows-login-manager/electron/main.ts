@@ -10,6 +10,7 @@ import { wsManager, WebSocketManager } from './websocket/manager';
 import { userWsManager, UserWebSocketManager } from './websocket/userManager';
 import { storageManager } from './storage/manager';
 import { AutoUpdater } from './updater/auto-updater';
+import { taskQueue } from './publishing/taskQueue';
 
 // 初始化核心服务
 const logger = Logger.getInstance();
@@ -80,6 +81,9 @@ class ApplicationManager {
       
       // 初始化自动更新器
       this.initializeAutoUpdater();
+      
+      // 初始化任务队列（设置主窗口引用并启动）
+      this.initializeTaskQueue();
       
       // 处理应用激活（macOS）
       app.on('activate', () => {
@@ -334,6 +338,14 @@ class ApplicationManager {
   handleAppQuit(): void {
     logger.info('Application quitting...');
     
+    // 停止任务队列
+    try {
+      taskQueue.stop();
+      logger.info('Task queue stopped');
+    } catch (error) {
+      logger.error('Failed to stop task queue:', error);
+    }
+    
     // 断开WebSocket连接
     try {
       wsManager.disconnect();
@@ -486,6 +498,29 @@ class ApplicationManager {
       logger.info('Auto updater initialized');
     } catch (error) {
       logger.error('Failed to initialize auto updater:', error);
+      // 不抛出错误，允许应用继续运行
+    }
+  }
+
+  /**
+   * 初始化任务队列
+   * 本地发布模块 - 设置主窗口引用并启动任务队列
+   */
+  private initializeTaskQueue(): void {
+    try {
+      logger.info('Initializing task queue...');
+      
+      // 设置主窗口引用（用于发送 IPC 消息）
+      if (this.window) {
+        taskQueue.setMainWindow(this.window);
+      }
+      
+      // 启动任务队列（自动检查和执行待处理任务）
+      taskQueue.start();
+      
+      logger.info('✅ Task queue initialized and started');
+    } catch (error) {
+      logger.error('Failed to initialize task queue:', error);
       // 不抛出错误，允许应用继续运行
     }
   }

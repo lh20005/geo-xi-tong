@@ -140,53 +140,17 @@ router.post('/tasks', async (req, res) => {
     );
     console.log(`✅ 文章 #${article_id} 已标记为发布中（publishing_status = 'pending'）`);
 
-    // 如果有 batch_id，说明是批次任务，由批次执行器处理
+    // ========== 本地发布迁移：禁用服务器端自动执行 ==========
+    // 任务执行已迁移到 Electron 桌面客户端
+    // 服务器只负责创建任务，不再自动执行
+    
     if (batch_id) {
       console.log(`✅ 批次任务 #${task.id} 已创建 (批次: ${batch_id}, 顺序: ${batch_order}, 总数: ${batch_total})`);
-      
-      // 检查批次任务是否全部创建完成
-      if (batch_total && batch_total > 0) {
-        const batchTasksResult = await pool.query(
-          'SELECT COUNT(*) as count FROM publishing_tasks WHERE batch_id = $1',
-          [batch_id]
-        );
-        const currentCount = parseInt(batchTasksResult.rows[0].count);
-        
-        console.log(`📊 批次 ${batch_id} 当前任务数: ${currentCount}/${batch_total}`);
-        
-        // 如果所有任务都已创建，检查是否可以立即执行
-        if (currentCount >= batch_total) {
-          console.log(`✅ 批次 ${batch_id} 所有任务已创建完成`);
-          
-          const { batchExecutor } = require('../services/BatchExecutor');
-          
-          // 检查是否有其他批次正在执行（全局队列检查）
-          const executingBatches = batchExecutor.getExecutingBatches();
-          
-          if (executingBatches.length > 0) {
-            console.log(`⏳ 当前有 ${executingBatches.length} 个批次正在执行，批次 ${batch_id} 已加入队列等待`);
-            console.log(`   正在执行的批次: ${executingBatches.join(', ')}`);
-          } else {
-            // 没有其他批次在执行，可以立即开始
-            console.log(`🚀 没有其他批次在执行，批次 ${batch_id} 立即开始执行`);
-            batchExecutor.executeBatch(batch_id).catch((error: any) => {
-              console.error(`批次 ${batch_id} 执行失败:`, error);
-            });
-          }
-        }
-      }
+      console.log(`📌 任务将由桌面客户端执行`);
     } else if (!scheduledTime) {
-      // 普通立即发布任务
-      const { publishingExecutor } = require('../services/PublishingExecutor');
-      
-      // 异步执行任务，不阻塞响应
-      publishingExecutor.executeTask(task.id).catch((error: any) => {
-        console.error(`任务 #${task.id} 自动执行失败:`, error);
-      });
-      
-      console.log(`✅ 任务 #${task.id} 已创建并开始自动执行`);
+      console.log(`✅ 任务 #${task.id} 已创建，等待桌面客户端执行`);
     } else {
-      console.log(`✅ 任务 #${task.id} 已创建，将在 ${scheduledTime} 执行`);
+      console.log(`✅ 任务 #${task.id} 已创建，计划在 ${scheduledTime} 由桌面客户端执行`);
     }
 
     res.json({
@@ -323,6 +287,265 @@ router.get('/tasks/:id', async (req, res) => {
 });
 
 /**
+ * 获取任务完整详情（含关联账号凭证）
+ * 用于本地执行器获取执行任务所需的全部数据
+ * 任务 1.1：新增任务详情 API（含关联数据）
+ */
+router.get('/tasks/:id/full', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const taskId = parseInt(req.params.id);
+    
+    // 获取任务完整信息（包含 article_content 大字段）
+    const taskResult = await pool.query(
+      `SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2`,
+      [taskId, userId]
+    );
+
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '任务不存在或无权访问'
+      });
+    }
+
+    const task = taskResult.rows[0];
+    
+    // 获取关联账号信息（包含解密后的凭证）
+    const { accountService } = await import('../services/AccountService');
+    const account = await accountService.getAccountById(task.account_id, userId, true);
+    
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        message: '关联账号不存在或无权访问'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        task,
+        account
+      }
+    });
+  } catch (error) {
+    console.error('获取任务完整详情失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '获取任务完整详情失败'
+    });
+  }
+});
+
+/**
+ * 更新任务状态（供本地执行器调用）
+ * 任务 1.2：新增状态更新 API
+ */
+router.put('/tasks/:id/status', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const taskId = parseInt(req.params.id);
+    const { status, error_message } = req.body;
+    
+    // 验证状态值
+    const validStatuses = ['pending', 'running', 'success', 'failed', 'timeout', 'cancelled'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: `无效的状态值，有效值: ${validStatuses.join(', ')}`
+      });
+    }
+    
+    // 验证任务所有权
+    const taskResult = await pool.query(
+      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
+
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '任务不存在或无权访问'
+      });
+    }
+
+    const task = taskResult.rows[0];
+    
+    // 更新任务状态
+    await publishingService.updateTaskStatus(taskId, status, error_message);
+    
+    // 如果状态为 success，创建发布记录
+    if (status === 'success') {
+      try {
+        // 获取账号信息
+        const { accountService } = await import('../services/AccountService');
+        const account = await accountService.getAccountById(task.account_id, userId, false);
+        
+        if (account) {
+          // 直接创建发布记录（不再依赖 PublishingExecutor）
+          await pool.query(
+            `INSERT INTO publishing_records 
+             (user_id, article_id, task_id, account_id, account_name, platform_id, 
+              article_title, article_content, article_keyword, article_image_url,
+              status, publishing_status, published_at, real_username_snapshot)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, $13)`,
+            [
+              userId,
+              task.article_id,
+              taskId,
+              task.account_id,
+              account.account_name,
+              task.platform_id,
+              task.article_title || '',
+              task.article_content || '',
+              task.article_keyword || '',
+              task.article_image_url || '',
+              'success',
+              'published',
+              account.real_username || ''
+            ]
+          );
+          console.log(`✅ 任务 #${taskId} 发布记录已创建`);
+          
+          // 扣除发布配额
+          try {
+            const { usageTrackingService } = await import('../services/UsageTrackingService');
+            await usageTrackingService.recordUsage(userId, 'publish_per_month', 'publish', taskId, 1);
+            console.log(`✅ 用户 #${userId} 发布配额已扣除`);
+          } catch (quotaError: any) {
+            console.error(`扣除配额失败（不影响发布记录）:`, quotaError.message);
+          }
+        }
+      } catch (recordError: any) {
+        console.error(`创建发布记录失败（不影响状态更新）:`, recordError.message);
+      }
+    }
+    
+    // 如果状态为 failed 或 timeout，清除文章锁
+    if (status === 'failed' || status === 'timeout') {
+      await pool.query(
+        'UPDATE articles SET publishing_status = NULL WHERE id = $1',
+        [task.article_id]
+      );
+      console.log(`✅ 文章 #${task.article_id} 发布状态已清除`);
+    }
+
+    res.json({
+      success: true,
+      message: `任务状态已更新为 ${status}`
+    });
+  } catch (error: any) {
+    console.error('更新任务状态失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '更新任务状态失败'
+    });
+  }
+});
+
+/**
+ * 同步任务日志（供本地执行器调用）
+ * 任务 1.3：新增日志同步 API
+ */
+router.post('/tasks/:id/logs', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const taskId = parseInt(req.params.id);
+    const { level, message, details } = req.body;
+    
+    // 验证日志级别
+    const validLevels = ['info', 'warning', 'error'];
+    if (!validLevels.includes(level)) {
+      return res.status(400).json({
+        success: false,
+        message: `无效的日志级别，有效值: ${validLevels.join(', ')}`
+      });
+    }
+    
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: '日志消息不能为空'
+      });
+    }
+    
+    // 验证任务所有权
+    const taskCheck = await pool.query(
+      'SELECT id FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
+    
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '任务不存在或无权访问'
+      });
+    }
+
+    // 记录日志（会自动通过 WebSocket 广播）
+    await publishingService.logMessage(taskId, level, message, details);
+
+    res.json({
+      success: true,
+      message: '日志已记录'
+    });
+  } catch (error) {
+    console.error('同步任务日志失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '同步任务日志失败'
+    });
+  }
+});
+
+/**
+ * 增加任务重试次数（供本地执行器调用）
+ * 任务 1.7：新增重试次数更新 API
+ */
+router.post('/tasks/:id/increment-retry', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const taskId = parseInt(req.params.id);
+    
+    // 验证任务所有权
+    const taskCheck = await pool.query(
+      'SELECT id, retry_count, max_retries FROM publishing_tasks WHERE id = $1 AND user_id = $2',
+      [taskId, userId]
+    );
+    
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: '任务不存在或无权访问'
+      });
+    }
+
+    // 增加重试次数
+    await publishingService.incrementRetryCount(taskId);
+    
+    const task = taskCheck.rows[0];
+    const newRetryCount = task.retry_count + 1;
+
+    res.json({
+      success: true,
+      data: {
+        retry_count: newRetryCount,
+        max_retries: task.max_retries,
+        can_retry: newRetryCount < task.max_retries
+      },
+      message: `重试次数已更新为 ${newRetryCount}/${task.max_retries}`
+    });
+  } catch (error) {
+    console.error('增加重试次数失败:', error);
+    res.status(500).json({
+      success: false,
+      message: '增加重试次数失败'
+    });
+  }
+});
+
+/**
  * 获取任务日志
  */
 router.get('/tasks/:id/logs', async (req, res) => {
@@ -427,21 +650,13 @@ router.post('/tasks/:id/retry', async (req, res) => {
       scheduled_at: req.body.scheduled_at ? new Date(req.body.scheduled_at) : undefined
     });
 
-    // 如果是立即发布，自动触发执行
-    if (!req.body.scheduled_at) {
-      const { publishingExecutor } = require('../services/PublishingExecutor');
-      
-      publishingExecutor.executeTask(newTask.id).catch((error: any) => {
-        console.error(`重试任务 #${newTask.id} 执行失败:`, error);
-      });
-      
-      console.log(`✅ 重试任务 #${newTask.id} 已创建并开始执行`);
-    }
+    // 本地发布迁移：不再自动执行，由桌面客户端处理
+    console.log(`✅ 重试任务 #${newTask.id} 已创建，等待桌面客户端执行`);
 
     res.json({
       success: true,
       data: newTask,
-      message: '重新发布任务已创建'
+      message: '重新发布任务已创建，请使用桌面客户端执行'
     });
   } catch (error: any) {
     console.error('重新发布失败:', error);
@@ -454,51 +669,15 @@ router.post('/tasks/:id/retry', async (req, res) => {
 
 /**
  * 立即执行任务
+ * 本地发布迁移：此 API 已禁用，任务执行已迁移到桌面客户端
  */
 router.post('/tasks/:id/execute', async (req, res) => {
-  try {
-    const userId = getCurrentTenantId(req);
-    const taskId = parseInt(req.params.id);
-    
-    // 验证任务所有权
-    const taskResult = await pool.query(
-      'SELECT * FROM publishing_tasks WHERE id = $1 AND user_id = $2',
-      [taskId, userId]
-    );
-
-    if (taskResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: '任务不存在或无权访问'
-      });
-    }
-
-    const task = taskResult.rows[0];
-
-    if (task.status !== 'pending') {
-      return res.status(400).json({
-        success: false,
-        message: '只能执行待处理状态的任务'
-      });
-    }
-
-    // 异步执行任务
-    const { publishingExecutor } = require('../services/PublishingExecutor');
-    publishingExecutor.executeTask(taskId).catch((error: any) => {
-      console.error(`任务 #${taskId} 执行失败:`, error);
-    });
-
-    res.json({
-      success: true,
-      message: '任务已开始执行'
-    });
-  } catch (error) {
-    console.error('执行任务失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '执行任务失败'
-    });
-  }
+  // 本地发布迁移：禁用服务器端执行
+  return res.status(400).json({
+    success: false,
+    message: '请使用桌面客户端执行任务',
+    code: 'LOCAL_EXECUTION_REQUIRED'
+  });
 });
 
 /**
@@ -741,65 +920,15 @@ router.post('/tasks/delete-all', async (req, res) => {
 
 /**
  * 启动批次执行
- * 在所有任务创建完成后调用此 API 来触发批次执行
+ * 本地发布迁移：此 API 已禁用，批次执行已迁移到桌面客户端
  */
 router.post('/batches/:batchId/start', async (req, res) => {
-  try {
-    const userId = getCurrentTenantId(req);
-    const { batchId } = req.params;
-    
-    // 验证批次所有权
-    const batchCheck = await pool.query(
-      'SELECT id FROM publishing_tasks WHERE batch_id = $1 AND user_id = $2 LIMIT 1',
-      [batchId, userId]
-    );
-    
-    if (batchCheck.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: '批次不存在或无权访问'
-      });
-    }
-    
-    // 检查是否有用户的其他任务正在执行
-    const runningTasksResult = await pool.query(
-      `SELECT COUNT(*) as count FROM publishing_tasks 
-       WHERE user_id = $1 AND status = 'running'`,
-      [userId]
-    );
-    const runningCount = parseInt(runningTasksResult.rows[0].count);
-    
-    if (runningCount > 0) {
-      // 有任务正在执行，批次会被 TaskScheduler 自动调度
-      console.log(`⏳ 用户 #${userId} 有 ${runningCount} 个任务正在执行，批次 ${batchId} 将排队等待`);
-      return res.json({
-        success: true,
-        message: `批次已创建，当前有 ${runningCount} 个任务正在执行，将在完成后自动开始`,
-        queued: true
-      });
-    }
-    
-    const { batchExecutor } = require('../services/BatchExecutor');
-    
-    // 异步执行批次，不阻塞响应
-    batchExecutor.executeBatch(batchId).catch((error: any) => {
-      console.error(`批次 ${batchId} 执行失败:`, error);
-    });
-    
-    console.log(`🚀 批次 ${batchId} 已开始执行`);
-    
-    res.json({
-      success: true,
-      message: '批次已开始执行',
-      queued: false
-    });
-  } catch (error) {
-    console.error('启动批次失败:', error);
-    res.status(500).json({
-      success: false,
-      message: '启动批次失败'
-    });
-  }
+  // 本地发布迁移：禁用服务器端批次执行
+  return res.status(400).json({
+    success: false,
+    message: '请使用桌面客户端执行批次',
+    code: 'LOCAL_EXECUTION_REQUIRED'
+  });
 });
 
 /**

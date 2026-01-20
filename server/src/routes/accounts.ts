@@ -193,4 +193,57 @@ router.post('/:id/set-default', async (req, res) => {
   }
 });
 
+/**
+ * 更新账号在线状态（供本地执行器调用）
+ * 任务 1.4：新增账号状态更新 API
+ */
+router.put('/:id/online-status', async (req, res) => {
+  try {
+    const userId = getCurrentTenantId(req);
+    const accountId = parseInt(req.params.id);
+    const { is_online, offline_reason } = req.body;
+    
+    if (typeof is_online !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'is_online 必须是布尔值'
+      });
+    }
+    
+    // 验证账号所有权
+    const account = await accountService.getAccountById(accountId, userId, false);
+    if (!account) {
+      return res.status(404).json({
+        success: false,
+        message: '账号不存在或无权访问'
+      });
+    }
+    
+    // 更新账号状态
+    if (is_online) {
+      await accountService.markAccountOnline(accountId);
+    } else {
+      await accountService.markAccountOffline(accountId, offline_reason || 'Cookie已失效');
+    }
+    
+    // 广播账号状态更新事件
+    getWebSocketService().broadcastAccountEvent('updated', { 
+      id: accountId, 
+      is_online,
+      offline_reason: is_online ? null : offline_reason 
+    }, userId);
+    
+    res.json({
+      success: true,
+      message: is_online ? '账号已标记为在线' : '账号已标记为离线'
+    });
+  } catch (error: any) {
+    console.error('更新账号在线状态失败:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || '更新账号在线状态失败'
+    });
+  }
+});
+
 export default router;

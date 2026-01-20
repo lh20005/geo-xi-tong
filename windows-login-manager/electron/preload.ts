@@ -95,6 +95,45 @@ export interface ElectronAPI {
   };
 }
 
+// 发布任务管理 API 类型
+export interface PublishingAPI {
+  // 队列控制
+  startQueue: () => Promise<{ success: boolean; error?: string }>;
+  stopQueue: () => Promise<{ success: boolean; error?: string }>;
+  getQueueStatus: () => Promise<{ isRunning: boolean; executingBatches: string[] }>;
+  
+  // 任务执行
+  executeTask: (taskId: number) => Promise<{ success: boolean; error?: string }>;
+  executeBatch: (batchId: string) => Promise<{ success: boolean; error?: string }>;
+  stopTask: (taskId: number) => Promise<{ success: boolean }>;
+  stopBatch: (batchId: string) => Promise<{ success: boolean }>;
+  
+  // 事件监听
+  onTaskLog: (callback: (data: TaskLogEvent) => void) => () => void;
+  onTaskStatus: (callback: (data: TaskStatusEvent) => void) => () => void;
+  onQueueStatus: (callback: (data: QueueStatusEvent) => void) => () => void;
+}
+
+// 事件类型定义
+export interface TaskLogEvent {
+  taskId: number;
+  level: 'info' | 'warning' | 'error';
+  message: string;
+  timestamp: string;
+  details?: any;
+}
+
+export interface TaskStatusEvent {
+  taskId: number;
+  status: string;
+  error_message?: string;
+}
+
+export interface QueueStatusEvent {
+  isRunning: boolean;
+  executingBatches: string[];
+}
+
 // 创建 API 对象
 const electronAPI = {
   // 系统登录
@@ -225,10 +264,51 @@ contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 // 同时暴露为 electron 别名，以兼容现有代码
 contextBridge.exposeInMainWorld('electron', electronAPI);
 
+// 发布任务管理 API
+const publishingAPI: PublishingAPI = {
+  // 队列控制
+  startQueue: () => ipcRenderer.invoke('publishing:start-queue'),
+  stopQueue: () => ipcRenderer.invoke('publishing:stop-queue'),
+  getQueueStatus: () => ipcRenderer.invoke('publishing:get-queue-status'),
+  
+  // 任务执行
+  executeTask: (taskId: number) => ipcRenderer.invoke('publishing:execute-task', taskId),
+  executeBatch: (batchId: string) => ipcRenderer.invoke('publishing:execute-batch', batchId),
+  stopTask: (taskId: number) => ipcRenderer.invoke('publishing:stop-task', taskId),
+  stopBatch: (batchId: string) => ipcRenderer.invoke('publishing:stop-batch', batchId),
+  
+  // 事件监听
+  onTaskLog: (callback: (data: TaskLogEvent) => void) => {
+    const listener = (_event: any, data: TaskLogEvent) => callback(data);
+    ipcRenderer.on('publishing:task-log', listener);
+    return () => {
+      ipcRenderer.removeListener('publishing:task-log', listener);
+    };
+  },
+  onTaskStatus: (callback: (data: TaskStatusEvent) => void) => {
+    const listener = (_event: any, data: TaskStatusEvent) => callback(data);
+    ipcRenderer.on('publishing:task-status', listener);
+    return () => {
+      ipcRenderer.removeListener('publishing:task-status', listener);
+    };
+  },
+  onQueueStatus: (callback: (data: QueueStatusEvent) => void) => {
+    const listener = (_event: any, data: QueueStatusEvent) => callback(data);
+    ipcRenderer.on('publishing:queue-status', listener);
+    return () => {
+      ipcRenderer.removeListener('publishing:queue-status', listener);
+    };
+  },
+};
+
+// 暴露发布任务管理 API
+contextBridge.exposeInMainWorld('publishing', publishingAPI);
+
 // 声明全局类型
 declare global {
   interface Window {
     electronAPI: ElectronAPI;
     electron: ElectronAPI; // 别名
+    publishing: PublishingAPI; // 发布任务管理
   }
 }

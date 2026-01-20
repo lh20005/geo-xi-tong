@@ -20,6 +20,9 @@ import { apiClient } from '../api/client';
 import { syncService } from '../sync/service';
 import { wsManager, WebSocketManager } from '../websocket/manager';
 import { AccountEvent } from '../websocket/client';
+import { taskQueue } from '../publishing/taskQueue';
+import { publishingExecutor } from '../publishing/executor';
+import { batchExecutor } from '../publishing/batchExecutor';
 import path from 'path';
 import fs from 'fs/promises';
 import * as fsSync from 'fs';
@@ -83,6 +86,9 @@ class IPCHandler {
     
     // 存储管理
     this.registerStorageHandlers();
+    
+    // 发布任务管理
+    this.registerPublishingHandlers();
     
     // 设置WebSocket事件转发回调
     wsManager.setEventForwardCallback((event: AccountEvent) => {
@@ -1252,6 +1258,109 @@ class IPCHandler {
         throw error;
       }
     });
+  }
+
+  /**
+   * 注册发布任务管理处理器
+   * 本地发布模块 - 处理任务队列、任务执行、批次执行等
+   */
+  private registerPublishingHandlers(): void {
+    log.info('Registering publishing handlers...');
+
+    // 启动任务队列
+    ipcMain.handle('publishing:start-queue', async () => {
+      try {
+        log.info('IPC: publishing:start-queue');
+        taskQueue.start();
+        return { success: true };
+      } catch (error) {
+        log.error('IPC: publishing:start-queue failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '启动队列失败',
+        };
+      }
+    });
+
+    // 停止任务队列
+    ipcMain.handle('publishing:stop-queue', async () => {
+      try {
+        log.info('IPC: publishing:stop-queue');
+        taskQueue.stop();
+        return { success: true };
+      } catch (error) {
+        log.error('IPC: publishing:stop-queue failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '停止队列失败',
+        };
+      }
+    });
+
+    // 获取队列状态
+    ipcMain.handle('publishing:get-queue-status', async () => {
+      try {
+        return taskQueue.getStatus();
+      } catch (error) {
+        log.error('IPC: publishing:get-queue-status failed:', error);
+        return {
+          isRunning: false,
+          executingBatches: []
+        };
+      }
+    });
+
+    // 手动执行单个任务
+    ipcMain.handle('publishing:execute-task', async (_event, taskId: number) => {
+      try {
+        log.info(`IPC: publishing:execute-task - ${taskId}`);
+        return await taskQueue.executeTask(taskId);
+      } catch (error) {
+        log.error('IPC: publishing:execute-task failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '执行任务失败',
+        };
+      }
+    });
+
+    // 手动执行批次
+    ipcMain.handle('publishing:execute-batch', async (_event, batchId: string) => {
+      try {
+        log.info(`IPC: publishing:execute-batch - ${batchId}`);
+        return await taskQueue.executeBatch(batchId);
+      } catch (error) {
+        log.error('IPC: publishing:execute-batch failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '执行批次失败',
+        };
+      }
+    });
+
+    // 停止任务
+    ipcMain.handle('publishing:stop-task', async (_event, taskId: number) => {
+      try {
+        log.info(`IPC: publishing:stop-task - ${taskId}`);
+        return await taskQueue.stopTask(taskId);
+      } catch (error) {
+        log.error('IPC: publishing:stop-task failed:', error);
+        return { success: false };
+      }
+    });
+
+    // 停止批次
+    ipcMain.handle('publishing:stop-batch', async (_event, batchId: string) => {
+      try {
+        log.info(`IPC: publishing:stop-batch - ${batchId}`);
+        return await taskQueue.stopBatch(batchId);
+      } catch (error) {
+        log.error('IPC: publishing:stop-batch failed:', error);
+        return { success: false };
+      }
+    });
+
+    log.info('Publishing handlers registered');
   }
 
   /**

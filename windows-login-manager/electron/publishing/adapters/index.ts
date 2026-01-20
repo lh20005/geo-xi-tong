@@ -1,28 +1,24 @@
-import { PlatformAdapter } from './PlatformAdapter';
-import { XiaohongshuAdapter } from './XiaohongshuAdapter';
-import { DouyinAdapter } from './DouyinAdapter';
-import { ToutiaoAdapter } from './ToutiaoAdapter';
-import { SohuAdapter } from './SohuAdapter';
-import { WangyiAdapter } from './WangyiAdapter';
-import { BaijiahaoAdapter } from './BaijiahaoAdapter';
-import { ZhihuAdapter } from './ZhihuAdapter';
-import { CSDNAdapter } from './CSDNAdapter';
-import { JianshuAdapter } from './JianshuAdapter';
-import { WechatAdapter } from './WechatAdapter';
-import { QieAdapter } from './QieAdapter';
-import { BilibiliAdapter } from './BilibiliAdapter';
+/**
+ * 平台适配器注册表 (Playwright)
+ * 本地发布模块 - 管理所有平台适配器
+ */
+
+import { PlatformAdapter } from './base';
+import { XiaohongshuAdapter } from './xiaohongshu';
+import { DouyinAdapter } from './douyin';
+import { ToutiaoAdapter } from './toutiao';
+import { SohuAdapter } from './sohu';
+import { WangyiAdapter } from './wangyi';
+import { BaijiahaoAdapter } from './baijiahao';
+import { ZhihuAdapter } from './zhihu';
+import { CSDNAdapter } from './csdn';
+import { JianshuAdapter } from './jianshu';
+import { WechatAdapter } from './wechat';
+import { QieAdapter } from './qie';
+import { BilibiliAdapter } from './bilibili';
 
 /**
  * 平台适配器注册表 (Playwright)
- * 
- * 使用方法：
- * 1. 创建新的平台适配器（继承 PlatformAdapter）
- * 2. 在此文件中导入适配器
- * 3. 在 registerDefaultAdapters() 中注册
- * 
- * 示例：
- * import { ToutiaoAdapter } from './ToutiaoAdapter';
- * this.register(new ToutiaoAdapter());
  */
 export class AdapterRegistry {
   private adapters: Map<string, PlatformAdapter> = new Map();
@@ -33,21 +29,13 @@ export class AdapterRegistry {
 
   /**
    * 注册默认适配器
-   * 
-   * TODO: 在这里注册你的平台适配器
-   * 
-   * 示例：
-   * import { ToutiaoAdapter } from './ToutiaoAdapter';
-   * this.register(new ToutiaoAdapter());
    */
   private registerDefaultAdapters(): void {
-    // 注册工作良好的适配器
+    // 注册所有平台适配器
     this.register(new XiaohongshuAdapter());
     this.register(new DouyinAdapter());
     this.register(new ToutiaoAdapter());
     this.register(new SohuAdapter());
-    
-    // 注册新创建的适配器
     this.register(new WangyiAdapter());
     this.register(new BaijiahaoAdapter());
     this.register(new ZhihuAdapter());
@@ -57,8 +45,7 @@ export class AdapterRegistry {
     this.register(new QieAdapter());
     this.register(new BilibiliAdapter());
     
-    console.log('✅ 已注册 12 个平台适配器');
-    console.log('💡 参考登录器代码已应用到所有平台');
+    console.log('✅ 已注册 12 个平台适配器（本地发布模块）');
   }
 
   /**
@@ -103,4 +90,20 @@ export class AdapterRegistry {
   }
 }
 
+// 导出单例
 export const adapterRegistry = new AdapterRegistry();
+
+// 导出所有适配器类
+export { PlatformAdapter } from './base';
+export { XiaohongshuAdapter } from './xiaohongshu';
+export { DouyinAdapter } from './douyin';
+export { ToutiaoAdapter } from './toutiao';
+export { SohuAdapter } from './sohu';
+export { WangyiAdapter } from './wangyi';
+export { BaijiahaoAdapter } from './baijiahao';
+export { ZhihuAdapter } from './zhihu';
+export { CSDNAdapter } from './csdn';
+export { JianshuAdapter } from './jianshu';
+export { WechatAdapter } from './wechat';
+export { QieAdapter } from './qie';
+export { BilibiliAdapter } from './bilibili';

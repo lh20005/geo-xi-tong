@@ -95,12 +95,11 @@ windows-login-manager/
 
 ## 平台适配器位置
 
-**重要：本地发布迁移后，适配器存在于两个位置：**
+**重要：本地发布迁移后，适配器只存在于 Electron 应用中：**
 
 | 位置 | 路径 | 用途 |
 |------|------|------|
-| 服务器（保留） | `server/src/services/adapters/` | Web 端发布（兼容） |
-| Electron（新增） | `electron/publishing/adapters/` | 本地发布（主要） |
+| Electron | `electron/publishing/adapters/` | 本地发布（唯一） |
 
 适配器列表（12个平台）：
 - 小红书、抖音、头条号、知乎、百家号、网易号

@@ -1,5 +1,5 @@
 import { Page } from 'playwright';
-import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './PlatformAdapter';
+import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
 import path from 'path';
 import fs from 'fs';
 
@@ -241,7 +241,7 @@ export class QieAdapter extends PlatformAdapter {
     // 使用文章关键词
     if (article.keyword) {
       // 关键词可能是逗号分隔的，转换为空格分隔
-      const keywords = article.keyword.split(/[,，、\s]+/).filter(k => k.trim());
+      const keywords = article.keyword.split(/[,，、\s]+/).filter((k: string) => k.trim());
       return keywords.slice(0, 9).join(' '); // 最多9个标签
     }
     

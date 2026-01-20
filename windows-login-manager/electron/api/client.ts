@@ -645,6 +645,48 @@ class APIClient {
 
     throw lastError!;
   }
+
+  // ============ 通用 HTTP 方法（供发布模块使用）============
+
+  /**
+   * GET 请求
+   */
+  async get<T = any>(url: string, config?: AxiosRequestConfig): Promise<{ data: T }> {
+    const response = await this.axiosInstance.get<T>(url, config);
+    return { data: response.data };
+  }
+
+  /**
+   * POST 请求
+   */
+  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<{ data: T }> {
+    const response = await this.axiosInstance.post<T>(url, data, config);
+    return { data: response.data };
+  }
+
+  /**
+   * PUT 请求
+   */
+  async put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<{ data: T }> {
+    const response = await this.axiosInstance.put<T>(url, data, config);
+    return { data: response.data };
+  }
+
+  /**
+   * DELETE 请求
+   */
+  async delete<T = any>(url: string, config?: AxiosRequestConfig): Promise<{ data: T }> {
+    const response = await this.axiosInstance.delete<T>(url, config);
+    return { data: response.data };
+  }
+
+  /**
+   * PATCH 请求
+   */
+  async patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<{ data: T }> {
+    const response = await this.axiosInstance.patch<T>(url, data, config);
+    return { data: response.data };
+  }
 }
 
 // 导出单例实例

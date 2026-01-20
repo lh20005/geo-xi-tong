@@ -1,6 +1,11 @@
+/**
+ * 浏览器自动化服务 (Playwright)
+ * 本地发布模块 - 负责浏览器生命周期管理
+ */
+
 import { chromium, Browser, Page, BrowserContext } from 'playwright';
-import { getStandardBrowserConfig, findChromeExecutable } from '../config/browserConfig';
-import { publishingService } from './PublishingService';
+import { getStandardBrowserConfig } from './config';
+import { LogCallback } from './types';
 
 export interface BrowserOptions {
   headless?: boolean;
@@ -17,8 +22,9 @@ export interface BrowserOptions {
 export class BrowserAutomationService {
   private browser: Browser | null = null;
   private context: BrowserContext | null = null;
+  private logCallback: LogCallback | null = null;
   private defaultOptions: BrowserOptions = {
-    headless: true,
+    headless: false, // Electron 环境默认可视化
     timeout: 30000,
     viewport: {
       width: 1920,
@@ -27,19 +33,41 @@ export class BrowserAutomationService {
   };
 
   /**
+   * 设置日志回调
+   */
+  setLogCallback(callback: LogCallback | null): void {
+    this.logCallback = callback;
+  }
+
+  /**
+   * 记录日志
+   */
+  private log(level: 'info' | 'warning' | 'error', message: string, details?: any): void {
+    if (this.logCallback) {
+      this.logCallback(level, message, details);
+    }
+    
+    // 同时输出到控制台
+    const prefix = '[Browser]';
+    if (level === 'error') {
+      console.error(prefix, message, details || '');
+    } else if (level === 'warning') {
+      console.warn(prefix, message, details || '');
+    } else {
+      console.log(prefix, message, details || '');
+    }
+  }
+
+  /**
    * 启动浏览器
    */
   async launchBrowser(options?: BrowserOptions): Promise<Browser> {
     const opts = { ...this.defaultOptions, ...options };
 
     try {
-      // 查找系统Chrome路径
-      const executablePath = findChromeExecutable();
-
       // 使用统一的浏览器配置
       const launchOptions = getStandardBrowserConfig({
-        headless: opts.headless,
-        executablePath
+        headless: opts.headless
       });
 
       this.browser = await chromium.launch(launchOptions);
@@ -55,10 +83,10 @@ export class BrowserAutomationService {
       this.context.setDefaultTimeout(opts.timeout!);
       this.context.setDefaultNavigationTimeout(opts.timeout!);
 
-      console.log('✅ 浏览器启动成功 (Playwright)');
+      this.log('info', '✅ 浏览器启动成功 (Playwright)');
       return this.browser;
-    } catch (error) {
-      console.error('❌ 浏览器启动失败:', error);
+    } catch (error: any) {
+      this.log('error', '❌ 浏览器启动失败', { error: error.message });
       throw new Error('浏览器启动失败');
     }
   }
@@ -72,7 +100,6 @@ export class BrowserAutomationService {
     }
 
     const page = await this.context!.newPage();
-
     return page;
   }
 
@@ -86,30 +113,18 @@ export class BrowserAutomationService {
   /**
    * 导航到URL
    */
-  async navigateTo(page: Page, url: string, taskId?: number): Promise<void> {
+  async navigateTo(page: Page, url: string): Promise<void> {
     try {
-      if (taskId) {
-        await publishingService.logMessage(taskId, 'info', `导航到: ${url}`);
-      }
+      this.log('info', `导航到: ${url}`);
 
       await page.goto(url, {
         waitUntil: 'networkidle',
         timeout: this.defaultOptions.timeout
       });
 
-      console.log(`✅ 成功导航到: ${url}`);
+      this.log('info', `✅ 成功导航到: ${url}`);
     } catch (error: any) {
-      console.error(`❌ 导航失败: ${url}`, error);
-      
-      if (taskId) {
-        await publishingService.logMessage(
-          taskId,
-          'error',
-          `导航失败: ${url}`,
-          { error: error.message }
-        );
-      }
-
+      this.log('error', `❌ 导航失败: ${url}`, { error: error.message });
       throw new Error(`导航失败: ${error.message}`);
     }
   }
@@ -137,30 +152,14 @@ export class BrowserAutomationService {
   async fillInput(
     page: Page,
     selector: string,
-    value: string,
-    taskId?: number
+    value: string
   ): Promise<void> {
     try {
       await this.waitForElement(page, selector);
-      // Playwright 推荐使用 fill，但也支持 type
       await page.fill(selector, value);
-
-      if (taskId) {
-        await publishingService.logMessage(
-          taskId,
-          'info',
-          `填充输入框: ${selector}`
-        );
-      }
+      this.log('info', `填充输入框: ${selector}`);
     } catch (error: any) {
-      if (taskId) {
-        await publishingService.logMessage(
-          taskId,
-          'error',
-          `填充输入框失败: ${selector}`,
-          { error: error.message }
-        );
-      }
+      this.log('error', `填充输入框失败: ${selector}`, { error: error.message });
       throw error;
     }
   }
@@ -170,29 +169,14 @@ export class BrowserAutomationService {
    */
   async clickElement(
     page: Page,
-    selector: string,
-    taskId?: number
+    selector: string
   ): Promise<void> {
     try {
       await this.waitForElement(page, selector);
       await page.click(selector);
-
-      if (taskId) {
-        await publishingService.logMessage(
-          taskId,
-          'info',
-          `点击元素: ${selector}`
-        );
-      }
+      this.log('info', `点击元素: ${selector}`);
     } catch (error: any) {
-      if (taskId) {
-        await publishingService.logMessage(
-          taskId,
-          'error',
-          `点击元素失败: ${selector}`,
-          { error: error.message }
-        );
-      }
+      this.log('error', `点击元素失败: ${selector}`, { error: error.message });
       throw error;
     }
   }
@@ -202,19 +186,14 @@ export class BrowserAutomationService {
    */
   async executeWithRetry<T>(
     operation: () => Promise<T>,
-    maxRetries: number = 3,
-    taskId?: number
+    maxRetries: number = 3
   ): Promise<T> {
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        if (taskId && attempt > 1) {
-          await publishingService.logMessage(
-            taskId,
-            'info',
-            `重试操作 (${attempt}/${maxRetries})`
-          );
+        if (attempt > 1) {
+          this.log('info', `重试操作 (${attempt}/${maxRetries})`);
         }
 
         return await operation();
@@ -230,15 +209,7 @@ export class BrowserAutomationService {
       }
     }
 
-    if (taskId) {
-      await publishingService.logMessage(
-        taskId,
-        'error',
-        `操作失败，已重试 ${maxRetries} 次`,
-        { error: lastError?.message }
-      );
-    }
-
+    this.log('error', `操作失败，已重试 ${maxRetries} 次`, { error: lastError?.message });
     throw lastError || new Error('操作失败');
   }
 
@@ -253,7 +224,7 @@ export class BrowserAutomationService {
     if (this.browser) {
       await this.browser.close();
       this.browser = null;
-      console.log('✅ 浏览器已关闭');
+      this.log('info', '✅ 浏览器已关闭');
     }
   }
 
@@ -289,13 +260,11 @@ export class BrowserAutomationService {
     }
     if (this.browser) {
       try {
-        // 尝试正常关闭
         await this.browser.close();
         this.browser = null;
-        console.log('✅ 浏览器已强制关闭');
+        this.log('info', '✅ 浏览器已强制关闭');
       } catch (error) {
         console.error('❌ 强制关闭浏览器失败:', error);
-        // 即使失败也清空引用
         this.browser = null;
       }
     }
@@ -309,4 +278,5 @@ export class BrowserAutomationService {
   }
 }
 
+// 导出单例
 export const browserAutomationService = new BrowserAutomationService();
