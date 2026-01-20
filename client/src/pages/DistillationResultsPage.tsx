@@ -8,7 +8,7 @@ import {
   SearchOutlined, FilterOutlined, ReloadOutlined, PlusOutlined,
   ExclamationCircleOutlined 
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
 import { 
   fetchResultsWithReferences, 
@@ -24,6 +24,7 @@ const { Option } = Select;
 
 export default function DistillationResultsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<TopicWithReference[]>([]);
   const [total, setTotal] = useState(0);
@@ -106,6 +107,14 @@ export default function DistillationResultsPage() {
   useEffect(() => {
     loadData();
   }, [currentPage, pageSize, filterKeyword, searchText]);
+
+  // 当用户导航到此页面时，自动刷新数据
+  // 使用 location.key 作为依赖，每次导航都会生成新的 key
+  useEffect(() => {
+    console.log('[DistillationResultsPage] 页面导航触发，刷新数据');
+    loadData();
+    loadAllKeywords();
+  }, [location.key]);
 
   // 添加自动刷新功能，每15秒刷新一次以同步最新的引用计数
   useEffect(() => {

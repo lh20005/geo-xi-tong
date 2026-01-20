@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Input, Button, message, Space, Typography, Tag, Modal, Empty } from 'antd';
 import { ThunderboltOutlined, FileTextOutlined, EyeOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import ResizableTable from '../components/ResizableTable';
 import { 
@@ -14,6 +14,7 @@ const { Title, Paragraph } = Typography;
 
 export default function DistillationPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
@@ -140,14 +141,16 @@ export default function DistillationPage() {
     });
   };
 
-  // 组件挂载时加载历史记录和选中的记录
+  // 组件挂载时和每次导航到此页面时加载历史记录
+  // 使用 location.key 作为依赖，每次导航都会生成新的 key
   useEffect(() => {
+    console.log('[DistillationPage] 页面加载/导航，刷新历史列表');
     loadHistory();
     const savedResult = loadResultFromLocalStorage();
     if (savedResult) {
       setSelectedRecordId(savedResult.distillationId);
     }
-  }, []);
+  }, [location.key]);
 
   const handleDistill = async () => {
     if (!keyword.trim()) {
@@ -175,8 +178,8 @@ export default function DistillationPage() {
       // 刷新历史列表
       loadHistory();
       
-      // 自动导航到结果页面
-      navigate('/distillation-results');
+      // 自动导航到结果页面，传递刷新标记
+      navigate('/distillation-results', { state: { refresh: Date.now() } });
     } catch (error: any) {
       message.error(error.response?.data?.error || '蒸馏失败，请检查API配置');
     } finally {

@@ -206,7 +206,8 @@ export default function Sidebar() {
     if (key === 'logout') {
       handleLogout();
     } else {
-      navigate(key);
+      // 传递刷新标记，确保页面在导航时能够刷新数据
+      navigate(key, { state: { refresh: Date.now() } });
     }
   };
 
