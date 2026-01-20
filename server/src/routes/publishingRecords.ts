@@ -11,7 +11,7 @@ router.use(setTenantContext);
 router.use(requireTenantContext);
 
 /**
- * 获取发布记录列表（优先使用快照数据）
+ * 获取发布记录列表（完全使用快照数据，不依赖外键关联）
  */
 router.get('/records', async (req, res) => {
   try {
@@ -56,8 +56,7 @@ router.get('/records', async (req, res) => {
     );
     const total = parseInt(countResult.rows[0].total);
 
-    // 获取数据（优先使用快照字段，兼容旧数据）
-    // 优化：直接使用 pa.real_username 而不是查询整个 credentials（平均110KB/账号）再解密
+    // 获取数据（完全使用快照字段，删除源数据不影响发布记录）
     const offset = (parseInt(page as string) - 1) * parseInt(pageSize as string);
     const dataResult = await pool.query(
       `SELECT 
@@ -71,25 +70,17 @@ router.get('/records', async (req, res) => {
         pr.platform_url,
         pr.published_at,
         pr.created_at,
-        COALESCE(pr.article_title, a.title) as article_title,
-        COALESCE(pr.article_keyword, a.keyword) as article_keyword,
-        COALESCE(pr.article_content, a.content) as article_content,
-        COALESCE(pr.article_image_url, a.image_url) as article_image_url,
-        COALESCE(pr.topic_question, a.topic_question_snapshot, t.question) as topic_question,
-        COALESCE(pr.article_setting_name, gt.article_setting_name, ast.name) as article_setting_name,
-        COALESCE(pr.distillation_keyword, a.distillation_keyword_snapshot, d.keyword) as distillation_keyword,
-        pc.platform_name,
-        pt.status as task_status,
-        COALESCE(pr.real_username_snapshot, pa.real_username) as real_username
+        pr.article_title,
+        pr.article_keyword,
+        pr.article_content,
+        pr.article_image_url,
+        pr.topic_question,
+        pr.article_setting_name,
+        pr.distillation_keyword,
+        COALESCE(pr.platform_name, pc.platform_name) as platform_name,
+        pr.real_username_snapshot as real_username
        FROM publishing_records pr
-       LEFT JOIN articles a ON pr.article_id = a.id
-       LEFT JOIN topics t ON a.topic_id = t.id
-       LEFT JOIN distillations d ON a.distillation_id = d.id
-       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
-       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
-       LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
-       LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
        ${whereClause}
        ORDER BY pr.published_at DESC
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,
@@ -118,14 +109,13 @@ router.get('/records', async (req, res) => {
 });
 
 /**
- * 获取发布记录详情（优先使用快照数据）
+ * 获取发布记录详情（完全使用快照数据）
  */
 router.get('/records/:id', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
     const recordId = parseInt(req.params.id);
 
-    // 优化：直接使用 pa.real_username 而不是查询整个 credentials 再解密
     const result = await pool.query(
       `SELECT 
         pr.id,
@@ -138,26 +128,17 @@ router.get('/records/:id', async (req, res) => {
         pr.platform_url,
         pr.published_at,
         pr.created_at,
-        COALESCE(pr.article_title, a.title) as article_title,
-        COALESCE(pr.article_keyword, a.keyword) as article_keyword,
-        COALESCE(pr.article_content, a.content) as article_content,
-        COALESCE(pr.article_image_url, a.image_url) as article_image_url,
-        COALESCE(pr.topic_question, a.topic_question_snapshot, t.question) as topic_question,
-        COALESCE(pr.article_setting_name, gt.article_setting_name, ast.name) as article_setting_name,
-        COALESCE(pr.distillation_keyword, a.distillation_keyword_snapshot, d.keyword) as distillation_keyword,
-        pc.platform_name,
-        pt.status as task_status,
-        pt.error_message as task_error,
-        COALESCE(pr.real_username_snapshot, pa.real_username) as real_username
+        pr.article_title,
+        pr.article_keyword,
+        pr.article_content,
+        pr.article_image_url,
+        pr.topic_question,
+        pr.article_setting_name,
+        pr.distillation_keyword,
+        COALESCE(pr.platform_name, pc.platform_name) as platform_name,
+        pr.real_username_snapshot as real_username
        FROM publishing_records pr
-       LEFT JOIN articles a ON pr.article_id = a.id
-       LEFT JOIN topics t ON a.topic_id = t.id
-       LEFT JOIN distillations d ON a.distillation_id = d.id
-       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
-       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
-       LEFT JOIN publishing_tasks pt ON pr.task_id = pt.id
-       LEFT JOIN platform_accounts pa ON pr.account_id = pa.id
        WHERE pr.id = $1 AND pr.user_id = $2`,
       [recordId, userId]
     );
@@ -267,16 +248,16 @@ router.get('/stats', async (req, res) => {
       [userId]
     );
 
-    // 按平台统计（仅当前用户）
+    // 按平台统计（使用快照的 platform_name，兼容旧数据用 platforms_config）
     const platformResult = await pool.query(
       `SELECT 
         pr.platform_id,
-        pc.platform_name,
+        COALESCE(pr.platform_name, pc.platform_name) as platform_name,
         COUNT(*) as count
        FROM publishing_records pr
        LEFT JOIN platforms_config pc ON pr.platform_id = pc.platform_id
        WHERE pr.user_id = $1
-       GROUP BY pr.platform_id, pc.platform_name
+       GROUP BY pr.platform_id, pr.platform_name, pc.platform_name
        ORDER BY count DESC`,
       [userId]
     );

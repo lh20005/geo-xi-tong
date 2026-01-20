@@ -389,13 +389,47 @@ router.put('/tasks/:id/status', async (req, res) => {
         const account = await accountService.getAccountById(task.account_id, userId, false);
         
         if (account) {
-          // 直接创建发布记录（不再依赖 PublishingExecutor）
+          // 获取文章的蒸馏结果和文章设置信息（在删除文章前）
+          let topicQuestion = '';
+          let articleSettingName = '';
+          let distillationKeyword = '';
+          
+          if (task.article_id) {
+            const articleInfoResult = await pool.query(
+              `SELECT 
+                COALESCE(a.topic_question_snapshot, t.question) as topic_question,
+                COALESCE(gt.article_setting_name, ast.name) as article_setting_name,
+                COALESCE(a.distillation_keyword_snapshot, d.keyword) as distillation_keyword
+               FROM articles a
+               LEFT JOIN topics t ON a.topic_id = t.id
+               LEFT JOIN distillations d ON a.distillation_id = d.id
+               LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+               LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
+               WHERE a.id = $1 AND a.user_id = $2`,
+              [task.article_id, userId]
+            );
+            if (articleInfoResult.rows.length > 0) {
+              topicQuestion = articleInfoResult.rows[0].topic_question || '';
+              articleSettingName = articleInfoResult.rows[0].article_setting_name || '';
+              distillationKeyword = articleInfoResult.rows[0].distillation_keyword || '';
+            }
+          }
+          
+          // 获取平台名称
+          const platformResult = await pool.query(
+            'SELECT platform_name FROM platforms_config WHERE platform_id = $1',
+            [task.platform_id]
+          );
+          const platformName = platformResult.rows[0]?.platform_name || task.platform_id;
+          
+          // 直接创建发布记录（所有字段都保存快照，不依赖外键关联）
           await pool.query(
             `INSERT INTO publishing_records 
-             (user_id, article_id, task_id, account_id, account_name, platform_id, 
+             (user_id, article_id, task_id, account_id, account_name, platform_id, platform_name,
               article_title, article_content, article_keyword, article_image_url,
+              topic_question, article_setting_name, distillation_keyword,
               status, publishing_status, published_at, real_username_snapshot)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, $13)`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP, $17)`,
             [
               userId,
               task.article_id,
@@ -403,10 +437,14 @@ router.put('/tasks/:id/status', async (req, res) => {
               task.account_id,
               account.account_name,
               task.platform_id,
+              platformName,
               task.article_title || '',
               task.article_content || '',
               task.article_keyword || '',
               task.article_image_url || '',
+              topicQuestion,
+              articleSettingName,
+              distillationKeyword,
               'success',
               'published',
               account.real_username || ''
@@ -421,6 +459,17 @@ router.put('/tasks/:id/status', async (req, res) => {
             console.log(`✅ 用户 #${userId} 发布配额已扣除`);
           } catch (quotaError: any) {
             console.error(`扣除配额失败（不影响发布记录）:`, quotaError.message);
+          }
+          
+          // 删除已发布的文章（文章内容已保存在发布记录中）
+          try {
+            await pool.query(
+              'DELETE FROM articles WHERE id = $1 AND user_id = $2',
+              [task.article_id, userId]
+            );
+            console.log(`✅ 文章 #${task.article_id} 已从文章管理中删除（内容已保存在发布记录）`);
+          } catch (deleteError: any) {
+            console.error(`删除文章失败（不影响发布记录）:`, deleteError.message);
           }
         }
       } catch (recordError: any) {

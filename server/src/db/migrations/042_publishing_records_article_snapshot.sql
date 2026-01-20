@@ -10,7 +10,8 @@ ADD COLUMN IF NOT EXISTS article_keyword VARCHAR(255),
 ADD COLUMN IF NOT EXISTS article_image_url TEXT,
 ADD COLUMN IF NOT EXISTS topic_question TEXT,
 ADD COLUMN IF NOT EXISTS article_setting_name VARCHAR(255),
-ADD COLUMN IF NOT EXISTS distillation_keyword VARCHAR(255);
+ADD COLUMN IF NOT EXISTS distillation_keyword VARCHAR(255),
+ADD COLUMN IF NOT EXISTS platform_name VARCHAR(100);
 
 -- 2. 修改 article_id 外键约束，改为 ON DELETE SET NULL（允许删除原文章）
 -- 先删除旧的外键约束
@@ -44,6 +45,13 @@ LEFT JOIN distillations d ON a.distillation_id = d.id
 WHERE pr.article_id = a.id
   AND pr.article_title IS NULL;
 
+-- 5.1 为现有记录填充平台名称快照
+UPDATE publishing_records pr
+SET platform_name = pc.platform_name
+FROM platforms_config pc
+WHERE pr.platform_id = pc.platform_id
+  AND pr.platform_name IS NULL;
+
 -- 6. 创建索引以优化查询
 CREATE INDEX IF NOT EXISTS idx_publishing_records_article_keyword ON publishing_records(article_keyword);
 CREATE INDEX IF NOT EXISTS idx_publishing_records_published_at ON publishing_records(published_at DESC);
@@ -55,6 +63,7 @@ COMMENT ON COLUMN publishing_records.article_image_url IS '文章图片URL快照
 COMMENT ON COLUMN publishing_records.topic_question IS '蒸馏话题问题快照';
 COMMENT ON COLUMN publishing_records.article_setting_name IS '文章设置名称快照';
 COMMENT ON COLUMN publishing_records.distillation_keyword IS '蒸馏关键词快照';
+COMMENT ON COLUMN publishing_records.platform_name IS '平台名称快照';
 
 -- ==================== DOWN ====================
 -- 回滚：删除快照字段，恢复外键约束
@@ -71,7 +80,8 @@ DROP COLUMN IF EXISTS article_keyword,
 DROP COLUMN IF EXISTS article_image_url,
 DROP COLUMN IF EXISTS topic_question,
 DROP COLUMN IF EXISTS article_setting_name,
-DROP COLUMN IF EXISTS distillation_keyword;
+DROP COLUMN IF EXISTS distillation_keyword,
+DROP COLUMN IF EXISTS platform_name;
 
 -- 3. 删除新的外键约束
 ALTER TABLE publishing_records
