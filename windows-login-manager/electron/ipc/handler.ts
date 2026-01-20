@@ -954,55 +954,8 @@ class IPCHandler {
       ) => {
         try {
           log.info('IPC: conversion-targets:create');
-          const response = await apiClient.createConversionTarget(payload);
-          
-          // 立即同步到本地数据库 (Write-Through)
-          try {
-            const user = await storageManager.getUser();
-            if (user && response.success && response.data) {
-              const factory = ServiceFactory.getInstance();
-              factory.setUserId(user.id);
-              const service = factory.getConversionTargetService();
-              
-              const serverData = response.data;
-              // 检查本地是否存在
-              const exists = await service.exists(serverData.id);
-              
-              const targetData = {
-                id: serverData.id,
-                company_name: serverData.company_name,
-                industry: serverData.industry || '',
-                website: serverData.website,
-                address: serverData.address,
-                company_size: serverData.company_size,
-                features: serverData.features,
-                contact_info: serverData.contact_info,
-                target_audience: serverData.target_audience,
-                core_products: serverData.core_products,
-                is_default: false // 默认值
-              };
-
-              if (exists) {
-                await service.update(serverData.id, targetData);
-                log.info(`Local DB updated immediately for target ${serverData.id}`);
-              } else {
-                await service.create(targetData);
-                log.info(`Local DB inserted immediately for target ${serverData.id}`);
-              }
-            }
-          } catch (localError) {
-            log.error('Failed to write-through to local DB:', localError);
-          }
-          
-          // 强制触发全量同步并等待完成，作为双重保险
-          try {
-             log.info('Forcing sync after create...');
-             await syncService.pullConversionTargets();
-          } catch (syncError) {
-             log.error('Force sync failed:', syncError);
-          }
-          
-          return { success: true, data: response };
+          const data = await apiClient.createConversionTarget(payload);
+          return { success: true, data };
         } catch (error: any) {
           log.error('IPC: conversion-targets:create failed:', error);
           const message = error?.response?.data?.error || error?.message || '创建失败';
@@ -1020,53 +973,8 @@ class IPCHandler {
       ) => {
         try {
           log.info(`IPC: conversion-targets:update - ${id}`);
-          const response = await apiClient.updateConversionTarget(id, payload);
-          
-          // 立即同步到本地数据库 (Write-Through)
-          try {
-            const user = await storageManager.getUser();
-            if (user && response.success && response.data) {
-              const factory = ServiceFactory.getInstance();
-              factory.setUserId(user.id);
-              const service = factory.getConversionTargetService();
-              
-              const serverData = response.data;
-              const targetData = {
-                company_name: serverData.company_name,
-                industry: serverData.industry || '',
-                website: serverData.website,
-                address: serverData.address,
-                company_size: serverData.company_size,
-                features: serverData.features,
-                contact_info: serverData.contact_info,
-                target_audience: serverData.target_audience,
-                core_products: serverData.core_products
-              };
-
-              // 检查是否存在
-              const exists = await service.exists(id);
-              if (exists) {
-                await service.update(id, targetData);
-                log.info(`Local DB updated immediately for target ${id}`);
-              } else {
-                // 如果本地不存在（异常情况），尝试创建
-                await service.create({ id, ...targetData, is_default: false });
-                log.info(`Local DB created missing target immediately ${id}`);
-              }
-            }
-          } catch (localError) {
-            log.error('Failed to write-through update to local DB:', localError);
-          }
-          
-          // 强制触发全量同步并等待完成，作为双重保险
-          try {
-             log.info('Forcing sync after update...');
-             await syncService.pullConversionTargets();
-          } catch (syncError) {
-             log.error('Force sync failed:', syncError);
-          }
-          
-          return { success: true, data: response };
+          const data = await apiClient.updateConversionTarget(id, payload);
+          return { success: true, data };
         } catch (error: any) {
           log.error('IPC: conversion-targets:update failed:', error);
           const message = error?.response?.data?.error || error?.message || '更新失败';
@@ -1078,32 +986,8 @@ class IPCHandler {
     ipcMain.handle('conversion-targets:delete', async (_event, id: number) => {
       try {
         log.info(`IPC: conversion-targets:delete - ${id}`);
-        const response = await apiClient.deleteConversionTarget(id);
-        
-        // 立即同步到本地数据库 (Write-Through)
-        try {
-          const user = await storageManager.getUser();
-          if (user && response.success) {
-            const factory = ServiceFactory.getInstance();
-            factory.setUserId(user.id);
-            const service = factory.getConversionTargetService();
-            
-            await service.delete(id);
-            log.info(`Local DB deleted immediately for target ${id}`);
-          }
-        } catch (localError) {
-          log.error('Failed to write-through delete to local DB:', localError);
-        }
-        
-        // 强制触发全量同步并等待完成，作为双重保险
-        try {
-           log.info('Forcing sync after delete...');
-           await syncService.pullConversionTargets();
-        } catch (syncError) {
-           log.error('Force sync failed:', syncError);
-        }
-        
-        return { success: true, data: response };
+        const data = await apiClient.deleteConversionTarget(id);
+        return { success: true, data };
       } catch (error: any) {
         log.error('IPC: conversion-targets:delete failed:', error);
         const message = error?.response?.data?.error || error?.message || '删除失败';

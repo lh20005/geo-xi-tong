@@ -28,10 +28,6 @@ CREATE TABLE IF NOT EXISTS articles (
     published_at TIMESTAMP,
     distillation_keyword_snapshot TEXT,
     topic_question_snapshot TEXT,
-    article_setting_id INTEGER,
-    article_setting_snapshot TEXT,
-    conversion_target_id INTEGER,
-    conversion_target_snapshot TEXT,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -229,8 +225,6 @@ CREATE TABLE IF NOT EXISTS conversion_targets (
     target_audience TEXT,
     core_products TEXT,
     address TEXT,
-    is_default BOOLEAN DEFAULT FALSE,
-    usage_count INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );

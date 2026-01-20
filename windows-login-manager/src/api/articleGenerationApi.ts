@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import { localArticleSettingApi, localKnowledgeApi, localConversionTargetApi } from './local';
+import { localDistillationApi } from './localDistillationApi';
 import type {
   TaskConfig,
   CreateTaskResponse,
@@ -16,7 +17,7 @@ import type {
  * 检查是否在 Electron 环境中
  */
 function isElectron(): boolean {
-  return !!(window as any).electronAPI || !!(window as any).electron || navigator.userAgent.toLowerCase().includes('electron');
+  return !!(window as any).electronAPI || !!(window as any).electron;
 }
 
 /**
@@ -88,10 +89,34 @@ export async function createTask(config: TaskConfig): Promise<CreateTaskResponse
     }
   }
 
+  let topicSnapshots: string[] | undefined;
+  let distillationKeyword: string | undefined;
+  if (isEle && config.distillationId) {
+    try {
+      const distillationResult = await localDistillationApi.findById(config.distillationId);
+      if (distillationResult.success && distillationResult.data) {
+        distillationKeyword = distillationResult.data.keyword;
+      }
+    } catch (e) {
+      console.warn('[ArticleGeneration] 获取本地蒸馏关键词失败:', e);
+    }
+    try {
+      const api = getElectronAPI();
+      const topicResult = await api.topic.getByDistillation(config.distillationId);
+      if (topicResult.success && Array.isArray(topicResult.data)) {
+        topicSnapshots = topicResult.data.map((topic: any) => topic.question).filter((topic: string) => !!topic);
+      }
+    } catch (e) {
+      console.warn('[ArticleGeneration] 获取本地话题失败:', e);
+    }
+  }
+
   const response = await apiClient.post('/article-generation/tasks', {
     ...config,
     knowledgeSummary,
     articleSettingSnapshot,
+    topicSnapshots,
+    distillationKeyword,
     resourceSource: isEle ? 'local' : config.resourceSource
   });
   return response.data;
@@ -194,7 +219,6 @@ export async function fetchConversionTargets(): Promise<ConversionTarget[]> {
     try {
       const result = await localConversionTargetApi.findAll({ page: 1, pageSize: 1000 });
       if (result.success && result.data) {
-        // 直接返回本地数据，Service 层已修正为使用 company_name 和 industry
         return result.data.data || [];
       }
       return [];

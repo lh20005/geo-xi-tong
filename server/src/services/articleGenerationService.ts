@@ -116,11 +116,13 @@ export interface TaskConfig {
   resourceSource?: 'local' | 'server';
   knowledgeSummary?: string;
   articleSettingSnapshot?: string; // 本地文章设置快照
+  topicSnapshots?: string[];
+  distillationKeyword?: string;
 }
 
 export interface GenerationTask {
   id: number;
-  distillationId: number;
+  distillationId: number | null;
   albumId: number;
   knowledgeBaseId: number;
   articleSettingId: number | null;
@@ -284,34 +286,55 @@ export class ArticleGenerationService {
     
     // 1. 预先为每篇文章选择不同的话题（一次性选择，避免并发冲突）
     console.log(`[任务创建] 预先选择 ${config.articleCount} 个不同的话题...`);
-    // [已修复] 不再实例化 TopicSelectionService，直接使用 SQL 查询
-    const selectedTopics: Array<{ topicId: number; question: string }> = [];
+    const selectedTopics: Array<{ topicId: number | null; question: string }> = [];
     const usedTopicIds = new Set<number>();
-    
-    for (let i = 0; i < config.articleCount; i++) {
-      // 查询下一个未使用的话题
-      const topicResult = await pool.query(
-        `SELECT id, question, usage_count
+    const isLocalResource = config.resourceSource === 'local';
+    const providedTopics = (config.topicSnapshots || []).map(topic => topic.trim()).filter(Boolean);
+
+    if (isLocalResource && providedTopics.length > 0) {
+      const limitedTopics = providedTopics.slice(0, config.articleCount);
+      for (const topic of limitedTopics) {
+        selectedTopics.push({
+          topicId: null,
+          question: topic
+        });
+      }
+    } else {
+      const topicCountResult = await pool.query(
+        `SELECT COUNT(*) as count
          FROM topics
-         WHERE distillation_id = $1 ${usedTopicIds.size > 0 ? `AND id NOT IN (${Array.from(usedTopicIds).join(',')})` : ''}
-         ORDER BY usage_count ASC, created_at ASC
-         LIMIT 1`,
-        [config.distillationId]
+         WHERE distillation_id = $1 AND user_id = $2`,
+        [config.distillationId, config.userId]
       );
-      
-      if (topicResult.rows.length === 0) {
-        console.warn(`[任务创建] 警告：没有更多可用话题，已选择 ${selectedTopics.length} 个话题`);
-        break;
+      const topicCount = parseInt(topicCountResult.rows[0].count);
+      if (topicCount === 0) {
+        throw new Error('蒸馏结果没有话题，无法创建任务');
       }
       
-      const topic = topicResult.rows[0];
-      selectedTopics.push({
-        topicId: topic.id,
-        question: topic.question
-      });
-      usedTopicIds.add(topic.id);
-      
-      console.log(`[任务创建] 选择话题 ${i + 1}/${config.articleCount}: ID=${topic.id}, 问题="${topic.question.substring(0, 30)}...", 使用次数=${topic.usage_count || 0}`);
+      for (let i = 0; i < config.articleCount; i++) {
+        const topicResult = await pool.query(
+          `SELECT id, question, usage_count
+           FROM topics
+           WHERE distillation_id = $1 AND user_id = $2 ${usedTopicIds.size > 0 ? `AND id NOT IN (${Array.from(usedTopicIds).join(',')})` : ''}
+           ORDER BY usage_count ASC, created_at ASC
+           LIMIT 1`,
+          [config.distillationId, config.userId]
+        );
+        
+        if (topicResult.rows.length === 0) {
+          console.warn(`[任务创建] 警告：没有更多可用话题，已选择 ${selectedTopics.length} 个话题`);
+          break;
+        }
+        
+        const topic = topicResult.rows[0];
+        selectedTopics.push({
+          topicId: topic.id,
+          question: topic.question
+        });
+        usedTopicIds.add(topic.id);
+        
+        console.log(`[任务创建] 选择话题 ${i + 1}/${config.articleCount}: ID=${topic.id}, 问题="${topic.question.substring(0, 30)}...", 使用次数=${topic.usage_count || 0}`);
+      }
     }
     
     if (selectedTopics.length === 0) {
@@ -327,7 +350,6 @@ export class ArticleGenerationService {
     // 解析文章设置快照（如果是本地资源）
     let articleSettingName: string | null = null;
     let articleSettingPrompt: string | null = null;
-    const isLocalResource = config.resourceSource === 'local';
     
     if (isLocalResource && config.articleSettingSnapshot) {
       try {
@@ -346,21 +368,29 @@ export class ArticleGenerationService {
       
       // 将话题ID和话题问题保存到selected_distillation_ids中
       // 包含 topic 字段作为快照，确保删除蒸馏结果后仍能显示
-      const selectedIdsJson = JSON.stringify({
-        distillationId: config.distillationId,
-        topicId: topic.topicId,
-        topic: topic.question  // 快照：保存话题问题内容
-      });
+      const selectedIdsJson = topic.topicId
+        ? JSON.stringify({
+            distillationId: config.distillationId,
+            topicId: topic.topicId,
+            topic: topic.question
+          })
+        : JSON.stringify({
+            distillationId: config.distillationId,
+            keyword: config.distillationKeyword || null,
+            topic: topic.question
+          });
       
       // 创建独立任务
+      const distillationIdForInsert = isLocalResource && providedTopics.length > 0 ? null : config.distillationId;
       const result = await pool.query(
         `INSERT INTO generation_tasks 
-         (distillation_id, album_id, knowledge_base_id, resource_source, knowledge_summary, article_setting_id, 
+         (distillation_id, distillation_keyword, album_id, knowledge_base_id, resource_source, knowledge_summary, article_setting_id, 
           article_setting_name, article_setting_prompt, conversion_target_id, requested_count, selected_distillation_ids, user_id, status) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending') 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'pending') 
          RETURNING id`,
         [
-          config.distillationId,
+          distillationIdForInsert,
+          config.distillationKeyword || null,
           config.albumId,
           config.knowledgeBaseId,
           config.resourceSource || 'server',
@@ -476,24 +506,24 @@ export class ArticleGenerationService {
         // 优先从 selected_distillation_ids 的 topic 字段获取蒸馏结果（快照）
         // 如果没有，则使用 SQL 子查询的结果
         let distillationResult = row.distillation_result || null;
+        let selectedData: any = null;
         
-        // 尝试从 selected_distillation_ids 中提取 topic 作为快照
-        if (!distillationResult && row.selected_distillation_ids) {
+        if (row.selected_distillation_ids) {
           try {
-            const selectedData = JSON.parse(row.selected_distillation_ids);
-            if (selectedData.topic) {
+            selectedData = JSON.parse(row.selected_distillation_ids);
+            if (!distillationResult && selectedData?.topic) {
               distillationResult = selectedData.topic;
             }
           } catch (e) {
-            // JSON 解析失败，忽略
           }
         }
         
         const keyword = row.keyword;
+        const distillationId = row.distillation_id ?? (selectedData?.distillationId ?? null);
         
         return {
           id: row.id,
-          distillationId: row.distillation_id,
+          distillationId,
           albumId: row.album_id,
           knowledgeBaseId: row.knowledge_base_id,
           knowledgeSummary: row.knowledge_summary || null,
@@ -580,20 +610,21 @@ export class ArticleGenerationService {
     
     // 优先从 selected_distillation_ids 的 topic 字段获取蒸馏结果（快照）
     let distillationResult = row.distillation_result || null;
-    if (!distillationResult && row.selected_distillation_ids) {
+    let selectedData: any = null;
+    if (row.selected_distillation_ids) {
       try {
-        const selectedData = JSON.parse(row.selected_distillation_ids);
-        if (selectedData.topic) {
+        selectedData = JSON.parse(row.selected_distillation_ids);
+        if (!distillationResult && selectedData?.topic) {
           distillationResult = selectedData.topic;
         }
       } catch (e) {
-        // JSON 解析失败，忽略
       }
     }
+    const distillationId = row.distillation_id ?? (selectedData?.distillationId ?? null);
     
     return {
       id: row.id,
-      distillationId: row.distillation_id,
+      distillationId,
       albumId: row.album_id,
       knowledgeBaseId: row.knowledge_base_id,
       knowledgeSummary: row.knowledge_summary || null,
@@ -735,14 +766,13 @@ export class ArticleGenerationService {
       );
       
       const selectedIdsJson = selectedIdsResult.rows[0]?.selected_distillation_ids;
-      let distillationDataArray: Array<{ distillationId: number; keyword: string; topicId: number; topic: string }> = [];
+      let distillationDataArray: Array<{ distillationId: number | null; keyword: string; topicId: number | null; topic: string }> = [];
       
       // 反序列化JSON字符串
       if (selectedIdsJson) {
         try {
           const parsedData = JSON.parse(selectedIdsJson);
           
-          // 检查是否是新格式（包含预分配的话题ID）
           if (parsedData && typeof parsedData === 'object' && 'distillationId' in parsedData && 'topicId' in parsedData) {
             console.log(`[任务 ${taskId}] 检测到新格式：预分配的话题ID=${parsedData.topicId}`);
             
@@ -759,7 +789,7 @@ export class ArticleGenerationService {
             
             if (distillationResult.rows.length > 0 && topicResult.rows.length > 0) {
               distillationDataArray = [{
-                distillationId: parsedData.distillationId,
+                distillationId: task.distillationId,
                 keyword: distillationResult.rows[0].keyword,
                 topicId: parsedData.topicId,
                 topic: topicResult.rows[0].question
@@ -769,6 +799,16 @@ export class ArticleGenerationService {
             } else {
               throw new Error('预分配的蒸馏结果或话题不存在');
             }
+          } else if (parsedData && typeof parsedData === 'object' && 'topic' in parsedData && !('topicId' in parsedData)) {
+            const snapshotKeyword = typeof parsedData.keyword === 'string' && parsedData.keyword.trim()
+              ? parsedData.keyword
+              : task.keyword || '已删除';
+            distillationDataArray = [{
+              distillationId: task.distillationId,
+              keyword: snapshotKeyword,
+              topicId: null,
+              topic: parsedData.topic
+            }];
           } else if (Array.isArray(parsedData)) {
             // 旧格式：数组
             console.log(`[任务 ${taskId}] 检测到旧格式：蒸馏结果ID数组 [${parsedData.join(', ')}]`);
@@ -922,6 +962,7 @@ export class ArticleGenerationService {
               distillationId,
               distillationData.topicId,
               distillationData.keyword,
+              distillationData.topic,
               result.title,
               result.content,
               imageUrl,
@@ -981,6 +1022,9 @@ export class ArticleGenerationService {
     
     // 获取蒸馏历史的关键词-话题对
     console.log(`[任务 ${taskId}] 提取关键词和话题...`);
+    if (task.distillationId === null) {
+      throw new Error('蒸馏记录不存在');
+    }
     const keywordTopicPairs = await this.extractKeywordTopicPairs(task.distillationId);
     console.log(`[任务 ${taskId}] 找到 ${keywordTopicPairs.length} 个关键词-话题对`);
 
@@ -1743,9 +1787,10 @@ export class ArticleGenerationService {
    */
   private async saveArticleWithTopicTracking(
     taskId: number,
-    distillationId: number,
-    topicId: number,
+    distillationId: number | null,
+    topicId: number | null,
     keyword: string,
+    topic: string,
     title: string,
     content: string,
     imageUrl: string,
@@ -1763,34 +1808,38 @@ export class ArticleGenerationService {
       // 1. 保存文章（包含topic_id、user_id和image_id）
       const articleResult = await client.query(
         `INSERT INTO articles 
-         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id, image_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+         (title, keyword, distillation_id, topic_id, task_id, content, image_url, provider, user_id, image_id, distillation_keyword_snapshot, topic_question_snapshot) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) 
          RETURNING id`,
-        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId, imageId || null]
+        [title, keyword, distillationId, topicId, taskId, content, imageUrl, provider, userId, imageId || null, keyword, topic]
       );
 
       const articleId = articleResult.rows[0].id;
       console.log(`[保存文章] 文章已插入，ID: ${articleId}, topic_id: ${topicId}, image_id: ${imageId || 'null'}`);
 
       // 2. 创建蒸馏使用记录
-      await this.recordDistillationUsage(distillationId, taskId, articleId, client);
-      console.log(`[保存文章] 蒸馏使用记录已创建`);
+      if (distillationId) {
+        await this.recordDistillationUsage(distillationId, taskId, articleId, client);
+        console.log(`[保存文章] 蒸馏使用记录已创建`);
+      }
 
-      // 3. 创建话题使用记录并更新话题usage_count
-      await client.query(
-        `INSERT INTO topic_usage (topic_id, distillation_id, article_id, task_id)
-         VALUES ($1, $2, $3, $4)`,
-        [topicId, distillationId, articleId, taskId]
-      );
-      await client.query(
-        `UPDATE topics SET usage_count = COALESCE(usage_count, 0) + 1 WHERE id = $1`,
-        [topicId]
-      );
-      console.log(`[保存文章] 话题使用记录已创建，话题usage_count已更新`);
+      if (topicId && distillationId) {
+        await client.query(
+          `INSERT INTO topic_usage (topic_id, distillation_id, article_id, task_id)
+           VALUES ($1, $2, $3, $4)`,
+          [topicId, distillationId, articleId, taskId]
+        );
+        await client.query(
+          `UPDATE topics SET usage_count = COALESCE(usage_count, 0) + 1 WHERE id = $1`,
+          [topicId]
+        );
+        console.log(`[保存文章] 话题使用记录已创建，话题usage_count已更新`);
+      }
 
-      // 4. 更新蒸馏usage_count
-      await this.incrementUsageCount(distillationId, client);
-      console.log(`[保存文章] 蒸馏usage_count已更新`);
+      if (distillationId) {
+        await this.incrementUsageCount(distillationId, client);
+        console.log(`[保存文章] 蒸馏usage_count已更新`);
+      }
 
       // 5. 如果提供了imageId，增加引用计数（不重复计算存储）
       if (imageId) {
@@ -1985,26 +2034,25 @@ export class ArticleGenerationService {
       throw new Error('任务不存在');
     }
 
-    // 验证蒸馏记录
-    const distillationResult = await pool.query(
-      'SELECT id FROM distillations WHERE id = $1',
-      [task.distillationId]
-    );
-    if (distillationResult.rows.length === 0) {
-      throw new Error(`蒸馏记录ID ${task.distillationId} 不存在`);
-    }
-
-    // 验证话题
-    const topicsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM topics WHERE distillation_id = $1',
-      [task.distillationId]
-    );
-    const topicCount = parseInt(topicsResult.rows[0].count);
-    if (topicCount === 0) {
-      throw new Error('蒸馏记录没有关联的话题，无法生成文章');
-    }
-
     const isLocalResource = task.resourceSource === 'local';
+    if (!isLocalResource) {
+      const distillationResult = await pool.query(
+        'SELECT id FROM distillations WHERE id = $1',
+        [task.distillationId]
+      );
+      if (distillationResult.rows.length === 0) {
+        throw new Error(`蒸馏记录ID ${task.distillationId} 不存在`);
+      }
+
+      const topicsResult = await pool.query(
+        'SELECT COUNT(*) as count FROM topics WHERE distillation_id = $1',
+        [task.distillationId]
+      );
+      const topicCount = parseInt(topicsResult.rows[0].count);
+      if (topicCount === 0) {
+        throw new Error('蒸馏记录没有关联的话题，无法生成文章');
+      }
+    }
 
     // 验证图库（本地资源跳过验证）
     if (!isLocalResource && typeof task.albumId === 'number') {

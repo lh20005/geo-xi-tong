@@ -8,12 +8,14 @@ export interface TaskConfig {
   articleCount: number;
   resourceSource?: 'local' | 'server';
   knowledgeSummary?: string;
+  topicSnapshots?: string[];
+  distillationKeyword?: string;
 }
 
 // 生成任务
 export interface GenerationTask {
   id: number;
-  distillationId: number;
+  distillationId: number | null;
   albumId: number;
   knowledgeBaseId: number;
   articleSettingId: number;

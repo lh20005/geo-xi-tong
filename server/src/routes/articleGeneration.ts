@@ -33,7 +33,9 @@ const createTaskSchema = z.object({
   articleCount: z.number().int().positive('文章数量必须是正整数').max(100, '文章数量不能超过100'),
   resourceSource: z.enum(['local', 'server']).optional(),
   knowledgeSummary: z.string().max(3000, '知识库摘要不能超过3000字符').optional(),
-  articleSettingSnapshot: z.string().optional() // 本地文章设置快照
+  articleSettingSnapshot: z.string().optional(),
+  topicSnapshots: z.array(z.string().min(1)).optional(),
+  distillationKeyword: z.string().max(255).optional()
 });
 
 /**
@@ -74,19 +76,21 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       });
     }
 
-    // 验证引用的资源是否存在
-    const distillationCheck = await pool.query(
-      'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
-      [validatedData.distillationId, userId]
-    );
-    if (distillationCheck.rows.length === 0) {
-      return res.status(404).json({ error: '蒸馏历史不存在' });
-    }
-
     const isLocalResource = (validatedData.resourceSource && validatedData.resourceSource.toLowerCase() === 'local')
       || typeof validatedData.albumId === 'string'
       || typeof validatedData.knowledgeBaseId === 'string'
       || !!validatedData.articleSettingSnapshot;
+
+    // 验证引用的资源是否存在
+    if (!isLocalResource || !validatedData.topicSnapshots || validatedData.topicSnapshots.length === 0) {
+      const distillationCheck = await pool.query(
+        'SELECT id FROM distillations WHERE id = $1 AND user_id = $2',
+        [validatedData.distillationId, userId]
+      );
+      if (distillationCheck.rows.length === 0) {
+        return res.status(404).json({ error: '蒸馏历史不存在' });
+      }
+    }
 
     // 如果 albumId 是数字，验证服务器数据库中是否存在（本地资源跳过验证）
     // 如果是 UUID，说明来自 Windows 端本地数据，跳过验证
@@ -154,7 +158,9 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
       userId,
       resourceSource: isLocalResource ? 'local' : validatedData.resourceSource,
       knowledgeSummary: validatedData.knowledgeSummary,
-      articleSettingSnapshot: validatedData.articleSettingSnapshot
+      articleSettingSnapshot: validatedData.articleSettingSnapshot,
+      topicSnapshots: validatedData.topicSnapshots,
+      distillationKeyword: validatedData.distillationKeyword
     });
 
     // 获取任务详情（包含selected_distillation_ids）
@@ -184,6 +190,9 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return res.status(400).json({ error: '数据验证失败', details: error.errors });
+    }
+    if (typeof error?.message === 'string' && (error.message.includes('没有可用的话题') || error.message.includes('没有话题'))) {
+      return res.status(400).json({ error: '没有可用的话题', details: error.message });
     }
     console.error('创建任务错误:', error);
     res.status(500).json({ error: '创建任务失败', details: error.message });

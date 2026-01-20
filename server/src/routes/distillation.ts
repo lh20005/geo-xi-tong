@@ -63,6 +63,10 @@ distillationRouter.post('/', async (req, res) => {
     // 执行蒸馏（使用配置的prompt和数量）
     const questions = await aiService.distillKeyword(keyword, promptTemplate, topicCount);
     
+    if (!questions || questions.length === 0) {
+      return res.status(500).json({ error: '蒸馏失败，未生成话题' });
+    }
+    
     // 保存蒸馏记录（关联用户）
     const distillationResult = await pool.query(
       'INSERT INTO distillations (keyword, provider, user_id, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW()) RETURNING id',

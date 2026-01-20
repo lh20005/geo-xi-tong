@@ -50,7 +50,7 @@ export function registerLocalConversionTargetHandlers(): void {
 
       const result = await conversionTargetService.findPaginated(
         params || {},
-        ['company_name', 'address', 'industry']
+        ['name', 'description', 'type']
       );
 
       return { success: true, data: result };
