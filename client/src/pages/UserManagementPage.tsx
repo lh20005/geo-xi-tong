@@ -582,6 +582,7 @@ export default function UserManagementPage() {
           setSelectedUserId(null);
           setSelectedUsername('');
         }}
+        onSubscriptionChange={loadUsers}
       />
     </div>
   );

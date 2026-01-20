@@ -38,9 +38,10 @@ interface Props {
   userId: number | null;
   username: string;
   onClose: () => void;
+  onSubscriptionChange?: () => void; // 订阅变更后的回调，用于刷新父组件数据
 }
 
-export default function SubscriptionDetailDrawer({ visible, userId, username, onClose }: Props) {
+export default function SubscriptionDetailDrawer({ visible, userId, username, onClose, onSubscriptionChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<SubscriptionDetail | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
@@ -81,6 +82,8 @@ export default function SubscriptionDetailDrawer({ visible, userId, username, on
   const handleOperationSuccess = () => {
     message.success('操作成功');
     loadSubscriptionDetail();
+    // 通知父组件刷新用户列表
+    onSubscriptionChange?.();
   };
 
   const handleControl = (action: 'pause' | 'resume' | 'cancel') => {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar, Tooltip } from 'antd';
-import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined, MailOutlined, CheckCircleOutlined, CloudSyncOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar } from 'antd';
+import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined, MailOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
@@ -10,8 +10,6 @@ import { getStorageUsage, getStorageBreakdown, StorageUsage as StorageUsageType,
 import { AgentCenterPage } from '../components/Agent';
 import { Agent, getAgentStatus } from '../api/agent';
 import { BoosterQuotaCard } from '../components/Booster';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { TabPane } = Tabs;
 
@@ -75,10 +73,11 @@ interface PasswordFormValues {
 
 const UserCenterPage = () => {
   const location = useLocation();
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(false);
   const [usageStats, setUsageStats] = useState<UsageStats[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [invitationStats, setInvitationStats] = useState<InvitationStats | null>(null);
   const [passwordModalVisible, setPasswordModalVisible] = useState(false);
@@ -89,10 +88,12 @@ const UserCenterPage = () => {
   // 存储相关状态
   const [storageUsage, setStorageUsage] = useState<StorageUsageType | null>(null);
   const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdownType | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
 
   // 代理商相关状态
   const [isAgent, setIsAgent] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
+  const [agentLoading, setAgentLoading] = useState(false);
 
   // 邮箱更换相关状态
   const [emailModalVisible, setEmailModalVisible] = useState(false);
@@ -102,218 +103,116 @@ const UserCenterPage = () => {
   const [emailCountdown, setEmailCountdown] = useState(0);
   const [emailStep, setEmailStep] = useState<'verify' | 'change'>('verify'); // 更换邮箱步骤
 
-  // 数据获取函数
-  const fetchSubscriptionData = useCallback(async () => {
-    const response = await apiClient.get('/subscription/current');
-    if (response.data.success) {
-      return response.data.data;
-    }
-    return null;
-  }, []);
-
-  const fetchUsageStatsData = useCallback(async () => {
-    const response = await apiClient.get('/subscription/usage-stats');
-    if (response.data.success) {
-      const features = response.data.data?.features;
-      return Array.isArray(features) ? features : [];
-    }
-    return [];
-  }, []);
-
-  const fetchOrdersData = useCallback(async () => {
-    const response = await apiClient.get('/orders');
-    if (response.data.success) {
-      const ordersData = response.data.data?.orders || response.data.data;
-      return Array.isArray(ordersData) ? ordersData : [];
-    }
-    return [];
-  }, []);
-
-  const fetchUserProfileData = useCallback(async () => {
-    const response = await apiClient.get('/users/profile');
-    if (response.data.success) {
-      return response.data.data;
-    }
-    return null;
-  }, []);
-
-  const fetchInvitationStatsData = useCallback(async () => {
-    const response = await apiClient.get('/invitations/stats');
-    if (response.data.success) {
-      return response.data.data;
-    }
-    return null;
-  }, []);
-
-  const fetchStorageDataFn = useCallback(async () => {
-    const [usage, breakdown] = await Promise.all([
-      getStorageUsage(),
-      getStorageBreakdown()
-    ]);
-    return { usage, breakdown };
-  }, []);
-
-  const fetchAgentStatusData = useCallback(async () => {
-    return await getAgentStatus();
-  }, []);
-
-  // 使用缓存 Hook 获取订阅数据
-  const {
-    data: subscriptionData,
-    loading: subscriptionLoading,
-    refreshing: subscriptionRefreshing,
-    refresh: refreshSubscription,
-    isFromCache: subscriptionFromCache
-  } = useCachedData<Subscription | null>(
-    'userCenter:subscription',
-    fetchSubscriptionData,
-    { onError: (error) => console.error('获取订阅信息失败:', error) }
-  );
-
-  // 使用缓存 Hook 获取使用统计
-  const {
-    data: usageStatsData,
-    refresh: refreshUsageStats,
-    isFromCache: usageStatsFromCache,
-    refreshing: usageStatsRefreshing
-  } = useCachedData<UsageStats[]>(
-    'userCenter:usageStats',
-    fetchUsageStatsData,
-    { onError: (error) => console.error('获取使用统计失败:', error) }
-  );
-
-  // 使用缓存 Hook 获取订单列表
-  const {
-    data: ordersData,
-    loading: ordersLoading,
-    refresh: refreshOrders,
-    isFromCache: ordersFromCache,
-    refreshing: ordersRefreshing
-  } = useCachedData<Order[]>(
-    'userCenter:orders',
-    fetchOrdersData,
-    { onError: (error) => console.error('获取订单列表失败:', error) }
-  );
-
-  // 使用缓存 Hook 获取用户资料
-  const {
-    data: userProfileData,
-    refresh: refreshUserProfile
-  } = useCachedData<UserProfile | null>(
-    'userCenter:profile',
-    fetchUserProfileData,
-    { onError: (error) => console.error('获取用户资料失败:', error) }
-  );
-
-  // 使用缓存 Hook 获取邀请统计
-  const {
-    data: invitationStatsData,
-    refresh: refreshInvitationStats
-  } = useCachedData<InvitationStats | null>(
-    'userCenter:invitationStats',
-    fetchInvitationStatsData,
-    { onError: (error) => console.error('获取邀请统计失败:', error) }
-  );
-
-  // 使用缓存 Hook 获取存储数据
-  const {
-    data: storageData,
-    loading: storageLoading,
-    refresh: refreshStorageData
-  } = useCachedData<{ usage: StorageUsageType; breakdown: StorageBreakdownType } | null>(
-    'userCenter:storage',
-    fetchStorageDataFn,
-    { onError: (error) => console.error('[UserCenter] 加载存储数据失败:', error) }
-  );
-
-  // 使用缓存 Hook 获取代理商状态
-  const {
-    data: agentStatusData,
-    loading: agentLoading,
-    refresh: refreshAgentStatus
-  } = useCachedData<{ isAgent: boolean; agent: Agent | null } | null>(
-    'userCenter:agentStatus',
-    fetchAgentStatusData,
-    { onError: (error) => console.error('[UserCenter] 获取代理商状态失败:', error) }
-  );
-
-  // 更新本地状态
-  useEffect(() => {
-    if (subscriptionData !== undefined) setSubscription(subscriptionData);
-  }, [subscriptionData]);
-
-  useEffect(() => {
-    if (usageStatsData) setUsageStats(usageStatsData);
-  }, [usageStatsData]);
-
-  useEffect(() => {
-    if (ordersData) setOrders(ordersData);
-  }, [ordersData]);
-
-  useEffect(() => {
-    if (userProfileData !== undefined) setUserProfile(userProfileData);
-  }, [userProfileData]);
-
-  useEffect(() => {
-    if (invitationStatsData !== undefined) setInvitationStats(invitationStatsData);
-  }, [invitationStatsData]);
-
-  useEffect(() => {
-    if (storageData) {
-      setStorageUsage(storageData.usage);
-      setStorageBreakdown(storageData.breakdown);
-    }
-  }, [storageData]);
-
-  useEffect(() => {
-    if (agentStatusData) {
-      setIsAgent(agentStatusData.isAgent);
-      setAgent(agentStatusData.agent);
-    }
-  }, [agentStatusData]);
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('userCenter:');
-    await Promise.all([
-      refreshSubscription(true),
-      refreshUsageStats(true),
-      refreshOrders(true),
-      refreshUserProfile(true),
-      refreshInvitationStats(true),
-      refreshStorageData(true),
-      refreshAgentStatus(true)
-    ]);
-  }, [invalidateCacheByPrefix, refreshSubscription, refreshUsageStats, refreshOrders, refreshUserProfile, refreshInvitationStats, refreshStorageData, refreshAgentStatus]);
-
-  // 兼容旧的函数名
+  // 数据获取函数 - 直接获取，不使用缓存
   const fetchSubscription = useCallback(async () => {
-    await refreshSubscription(true);
-  }, [refreshSubscription]);
+    setSubscriptionLoading(true);
+    try {
+      const response = await apiClient.get('/subscription/current');
+      if (response.data.success) {
+        setSubscription(response.data.data);
+      }
+    } catch (error) {
+      console.error('获取订阅信息失败:', error);
+    } finally {
+      setSubscriptionLoading(false);
+    }
+  }, []);
 
   const fetchUsageStats = useCallback(async () => {
-    await refreshUsageStats(true);
-  }, [refreshUsageStats]);
+    try {
+      const response = await apiClient.get('/subscription/usage-stats');
+      if (response.data.success) {
+        const features = response.data.data?.features;
+        setUsageStats(Array.isArray(features) ? features : []);
+      }
+    } catch (error) {
+      console.error('获取使用统计失败:', error);
+    }
+  }, []);
 
   const fetchOrders = useCallback(async () => {
-    await refreshOrders(true);
-  }, [refreshOrders]);
+    setOrdersLoading(true);
+    try {
+      const response = await apiClient.get('/orders');
+      if (response.data.success) {
+        const ordersData = response.data.data?.orders || response.data.data;
+        setOrders(Array.isArray(ordersData) ? ordersData : []);
+      }
+    } catch (error) {
+      console.error('获取订单列表失败:', error);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, []);
 
   const fetchUserProfile = useCallback(async () => {
-    await refreshUserProfile(true);
-  }, [refreshUserProfile]);
+    try {
+      const response = await apiClient.get('/users/profile');
+      if (response.data.success) {
+        setUserProfile(response.data.data);
+      }
+    } catch (error) {
+      console.error('获取用户资料失败:', error);
+    }
+  }, []);
 
   const fetchInvitationStats = useCallback(async () => {
-    await refreshInvitationStats(true);
-  }, [refreshInvitationStats]);
+    try {
+      const response = await apiClient.get('/invitations/stats');
+      if (response.data.success) {
+        setInvitationStats(response.data.data);
+      }
+    } catch (error) {
+      console.error('获取邀请统计失败:', error);
+    }
+  }, []);
 
   const fetchStorageData = useCallback(async () => {
-    await refreshStorageData(true);
-  }, [refreshStorageData]);
+    setStorageLoading(true);
+    try {
+      const [usage, breakdown] = await Promise.all([
+        getStorageUsage(),
+        getStorageBreakdown()
+      ]);
+      setStorageUsage(usage);
+      setStorageBreakdown(breakdown);
+    } catch (error) {
+      console.error('[UserCenter] 加载存储数据失败:', error);
+    } finally {
+      setStorageLoading(false);
+    }
+  }, []);
 
   const fetchAgentStatus = useCallback(async () => {
-    await refreshAgentStatus(true);
-  }, [refreshAgentStatus]);
+    setAgentLoading(true);
+    try {
+      const result = await getAgentStatus();
+      setIsAgent(result.isAgent);
+      setAgent(result.agent);
+    } catch (error) {
+      console.error('[UserCenter] 获取代理商状态失败:', error);
+    } finally {
+      setAgentLoading(false);
+    }
+  }, []);
+
+  // 刷新所有数据
+  const refreshAllData = useCallback(async () => {
+    await Promise.all([
+      fetchSubscription(),
+      fetchUsageStats(),
+      fetchOrders(),
+      fetchUserProfile(),
+      fetchInvitationStats(),
+      fetchStorageData(),
+      fetchAgentStatus()
+    ]);
+  }, [fetchSubscription, fetchUsageStats, fetchOrders, fetchUserProfile, fetchInvitationStats, fetchStorageData, fetchAgentStatus]);
+
+  // 组件挂载时获取数据
+  useEffect(() => {
+    refreshAllData();
+  }, []);
 
   // 邮箱验证码倒计时
   useEffect(() => {
@@ -341,19 +240,19 @@ const UserCenterPage = () => {
     const handleQuotaUpdate = (data: any) => {
       console.log('Quota updated:', data);
       message.info('配额已更新');
-      refreshUsageStats(true);
+      fetchUsageStats();
     };
 
     const handleSubscriptionUpdate = (data: any) => {
       console.log('Subscription updated:', data);
       message.info('订阅信息已更新');
-      refreshSubscription(true);
+      fetchSubscription();
     };
 
     const handleOrderStatusChange = (data: any) => {
       console.log('Order status changed:', data);
       message.info('订单状态已更新');
-      refreshOrders(true);
+      fetchOrders();
     };
 
     // 存储相关事件
@@ -379,7 +278,7 @@ const UserCenterPage = () => {
     const handleStorageQuotaChange = (data: any) => {
       console.log('[UserCenter] 配额变更:', data);
       message.success('存储配额已更新');
-      refreshStorageData(true);
+      fetchStorageData();
     };
 
     wsService.on('quota_updated', handleQuotaUpdate);
@@ -397,7 +296,7 @@ const UserCenterPage = () => {
       wsService.off('storage_alert', handleStorageAlert);
       wsService.off('storage_quota_changed', handleStorageQuotaChange);
     };
-  }, [refreshUsageStats, refreshSubscription, refreshOrders, refreshStorageData]);
+  }, [fetchUsageStats, fetchSubscription, fetchOrders, fetchStorageData]);
 
   const handleAgentApplySuccess = (newAgent: Agent) => {
     setIsAgent(true);
@@ -601,14 +500,6 @@ const UserCenterPage = () => {
                   <Space>
                     <CrownOutlined />
                     我的订阅
-                    {subscriptionFromCache && !subscriptionRefreshing && (
-                      <Tooltip title="数据来自缓存">
-                        <Tag color="gold" style={{ marginLeft: 8 }}>缓存</Tag>
-                      </Tooltip>
-                    )}
-                    {subscriptionRefreshing && (
-                      <Tag icon={<CloudSyncOutlined spin />} color="processing" style={{ marginLeft: 8 }}>更新中</Tag>
-                    )}
                   </Space>
                 }
                 loading={subscriptionLoading}
@@ -683,14 +574,6 @@ const UserCenterPage = () => {
                 title={
                   <Space>
                     使用统计
-                    {usageStatsFromCache && !usageStatsRefreshing && (
-                      <Tooltip title="数据来自缓存">
-                        <Tag color="gold">缓存</Tag>
-                      </Tooltip>
-                    )}
-                    {usageStatsRefreshing && (
-                      <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-                    )}
                   </Space>
                 }
                 extra={<Button icon={<ReloadOutlined />} onClick={fetchUsageStats}>刷新</Button>}
@@ -774,14 +657,6 @@ const UserCenterPage = () => {
               <Space>
                 <HistoryOutlined />
                 订单记录
-                {ordersFromCache && !ordersRefreshing && (
-                  <Tooltip title="数据来自缓存">
-                    <Tag color="gold">缓存</Tag>
-                  </Tooltip>
-                )}
-                {ordersRefreshing && (
-                  <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-                )}
               </Space>
             }
             extra={<Button icon={<ReloadOutlined />} onClick={fetchOrders}>刷新</Button>}

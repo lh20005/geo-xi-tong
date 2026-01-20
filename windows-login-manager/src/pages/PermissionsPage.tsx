@@ -1,10 +1,8 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Card, Table, Button, Modal, Select, message, Space, Tag, Popconfirm, Tooltip } from 'antd';
-import { SafetyOutlined, PlusOutlined, DeleteOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
+import { SafetyOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import type { ColumnsType } from 'antd/es/table';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { Option } = Select;
 
@@ -36,46 +34,44 @@ interface UserPermission {
 }
 
 const PermissionsPage: React.FC = () => {
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<string | null>(null);
+  
+  // 数据状态
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [userPermissions, setUserPermissions] = useState<UserPermission[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // 数据获取函数
   const fetchData = useCallback(async () => {
-    const [permsRes, usersRes, userPermsRes] = await Promise.all([
-      apiClient.get('/security/permissions'),
-      apiClient.get('/admin/users?page=1&pageSize=1000'),
-      apiClient.get('/security/user-permissions')
-    ]);
+    setLoading(true);
+    try {
+      const [permsRes, usersRes, userPermsRes] = await Promise.all([
+        apiClient.get('/security/permissions'),
+        apiClient.get('/admin/users?page=1&pageSize=1000'),
+        apiClient.get('/security/user-permissions')
+      ]);
 
-    const permissions = permsRes.data.success ? (permsRes.data.data || []) : (permsRes.data || []);
-    const users = usersRes.data?.data?.users || [];
-    const userPermissions = userPermsRes.data || [];
+      const perms = permsRes.data.success ? (permsRes.data.data || []) : (permsRes.data || []);
+      const usersData = usersRes.data?.data?.users || [];
+      const userPerms = userPermsRes.data || [];
 
-    return { permissions, users, userPermissions };
+      setPermissions(perms);
+      setUsers(usersData);
+      setUserPermissions(userPerms);
+    } catch (error: any) {
+      message.error(error.message || '获取数据失败');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // 使用缓存 Hook
-  const {
-    data,
-    loading,
-    refreshing,
-    refresh,
-    isFromCache
-  } = useCachedData('permissions:all', fetchData, {
-    onError: (error) => message.error(error.message || '获取数据失败'),
-  });
-
-  const permissions = data?.permissions || [];
-  const users = data?.users || [];
-  const userPermissions = data?.userPermissions || [];
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('permissions:');
-    await refresh(true);
-  }, [invalidateCacheByPrefix, refresh]);
+  // 初始加载
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // 按类别分组权限
   const permissionsByCategory = useMemo((): PermissionsByCategory => {
@@ -108,7 +104,7 @@ const PermissionsPage: React.FC = () => {
         setModalVisible(false);
         setSelectedUser(null);
         setSelectedPermission(null);
-        invalidateAndRefresh();
+        fetchData();
       } else {
         message.error(response.data.message || '授予权限失败');
       }
@@ -130,7 +126,7 @@ const PermissionsPage: React.FC = () => {
 
       if (response.data.success) {
         message.success(response.data.message || '权限撤销成功');
-        invalidateAndRefresh();
+        fetchData();
       } else {
         message.error(response.data.message || '撤销权限失败');
       }
@@ -191,20 +187,12 @@ const PermissionsPage: React.FC = () => {
     <div style={{ padding: '24px' }}>
       <h1 style={{ marginBottom: '24px' }}>
         <SafetyOutlined /> 权限管理
-        <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
-          {isFromCache && !refreshing && (
-            <Tooltip title="数据来自缓存">
-              <Tag color="gold">缓存</Tag>
-            </Tooltip>
-          )}
-          {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
-        </Space>
       </h1>
 
       <Card style={{ marginBottom: '24px' }}>
         <Space>
           <Tooltip title="刷新数据">
-            <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => refresh(true)}>
+            <Button icon={<ReloadOutlined spin={loading} />} onClick={fetchData} loading={loading}>
               刷新
             </Button>
           </Tooltip>

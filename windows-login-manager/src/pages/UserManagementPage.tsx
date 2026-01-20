@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Input, Button, Tag, Modal, Form, Select, Space, Card, Badge, App, Tooltip } from 'antd';
-import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
+import { SearchOutlined, EditOutlined, DeleteOutlined, KeyOutlined, UserOutlined, CrownOutlined, ReloadOutlined } from '@ant-design/icons';
 import axios from 'axios';
 import { config } from '../config/env';
 import { getUserWebSocketService } from '../services/UserWebSocketService';
 import ResizableTable from '../components/ResizableTable';
 import SubscriptionDetailDrawer from '../components/UserSubscription/SubscriptionDetailDrawer';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { Search } = Input;
 
@@ -27,7 +25,6 @@ interface User {
 
 export default function UserManagementPage() {
   const { message, modal } = App.useApp();
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [search, setSearch] = useState('');
@@ -39,6 +36,11 @@ export default function UserManagementPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [tempPassword, setTempPassword] = useState('');
   const [form] = Form.useForm();
+
+  // 数据状态
+  const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   // 订阅管理抽屉
   const [subscriptionDrawerVisible, setSubscriptionDrawerVisible] = useState(false);
@@ -54,50 +56,38 @@ export default function UserManagementPage() {
     return 'purple';
   };
 
-  // 构建缓存 key
-  const cacheKey = useMemo(() => {
-    return `users:${page}:${pageSize}:${search}:${subscriptionFilter}:${onlineFilter}:${roleFilter}`;
-  }, [page, pageSize, search, subscriptionFilter, onlineFilter, roleFilter]);
-
   // 数据获取函数
   const loadUsers = useCallback(async () => {
-    const token = localStorage.getItem('auth_token');
-    const response = await axios.get(`${config.apiUrl}/admin/users`, {
-      params: { 
-        page, 
-        pageSize, 
-        search: search || undefined,
-        subscriptionPlan: subscriptionFilter || undefined,
-        onlineStatus: onlineFilter || undefined,
-        roleFilter: roleFilter || undefined
-      },
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    
-    if (response.data.success) {
-      return {
-        users: response.data.data.users,
-        total: response.data.data.total
-      };
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`${config.apiUrl}/admin/users`, {
+        params: { 
+          page, 
+          pageSize, 
+          search: search || undefined,
+          subscriptionPlan: subscriptionFilter || undefined,
+          onlineStatus: onlineFilter || undefined,
+          roleFilter: roleFilter || undefined
+        },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (response.data.success) {
+        setUsers(response.data.data.users);
+        setTotal(response.data.data.total);
+      }
+    } catch (error) {
+      message.error('加载用户列表失败');
+    } finally {
+      setLoading(false);
     }
-    throw new Error('加载用户列表失败');
-  }, [page, pageSize, search, subscriptionFilter, onlineFilter, roleFilter]);
+  }, [page, pageSize, search, subscriptionFilter, onlineFilter, roleFilter, message]);
 
-  // 使用缓存 hook
-  const { data, loading, refreshing, refresh, isFromCache } = useCachedData(
-    cacheKey,
-    loadUsers,
-    { deps: [page, search, subscriptionFilter, onlineFilter, roleFilter] }
-  );
-
-  const users = data?.users || [];
-  const total = data?.total || 0;
-
-  // 刷新数据的辅助函数
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('users:');
-    await refresh(true);
-  }, [invalidateCacheByPrefix, refresh]);
+  // 初始加载和筛选变化时重新加载
+  useEffect(() => {
+    loadUsers();
+  }, [loadUsers]);
 
   // WebSocket 订阅
   useEffect(() => {
@@ -110,12 +100,12 @@ export default function UserManagementPage() {
     // 订阅用户更新和删除事件
     const handleUserUpdated = () => {
       console.log('[UserManagement] User updated, refreshing list');
-      invalidateAndRefresh();
+      loadUsers();
     };
 
     const handleUserDeleted = () => {
       console.log('[UserManagement] User deleted, refreshing list');
-      invalidateAndRefresh();
+      loadUsers();
     };
 
     wsService.on('user:updated', handleUserUpdated);
@@ -126,7 +116,7 @@ export default function UserManagementPage() {
       wsService.off('user:updated', handleUserUpdated);
       wsService.off('user:deleted', handleUserDeleted);
     };
-  }, [invalidateAndRefresh]);
+  }, [loadUsers]);
 
   const handleEdit = (user: User) => {
     setSelectedUser(user);
@@ -170,7 +160,7 @@ export default function UserManagementPage() {
       if (response.data.success) {
         message.success('用户信息更新成功');
         setEditModalVisible(false);
-        invalidateAndRefresh();
+        loadUsers();
       }
     } catch (error: any) {
       message.error(error.response?.data?.message || '更新用户信息失败');
@@ -258,7 +248,7 @@ export default function UserManagementPage() {
 
           if (response.data.success) {
             message.success('用户删除成功');
-            invalidateAndRefresh();
+            loadUsers();
           }
         } catch (error: any) {
           message.error(error.response?.data?.message || '删除用户失败');
@@ -412,14 +402,12 @@ export default function UserManagementPage() {
           <h2 style={{ fontSize: 24, fontWeight: 600, marginBottom: 8 }}>
             用户管理
             <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
-              {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
-              {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
               <Tooltip title="刷新数据">
                 <Button
                   type="text"
                   size="small"
-                  icon={<ReloadOutlined spin={refreshing} />}
-                  onClick={() => refresh(true)}
+                  icon={<ReloadOutlined spin={loading} />}
+                  onClick={loadUsers}
                 />
               </Tooltip>
             </Space>
@@ -610,6 +598,7 @@ export default function UserManagementPage() {
           setSelectedUserId(null);
           setSelectedUsername('');
         }}
+        onSubscriptionChange={loadUsers}
       />
     </div>
   );
