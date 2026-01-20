@@ -374,22 +374,50 @@ export default function PublishingTasksPage() {
       return;
     }
 
-    const unsubscribe = subscribeToTaskLogs(
-      logsModal.taskId,
-      (log) => {
-        setLogsModal(prev => ({
-          ...prev,
-          logs: [...prev.logs, log]
-        }));
-      },
-      () => {
-        message.error('日志流连接失败');
-        setLogsModal(prev => ({ ...prev, isLive: false }));
+    let unsubscribe: (() => void) | null = null;
+    let isMounted = true;
+
+    const setupSubscription = async () => {
+      try {
+        const unsub = await subscribeToTaskLogs(
+          logsModal.taskId!,
+          (log) => {
+            if (isMounted) {
+              setLogsModal(prev => ({
+                ...prev,
+                logs: [...prev.logs, log]
+              }));
+            }
+          },
+          () => {
+            if (isMounted) {
+              message.error('日志流连接失败');
+              setLogsModal(prev => ({ ...prev, isLive: false }));
+            }
+          }
+        );
+        if (isMounted) {
+          unsubscribe = unsub;
+        } else {
+          // 如果组件已卸载，立即取消订阅
+          unsub();
+        }
+      } catch (error) {
+        console.error('订阅日志流失败:', error);
+        if (isMounted) {
+          message.error('订阅日志流失败');
+          setLogsModal(prev => ({ ...prev, isLive: false }));
+        }
       }
-    );
+    };
+
+    setupSubscription();
 
     return () => {
-      unsubscribe();
+      isMounted = false;
+      if (unsubscribe) {
+        unsubscribe();
+      }
     };
   }, [logsModal.visible, logsModal.taskId, logsModal.isLive]);
 

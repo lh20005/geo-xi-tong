@@ -2,6 +2,7 @@ import { Page } from 'playwright';
 import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
 import path from 'path';
 import fs from 'fs';
+import { resolveImagePath } from '../imageDownloader';
 
 /**
  * 抖音适配器
@@ -400,7 +401,9 @@ export class DouyinAdapter extends PlatformAdapter {
 
     // 抖音只上传第一张图片作为封面
     const firstImage = images[0];
-    const imagePath = this.resolveImagePath(firstImage);
+    
+    // 使用新的图片下载服务（支持从服务器下载）
+    const imagePath = await resolveImagePath(firstImage);
 
     // 检查文件是否存在
     if (!fs.existsSync(imagePath)) {
@@ -542,36 +545,5 @@ export class DouyinAdapter extends PlatformAdapter {
     }
     
     return images;
-  }
-
-  /**
-   * 解析图片路径为绝对路径
-   */
-  private resolveImagePath(imagePath: string): string {
-    // 如果是 URL，不处理
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
-    }
-
-    // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
-    const serverDir = path.resolve(__dirname, '../..');
-
-    // 如果以 /uploads/ 开头，这是相对于 server 目录的路径
-    if (imagePath.startsWith('/uploads/')) {
-      return path.resolve(serverDir, imagePath.substring(1));
-    }
-    
-    // 如果以 uploads/ 开头，直接拼接到 server 目录
-    if (imagePath.startsWith('uploads/')) {
-      return path.resolve(serverDir, imagePath);
-    }
-
-    // 如果是绝对路径，直接返回
-    if (path.isAbsolute(imagePath)) {
-      return imagePath;
-    }
-
-    // 其他情况，尝试 server 目录
-    return path.resolve(serverDir, imagePath);
   }
 }

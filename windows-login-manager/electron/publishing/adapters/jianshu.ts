@@ -1,5 +1,6 @@
 import { Page } from 'playwright';
 import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
+import { resolveImagePath } from '../imageDownloader';
 
 /**
  * 简书适配器
@@ -215,10 +216,10 @@ export class JianshuAdapter extends PlatformAdapter {
    */
   private async uploadImageWithFileChooser(page: Page, imagePath: string): Promise<void> {
     try {
-      const path = require('path');
       const fs = require('fs');
       
-      const fullPath = this.resolveImagePath(imagePath);
+      // 使用新的图片下载服务（支持从服务器下载）
+      const fullPath = await resolveImagePath(imagePath);
       
       // 检查文件是否存在
       if (!fs.existsSync(fullPath)) {
@@ -274,39 +275,6 @@ export class JianshuAdapter extends PlatformAdapter {
     }
     
     return images;
-  }
-
-  /**
-   * 解析图片路径为绝对路径
-   */
-  private resolveImagePath(imagePath: string): string {
-    const path = require('path');
-    
-    // 如果是 URL，不处理
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
-    }
-
-    // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
-    const serverDir = path.resolve(__dirname, '../..');
-
-    // 如果以 /uploads/ 开头，这是相对于 server 目录的路径
-    if (imagePath.startsWith('/uploads/')) {
-      return path.resolve(serverDir, imagePath.substring(1));
-    }
-    
-    // 如果以 uploads/ 开头，直接拼接到 server 目录
-    if (imagePath.startsWith('uploads/')) {
-      return path.resolve(serverDir, imagePath);
-    }
-
-    // 如果是绝对路径，直接返回
-    if (path.isAbsolute(imagePath)) {
-      return imagePath;
-    }
-
-    // 其他情况，尝试 server 目录
-    return path.resolve(serverDir, imagePath);
   }
 
   async verifyPublishSuccess(page: Page): Promise<boolean> {

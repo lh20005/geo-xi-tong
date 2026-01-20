@@ -397,13 +397,14 @@ export async function getBatchInfo(batchId: string): Promise<BatchInfo> {
 /**
  * 订阅任务日志流（SSE）
  */
-export function subscribeToTaskLogs(
+export async function subscribeToTaskLogs(
   taskId: number,
   onLog: (log: PublishingLog) => void,
   onError?: (error: Error) => void
-): () => void {
-  // 从 localStorage 获取 token
-  const token = localStorage.getItem('auth_token');
+): Promise<() => void> {
+  // 先尝试刷新 token（如果需要的话）
+  let token: string | null = localStorage.getItem('auth_token');
+  
   if (!token) {
     if (onError) {
       onError(new Error('未登录，无法订阅日志流'));
@@ -411,11 +412,61 @@ export function subscribeToTaskLogs(
     return () => {};
   }
 
+  // 检查 token 是否即将过期（提前 5 分钟刷新）
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expiresAt = payload.exp * 1000; // 转换为毫秒
+    const now = Date.now();
+    const fiveMinutes = 5 * 60 * 1000;
+    
+    if (expiresAt - now < fiveMinutes) {
+      console.log('[SSE] Token 即将过期，尝试刷新...');
+      const refreshToken = localStorage.getItem('refresh_token');
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      
+      if (refreshToken) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success && data.data?.token) {
+            token = data.data.token as string;
+            localStorage.setItem('auth_token', token);
+            console.log('[SSE] Token 刷新成功');
+          } else {
+            throw new Error('Token 刷新失败');
+          }
+        } catch (refreshError) {
+          console.error('[SSE] Token 刷新失败:', refreshError);
+          if (onError) {
+            onError(new Error('登录已过期，请重新登录'));
+          }
+          return () => {};
+        }
+      } else {
+        if (onError) {
+          onError(new Error('登录已过期，请重新登录'));
+        }
+        return () => {};
+      }
+    }
+  } catch (e) {
+    console.warn('[SSE] 无法解析 token，继续尝试连接');
+  }
+
+  // 此时 token 一定是 string 类型
+  const validToken = token as string;
+
   // 获取 API 基础 URL（EventSource 不使用 axios 配置，需要完整 URL）
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
   
   // 通过 URL 参数传递 token（EventSource 不支持自定义 headers）
-  const url = `${API_BASE_URL}/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(token)}`;
+  const url = `${API_BASE_URL}/api/publishing/tasks/${taskId}/logs/stream?token=${encodeURIComponent(validToken)}`;
   const eventSource = new EventSource(url);
 
   eventSource.onmessage = (event) => {

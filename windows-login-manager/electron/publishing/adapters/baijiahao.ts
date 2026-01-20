@@ -2,6 +2,7 @@ import { Page } from 'playwright';
 import { PlatformAdapter, LoginSelectors, PublishSelectors, Article, PublishingConfig } from './base';
 import path from 'path';
 import fs from 'fs';
+import { resolveImagePath } from '../imageDownloader';
 
 /**
  * 百家号适配器
@@ -308,7 +309,8 @@ export class BaijiahaoAdapter extends PlatformAdapter {
     await this.log('info', `找到 ${images.length} 张图片，准备上传第一张`);
 
     const firstImage = images[0];
-    const imagePath = this.resolveImagePath(firstImage);
+    // 使用新的图片下载服务（支持从服务器下载）
+    const imagePath = await resolveImagePath(firstImage);
 
     if (!fs.existsSync(imagePath)) {
       await this.log('error', '❌ 图片文件不存在', { path: imagePath });
@@ -370,29 +372,6 @@ export class BaijiahaoAdapter extends PlatformAdapter {
     }
     
     return images;
-  }
-
-  private resolveImagePath(imagePath: string): string {
-    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      return imagePath;
-    }
-
-    // 使用 __dirname 获取当前文件所在目录，然后向上两级到 server 目录
-    const serverDir = path.resolve(__dirname, '../..');
-
-    if (imagePath.startsWith('/uploads/')) {
-      return path.resolve(serverDir, imagePath.substring(1));
-    }
-    
-    if (imagePath.startsWith('uploads/')) {
-      return path.resolve(serverDir, imagePath);
-    }
-
-    if (path.isAbsolute(imagePath)) {
-      return imagePath;
-    }
-
-    return path.resolve(serverDir, imagePath);
   }
 
   /**
