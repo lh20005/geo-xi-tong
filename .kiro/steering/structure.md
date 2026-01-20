@@ -4,10 +4,10 @@
 
 ```
 geo-optimization-system/
-├── client/              # 主前端应用（React）
-├── server/              # 后端 API（Node.js/Express）
+├── client/              # 主前端应用（React）- Web 端
+├── server/              # 后端 API（Node.js/Express）- 数据存储
 ├── landing/             # 营销落地页
-├── windows-login-manager/  # Electron 桌面应用（登录管理器）
+├── windows-login-manager/  # Electron 桌面应用（登录管理 + 本地发布）
 ├── docs/                # 文档目录（按类别组织）
 ├── dev-docs/            # 开发文档
 ├── scripts/             # 工具脚本（部署、测试、安全）
@@ -64,27 +64,47 @@ src/
 └── index.ts             # 服务器入口
 ```
 
-## 平台适配器模式 (server/src/services/adapters/)
-
-每个内容平台都有一个继承 `PlatformAdapter` 的适配器：
+## Electron 桌面应用结构 (windows-login-manager/)
 
 ```
-adapters/
-├── PlatformAdapter.ts   # 抽象基类
-├── AdapterRegistry.ts   # 适配器注册和查找
-├── XiaohongshuAdapter.ts  # 小红书
-├── DouyinAdapter.ts     # 抖音
-├── ToutiaoAdapter.ts    # 头条号
-├── ZhihuAdapter.ts      # 知乎
-├── BaijiahaoAdapter.ts  # 百家号
-├── WangyiAdapter.ts     # 网易号
-├── SohuAdapter.ts       # 搜狐号
-├── CSDNAdapter.ts       # CSDN
-├── JianshuAdapter.ts    # 简书
-├── WechatAdapter.ts     # 微信公众号
-├── QieAdapter.ts        # 企鹅号
-└── BilibiliAdapter.ts   # B站
+windows-login-manager/
+├── electron/                # Electron 主进程代码
+│   ├── main.ts              # 应用入口
+│   ├── preload.ts           # 预加载脚本（IPC 桥接）
+│   ├── api/                 # 服务器 API 客户端
+│   ├── ipc/                 # IPC 处理器
+│   ├── login/               # 平台登录功能
+│   ├── publishing/          # 本地发布功能（迁移自服务器）
+│   │   ├── executor.ts      # 发布执行器
+│   │   ├── browser.ts       # 浏览器自动化服务
+│   │   ├── config.ts        # 浏览器配置
+│   │   └── adapters/        # 12个平台适配器
+│   ├── storage/             # 本地存储管理
+│   ├── websocket/           # WebSocket 连接
+│   └── security/            # 安全相关
+├── src/                     # React 渲染进程代码
+│   ├── api/                 # API 封装（复用服务器 API）
+│   ├── pages/               # 页面组件
+│   │   ├── PublishingTasksPage.tsx    # 发布任务管理
+│   │   ├── PublishingRecordsPage.tsx  # 发布记录查看
+│   │   └── ...
+│   ├── components/          # 可复用组件
+│   └── stores/              # 状态管理
+└── package.json
 ```
+
+## 平台适配器位置
+
+**重要：本地发布迁移后，适配器存在于两个位置：**
+
+| 位置 | 路径 | 用途 |
+|------|------|------|
+| 服务器（保留） | `server/src/services/adapters/` | Web 端发布（兼容） |
+| Electron（新增） | `electron/publishing/adapters/` | 本地发布（主要） |
+
+适配器列表（12个平台）：
+- 小红书、抖音、头条号、知乎、百家号、网易号
+- 搜狐号、CSDN、简书、微信公众号、企鹅号、B站
 
 ## 关键架构模式
 
@@ -93,6 +113,31 @@ adapters/
 3. **多租户**：通过 `tenantContext` 中间件实现用户数据隔离
 4. **迁移系统**：`db/migrations/` 中的版本化 SQL 迁移
 5. **WebSocket 同步**：通过 `WebSocketService` 实现实时更新
+6. **本地发布架构**：Electron 应用通过 IPC 调用本地浏览器执行发布，通过 API 同步状态到服务器
+
+## 发布功能架构
+
+**本地发布模式（Electron 应用）**
+```
+用户操作 → React 页面 → IPC 调用 → Electron 主进程
+                                        ↓
+                              本地 PublishingExecutor
+                                        ↓
+                              本地 Playwright 浏览器
+                                        ↓
+                              调用服务器 API 同步状态
+```
+
+**服务器职责**：
+- 数据存储（任务、记录、账号、文章）
+- 状态同步 API
+- 配额管理
+- 发布记录创建
+
+**Electron 职责**：
+- 浏览器自动化执行
+- 平台登录和发布
+- 实时日志显示
 
 ## 文档组织 (docs/)
 

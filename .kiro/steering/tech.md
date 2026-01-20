@@ -16,7 +16,6 @@
 - **TypeScript**（编译为 CommonJS）
 - **PostgreSQL** 主数据库
 - **Redis** 缓存和会话
-- **Playwright** 浏览器自动化（用于发布）
 - **WebSocket (ws)** 实时同步
 
 ### 落地页 (landing/)
@@ -27,16 +26,20 @@
 ### Windows 登录管理器 (windows-login-manager/)
 - **Electron** 桌面应用
 - React + TypeScript + Vite
-- 用于平台账号登录管理
+- **Playwright** 浏览器自动化（本地发布执行）
+- 功能：平台账号登录管理 + 本地发布执行
 
 ## 关键依赖
 
-- `playwright` - 浏览器自动化，用于多平台发布
+### 服务器端
 - `wechatpay-axios-plugin` - 微信支付集成
 - `jsonwebtoken` + `bcrypt` - 认证
 - `zod` - Schema 验证
 - `mammoth` + `pdf-parse` - 文档解析
 - `helmet` + `express-rate-limit` - 安全防护
+
+### Electron 端
+- `playwright` - 浏览器自动化，用于本地发布执行
 
 ## 常用命令
 
@@ -79,11 +82,16 @@ npm run status           # 检查服务状态
 ## 环境变量
 
 通过各项目根目录的 `.env` 文件配置：
+
+### 服务器 (server/.env)
 - 数据库：`DATABASE_URL`
 - AI API：`DEEPSEEK_API_KEY`、`GEMINI_API_KEY`、`OLLAMA_BASE_URL`
 - 认证：`JWT_SECRET`、`JWT_REFRESH_SECRET`
-- 浏览器：`PUPPETEER_EXECUTABLE_PATH`、`BROWSER_HEADLESS`
 - 支付：`WECHAT_PAY_*` 系列变量
+
+### Electron 应用 (windows-login-manager/.env)
+- 服务器地址：`VITE_API_URL`
+- 浏览器配置：`BROWSER_HEADLESS`（是否无头模式）
 
 ## 端口分配
 

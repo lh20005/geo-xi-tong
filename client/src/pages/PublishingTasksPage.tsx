@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, message, 
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
-  InputNumber, Table
+  InputNumber, Table, Switch
 } from 'antd';
 import {
   SendOutlined, ReloadOutlined, CheckCircleOutlined,
@@ -99,8 +99,10 @@ export default function PublishingTasksPage() {
   // 创建任务中（防止重复提交）
   const [creatingTasks, setCreatingTasks] = useState(false);
 
-  // 静默发布模式（Web端强制静默模式，可视化模式仅桌面端可用）
-  const [headlessMode] = useState<boolean>(true);
+  // 静默发布模式（本地开发默认可视化，生产环境默认静默）
+  // 检测是否为本地开发环境
+  const isLocalDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const [headlessMode, setHeadlessMode] = useState<boolean>(!isLocalDev);
 
   // 日志查看
   const [logsModal, setLogsModal] = useState<{ 
@@ -1289,20 +1291,30 @@ export default function PublishingTasksPage() {
               </Col>
             </Row>
 
-            {/* 发布模式提示 - Web端仅支持静默模式 */}
+            {/* 浏览器模式切换 */}
             <Row gutter={16} align="middle" style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
               <Col flex="auto">
                 <Space size="middle" align="center">
-                  <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
-                  <Text style={{ color: '#fff', fontSize: 14 }}>发布模式：</Text>
-                  <Tag color="blue" style={{ fontSize: 13, padding: '4px 12px' }}>
-                    🔇 静默发布
+                  {headlessMode ? (
+                    <EyeInvisibleOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  ) : (
+                    <EyeOutlined style={{ color: '#fff', fontSize: 20 }} />
+                  )}
+                  <Text style={{ color: '#fff', fontSize: 14 }}>浏览器模式：</Text>
+                  <Switch
+                    checked={!headlessMode}
+                    onChange={(checked) => setHeadlessMode(!checked)}
+                    checkedChildren="可视化"
+                    unCheckedChildren="静默"
+                    style={{ background: headlessMode ? 'rgba(255,255,255,0.3)' : '#52c41a' }}
+                  />
+                  <Tag color={headlessMode ? "blue" : "green"} style={{ fontSize: 13, padding: '4px 12px' }}>
+                    {headlessMode ? '🔇 静默发布' : '👁️ 可视化发布'}
                   </Tag>
                   <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 12 }}>
-                    后台运行，不显示浏览器窗口
-                  </Text>
-                  <Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>
-                    （可视化模式仅 Windows 登录管理器可用）
+                    {headlessMode 
+                      ? '后台运行，不显示浏览器窗口（推荐）' 
+                      : '显示浏览器窗口，便于调试（仅本地开发）'}
                   </Text>
                 </Space>
               </Col>
