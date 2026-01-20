@@ -119,23 +119,18 @@ export default function ArticleSettingsPage() {
 
   // 处理提交
   const handleSubmit = async (data: ArticleSettingFormData) => {
-    try {
-      if (modalMode === 'create') {
-        await createArticleSetting(data);
-        message.success('创建成功');
-        // 创建后跳转到第一页
-        setCurrentPage(1);
-        invalidateAndRefresh();
-      } else if (modalMode === 'edit' && selectedSetting) {
-        await updateArticleSetting(selectedSetting.id, data);
-        message.success('更新成功');
-        invalidateAndRefresh();
-      }
-      setModalVisible(false);
-      setSelectedSetting(null);
-    } catch (error: any) {
-      throw error; // 让Modal组件处理错误显示
+    if (modalMode === 'create') {
+      await createArticleSetting(data);
+      message.success('创建成功');
+      setCurrentPage(1);
+      invalidateAndRefresh();
+    } else if (modalMode === 'edit' && selectedSetting) {
+      await updateArticleSetting(selectedSetting.id, data);
+      message.success('更新成功');
+      invalidateAndRefresh();
     }
+    setModalVisible(false);
+    setSelectedSetting(null);
   };
 
   // 处理取消

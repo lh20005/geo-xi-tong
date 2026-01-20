@@ -120,8 +120,8 @@ export abstract class BaseService<T> {
       const pageSize = params.pageSize || 20;
       const offset = (page - 1) * pageSize;
 
-      let whereClauses: string[] = ['user_id = ?'];
-      let queryParams: any[] = [userId];
+      const whereClauses: string[] = ['user_id = ?'];
+      const queryParams: any[] = [userId];
 
       // 搜索条件
       if (params.search && searchFields.length > 0) {

@@ -87,7 +87,7 @@ export default function PublishingConfigModal({
       // 筛选已绑定账号的平台
       const boundPlatformIds = new Set(
         accountsData
-          .map(acc => acc.platformId || acc.platform)
+          .map((acc: LocalAccount) => acc.platformId || acc.platform)
           .filter(Boolean)
       );
       const bound = (platformsData || []).filter(p => boundPlatformIds.has(p.platform_id));

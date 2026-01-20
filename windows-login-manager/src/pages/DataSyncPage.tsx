@@ -62,7 +62,7 @@ const DataSyncPage: React.FC = () => {
   } = useSyncStore();
 
   const [restoreModalVisible, setRestoreModalVisible] = useState(false);
-  const [selectedSnapshot, setSelectedSnapshot] = useState<string | null>(null);
+  const [selectedSnapshot, setSelectedSnapshot] = useState<number | null>(null);
 
   useEffect(() => {
     fetchSnapshots();
@@ -97,7 +97,7 @@ const DataSyncPage: React.FC = () => {
   };
 
   // 删除快照
-  const handleDeleteSnapshot = async (snapshotId: string) => {
+  const handleDeleteSnapshot = async (snapshotId: number) => {
     const success = await deleteSnapshot(snapshotId);
     if (success) {
       message.success('删除成功！');

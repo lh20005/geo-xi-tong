@@ -150,6 +150,7 @@ export default function AccountManagementModal({
               <List.Item
                 actions={[
                   <Button
+                    key="default"
                     type="text"
                     icon={account.is_default ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
                     onClick={() => !account.is_default && handleSetDefault(account.id)}
@@ -158,6 +159,7 @@ export default function AccountManagementModal({
                     {account.is_default ? '默认' : '设为默认'}
                   </Button>,
                   <Button
+                    key="edit"
                     type="text"
                     icon={<EditOutlined />}
                     onClick={() => handleEdit(account)}
@@ -165,6 +167,7 @@ export default function AccountManagementModal({
                     编辑
                   </Button>,
                   <Popconfirm
+                    key="delete"
                     title="确定要删除这个账号吗？"
                     description="删除后将无法恢复"
                     onConfirm={() => handleDelete(account.id)}

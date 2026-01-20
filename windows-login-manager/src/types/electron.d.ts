@@ -1,13 +1,16 @@
 // Electron API类型定义
+type ApiResult<T = any> = { success: boolean; data?: T; error?: string };
+type UnknownRecord = Record<string, any>;
+type UnknownArray = any[];
 export interface ElectronAPI {
   // 系统登录
   login: (username: string, password: string) => Promise<AuthResult>;
-  logout: () => Promise<any>;
+  logout: () => Promise<unknown>;
   checkAuth: () => Promise<{ isAuthenticated: boolean; user?: { id: number; username: string; email?: string; role: string } }>;
 
   // 平台登录
   loginPlatform: (platformId: string) => Promise<LoginResult>;
-  cancelLogin: (platformId?: string) => Promise<any>;
+  cancelLogin: (platformId?: string) => Promise<unknown>;
   getLoginStatus: () => Promise<{ isLoggingIn: boolean }>;
   testAccountLogin: (accountId: number) => Promise<{ success: boolean; message?: string }>;
 
@@ -18,52 +21,52 @@ export interface ElectronAPI {
   checkServerHealth: () => Promise<{ status: string; message?: string }>;
 
   // Dashboard
-  getDashboardAllData: (params?: { startDate?: string; endDate?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getDashboardAllData: (params?: { startDate?: string; endDate?: string }) => Promise<ApiResult>;
 
   // 转化目标
-  getConversionTargets: (params: { page?: number; pageSize?: number; search?: string; sortField?: string; sortOrder?: 'asc' | 'desc' }) => Promise<{ success: boolean; data?: any; error?: string }>;
-  createConversionTarget: (payload: { companyName: string; industry?: string; website?: string; address?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
-  updateConversionTarget: (id: number, payload: { companyName?: string; industry?: string; website?: string; address?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
-  deleteConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
-  getConversionTarget: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getConversionTargets: (params: { page?: number; pageSize?: number; search?: string; sortField?: string; sortOrder?: 'asc' | 'desc' }) => Promise<ApiResult>;
+  createConversionTarget: (payload: { companyName: string; industry?: string; website?: string; address?: string }) => Promise<ApiResult>;
+  updateConversionTarget: (id: number, payload: { companyName?: string; industry?: string; website?: string; address?: string }) => Promise<ApiResult>;
+  deleteConversionTarget: (id: number) => Promise<ApiResult>;
+  getConversionTarget: (id: number) => Promise<ApiResult>;
 
   // 知识库管理
-  getKnowledgeBases: () => Promise<{ success: boolean; data?: any; error?: string }>;
-  getKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
-  createKnowledgeBase: (payload: { name: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
-  updateKnowledgeBase: (id: number, payload: { name?: string; description?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
-  deleteKnowledgeBase: (id: number) => Promise<{ success: boolean; data?: any; error?: string }>;
-  uploadKnowledgeBaseDocuments: (id: number, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
-  getKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
-  deleteKnowledgeBaseDocument: (docId: number) => Promise<{ success: boolean; data?: any; error?: string }>;
-  searchKnowledgeBaseDocuments: (id: number, query: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+  getKnowledgeBases: () => Promise<ApiResult>;
+  getKnowledgeBase: (id: number) => Promise<ApiResult>;
+  createKnowledgeBase: (payload: { name: string; description?: string }) => Promise<ApiResult>;
+  updateKnowledgeBase: (id: number, payload: { name?: string; description?: string }) => Promise<ApiResult>;
+  deleteKnowledgeBase: (id: number) => Promise<ApiResult>;
+  uploadKnowledgeBaseDocuments: (id: number, files: UnknownArray) => Promise<ApiResult>;
+  getKnowledgeBaseDocument: (docId: number) => Promise<ApiResult>;
+  deleteKnowledgeBaseDocument: (docId: number) => Promise<ApiResult>;
+  searchKnowledgeBaseDocuments: (id: number, query: string) => Promise<ApiResult>;
 
   // 账号管理
   getAccounts: () => Promise<Account[]>;
-  deleteAccount: (accountId: number) => Promise<any>;
-  setDefaultAccount: (platformId: string, accountId: number) => Promise<any>;
+  deleteAccount: (accountId: number) => Promise<unknown>;
+  setDefaultAccount: (platformId: string, accountId: number) => Promise<unknown>;
   refreshAccounts: () => Promise<Account[]>;
 
   // 配置管理
   getConfig: () => Promise<AppConfig>;
-  setConfig: (config: AppConfig) => Promise<any>;
-  clearCache: () => Promise<any>;
-  clearAllData: () => Promise<any>;
+  setConfig: (config: AppConfig) => Promise<unknown>;
+  clearCache: () => Promise<unknown>;
+  clearAllData: () => Promise<unknown>;
 
   // 日志管理
   getLogs: () => Promise<string[]>;
   exportLogs: () => Promise<string>;
-  clearLogs: () => Promise<any>;
+  clearLogs: () => Promise<unknown>;
 
   // 同步管理
-  getSyncStatus: () => Promise<any>;
-  triggerSync: () => Promise<any>;
-  clearSyncQueue: () => Promise<any>;
+  getSyncStatus: () => Promise<unknown>;
+  triggerSync: () => Promise<unknown>;
+  clearSyncQueue: () => Promise<unknown>;
 
   // WebSocket管理
-  getWebSocketStatus: () => Promise<any>;
-  reconnectWebSocket: () => Promise<any>;
-  onAccountEvent: (callback: (event: any) => void) => () => void;
+  getWebSocketStatus: () => Promise<unknown>;
+  reconnectWebSocket: () => Promise<unknown>;
+  onAccountEvent: (callback: (event: unknown) => void) => () => void;
 
   // 存储管理
   storage: {
@@ -87,138 +90,165 @@ export interface ElectronAPI {
 
   // 文章管理（本地 SQLite）
   article: {
-    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    update: (id: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    create: (params: UnknownRecord) => Promise<ApiResult>;
+    findAll: (params?: UnknownRecord) => Promise<ApiResult>;
+    findById: (id: string) => Promise<ApiResult>;
+    update: (id: string, params: UnknownRecord) => Promise<ApiResult>;
     delete: (id: string) => Promise<{ success: boolean; error?: string }>;
-    search: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteBatch: (ids: string[]) => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteAll: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    getKeywordStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    search: (params: UnknownRecord) => Promise<ApiResult>;
+    deleteBatch: (ids: string[]) => Promise<ApiResult>;
+    deleteAll: () => Promise<ApiResult>;
+    getStats: () => Promise<ApiResult>;
+    getKeywordStats: () => Promise<ApiResult>;
     markAsPublished: (id: string, publishedAt?: string) => Promise<{ success: boolean; error?: string }>;
-    findUnpublished: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    findUnpublished: () => Promise<ApiResult>;
     checkArticleExists: (params: { taskId: number; title: string }) => Promise<{ success: boolean; data?: { exists: boolean }; error?: string }>;
   };
 
   // 任务管理（本地 SQLite）
   task: {
-    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findAll: (params?: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    create: (params: UnknownRecord) => Promise<ApiResult>;
+    findAll: (params?: UnknownRecord) => Promise<ApiResult>;
+    findById: (id: string) => Promise<ApiResult>;
     updateStatus: (id: string, status: string, errorMessage?: string) => Promise<{ success: boolean; error?: string }>;
     cancel: (id: string) => Promise<{ success: boolean; error?: string }>;
     delete: (id: string) => Promise<{ success: boolean; error?: string }>;
-    findPending: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    findByBatchId: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    cancelBatch: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteBatch: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getBatchStats: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    getLogs: (taskId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    createRecord: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    updateRecord: (id: string, params: any) => Promise<{ success: boolean; error?: string }>;
+    findPending: () => Promise<ApiResult>;
+    findByBatchId: (batchId: string) => Promise<ApiResult>;
+    cancelBatch: (batchId: string) => Promise<ApiResult>;
+    deleteBatch: (batchId: string) => Promise<ApiResult>;
+    getBatchStats: (batchId: string) => Promise<ApiResult>;
+    getStats: () => Promise<ApiResult>;
+    getLogs: (taskId: string) => Promise<ApiResult>;
+    createRecord: (params: UnknownRecord) => Promise<ApiResult>;
+    updateRecord: (id: string, params: UnknownRecord) => Promise<{ success: boolean; error?: string }>;
   };
 
   // 发布执行（本地 Playwright）
   publish: {
-    executeSingle: (taskId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    executeSingle: (taskId: string) => Promise<ApiResult>;
     executeBatch: (batchId: string) => Promise<{ success: boolean; message?: string; error?: string }>;
-    stopBatch: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getBatchStatus: (batchId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    stopBatch: (batchId: string) => Promise<ApiResult>;
+    getBatchStatus: (batchId: string) => Promise<ApiResult>;
     startScheduler: () => Promise<{ success: boolean; message?: string; error?: string }>;
     stopScheduler: () => Promise<{ success: boolean; message?: string; error?: string }>;
-    getSchedulerStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    reserveQuota: (quotaType: string, amount?: number, taskInfo?: object) => Promise<{ success: boolean; data?: any; error?: string }>;
-    confirmQuota: (reservationId: number, result?: object) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
-    releaseQuota: (reservationId: number, reason?: string) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
-    getQuotaInfo: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    reportResult: (report: any) => Promise<{ success: boolean; message?: string; error?: string }>;
+    getSchedulerStatus: () => Promise<ApiResult>;
+    reserveQuota: (quotaType: string, amount?: number, taskInfo?: UnknownRecord) => Promise<ApiResult>;
+    confirmQuota: (reservationId: number, result?: UnknownRecord) => Promise<ApiResult>;
+    releaseQuota: (reservationId: number, reason?: string) => Promise<ApiResult>;
+    getQuotaInfo: () => Promise<ApiResult>;
+    reportResult: (report: UnknownRecord) => Promise<{ success: boolean; message?: string; error?: string }>;
     flushPendingAnalytics: () => Promise<{ success: boolean; error?: string }>;
+  };
+
+  publishingRecord: {
+    findAll: (params?: UnknownRecord) => Promise<ApiResult>;
+    findById: (id: number) => Promise<ApiResult>;
+    delete: (id: number) => Promise<{ success: boolean; error?: string }>;
+    batchDelete: (ids: number[]) => Promise<ApiResult>;
+    getStats: () => Promise<ApiResult>;
   };
 
   // 浏览器自动化（本地 Playwright）
   browser: {
     launch: (options?: { headless?: boolean; userDataDir?: string }) => Promise<{ success: boolean; message?: string; error?: string }>;
     close: () => Promise<{ success: boolean; message?: string; error?: string }>;
-    screenshot: (options?: { fullPage?: boolean; path?: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
+    screenshot: (options?: { fullPage?: boolean; path?: string }) => Promise<ApiResult>;
     navigateTo: (url: string, options?: { waitUntil?: string; timeout?: number }) => Promise<{ success: boolean; error?: string }>;
-    getCurrentUrl: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    getPageContent: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    evaluate: (script: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    setCookies: (cookies: any[], url?: string) => Promise<{ success: boolean; error?: string }>;
-    getCookies: (url?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    checkLoginStatus: (accountId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    checkAllLoginStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    getStatus: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    getCurrentUrl: () => Promise<ApiResult>;
+    getPageContent: () => Promise<ApiResult>;
+    evaluate: (script: string) => Promise<ApiResult>;
+    setCookies: (cookies: UnknownArray, url?: string) => Promise<{ success: boolean; error?: string }>;
+    getCookies: (url?: string) => Promise<ApiResult>;
+    checkLoginStatus: (accountId: string) => Promise<ApiResult>;
+    checkAllLoginStatus: () => Promise<ApiResult>;
+    getStatus: () => Promise<ApiResult>;
   };
 
   // 本地账号管理（本地 SQLite + 加密）
   localAccount: {
-    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findAll: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findByPlatform: (platformId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    update: (id: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    create: (params: UnknownRecord) => Promise<ApiResult>;
+    findAll: () => Promise<ApiResult>;
+    findById: (id: string) => Promise<ApiResult>;
+    findByPlatform: (platformId: string) => Promise<ApiResult>;
+    update: (id: string, params: UnknownRecord) => Promise<ApiResult>;
     delete: (id: string) => Promise<{ success: boolean; error?: string }>;
     setDefault: (platformId: string, accountId: string) => Promise<{ success: boolean; error?: string }>;
-    getDefault: (platformId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    getDefault: (platformId: string) => Promise<ApiResult>;
     updateLoginStatus: (id: string, status: string, errorMessage?: string) => Promise<{ success: boolean; error?: string }>;
-    saveCookies: (id: string, cookies: any[]) => Promise<{ success: boolean; error?: string }>;
-    getCookies: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    exists: (platformId: string, platformUserId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    saveCookies: (id: string, cookies: UnknownArray) => Promise<{ success: boolean; error?: string }>;
+    getCookies: (id: string) => Promise<ApiResult>;
+    getStats: () => Promise<ApiResult>;
+    exists: (platformId: string, platformUserId: string) => Promise<ApiResult>;
   };
 
   // 本地知识库管理（本地文件系统）
   localKnowledge: {
-    create: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findAll: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    findById: (id: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    update: (id: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+    create: (params: UnknownRecord) => Promise<ApiResult>;
+    findAll: () => Promise<ApiResult>;
+    findById: (id: string) => Promise<ApiResult>;
+    update: (id: string, params: UnknownRecord) => Promise<ApiResult>;
     delete: (id: string) => Promise<{ success: boolean; error?: string }>;
-    upload: (kbId: string, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getDocuments: (kbId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getDocument: (docId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    upload: (kbId: string, files: UnknownArray) => Promise<ApiResult>;
+    getDocuments: (kbId: string) => Promise<ApiResult>;
+    getDocument: (docId: string) => Promise<ApiResult>;
     deleteDocument: (docId: string) => Promise<{ success: boolean; error?: string }>;
-    search: (kbId: string, query: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    parse: (filePath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    search: (kbId: string, query: string) => Promise<ApiResult>;
+    parse: (filePath: string) => Promise<ApiResult>;
+    getStats: () => Promise<ApiResult>;
+  };
+
+  topic: {
+    create: (params: UnknownRecord) => Promise<ApiResult>;
+    findAll: (params?: UnknownRecord) => Promise<ApiResult>;
+    findById: (id: number) => Promise<ApiResult>;
+    update: (id: number, params: UnknownRecord) => Promise<ApiResult>;
+    delete: (id: number) => Promise<{ success: boolean; error?: string }>;
+    deleteBatch: (ids: number[]) => Promise<ApiResult>;
+    getByDistillation: (distillationId: number) => Promise<ApiResult>;
+    search: (searchTerm: string) => Promise<ApiResult>;
+    findUnused: (limit?: number) => Promise<ApiResult>;
+    findRecent: (limit?: number) => Promise<ApiResult>;
+    getStats: () => Promise<ApiResult>;
+    exists: (id: number) => Promise<ApiResult>;
   };
 
   // 本地图库管理（本地文件系统）
   gallery: {
-    createAlbum: (params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findAlbums: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    getAlbum: (albumId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    updateAlbum: (albumId: string, params: any) => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteAlbum: (albumId: string) => Promise<{ success: boolean; error?: string }>;
-    uploadImage: (albumId: string, files: any[]) => Promise<{ success: boolean; data?: any; error?: string }>;
-    findImages: (albumId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getImage: (imageId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    deleteImage: (imageId: string) => Promise<{ success: boolean; error?: string }>;
-    deleteImages: (imageIds: string[]) => Promise<{ success: boolean; data?: any; error?: string }>;
-    moveImage: (imageId: string, targetAlbumId: string) => Promise<{ success: boolean; error?: string }>;
-    getStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    readImageFile: (imageId: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+    createAlbum: (params: UnknownRecord) => Promise<ApiResult>;
+    findAlbums: () => Promise<ApiResult>;
+    getAlbum: (albumId: number) => Promise<ApiResult>;
+    updateAlbum: (albumId: number, params: UnknownRecord) => Promise<ApiResult>;
+    deleteAlbum: (albumId: number) => Promise<{ success: boolean; error?: string }>;
+    uploadImage: (albumId: number, files: UnknownArray) => Promise<ApiResult>;
+    findImages: (albumId: number) => Promise<ApiResult>;
+    getImage: (imageId: number) => Promise<ApiResult>;
+    deleteImage: (imageId: number) => Promise<{ success: boolean; error?: string }>;
+    deleteImages: (imageIds: number[]) => Promise<ApiResult>;
+    moveImage: (imageId: number, targetAlbumId: number) => Promise<{ success: boolean; error?: string }>;
+    getStats: () => Promise<ApiResult>;
+    readImageFile: (imageId: number) => Promise<ApiResult>;
   };
 
   // 数据同步（与服务器同步）
   dataSync: {
-    backup: () => Promise<{ success: boolean; data?: any; error?: string }>;
-    restore: (snapshotId: number) => Promise<{ success: boolean; data?: any; error?: string }>;  // ✅ 修复
-    getSnapshots: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    backup: () => Promise<ApiResult>;
+    restore: (snapshotId: number) => Promise<ApiResult>;
+    getSnapshots: () => Promise<ApiResult>;
     deleteSnapshot: (snapshotId: number) => Promise<{ success: boolean; error?: string }>;  // ✅ 修复
-    exportLocal: (exportPath?: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    importLocal: (importPath: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-    getLocalStats: () => Promise<{ success: boolean; data?: any; error?: string }>;
+    exportLocal: (exportPath?: string) => Promise<ApiResult>;
+    importLocal: (importPath: string) => Promise<ApiResult>;
+    getLocalStats: () => Promise<ApiResult>;
   };
 
   // 工具函数
   utils: {
     getLocalFileUrl: (filePath: string) => string;
   };
+
+  invoke: <T = any>(channel: string, ...args: UnknownArray) => Promise<T>;
+
+  onTokensSaved: (callback: (tokens: { authToken: string; refreshToken: string }) => void) => () => void;
 }
 
 // 更新状态类型
@@ -310,7 +340,7 @@ export interface Cookie {
 export interface UserInfo {
   username: string;
   avatar?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 declare global {

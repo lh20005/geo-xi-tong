@@ -12,6 +12,14 @@ interface KnowledgeStats {
   totalSize: number;
 }
 
+type UploadFile = {
+  name: string;
+  type: string;
+  size?: number;
+  path?: string;
+  buffer?: number[];
+};
+
 interface KnowledgeState {
   // 数据
   knowledgeBases: LocalKnowledgeBase[];
@@ -35,7 +43,7 @@ interface KnowledgeState {
   deleteKnowledgeBase: (id: string) => Promise<boolean>;
   
   // 文档操作
-  uploadDocuments: (kbId: string, files: any[]) => Promise<boolean>;
+  uploadDocuments: (kbId: string, files: UploadFile[]) => Promise<boolean>;
   fetchDocuments: (kbId: string) => Promise<void>;
   fetchDocument: (docId: string) => Promise<void>;
   deleteDocument: (docId: string) => Promise<boolean>;
@@ -60,6 +68,9 @@ const initialState = {
   error: null,
 };
 
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
   ...initialState,
   
@@ -72,8 +83,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       } else {
         set({ error: result.error || '获取知识库列表失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取知识库列表失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取知识库列表失败'), loading: false });
     }
   },
   
@@ -86,8 +97,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       } else {
         set({ error: result.error || '获取知识库详情失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取知识库详情失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取知识库详情失败'), loading: false });
     }
   },
   
@@ -103,8 +114,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set({ error: result.error || '创建知识库失败', loading: false });
         return null;
       }
-    } catch (error: any) {
-      set({ error: error.message || '创建知识库失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '创建知识库失败'), loading: false });
       return null;
     }
   },
@@ -124,8 +135,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set({ error: result.error || '更新知识库失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '更新知识库失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '更新知识库失败'), loading: false });
       return false;
     }
   },
@@ -142,8 +153,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set({ error: result.error || '删除知识库失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除知识库失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除知识库失败'), loading: false });
       return false;
     }
   },
@@ -161,8 +172,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set({ error: result.error || '上传文档失败', uploading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '上传文档失败', uploading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '上传文档失败'), uploading: false });
       return false;
     }
   },
@@ -176,8 +187,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       } else {
         set({ error: result.error || '获取文档列表失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取文档列表失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取文档列表失败'), loading: false });
     }
   },
   
@@ -190,8 +201,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       } else {
         set({ error: result.error || '获取文档详情失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取文档详情失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取文档详情失败'), loading: false });
     }
   },
   
@@ -210,8 +221,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set({ error: result.error || '删除文档失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除文档失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除文档失败'), loading: false });
       return false;
     }
   },
@@ -225,8 +236,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       } else {
         set({ error: result.error || '搜索文档失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '搜索文档失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '搜索文档失败'), loading: false });
     }
   },
   
@@ -241,8 +252,8 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
         set({ error: result.error || '解析文件失败' });
         return null;
       }
-    } catch (error: any) {
-      set({ error: error.message || '解析文件失败', parsing: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '解析文件失败'), parsing: false });
       return null;
     }
   },
@@ -253,7 +264,7 @@ export const useKnowledgeStore = create<KnowledgeState>((set, get) => ({
       if (result.success) {
         set({ stats: result.data });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取知识库统计失败:', error);
     }
   },

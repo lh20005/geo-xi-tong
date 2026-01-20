@@ -12,6 +12,14 @@ interface GalleryStats {
   totalSize: number;
 }
 
+type UploadFile = {
+  name: string;
+  type: string;
+  size?: number;
+  path?: string;
+  buffer?: number[];
+};
+
 interface GalleryState {
   // 数据
   albums: LocalAlbum[];
@@ -33,7 +41,7 @@ interface GalleryState {
   deleteAlbum: (albumId: number) => Promise<boolean>;
   
   // 图片操作
-  uploadImages: (albumId: number, files: any[]) => Promise<boolean>;
+  uploadImages: (albumId: number, files: UploadFile[]) => Promise<boolean>;
   fetchImages: (albumId: number) => Promise<void>;
   fetchImage: (imageId: number) => Promise<void>;
   deleteImage: (imageId: number) => Promise<boolean>;
@@ -57,6 +65,9 @@ const initialState = {
   error: null,
 };
 
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 export const useGalleryStore = create<GalleryState>((set, get) => ({
   ...initialState,
   
@@ -70,8 +81,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       } else {
         set({ error: result.error || '获取相册列表失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取相册列表失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取相册列表失败'), loading: false });
     }
   },
   
@@ -84,8 +95,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       } else {
         set({ error: result.error || '获取相册详情失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取相册详情失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取相册详情失败'), loading: false });
     }
   },
   
@@ -101,8 +112,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '创建相册失败', loading: false });
         return null;
       }
-    } catch (error: any) {
-      set({ error: error.message || '创建相册失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '创建相册失败'), loading: false });
       return null;
     }
   },
@@ -122,8 +133,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '更新相册失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '更新相册失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '更新相册失败'), loading: false });
       return false;
     }
   },
@@ -140,8 +151,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '删除相册失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除相册失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除相册失败'), loading: false });
       return false;
     }
   },
@@ -159,8 +170,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '上传图片失败', uploading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '上传图片失败', uploading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '上传图片失败'), uploading: false });
       return false;
     }
   },
@@ -174,8 +185,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       } else {
         set({ error: result.error || '获取图片列表失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取图片列表失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取图片列表失败'), loading: false });
     }
   },
   
@@ -188,8 +199,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       } else {
         set({ error: result.error || '获取图片详情失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取图片详情失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取图片详情失败'), loading: false });
     }
   },
   
@@ -208,8 +219,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '删除图片失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除图片失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除图片失败'), loading: false });
       return false;
     }
   },
@@ -229,8 +240,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '批量删除图片失败', loading: false });
         return { success: false, deletedCount: 0 };
       }
-    } catch (error: any) {
-      set({ error: error.message || '批量删除图片失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '批量删除图片失败'), loading: false });
       return { success: false, deletedCount: 0 };
     }
   },
@@ -250,8 +261,8 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         set({ error: result.error || '移动图片失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '移动图片失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '移动图片失败'), loading: false });
       return false;
     }
   },
@@ -263,7 +274,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
         return result.data;
       }
       return null;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('读取图片文件失败:', error);
       return null;
     }
@@ -275,7 +286,7 @@ export const useGalleryStore = create<GalleryState>((set, get) => ({
       if (result.success) {
         set({ stats: result.data });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取图库统计失败:', error);
     }
   },

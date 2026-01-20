@@ -67,7 +67,7 @@ export default function GalleryPage() {
               const fileObj = file.originFileObj as any;
               
               // 尝试多种方式获取文件路径
-              let filePath = fileObj.path;
+              const filePath = fileObj.path;
               
               // 如果没有 path 属性，尝试使用 webkitRelativePath 或创建临时路径
               if (!filePath) {

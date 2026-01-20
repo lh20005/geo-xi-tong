@@ -16,7 +16,13 @@ const { Title, Paragraph, Text } = Typography;
 const { Search } = Input;
 
 // 获取滚动容器
-const getScrollContainer = () => document.querySelector('.ant-layout-content') as HTMLElement || window;
+const getScrollContainer = (): HTMLElement | Window => {
+  const container = document.querySelector('.ant-layout-content');
+  if (container instanceof HTMLElement) {
+    return container;
+  }
+  return window;
+};
 
 export default function UserManualPage() {
   const [, setSearchQuery] = useState('');

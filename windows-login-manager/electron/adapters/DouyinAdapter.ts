@@ -229,7 +229,7 @@ export class DouyinAdapter extends PlatformAdapter {
       // 第七步：填写正文（限制900字）
       await this.log('info', '第七步：填写正文');
       const cleanContent = this.cleanArticleContent(article.content);
-      let finalContent = cleanContent.length > 900 ? cleanContent.substring(0, 897) + '...' : cleanContent;
+      const finalContent = cleanContent.length > 900 ? cleanContent.substring(0, 897) + '...' : cleanContent;
       const contentEditor = page.locator('.ace-line > div');
       await this.humanClick(contentEditor, '正文编辑器');
       await this.humanType(page.locator('.zone-container'), finalContent, '正文内容');

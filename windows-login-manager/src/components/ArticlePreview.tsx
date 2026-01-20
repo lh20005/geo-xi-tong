@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Typography, Empty } from 'antd';
+import { config } from '../config/env';
 import { processArticleContent } from '../utils/articleUtils';
 
 const { Text } = Typography;
+const serverUrl = config.apiUrl.replace(/\/api$/, '');
 
 interface ArticlePreviewProps {
   content: string;

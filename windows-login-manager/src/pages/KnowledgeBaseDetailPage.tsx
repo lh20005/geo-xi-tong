@@ -6,6 +6,10 @@ import ResizableTable from '../components/ResizableTable';
 import { useKnowledgeStore } from '../stores/knowledgeStore';
 import type { UploadFile } from 'antd';
 
+type UploadFileData =
+  | { name: string; type: string; size?: number; path: string }
+  | { name: string; type: string; size?: number; buffer: number[] };
+
 export default function KnowledgeBaseDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -73,7 +77,7 @@ export default function KnowledgeBaseDetailPage() {
               type: file.type || 'application/octet-stream',
               size: file.size,
               path: fileObj.path
-            };
+            } as UploadFileData;
           }
 
           if (typeof fileObj.arrayBuffer === 'function') {
@@ -84,13 +88,13 @@ export default function KnowledgeBaseDetailPage() {
               type: file.type || 'application/octet-stream',
               size: file.size,
               buffer
-            };
+            } as UploadFileData;
           }
         }
         return null;
       }));
 
-      const validFiles = filesData.filter((f): f is { name: string; type: string; size?: number; path?: string; buffer?: number[] } => !!f && (!!f.path || (f.buffer && f.buffer.length > 0)));
+      const validFiles = filesData.filter((file): file is UploadFileData => Boolean(file));
 
       if (validFiles.length === 0) {
         message.error('无法获取文件内容，请重新选择文件');
@@ -380,13 +384,13 @@ export default function KnowledgeBaseDetailPage() {
               <strong>文件名:</strong> {currentDocument.filename}
             </div>
             <div>
-              <strong>文件类型:</strong> {currentDocument.file_type}
+              <strong>文件类型:</strong> {currentDocument.file_type || currentDocument.fileType}
             </div>
             <div>
-              <strong>文件大小:</strong> {formatFileSize(currentDocument.file_size)}
+              <strong>文件大小:</strong> {formatFileSize(currentDocument.file_size ?? currentDocument.fileSize ?? 0)}
             </div>
             <div>
-              <strong>上传时间:</strong> {new Date(currentDocument.created_at).toLocaleString('zh-CN')}
+              <strong>上传时间:</strong> {currentDocument.created_at || currentDocument.createdAt ? new Date(currentDocument.created_at || currentDocument.createdAt || '').toLocaleString('zh-CN') : '-'}
             </div>
             <div>
               <strong>文档内容:</strong>

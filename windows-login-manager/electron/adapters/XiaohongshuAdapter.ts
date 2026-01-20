@@ -168,7 +168,7 @@ export class XiaohongshuAdapter extends PlatformAdapter {
       // 第六步：填写正文
       await this.log('info', '第六步：填写正文');
       const cleanContent = this.cleanArticleContent(article.content);
-      let finalContent = cleanContent.length > 1000 ? cleanContent.substring(0, 997) + '...' : cleanContent;
+      const finalContent = cleanContent.length > 1000 ? cleanContent.substring(0, 997) + '...' : cleanContent;
       await page.getByRole('paragraph').first().click();
       await page.waitForTimeout(800); // 模拟人类思考
       await page.getByRole('textbox').nth(1).fill(finalContent);

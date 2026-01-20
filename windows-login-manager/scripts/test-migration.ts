@@ -248,7 +248,7 @@ async function runAllTests() {
   ];
   
   let passedCount = 0;
-  let totalCount = testResults.length;
+  const totalCount = testResults.length;
   
   testResults.forEach(([name, passed]) => {
     const status = passed ? '✅ 通过' : '❌ 失败';

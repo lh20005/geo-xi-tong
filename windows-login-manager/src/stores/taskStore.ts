@@ -92,6 +92,9 @@ const initialState = {
   error: null,
 };
 
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 export const useTaskStore = create<TaskState>((set, get) => ({
   ...initialState,
   
@@ -110,8 +113,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       } else {
         set({ error: result.error || '获取任务列表失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取任务列表失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取任务列表失败'), loading: false });
     }
   },
   
@@ -124,8 +127,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       } else {
         set({ error: result.error || '获取任务详情失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取任务详情失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取任务详情失败'), loading: false });
     }
   },
   
@@ -141,8 +144,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '创建任务失败', loading: false });
         return null;
       }
-    } catch (error: any) {
-      set({ error: error.message || '创建任务失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '创建任务失败'), loading: false });
       return null;
     }
   },
@@ -155,7 +158,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         return true;
       }
       return false;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('更新任务状态失败:', error);
       return false;
     }
@@ -173,8 +176,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '取消任务失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '取消任务失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '取消任务失败'), loading: false });
       return false;
     }
   },
@@ -191,8 +194,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '删除任务失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除任务失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除任务失败'), loading: false });
       return false;
     }
   },
@@ -206,8 +209,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       } else {
         set({ error: result.error || '获取待处理任务失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取待处理任务失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取待处理任务失败'), loading: false });
     }
   },
   
@@ -220,8 +223,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       } else {
         set({ error: result.error || '获取批次任务失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取批次任务失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取批次任务失败'), loading: false });
     }
   },
   
@@ -237,8 +240,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '取消批次失败', loading: false });
         return { success: false, cancelledCount: 0 };
       }
-    } catch (error: any) {
-      set({ error: error.message || '取消批次失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '取消批次失败'), loading: false });
       return { success: false, cancelledCount: 0 };
     }
   },
@@ -255,8 +258,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '删除批次失败', loading: false });
         return { success: false, deletedCount: 0 };
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除批次失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除批次失败'), loading: false });
       return { success: false, deletedCount: 0 };
     }
   },
@@ -268,7 +271,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         return result.data;
       }
       return null;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取批次统计失败:', error);
       return null;
     }
@@ -280,7 +283,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (result.success) {
         set({ stats: result.data });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取任务统计失败:', error);
     }
   },
@@ -291,7 +294,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (result.success) {
         set({ logs: result.data || [] });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取任务日志失败:', error);
     }
   },
@@ -309,8 +312,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '执行任务失败', executing: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '执行任务失败', executing: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '执行任务失败'), executing: false });
       return false;
     }
   },
@@ -326,8 +329,8 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         set({ error: result.error || '执行批次失败', executing: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '执行批次失败', executing: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '执行批次失败'), executing: false });
       return false;
     }
   },
@@ -340,7 +343,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         return true;
       }
       return false;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('停止批次失败:', error);
       return false;
     }
@@ -351,7 +354,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     try {
       const result = await localPublishApi.startScheduler();
       return result.success;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('启动调度器失败:', error);
       return false;
     }
@@ -361,7 +364,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     try {
       const result = await localPublishApi.stopScheduler();
       return result.success;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('停止调度器失败:', error);
       return false;
     }
@@ -374,7 +377,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         return result.data;
       }
       return null;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取调度器状态失败:', error);
       return null;
     }

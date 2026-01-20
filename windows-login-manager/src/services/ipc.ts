@@ -34,7 +34,8 @@ class IPCBridge {
 
   // 测试账号登录
   async testAccountLogin(accountId: string | number): Promise<{ success: boolean; message?: string }> {
-    return await this.api.testAccountLogin(accountId);
+    const resolvedId = typeof accountId === 'string' ? parseInt(accountId, 10) : accountId;
+    return await this.api.testAccountLogin(resolvedId);
   }
 
   // 平台列表

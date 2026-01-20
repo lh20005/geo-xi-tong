@@ -153,6 +153,17 @@ export default function ArticleListPage() {
     setRefreshing(false);
   }, [filters, page, pageSize]);
 
+  const handleArticlesUpdated = useCallback(() => {
+    loadArticles();
+  }, [loadArticles]);
+
+  useEffect(() => {
+    window.addEventListener('articles:updated', handleArticlesUpdated);
+    return () => {
+      window.removeEventListener('articles:updated', handleArticlesUpdated);
+    };
+  }, [handleArticlesUpdated]);
+
   const handleView = async (id: string) => {
     await fetchArticle(id);
     const { currentArticle } = useArticleStore.getState();

@@ -27,6 +27,14 @@ import { useCacheStore } from '../stores/cacheStore';
 const { Title } = Typography;
 const { TextArea } = Input;
 
+interface TopicItem {
+  topicId: number;
+  keyword: string;
+  question: string;
+  usageCount: number;
+  lastUsedAt: string | null;
+}
+
 export default function TopicsPage() {
   const { distillationId } = useParams();
   const navigate = useNavigate();
@@ -60,7 +68,7 @@ export default function TopicsPage() {
     refreshing,
     refresh: refreshTopics,
     isFromCache
-  } = useCachedData(cacheKey, fetchTopics, {
+  } = useCachedData<TopicItem[]>(cacheKey, fetchTopics, {
     deps: [distillationId],
     onError: () => message.error('加载话题失败'),
   });
@@ -188,6 +196,7 @@ export default function TopicsPage() {
               }}
               actions={[
                 <Button
+                  key="edit"
                   type="text"
                   icon={<EditOutlined />}
                   onClick={() => handleEdit(topic)}
@@ -195,6 +204,7 @@ export default function TopicsPage() {
                   编辑
                 </Button>,
                 <Button
+                  key="delete"
                   type="text"
                   danger
                   icon={<DeleteOutlined />}

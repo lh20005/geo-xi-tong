@@ -168,7 +168,7 @@ export default function ArticlePage() {
           content,
           imageUrl: generatedArticle.imageUrl || undefined,
           provider: detail.provider,
-          distillationId: detail.distillationId,
+          distillationId: detail.distillationId ?? undefined,
           distillationKeywordSnapshot: detail.keyword || keyword,
           topicQuestionSnapshot: detail.distillationResult || undefined,
           articleSettingId: selectedArticleSettingId || undefined,

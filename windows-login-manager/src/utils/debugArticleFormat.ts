@@ -14,6 +14,13 @@ export interface ArticleFormatInfo {
   imageUrl?: string;
 }
 
+export interface ArticleSummary {
+  id?: number | string;
+  title?: string;
+  content: string;
+  imageUrl?: string;
+}
+
 export function analyzeArticleFormat(content: string, imageUrl?: string): ArticleFormatInfo {
   const hasHtmlTags = /<[^>]+>/.test(content);
   const hasImageTag = /<img[^>]*>/i.test(content);
@@ -46,7 +53,7 @@ export function analyzeArticleFormat(content: string, imageUrl?: string): Articl
   };
 }
 
-export function logArticleFormat(article: any): void {
+export function logArticleFormat(article: ArticleSummary): void {
   console.group('📄 文章格式分析');
   console.log('文章ID:', article.id);
   console.log('标题:', article.title);

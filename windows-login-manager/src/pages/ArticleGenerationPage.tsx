@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Card, Button, Tag, Progress, message, Space, Modal, Popconfirm, 
   Tooltip, Select, Input, Row, Col, Statistic, Alert 
@@ -81,6 +81,7 @@ export default function ArticleGenerationPage() {
 
   // 记录已同步的任务ID，避免重复检查
   const syncedTaskIdsRef = useMemo(() => new Set<number>(), []);
+  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // 自动同步完成的任务
   const autoSyncTasks = useCallback(async (taskList: GenerationTask[]) => {
@@ -111,65 +112,59 @@ export default function ArticleGenerationPage() {
         let allSynced = true;
 
         for (const article of articles) {
-          // 检查是否已存在
-          const checkResult = await localArticleApi.checkArticleExists(task.id, article.title);
-          if (checkResult.data?.exists) {
-            continue;
-          }
+          try {
+            const checkResult = await localArticleApi.checkArticleExists(task.id, article.title);
+            if (checkResult.data?.exists) {
+              continue;
+            }
 
-          allSynced = false; // 发现未同步的文章
+            const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
+            const content = articleResponse.data?.content || '';
 
-          // 获取文章内容
-          const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
-          const content = articleResponse.data?.content || '';
+            const result = await localArticleApi.create({
+              userId,
+              title: article.title,
+              keyword: detail.keyword,
+              content,
+              imageUrl: article.imageUrl || undefined,
+              provider: detail.provider,
+            distillationId: detail.distillationId ?? undefined,
+              distillationKeywordSnapshot: detail.keyword,
+              topicQuestionSnapshot: detail.distillationResult || undefined,
+              taskId: detail.id,
+              albumId: typeof detail.albumId === 'string' ? parseInt(detail.albumId) : detail.albumId,
+              articleSettingId: detail.articleSettingId,
+              articleSettingSnapshot: detail.articleSettingName || undefined,
+              conversionTargetId: detail.conversionTargetId || undefined,
+              conversionTargetSnapshot: detail.conversionTargetName || undefined,
+              isPublished: false,
+            });
 
-          // 同步到本地
-          console.log('自动同步文章:', { 
-            title: article.title, 
-            taskId: detail.id,
-            articleSetting: detail.articleSettingName,
-            conversionTarget: detail.conversionTargetName
-          });
-
-          const result = await localArticleApi.create({
-            userId,
-            title: article.title,
-            keyword: detail.keyword,
-            content,
-            imageUrl: article.imageUrl || undefined,
-            provider: detail.provider,
-            distillationId: detail.distillationId,
-            distillationKeywordSnapshot: detail.keyword,
-            topicQuestionSnapshot: detail.distillationResult || undefined,
-            taskId: detail.id,
-            albumId: typeof detail.albumId === 'string' ? parseInt(detail.albumId) : detail.albumId,
-            articleSettingId: detail.articleSettingId,
-            articleSettingSnapshot: detail.articleSettingName || undefined,
-            conversionTargetId: detail.conversionTargetId || undefined,
-            conversionTargetSnapshot: detail.conversionTargetName || undefined,
-            isPublished: false,
-          });
-
-          if (result && result.success) {
-            totalSyncedCount++;
+            if (result && result.success) {
+              totalSyncedCount++;
+            } else {
+              allSynced = false;
+            }
+          } catch (syncError) {
+            allSynced = false;
+            console.error('自动同步单篇文章失败:', syncError);
           }
         }
 
-        // 如果所有文章都已同步（或者是本次同步完成），标记为已同步
-        if (allSynced || articles.length === task.generatedCount) {
+        if (allSynced) {
           syncedTaskIdsRef.add(task.id);
         }
       }
 
       if (totalSyncedCount > 0) {
         message.success(`自动同步完成：新增 ${totalSyncedCount} 篇文章`);
-        // 清除文章列表缓存，确保用户去文章管理页面能看到新文章
         invalidateCacheByPrefix('articles:');
+        window.dispatchEvent(new CustomEvent('articles:updated'));
       }
     } catch (error) {
       console.error('自动同步失败:', error);
     }
-  }, [syncedTaskIdsRef]);
+  }, [syncedTaskIdsRef, invalidateCacheByPrefix]);
 
   // 搜索防抖
   useEffect(() => {
@@ -277,13 +272,28 @@ export default function ArticleGenerationPage() {
     }
   }, [cachedData, currentPage, pageSize, filterStatus, filterKeyword, filterConversionTarget, searchText, autoSyncTasks]);
 
-  // 每10秒刷新一次任务状态
+  const hasActiveTasks = useMemo(
+    () => tasks.some(task => task.status === 'pending' || task.status === 'running'),
+    [tasks]
+  );
+
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (refreshIntervalRef.current) {
+      clearInterval(refreshIntervalRef.current);
+    }
+
+    const intervalMs = hasActiveTasks ? 2000 : 10000;
+    refreshIntervalRef.current = setInterval(() => {
       refreshTasks(true);
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [refreshTasks]);
+    }, intervalMs);
+
+    return () => {
+      if (refreshIntervalRef.current) {
+        clearInterval(refreshIntervalRef.current);
+        refreshIntervalRef.current = null;
+      }
+    };
+  }, [refreshTasks, hasActiveTasks]);
 
   // 使缓存失效并刷新
   const invalidateAndRefresh = useCallback(async () => {

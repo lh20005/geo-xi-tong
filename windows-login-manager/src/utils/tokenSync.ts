@@ -3,12 +3,6 @@
  * 确保 Electron storage 和 localStorage 之间的 token 同步
  */
 
-declare global {
-  interface Window {
-    electron?: any;
-  }
-}
-
 /**
  * 从 Electron storage 同步 token 到 localStorage
  */

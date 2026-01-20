@@ -237,26 +237,28 @@ export class WebSocketManager {
           break;
           
         case 'account.updated':
-          // Update existing account in cache
-          const updateIndex = accounts.findIndex(a => a.id === event.data.id);
-          if (updateIndex !== -1) {
-            accounts[updateIndex] = event.data;
-            log.info(`Account updated in cache: ${event.data.id}`);
-          } else {
-            log.warn(`Account not found in cache for update: ${event.data.id}`);
+          {
+            const updateIndex = accounts.findIndex(a => a.id === event.data.id);
+            if (updateIndex !== -1) {
+              accounts[updateIndex] = event.data;
+              log.info(`Account updated in cache: ${event.data.id}`);
+            } else {
+              log.warn(`Account not found in cache for update: ${event.data.id}`);
+            }
+            break;
           }
-          break;
           
         case 'account.deleted':
-          // Remove account from cache
-          const deleteIndex = accounts.findIndex(a => a.id === event.data.id);
-          if (deleteIndex !== -1) {
-            accounts.splice(deleteIndex, 1);
-            log.info(`Account deleted from cache: ${event.data.id}`);
-          } else {
-            log.warn(`Account not found in cache for deletion: ${event.data.id}`);
+          {
+            const deleteIndex = accounts.findIndex(a => a.id === event.data.id);
+            if (deleteIndex !== -1) {
+              accounts.splice(deleteIndex, 1);
+              log.info(`Account deleted from cache: ${event.data.id}`);
+            } else {
+              log.warn(`Account not found in cache for deletion: ${event.data.id}`);
+            }
+            break;
           }
-          break;
       }
       
       // Save updated cache

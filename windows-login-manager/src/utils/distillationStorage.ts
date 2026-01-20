@@ -1,7 +1,8 @@
-// LocalStorage工具函数
 const STORAGE_KEY = 'distillation_current_result';
 
-export const saveResultToLocalStorage = (result: any) => {
+type DistillationResult = Record<string, unknown>;
+
+export const saveResultToLocalStorage = (result: DistillationResult) => {
   try {
     const dataToStore = {
       ...result,

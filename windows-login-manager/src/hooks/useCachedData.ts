@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useCacheStore } from '../stores/cacheStore';
 
-interface UseCachedDataOptions<T> {
+export interface UseCachedDataOptions<T> {
   // 依赖项变化时重新获取数据
   deps?: any[];
   // 是否在组件挂载时自动获取数据
@@ -29,7 +29,7 @@ interface UseCachedDataOptions<T> {
   forceRefresh?: boolean;
 }
 
-interface UseCachedDataResult<T> {
+export interface UseCachedDataResult<T> {
   // 数据
   data: T | null;
   // 是否正在加载（首次加载，无缓存时）

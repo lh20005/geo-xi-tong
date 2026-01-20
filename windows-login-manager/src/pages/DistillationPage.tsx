@@ -28,7 +28,7 @@ export default function DistillationPage() {
     if (!result.success) {
       throw new Error(result.error || '加载历史记录失败');
     }
-    return result.data?.items || result.data?.data || [];
+    return result.data?.items || [];
   }, []);
 
   const {
@@ -433,7 +433,7 @@ export default function DistillationPage() {
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
               >
                 <p style={{ color: '#64748b' }}>
-                  输入关键词并点击"开始蒸馏"创建第一条记录
+                  输入关键词并点击“开始蒸馏”创建第一条记录
                 </p>
               </Empty>
             )

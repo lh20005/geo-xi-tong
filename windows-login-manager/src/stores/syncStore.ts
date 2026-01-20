@@ -55,6 +55,9 @@ const initialState = {
   error: null,
 };
 
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback;
+
 export const useSyncStore = create<SyncState>((set, get) => ({
   ...initialState,
   
@@ -72,9 +75,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         set({ error: result.error || '备份失败' });
         return { success: false, error: result.error };
       }
-    } catch (error: any) {
-      set({ error: error.message || '备份失败', backing: false });
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, '备份失败');
+      set({ error: message, backing: false });
+      return { success: false, error: message };
     }
   },
   
@@ -91,8 +95,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         set({ error: result.error || '恢复失败' });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '恢复失败', restoring: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '恢复失败'), restoring: false });
       return false;
     }
   },
@@ -106,8 +110,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       } else {
         set({ error: result.error || '获取快照列表失败', loading: false });
       }
-    } catch (error: any) {
-      set({ error: error.message || '获取快照列表失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '获取快照列表失败'), loading: false });
     }
   },
   
@@ -126,8 +130,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         set({ error: result.error || '删除快照失败', loading: false });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '删除快照失败', loading: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '删除快照失败'), loading: false });
       return false;
     }
   },
@@ -144,9 +148,10 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         set({ error: result.error || '导出失败' });
         return { success: false, error: result.error };
       }
-    } catch (error: any) {
-      set({ error: error.message || '导出失败', exporting: false });
-      return { success: false, error: error.message };
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, '导出失败');
+      set({ error: message, exporting: false });
+      return { success: false, error: message };
     }
   },
   
@@ -163,8 +168,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         set({ error: result.error || '导入失败' });
         return false;
       }
-    } catch (error: any) {
-      set({ error: error.message || '导入失败', importing: false });
+    } catch (error: unknown) {
+      set({ error: getErrorMessage(error, '导入失败'), importing: false });
       return false;
     }
   },
@@ -175,7 +180,7 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       if (result.success) {
         set({ localStats: result.data });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('获取本地统计失败:', error);
     }
   },

@@ -192,7 +192,7 @@ export default function KnowledgeBasePage() {
                           <Tag color="blue">{kb.document_count || 0} 个文档</Tag>
                         </div>
                         <div style={{ fontSize: 12, color: '#999' }}>
-                          {new Date(kb.created_at).toLocaleString('zh-CN')}
+                          {kb.created_at || kb.createdAt ? new Date(kb.created_at || kb.createdAt || '').toLocaleString('zh-CN') : '-'}
                         </div>
                         <Space size="small">
                           <Button

@@ -2,12 +2,6 @@ import { useState } from 'react';
 import { Card, Button, Space, message, Descriptions, Alert, Input } from 'antd';
 import { ReloadOutlined, CheckCircleOutlined, CloseCircleOutlined } from '@ant-design/icons';
 
-declare global {
-  interface Window {
-    electron?: any;
-  }
-}
-
 const TokenDebugPage = () => {
   const [tokens, setTokens] = useState<any>(null);
   const [apiTest, setApiTest] = useState<any>(null);

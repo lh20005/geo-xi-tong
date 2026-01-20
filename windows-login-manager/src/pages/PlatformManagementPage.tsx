@@ -84,7 +84,7 @@ export default function PlatformManagementPage() {
       clearTimeout(wsTimer);
       // 只有在 WebSocket 已初始化时才断开
       if (wsInitializedRef.current) {
-        try { getWebSocketClient().disconnect(); } catch (e) {}
+        try { getWebSocketClient().disconnect(); } catch (e) { void e; }
         wsInitializedRef.current = false;
       }
     };
@@ -149,7 +149,7 @@ export default function PlatformManagementPage() {
       wsClient.on('account.updated', () => { if (isMountedRef.current) { message.info('账号信息已更新'); fetchAccounts(); } });
       wsClient.on('account.deleted', () => { if (isMountedRef.current) { message.warning('账号已被删除'); fetchAccounts(); } });
       wsClient.connect(token);
-    } catch (e) {}
+    } catch (e) { void e; }
   };
 
   const handlePlatformClick = async (platform: Platform) => {

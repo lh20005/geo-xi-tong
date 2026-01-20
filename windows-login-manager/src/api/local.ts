@@ -239,6 +239,7 @@ export interface LocalPublishingRecord {
   article_id?: number | null;
   task_id?: number | null;
   platform_id: string;
+  platform_name?: string | null;
   account_id?: number | string;
   account_name?: string | null;
   platform_article_id?: string | null;
@@ -484,6 +485,10 @@ export interface LocalKnowledgeBase {
   description?: string;
   createdAt: string;
   updatedAt: string;
+  documentCount?: number;
+  document_count?: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LocalKnowledgeDocument {
@@ -494,10 +499,13 @@ export interface LocalKnowledgeDocument {
   fileSize: number;
   content: string;
   createdAt: string;
+  file_type?: string;
+  file_size?: number;
+  created_at?: string;
 }
 
 export interface CreateKnowledgeBaseParams {
-  userId: number;
+  userId?: number;
   name: string;
   description?: string;
 }
@@ -621,6 +629,12 @@ export interface LocalAlbum {
   name: string;
   createdAt: string;
   updatedAt: string;
+  imageCount?: number;
+  coverImage?: string | null;
+  image_count?: number;
+  cover_image?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LocalImage {
@@ -636,7 +650,7 @@ export interface LocalImage {
 }
 
 export interface CreateAlbumParams {
-  userId: number;
+  userId?: number;
   name: string;
 }
 
@@ -770,7 +784,7 @@ export const localConversionTargetApi = {
 // ==================== 数据同步 ====================
 
 export interface SyncSnapshot {
-  id: string;
+  id: number;
   metadata: {
     version: string;
     articleCount: number;

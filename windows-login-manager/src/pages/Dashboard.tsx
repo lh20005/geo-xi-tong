@@ -279,8 +279,8 @@ export default function Dashboard() {
         {/* 核心数据概览 - 6个小卡片 */}
         <div style={{ marginBottom: 16 }}>
           <QuickStatsCards 
-            metrics={dashboardData?.metrics}
-            resourceUsage={dashboardData?.resourceUsage}
+            metrics={dashboardData?.metrics ?? null}
+            resourceUsage={dashboardData?.resourceUsage ?? null}
             loading={loading}
             onCardClick={handleQuickAction}
           />
@@ -301,7 +301,7 @@ export default function Dashboard() {
         {/* 第一行：趋势图和文章统计 */}
         <Row gutter={[16, 16]}>
           <Col xs={24} xl={16}>
-            <TrendsChart data={dashboardData?.trends} loading={loading} />
+            <TrendsChart data={dashboardData?.trends ?? null} loading={loading} />
           </Col>
           <Col xs={24} xl={8}>
             <ArticleStatsChart data={dashboardData?.articleStats} loading={loading} />
@@ -318,17 +318,17 @@ export default function Dashboard() {
         {/* 第三行：资源效率 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24}>
-            <ResourceEfficiencyChart data={dashboardData?.resourceUsage} loading={loading} />
+            <ResourceEfficiencyChart data={dashboardData?.resourceUsage ?? null} loading={loading} />
           </Col>
         </Row>
 
         {/* 第四行：发布状态和平台分布 */}
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} lg={12}>
-            <PublishingStatusChart data={dashboardData?.publishingStatus} loading={loading} />
+            <PublishingStatusChart data={dashboardData?.publishingStatus ?? null} loading={loading} />
           </Col>
           <Col xs={24} lg={12}>
-            <PlatformDistributionChart data={dashboardData?.platformDistribution} loading={loading} />
+            <PlatformDistributionChart data={dashboardData?.platformDistribution ?? null} loading={loading} />
           </Col>
         </Row>
 

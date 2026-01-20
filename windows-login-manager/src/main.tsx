@@ -7,7 +7,7 @@ import './index.css';
 
 // 设置全局 token 同步监听器
 if (window.electron?.onTokensSaved) {
-  window.electron.onTokensSaved((tokens) => {
+  window.electron.onTokensSaved((tokens: { authToken: string; refreshToken: string }) => {
     console.log('[Main] 🔄 收到 tokens-saved 事件，同步到 localStorage');
     localStorage.setItem('auth_token', tokens.authToken);
     localStorage.setItem('refresh_token', tokens.refreshToken);
