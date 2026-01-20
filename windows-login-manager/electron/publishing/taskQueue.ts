@@ -26,6 +26,7 @@ export class TaskQueue {
   setMainWindow(window: BrowserWindow | null): void {
     this.mainWindow = window;
     batchExecutor.setMainWindow(window);
+    publishingExecutor.setMainWindow(window);
   }
 
   /**
@@ -93,7 +94,7 @@ export class TaskQueue {
   private async detectTimeoutTasks(): Promise<void> {
     try {
       // 从服务器获取所有 running 状态的任务
-      const response = await apiClient.get('/publishing/tasks', {
+      const response = await apiClient.get('/api/publishing/tasks', {
         params: { status: 'running' }
       });
 
@@ -131,16 +132,16 @@ export class TaskQueue {
   private async handleTimeoutTask(taskId: number): Promise<void> {
     try {
       // 记录日志
-      await apiClient.post(`/publishing/tasks/${taskId}/logs`, {
+      await apiClient.post(`/api/publishing/tasks/${taskId}/logs`, {
         level: 'warning',
         message: '任务执行超时，调度器检测到并标记为超时'
       });
 
       // 增加重试次数
-      await apiClient.post(`/publishing/tasks/${taskId}/increment-retry`);
+      await apiClient.post(`/api/publishing/tasks/${taskId}/increment-retry`);
 
       // 获取任务信息
-      const response = await apiClient.get(`/publishing/tasks/${taskId}`);
+      const response = await apiClient.get(`/api/publishing/tasks/${taskId}`);
       if (!response.data?.success || !response.data?.data) {
         console.error(`❌ 任务 #${taskId} 不存在`);
         return;
@@ -151,14 +152,14 @@ export class TaskQueue {
 
       if (nextRetryCount < task.max_retries) {
         // 还可以重试，标记为pending
-        await apiClient.put(`/publishing/tasks/${taskId}/status`, {
+        await apiClient.put(`/api/publishing/tasks/${taskId}/status`, {
           status: 'pending',
           error_message: `执行超时，将自动重试 (${nextRetryCount}/${task.max_retries})`
         });
         console.log(`🔄 超时任务 #${taskId} 将在下次调度时重试 (${nextRetryCount}/${task.max_retries})`);
       } else {
         // 重试次数已用完，标记为timeout
-        await apiClient.put(`/publishing/tasks/${taskId}/status`, {
+        await apiClient.put(`/api/publishing/tasks/${taskId}/status`, {
           status: 'timeout',
           error_message: '重试次数已用完'
         });
@@ -180,7 +181,7 @@ export class TaskQueue {
       }
       
       // 从服务器获取待执行的批次
-      const response = await apiClient.get('/publishing/tasks', {
+      const response = await apiClient.get('/api/publishing/tasks', {
         params: { status: 'pending' }
       });
 
@@ -231,7 +232,7 @@ export class TaskQueue {
       await this.checkAndExecuteBatches();
 
       // 2. 检查普通定时任务（没有 batch_id 的任务）
-      const response = await apiClient.get('/publishing/tasks', {
+      const response = await apiClient.get('/api/publishing/tasks', {
         params: { status: 'pending' }
       });
 

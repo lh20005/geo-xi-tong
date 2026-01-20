@@ -175,7 +175,7 @@ router.post('/tasks', async (req, res) => {
 router.get('/tasks', async (req, res) => {
   try {
     const userId = getCurrentTenantId(req);
-    const { status, platform_id, article_id, page, pageSize } = req.query;
+    const { status, platform_id, article_id, batch_id, page, pageSize } = req.query;
 
     // 构建查询条件，添加 user_id 过滤
     const conditions: string[] = ['pt.user_id = $1'];
@@ -197,6 +197,12 @@ router.get('/tasks', async (req, res) => {
     if (article_id) {
       conditions.push(`pt.article_id = $${paramIndex}`);
       params.push(parseInt(article_id as string));
+      paramIndex++;
+    }
+
+    if (batch_id) {
+      conditions.push(`pt.batch_id = $${paramIndex}`);
+      params.push(batch_id);
       paramIndex++;
     }
 

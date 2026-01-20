@@ -38,7 +38,7 @@ export class BatchExecutor {
 
     try {
       // 从服务器获取批次信息
-      const response = await apiClient.get(`/publishing/batches/${batchId}`);
+      const response = await apiClient.get(`/api/publishing/batches/${batchId}`);
       if (response.data?.success && response.data?.data) {
         const info = response.data.data as BatchInfo;
         return info.pending_tasks === 0;
@@ -100,7 +100,7 @@ export class BatchExecutor {
    */
   private async getBatchTasks(batchId: string): Promise<LocalTask[]> {
     try {
-      const response = await apiClient.get(`/publishing/tasks`, {
+      const response = await apiClient.get(`/api/publishing/tasks`, {
         params: { batch_id: batchId }
       });
       
@@ -121,7 +121,7 @@ export class BatchExecutor {
    */
   private async getTaskById(taskId: number): Promise<LocalTask | null> {
     try {
-      const response = await apiClient.get(`/publishing/tasks/${taskId}`);
+      const response = await apiClient.get(`/api/publishing/tasks/${taskId}`);
       if (response.data?.success && response.data?.data) {
         return response.data.data as LocalTask;
       }
@@ -266,7 +266,7 @@ export class BatchExecutor {
    */
   private async logBatchSummary(batchId: string): Promise<void> {
     try {
-      const response = await apiClient.get(`/publishing/batches/${batchId}`);
+      const response = await apiClient.get(`/api/publishing/batches/${batchId}`);
       if (response.data?.success && response.data?.data) {
         const stats = response.data.data as BatchInfo;
         console.log(`📊 批次 ${batchId} 统计:`);
@@ -292,7 +292,7 @@ export class BatchExecutor {
     
     try {
       // 调用服务器 API 停止批次
-      const response = await apiClient.post(`/publishing/batches/${batchId}/stop`);
+      const response = await apiClient.post(`/api/publishing/batches/${batchId}/stop`);
       
       if (response.data?.success && response.data?.data) {
         const result = response.data.data;

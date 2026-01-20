@@ -59,7 +59,7 @@ export class PublishingExecutor {
    */
   private async syncLogToServer(taskId: number, level: 'info' | 'warning' | 'error', message: string, details?: any): Promise<void> {
     try {
-      await apiClient.post(`/publishing/tasks/${taskId}/logs`, {
+      await apiClient.post(`/api/publishing/tasks/${taskId}/logs`, {
         level,
         message,
         details
@@ -85,7 +85,7 @@ export class PublishingExecutor {
    */
   private async updateTaskStatus(taskId: number, status: string, errorMessage?: string): Promise<void> {
     try {
-      await apiClient.put(`/publishing/tasks/${taskId}/status`, {
+      await apiClient.put(`/api/publishing/tasks/${taskId}/status`, {
         status,
         error_message: errorMessage
       });
@@ -101,7 +101,7 @@ export class PublishingExecutor {
    */
   private async updateAccountOnlineStatus(accountId: number, isOnline: boolean, offlineReason?: string): Promise<void> {
     try {
-      await apiClient.put(`/accounts/${accountId}/online-status`, {
+      await apiClient.put(`/api/accounts/${accountId}/online-status`, {
         is_online: isOnline,
         offline_reason: offlineReason
       });
@@ -115,7 +115,7 @@ export class PublishingExecutor {
    */
   private async incrementRetryCount(taskId: number): Promise<void> {
     try {
-      await apiClient.post(`/publishing/tasks/${taskId}/increment-retry`);
+      await apiClient.post(`/api/publishing/tasks/${taskId}/increment-retry`);
     } catch (error) {
       console.error(`增加重试次数失败:`, error);
     }
@@ -151,7 +151,7 @@ export class PublishingExecutor {
     try {
       // 从服务器获取任务详情
       await this.log(taskId, 'info', '获取任务详情...');
-      const response = await apiClient.get(`/publishing/tasks/${taskId}/full`);
+      const response = await apiClient.get(`/api/publishing/tasks/${taskId}/full`);
       
       if (!response.data?.success || !response.data?.data) {
         throw new Error('获取任务详情失败');
@@ -161,8 +161,18 @@ export class PublishingExecutor {
 
       await this.log(taskId, 'info', '开始执行发布任务');
 
+      // 解析 config（数据库返回的是 JSON 字符串）
+      let taskConfig: any = {};
+      if (task.config) {
+        try {
+          taskConfig = typeof task.config === 'string' ? JSON.parse(task.config) : task.config;
+        } catch (e) {
+          console.warn('解析任务配置失败，使用默认配置:', e);
+        }
+      }
+
       // 获取超时配置（默认15分钟）
-      const timeoutMinutes = task.config?.timeout_minutes || 15;
+      const timeoutMinutes = taskConfig.timeout_minutes || 15;
       
       // 验证超时时间
       const validatedTimeout = Math.max(1, timeoutMinutes);
@@ -183,7 +193,7 @@ export class PublishingExecutor {
       });
 
       // 创建执行Promise
-      const executePromise = this.performPublish(taskId, task, account);
+      const executePromise = this.performPublish(taskId, task, account, taskConfig);
 
       // 使用Promise.race实现超时控制
       page = await Promise.race([executePromise, timeoutPromise]);
@@ -215,7 +225,7 @@ export class PublishingExecutor {
   /**
    * 执行发布流程（不含超时控制）
    */
-  private async performPublish(taskId: number, task: LocalTask, account: Account): Promise<any> {
+  private async performPublish(taskId: number, task: LocalTask, account: Account, taskConfig: any = {}): Promise<any> {
     let page = null;
 
     try {
@@ -256,8 +266,8 @@ export class PublishingExecutor {
         throw new TaskCancelledError(taskId);
       }
 
-      // 启动浏览器
-      const headlessMode = task.config?.headless !== false;
+      // 启动浏览器（使用传入的 taskConfig）
+      const headlessMode = taskConfig.headless !== false;
       const modeText = headlessMode ? '静默模式' : '可视化模式';
       await this.log(taskId, 'info', `🚀 启动浏览器（${modeText}）...`);
       
@@ -349,7 +359,7 @@ export class PublishingExecutor {
       await this.log(taskId, 'info', `📝 开始发布文章《${article.title}》...`);
       
       const publishSuccess = await browserAutomationService.executeWithRetry(
-        () => adapter.performPublish(page!, article, task.config || {}),
+        () => adapter.performPublish(page!, article, taskConfig),
         task.max_retries
       );
 
@@ -396,7 +406,7 @@ export class PublishingExecutor {
 
     // 获取任务信息以检查重试次数
     try {
-      const response = await apiClient.get(`/publishing/tasks/${taskId}/full`);
+      const response = await apiClient.get(`/api/publishing/tasks/${taskId}/full`);
       if (!response.data?.success || !response.data?.data) {
         console.error(`❌ 获取任务 #${taskId} 信息失败`);
         return;
