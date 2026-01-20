@@ -21,6 +21,7 @@ import { apiClient } from '../api/client';
 import { localArticleApi } from '../api/local';
 import { getCurrentUserId } from '../api';
 import { localDistillationApi } from '../api/localDistillationApi';
+import { useCacheStore } from '../stores/cacheStore';
 import {
   createTask,
   fetchTaskDetail,
@@ -37,6 +38,7 @@ const { Title, Paragraph } = Typography;
 export default function ArticlePage() {
   const { distillationId } = useParams();
   const navigate = useNavigate();
+  const { invalidateCacheByPrefix } = useCacheStore();
   const [loading, setLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
   const [article, setArticle] = useState('');
@@ -181,6 +183,9 @@ export default function ArticlePage() {
 
         if (!saveResult.success) {
           message.warning(saveResult.error || '文章已生成，但保存到本地失败');
+        } else {
+          invalidateCacheByPrefix('articles:');
+          window.dispatchEvent(new CustomEvent('articles:updated'));
         }
       } else {
         message.warning('文章已生成，但未获取到本地用户信息，无法保存');

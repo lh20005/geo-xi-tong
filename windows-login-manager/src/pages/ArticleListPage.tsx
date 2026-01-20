@@ -13,6 +13,7 @@ import ArticlePreview from '../components/ArticlePreview';
 import ArticleEditorModal from '../components/ArticleEditorModal';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
+import { silentSyncArticles } from '../services/articleSyncService';
 
 const { Paragraph, Text } = Typography;
 const { Option } = Select;
@@ -61,7 +62,23 @@ export default function ArticleListPage() {
 
   // 初始加载
   useEffect(() => {
-    loadData();
+    const initPage = async () => {
+      console.log('[文章列表] 页面加载，开始同步服务器文章...');
+      
+      // 1. 先从服务器静默同步最新文章
+      try {
+        await silentSyncArticles(50); // 同步最新 50 篇
+        console.log('[文章列表] 服务器文章同步完成');
+      } catch (error) {
+        console.error('[文章列表] 同步失败:', error);
+        // 同步失败不影响页面加载
+      }
+      
+      // 2. 加载本地数据
+      await loadData();
+    };
+    
+    initPage();
   }, []);
 
   // 错误处理

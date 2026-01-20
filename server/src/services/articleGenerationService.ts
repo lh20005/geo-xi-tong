@@ -654,6 +654,37 @@ export class ArticleGenerationService {
   }
 
   /**
+   * 获取任务详情（包含生成的文章列表）
+   */
+  async getTaskDetailWithArticles(taskId: number, userId?: number): Promise<GenerationTask | null> {
+    const task = await this.getTaskDetail(taskId, userId);
+    if (!task) {
+      return null;
+    }
+
+    // 获取该任务生成的文章列表
+    const articlesResult = await pool.query(
+      `SELECT 
+        id, 
+        title, 
+        keyword, 
+        image_url as "imageUrl",
+        provider,
+        topic_question_snapshot as topic,
+        created_at as "createdAt"
+       FROM articles 
+       WHERE task_id = $1 AND user_id = $2
+       ORDER BY created_at ASC`,
+      [taskId, userId || task.userId]
+    );
+
+    return {
+      ...task,
+      generatedArticles: articlesResult.rows
+    };
+  }
+
+  /**
    * 更新任务状态
    */
   async updateTaskStatus(

@@ -79,92 +79,171 @@ export default function ArticleGenerationPage() {
   const [availableKeywords, setAvailableKeywords] = useState<string[]>([]);
   const [availableConversionTargets, setAvailableConversionTargets] = useState<string[]>([]);
 
-  // 记录已同步的任务ID，避免重复检查
-  const syncedTaskIdsRef = useMemo(() => new Set<number>(), []);
   const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 自动同步完成的任务
+  // 自动同步完成的任务（改进版：主动获取所有已完成任务）
   const autoSyncTasks = useCallback(async (taskList: GenerationTask[]) => {
-    if (!isElectron()) return;
-
-    // 筛选出已完成且未完全同步的任务
-    const completedTasks = taskList.filter(t => t.status === 'completed');
-    if (completedTasks.length === 0) return;
+    const syncStartTime = Date.now();
+    const logPrefix = `[自动同步 ${new Date().toLocaleTimeString()}]`;
+    
+    if (!isElectron()) {
+      console.log(`${logPrefix} 跳过：非 Electron 环境`);
+      return;
+    }
 
     try {
+      // 🔥 关键修复：主动从服务器获取所有已完成的任务，而不是依赖页面列表
+      console.log(`${logPrefix} 主动从服务器获取已完成任务...`);
+      const allTasksResponse = await fetchTasks(1, 100); // 获取最近 100 个任务
+      const allTasks = allTasksResponse.tasks || [];
+      
+      console.log(`${logPrefix} 服务器返回 ${allTasks.length} 个任务`);
+
+      // 筛选出已完成或正在运行且已生成部分文章的任务
+      const syncableTasks = allTasks.filter(
+        t => (t.status === 'completed' || t.status === 'running') && t.generatedCount > 0
+      );
+      
+      console.log(`${logPrefix} 开始同步检查`);
+      console.log(`${logPrefix} - 服务器总任务数: ${allTasks.length}`);
+      console.log(`${logPrefix} - 页面显示任务数: ${taskList.length}`);
+      console.log(`${logPrefix} - 可同步任务数: ${syncableTasks.length}`);
+      
+      if (syncableTasks.length === 0) {
+        console.log(`${logPrefix} 无需同步的任务`);
+        return;
+      }
+
+      console.log(`${logPrefix} 可同步任务列表:`, syncableTasks.map(t => ({
+        id: t.id,
+        status: t.status,
+        generatedCount: t.generatedCount,
+        keyword: t.keyword,
+        createdAt: t.createdAt
+      })));
+
       const userId = await getCurrentUserId();
-      if (!userId) return;
+      if (!userId) {
+        console.error(`${logPrefix} 无法获取用户 ID`);
+        return;
+      }
+      console.log(`${logPrefix} 用户 ID: ${userId}`);
 
       let totalSyncedCount = 0;
+      let totalSkippedCount = 0;
+      let totalFailedCount = 0;
 
-      for (const task of completedTasks) {
-        // 如果该任务已经标记为已同步，且生成的文章数量没变，则跳过
-        if (syncedTaskIdsRef.has(task.id)) {
-          continue;
-        }
-
-        // 获取任务详情以拿到文章列表
-        const detail = await fetchTaskDetail(task.id);
-        const articles = detail.generatedArticles || [];
+      for (const task of syncableTasks) {
+        const taskLogPrefix = `${logPrefix} [任务 ${task.id}]`;
+        console.log(`${taskLogPrefix} 开始处理 (关键词: ${task.keyword})`);
         
-        if (articles.length === 0) continue;
-
-        let allSynced = true;
-
-        for (const article of articles) {
-          try {
-            const checkResult = await localArticleApi.checkArticleExists(task.id, article.title);
-            if (checkResult.data?.exists) {
-              continue;
-            }
-
-            const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
-            const content = articleResponse.data?.content || '';
-
-            const result = await localArticleApi.create({
-              userId,
-              title: article.title,
-              keyword: detail.keyword,
-              content,
-              imageUrl: article.imageUrl || undefined,
-              provider: detail.provider,
-            distillationId: detail.distillationId ?? undefined,
-              distillationKeywordSnapshot: detail.keyword,
-              topicQuestionSnapshot: detail.distillationResult || undefined,
-              taskId: detail.id,
-              albumId: typeof detail.albumId === 'string' ? parseInt(detail.albumId) : detail.albumId,
-              articleSettingId: detail.articleSettingId,
-              articleSettingSnapshot: detail.articleSettingName || undefined,
-              conversionTargetId: detail.conversionTargetId || undefined,
-              conversionTargetSnapshot: detail.conversionTargetName || undefined,
-              isPublished: false,
-            });
-
-            if (result && result.success) {
-              totalSyncedCount++;
-            } else {
-              allSynced = false;
-            }
-          } catch (syncError) {
-            allSynced = false;
-            console.error('自动同步单篇文章失败:', syncError);
+        try {
+          // 获取任务详情以拿到文章列表
+          console.log(`${taskLogPrefix} 正在获取任务详情...`);
+          const detail = await fetchTaskDetail(task.id);
+          const articles = detail.generatedArticles || [];
+          
+          console.log(`${taskLogPrefix} 任务详情获取成功`);
+          console.log(`${taskLogPrefix} - 文章列表长度: ${articles.length}`);
+          console.log(`${taskLogPrefix} - 文章列表:`, articles.map(a => ({
+            id: a.id,
+            title: a.title
+          })));
+          
+          if (articles.length === 0) {
+            console.warn(`${taskLogPrefix} 文章列表为空，跳过`);
+            continue;
           }
-        }
 
-        if (allSynced) {
-          syncedTaskIdsRef.add(task.id);
+          for (const article of articles) {
+            const articleLogPrefix = `${taskLogPrefix} [文章 ${article.id}]`;
+            console.log(`${articleLogPrefix} 开始处理: ${article.title}`);
+            
+            try {
+              // 每次都检查数据库，而不是依赖内存状态
+              console.log(`${articleLogPrefix} 检查文章是否已存在 (taskId: ${task.id}, title: ${article.title})...`);
+              const checkResult = await localArticleApi.checkArticleExists(task.id, article.title);
+              console.log(`${articleLogPrefix} 检查结果:`, checkResult);
+              
+              if (checkResult.data?.exists) {
+                console.log(`${articleLogPrefix} 文章已存在，跳过`);
+                totalSkippedCount++;
+                continue;
+              }
+
+              console.log(`${articleLogPrefix} 文章不存在，开始同步`);
+
+              // 获取文章完整内容
+              console.log(`${articleLogPrefix} 正在获取文章完整内容...`);
+              const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
+              const content = articleResponse.data?.content || '';
+              console.log(`${articleLogPrefix} 文章内容获取成功，长度: ${content.length} 字符`);
+
+              // 保存到本地数据库
+              console.log(`${articleLogPrefix} 正在保存到本地数据库...`);
+              const result = await localArticleApi.create({
+                userId,
+                title: article.title,
+                keyword: detail.keyword,
+                content,
+                imageUrl: article.imageUrl || undefined,
+                provider: detail.provider,
+                distillationId: detail.distillationId ?? undefined,
+                distillationKeywordSnapshot: detail.keyword,
+                topicQuestionSnapshot: detail.distillationResult || undefined,
+                taskId: detail.id,
+                albumId: typeof detail.albumId === 'string' ? parseInt(detail.albumId) : detail.albumId,
+                articleSettingId: detail.articleSettingId,
+                articleSettingSnapshot: detail.articleSettingName || undefined,
+                conversionTargetId: detail.conversionTargetId || undefined,
+                conversionTargetSnapshot: detail.conversionTargetName || undefined,
+                isPublished: false,
+              });
+
+              if (result && result.success) {
+                console.log(`${articleLogPrefix} ✅ 同步成功`);
+                totalSyncedCount++;
+              } else {
+                console.error(`${articleLogPrefix} ❌ 同步失败:`, result);
+                totalFailedCount++;
+              }
+            } catch (syncError: any) {
+              console.error(`${articleLogPrefix} ❌ 同步异常:`, {
+                error: syncError.message,
+                stack: syncError.stack,
+                response: syncError.response?.data
+              });
+              totalFailedCount++;
+            }
+          }
+        } catch (taskError: any) {
+          console.error(`${taskLogPrefix} ❌ 获取任务详情失败:`, {
+            error: taskError.message,
+            stack: taskError.stack,
+            response: taskError.response?.data
+          });
         }
       }
+
+      const syncDuration = Date.now() - syncStartTime;
+      console.log(`${logPrefix} 同步完成`);
+      console.log(`${logPrefix} - 耗时: ${syncDuration}ms`);
+      console.log(`${logPrefix} - 新增: ${totalSyncedCount} 篇`);
+      console.log(`${logPrefix} - 跳过: ${totalSkippedCount} 篇`);
+      console.log(`${logPrefix} - 失败: ${totalFailedCount} 篇`);
 
       if (totalSyncedCount > 0) {
         message.success(`自动同步完成：新增 ${totalSyncedCount} 篇文章`);
         invalidateCacheByPrefix('articles:');
         window.dispatchEvent(new CustomEvent('articles:updated'));
       }
-    } catch (error) {
-      console.error('自动同步失败:', error);
+    } catch (error: any) {
+      console.error(`${logPrefix} ❌ 同步流程异常:`, {
+        error: error.message,
+        stack: error.stack
+      });
     }
-  }, [syncedTaskIdsRef, invalidateCacheByPrefix]);
+  }, [invalidateCacheByPrefix]);
 
   // 搜索防抖
   useEffect(() => {
@@ -295,6 +374,33 @@ export default function ArticleGenerationPage() {
     };
   }, [refreshTasks, hasActiveTasks]);
 
+  // 定期检测新任务（解决新生成的任务不出现在列表中的问题）
+  useEffect(() => {
+    const checkNewTasksInterval = setInterval(async () => {
+      try {
+        // 获取最新的前 10 个任务（不使用缓存）
+        const latestData = await fetchTasks(1, 10);
+        
+        // 检查是否有新任务（ID 不在当前列表中）
+        const latestTaskIds = latestData.tasks.map(t => t.id);
+        const currentTaskIds = tasks.map(t => t.id);
+        
+        const newTaskIds = latestTaskIds.filter(id => !currentTaskIds.includes(id));
+        
+        if (newTaskIds.length > 0) {
+          console.log(`[新任务检测] 发现 ${newTaskIds.length} 个新任务:`, newTaskIds);
+          console.log('[新任务检测] 刷新任务列表...');
+          await refreshTasks(true);
+        }
+      } catch (error) {
+        // 静默处理错误，不影响页面
+        console.error('[新任务检测] 检查失败:', error);
+      }
+    }, 10000); // 每 10 秒检查一次
+    
+    return () => clearInterval(checkNewTasksInterval);
+  }, [tasks, refreshTasks]);
+
   // 使缓存失效并刷新
   const invalidateAndRefresh = useCallback(async () => {
     invalidateCacheByPrefix('articleGeneration:');
@@ -310,6 +416,12 @@ export default function ArticleGenerationPage() {
     setModalVisible(false);
     handleClearFilters(); // 清除筛选以显示新任务
     invalidateAndRefresh();
+    
+    // 等待 2 秒后再次刷新，确保服务器端任务已完全创建
+    setTimeout(async () => {
+      console.log('[任务创建] 2秒后再次刷新，确保新任务出现');
+      await refreshTasks(true);
+    }, 2000);
   };
 
   // 清除所有筛选

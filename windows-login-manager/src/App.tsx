@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { App as AntApp } from 'antd';
 import { AppProvider, useApp } from './context/AppContext';
@@ -7,6 +7,11 @@ import StorageWarningBanner from './components/StorageWarningBanner';
 import Login from './pages/Login';
 import { ipcBridge } from './services/ipc';
 import { getUserWebSocketService } from './services/UserWebSocketService';
+import { useCacheStore } from './stores/cacheStore';
+import { apiClient } from './api/client';
+import { localArticleApi } from './api/local';
+import { getCurrentUserId, isElectron } from './api';
+import { fetchTaskDetail, fetchTasks } from './api/articleGenerationApi';
 import { routes } from './routes';
 import './App.css';
 
@@ -14,6 +19,9 @@ function AppContent() {
   const { setUser } = useApp();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { invalidateCacheByPrefix } = useCacheStore();
+  const syncedTaskArticlesRef = useMemo(() => new Map<number, Set<number>>(), []);
+  const syncTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     checkAuth();
@@ -44,6 +52,119 @@ function AppContent() {
       wsService.disconnect();
     };
   }, [isAuthenticated]);
+
+  const syncGeneratedArticles = useCallback(async () => {
+    if (!isElectron()) return;
+    if (!isAuthenticated) return;
+
+    try {
+      const taskList = await fetchTasks(1, 100);
+      const syncableTasks = taskList.tasks.filter(
+        (task) => (task.status === 'completed' || task.status === 'running') && task.generatedCount > 0
+      );
+      if (syncableTasks.length === 0) {
+        return;
+      }
+
+      const userId = await getCurrentUserId();
+      if (!userId) return;
+
+      let totalSyncedCount = 0;
+
+      for (const task of syncableTasks) {
+        const syncedArticles = syncedTaskArticlesRef.get(task.id);
+        if (syncedArticles && syncedArticles.size >= task.generatedCount) {
+          continue;
+        }
+
+        const detail = await fetchTaskDetail(task.id);
+        const articles = detail.generatedArticles || [];
+        if (articles.length === 0) continue;
+
+        let allSynced = true;
+        const syncedSet = syncedArticles ?? new Set<number>();
+        syncedTaskArticlesRef.set(task.id, syncedSet);
+
+        for (const article of articles) {
+          try {
+            if (syncedSet.has(article.id)) {
+              continue;
+            }
+            const checkResult = await localArticleApi.checkArticleExists(task.id, article.title);
+            if (checkResult.data?.exists) {
+              syncedSet.add(article.id);
+              continue;
+            }
+
+            const articleResponse = await apiClient.get(`/article-generation/articles/${article.id}`);
+            const content = articleResponse.data?.content || '';
+
+            const result = await localArticleApi.create({
+              userId,
+              title: article.title,
+              keyword: detail.keyword,
+              content,
+              imageUrl: article.imageUrl || undefined,
+              provider: detail.provider,
+              distillationId: detail.distillationId ?? undefined,
+              distillationKeywordSnapshot: detail.keyword,
+              topicQuestionSnapshot: detail.distillationResult || undefined,
+              taskId: detail.id,
+              albumId: typeof detail.albumId === 'string' ? parseInt(detail.albumId) : detail.albumId,
+              articleSettingId: detail.articleSettingId,
+              articleSettingSnapshot: detail.articleSettingName || undefined,
+              conversionTargetId: detail.conversionTargetId || undefined,
+              conversionTargetSnapshot: detail.conversionTargetName || undefined,
+              isPublished: false,
+            });
+
+            if (result && result.success) {
+              syncedSet.add(article.id);
+              totalSyncedCount++;
+            } else {
+              allSynced = false;
+            }
+          } catch {
+            allSynced = false;
+          }
+        }
+
+        if (allSynced && task.status === 'completed') {
+          syncedTaskArticlesRef.set(task.id, new Set(articles.map((item) => item.id)));
+        }
+      }
+
+      if (totalSyncedCount > 0) {
+        invalidateCacheByPrefix('articles:');
+        window.dispatchEvent(new CustomEvent('articles:updated'));
+      }
+    } catch {
+      return;
+    }
+  }, [isAuthenticated, invalidateCacheByPrefix, syncedTaskArticlesRef]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    let cancelled = false;
+    const schedule = async () => {
+      if (cancelled) return;
+      await syncGeneratedArticles();
+
+      if (cancelled) return;
+      syncTimerRef.current = setTimeout(schedule, 3000);
+    };
+
+    schedule();
+
+    return () => {
+      cancelled = true;
+      if (syncTimerRef.current) {
+        clearTimeout(syncTimerRef.current);
+        syncTimerRef.current = null;
+      }
+    };
+  }, [isAuthenticated, syncGeneratedArticles]);
 
   const checkAuth = async () => {
     try {
