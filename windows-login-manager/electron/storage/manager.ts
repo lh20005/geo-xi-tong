@@ -174,10 +174,10 @@ class StorageManager {
     // 判断是否为生产环境
     const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
     
-    // 生产环境使用硬编码的服务器地址
+    // 生产环境使用硬编码的服务器地址（注意：必须带 www）
     const serverUrl = isDev 
       ? (process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000')
-      : 'https://jzgeo.cc';
+      : 'https://www.jzgeo.cc';
     
     return {
       serverUrl,

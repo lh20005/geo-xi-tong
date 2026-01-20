@@ -10,7 +10,7 @@ interface SEOProps {
   noIndex?: boolean;
 }
 
-const BASE_URL = 'https://jzgeo.cc';
+const BASE_URL = 'https://www.jzgeo.cc';
 const DEFAULT_IMAGE = `${BASE_URL}/images/og-image.svg`;
 
 export default function SEO({

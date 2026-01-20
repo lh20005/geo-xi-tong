@@ -4,7 +4,7 @@
   
   <!-- 首页 - 最高优先级 -->
   <url>
-    <loc>https://jzgeo.cc/</loc>
+    <loc>https://www.jzgeo.cc/</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
@@ -12,7 +12,7 @@
   
   <!-- 案例页面 -->
   <url>
-    <loc>https://jzgeo.cc/cases</loc>
+    <loc>https://www.jzgeo.cc/cases</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
@@ -20,7 +20,7 @@
   
   <!-- 登录页面 -->
   <url>
-    <loc>https://jzgeo.cc/login</loc>
+    <loc>https://www.jzgeo.cc/login</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -28,7 +28,7 @@
   
   <!-- 注册页面 -->
   <url>
-    <loc>https://jzgeo.cc/register</loc>
+    <loc>https://www.jzgeo.cc/register</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
@@ -36,7 +36,7 @@
   
   <!-- 隐私政策 -->
   <url>
-    <loc>https://jzgeo.cc/privacy</loc>
+    <loc>https://www.jzgeo.cc/privacy</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
@@ -44,7 +44,7 @@
   
   <!-- 服务条款 -->
   <url>
-    <loc>https://jzgeo.cc/terms</loc>
+    <loc>https://www.jzgeo.cc/terms</loc>
     <lastmod>2026-01-11</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>

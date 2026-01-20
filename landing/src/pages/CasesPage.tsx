@@ -216,7 +216,7 @@ export default function CasesPage() {
         title="行业应用案例 - GEO优化系统"
         description="查看GEO优化系统在餐饮、民宿、制造业、教育、健身、美容、咖啡、医疗、跨境电商等行业的成功案例。AI推荐率提升显著，助力品牌在AI时代脱颖而出。"
         keywords="GEO优化案例,AI推荐优化案例,品牌营销案例,餐饮AI优化,民宿AI推荐,B2B AI营销"
-        canonicalUrl="https://jzgeo.cc/cases"
+        canonicalUrl="https://www.jzgeo.cc/cases"
       />
       {/* 导航栏 */}
       <Header />

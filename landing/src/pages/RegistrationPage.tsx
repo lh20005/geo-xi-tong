@@ -143,7 +143,7 @@ export default function RegistrationPage() {
         title="注册 - GEO优化系统"
         description="免费注册GEO优化系统账号，开始您的AI时代品牌推荐优化之旅。支持邀请码注册享8折优惠。"
         keywords="GEO优化注册,免费注册,品牌AI优化,邀请码"
-        canonicalUrl="https://jzgeo.cc/register"
+        canonicalUrl="https://www.jzgeo.cc/register"
         noIndex={true}
       />
       {/* 导航栏 */}

@@ -1,5 +1,5 @@
 # GEO优化系统 - robots.txt
-# https://jzgeo.cc/robots.txt
+# https://www.jzgeo.cc/robots.txt
 
 User-agent: *
 Allow: /
@@ -34,7 +34,7 @@ User-agent: bingbot
 Allow: /
 
 # 网站地图
-Sitemap: https://jzgeo.cc/sitemap.xml
+Sitemap: https://www.jzgeo.cc/sitemap.xml
 
 # 爬取延迟（可选，防止服务器压力）
 Crawl-delay: 1

@@ -1,8 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Card, Typography, Empty } from 'antd';
 import { processArticleContent } from '../utils/articleUtils';
+import { API_BASE_URL } from '../config/env';
 
 const { Text } = Typography;
+
+// 从环境变量获取服务器地址，确保不会使用 localhost
+const getServerUrl = (): string => {
+  // 优先使用环境变量配置的地址
+  if (API_BASE_URL && !API_BASE_URL.includes('localhost')) {
+    // API_BASE_URL 已经包含了完整的服务器地址，去掉 /api 后缀
+    return API_BASE_URL.replace(/\/api$/, '');
+  }
+  // 默认使用生产环境地址（注意：必须带 www）
+  return 'https://www.jzgeo.cc';
+};
 
 interface ArticlePreviewProps {
   content: string;
@@ -25,26 +37,6 @@ const ArticlePreview: React.FC<ArticlePreviewProps> = ({
   showTitle = true,
   showImage = true
 }) => {
-  const [serverUrl, setServerUrl] = useState<string>('http://localhost:3000');
-
-  useEffect(() => {
-    // 从 IPC 获取服务器配置
-    const loadServerUrl = async () => {
-      try {
-        if (window.electron?.getConfig) {
-          const config = await window.electron.getConfig();
-          if (config?.serverUrl) {
-            setServerUrl(config.serverUrl);
-          }
-        }
-      } catch (error) {
-        console.error('获取服务器配置失败:', error);
-      }
-    };
-    
-    loadServerUrl();
-  }, []);
-
   if (!content) {
     return <Empty description="暂无文章内容" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
   }
@@ -59,6 +51,7 @@ const ArticlePreview: React.FC<ArticlePreviewProps> = ({
     }
     
     // 如果是相对路径，添加服务器地址
+    const serverUrl = getServerUrl();
     const path = url.startsWith('/') ? url : `/${url}`;
     return `${serverUrl}${path}`;
   };

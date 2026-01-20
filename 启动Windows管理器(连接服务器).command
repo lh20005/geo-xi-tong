@@ -45,13 +45,13 @@ fi
 # 写入服务器配置
 cat > .env << 'EOF'
 # 后端API基础地址（不包含 /api）- 连接到生产服务器
-VITE_API_BASE_URL=https://jzgeo.cc
+VITE_API_BASE_URL=https://www.jzgeo.cc
 
 # WebSocket基础地址（包含 /ws 路径）
-VITE_WS_BASE_URL=wss://jzgeo.cc/ws
+VITE_WS_BASE_URL=wss://www.jzgeo.cc/ws
 
 # Landing页面地址
-VITE_LANDING_URL=https://jzgeo.cc
+VITE_LANDING_URL=https://www.jzgeo.cc
 
 # 应用环境
 NODE_ENV=development
@@ -60,7 +60,7 @@ NODE_ENV=development
 LOG_LEVEL=debug
 EOF
 
-echo "   ✅ 已配置连接到: https://jzgeo.cc"
+echo "   ✅ 已配置连接到: https://www.jzgeo.cc"
 echo ""
 
 # 4. 启动应用
@@ -68,8 +68,8 @@ echo "🚀 启动 Windows 登录管理器..."
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "📋 连接信息:"
-echo "   • 后端API:    https://jzgeo.cc/api"
-echo "   • WebSocket:  wss://jzgeo.cc/ws"
+echo "   • 后端API:    https://www.jzgeo.cc/api"
+echo "   • WebSocket:  wss://www.jzgeo.cc/ws"
 echo "   • 本地端口:   http://localhost:5174"
 echo ""
 echo "⚠️  操作提示:"
@@ -80,7 +80,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # 启动 Electron 开发模式（通过环境变量传递服务器地址）
-API_BASE_URL=https://jzgeo.cc npm run electron:dev
+API_BASE_URL=https://www.jzgeo.cc npm run electron:dev
 
 # 服务停止后的清理
 echo ""

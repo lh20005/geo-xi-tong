@@ -116,7 +116,7 @@ export default function LoginPage() {
         title="登录 - GEO优化系统"
         description="登录GEO优化系统，开始您的AI时代品牌推荐优化之旅。智能关键词蒸馏、AI内容生成、多平台自动发布。"
         keywords="GEO优化登录,品牌AI优化,内容营销工具"
-        canonicalUrl="https://jzgeo.cc/login"
+        canonicalUrl="https://www.jzgeo.cc/login"
         noIndex={true}
       />
       {/* 导航栏 */}
