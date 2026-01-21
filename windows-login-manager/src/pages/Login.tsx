@@ -157,7 +157,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               href="#" 
               onClick={(e) => {
                 e.preventDefault();
-                window.open(`${config.landingUrl}/forgot-password`, '_blank');
+                const url = `${config.landingUrl}/forgot-password`;
+                if (window.electronAPI?.openExternal) {
+                  window.electronAPI.openExternal(url);
+                } else {
+                  window.open(url, '_blank');
+                }
               }}
             >
               忘记密码？
@@ -167,7 +172,12 @@ export default function Login({ onLoginSuccess }: LoginProps) {
               href="#" 
               onClick={(e) => {
                 e.preventDefault();
-                window.open(`${config.landingUrl}/register`, '_blank');
+                const url = `${config.landingUrl}/register`;
+                if (window.electronAPI?.openExternal) {
+                  window.electronAPI.openExternal(url);
+                } else {
+                  window.open(url, '_blank');
+                }
               }}
             >
               注册新用户

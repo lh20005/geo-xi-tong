@@ -84,12 +84,22 @@ export const StorageWarningBanner: React.FC<StorageWarningBannerProps> = ({ fixe
 
   const handleUpgrade = () => {
     // Windows 端打开外部浏览器到用户中心
-    window.open('http://localhost:5173/user-center?tab=subscription', '_blank');
+    const url = 'http://localhost:5173/user-center?tab=subscription';
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   const handleManageStorage = () => {
     // Windows 端打开外部浏览器到存储管理
-    window.open('http://localhost:5173/user-center?tab=storage', '_blank');
+    const url = 'http://localhost:5173/user-center?tab=storage';
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   // 不显示警告的情况

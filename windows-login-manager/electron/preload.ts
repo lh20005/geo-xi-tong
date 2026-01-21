@@ -2,6 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // 定义暴露给渲染进程的API类型
 export interface ElectronAPI {
+  // 系统功能
+  openExternal: (url: string) => Promise<void>;
+  
   // 系统登录
   login: (username: string, password: string) => Promise<any>;
   logout: () => Promise<any>;
@@ -136,6 +139,9 @@ export interface QueueStatusEvent {
 
 // 创建 API 对象
 const electronAPI = {
+  // 系统功能
+  openExternal: (url: string) => ipcRenderer.invoke('open-external', url),
+  
   // 系统登录
   login: (username: string, password: string) =>
     ipcRenderer.invoke('login', username, password),

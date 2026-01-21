@@ -48,6 +48,15 @@ export interface PublishingAPI {
 declare global {
   interface Window {
     publishing?: PublishingAPI;
+    electronAPI?: {
+      openExternal: (url: string) => Promise<void>;
+      // 其他 API 方法在 preload.ts 中定义
+      [key: string]: any;
+    };
+    electron?: {
+      openExternal: (url: string) => Promise<void>;
+      [key: string]: any;
+    };
   }
 }
 

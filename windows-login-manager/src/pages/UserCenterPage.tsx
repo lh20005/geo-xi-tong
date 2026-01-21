@@ -310,7 +310,13 @@ const UserCenterPage = () => {
   // 跳转到落地页套餐购买页面
   const handleNavigateToPricing = () => {
     const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
-    window.open(`${landingUrl}/#pricing`, '_blank');
+    const url = `${landingUrl}/#pricing`;
+    // 使用系统默认浏览器打开外部链接
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   const getProgressColor = (percentage: number) => {

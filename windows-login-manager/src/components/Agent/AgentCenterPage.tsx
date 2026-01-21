@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
+import '../../types/electron.d'; // 导入 Window 类型扩展
 import { 
   Card, Row, Col, Statistic, Space, Button, message, 
   Typography, List, Avatar, Alert, Divider, Tooltip,
@@ -86,7 +87,13 @@ export const AgentCenterPage: React.FC<AgentCenterPageProps> = ({
 
   const handleNavigateToPricing = () => {
     const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:8080';
-    window.open(`${landingUrl}/#pricing`, '_blank');
+    const url = `${landingUrl}/#pricing`;
+    // 使用系统默认浏览器打开外部链接
+    if (window.electronAPI?.openExternal) {
+      window.electronAPI.openExternal(url);
+    } else {
+      window.open(url, '_blank');
+    }
     setUpgradeModalVisible(false);
   };
 

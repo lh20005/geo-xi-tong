@@ -1,4 +1,4 @@
-import { ipcMain, app, BrowserWindow } from 'electron';
+import { ipcMain, app, BrowserWindow, shell } from 'electron';
 import log from 'electron-log';
 import { appManager } from '../main';
 import { loginManager, Platform, LoginResult } from '../login/login-manager';
@@ -56,6 +56,9 @@ class IPCHandler {
 
     // 初始化API客户端的baseURL
     await this.initializeAPIClient();
+
+    // 系统功能
+    this.registerSystemHandlers();
 
     // 平台登录
     this.registerLoginHandlers();
@@ -119,6 +122,22 @@ class IPCHandler {
       const fallbackUrl = process.env.API_BASE_URL || process.env.VITE_API_BASE_URL || 'http://localhost:3000';
       await apiClient.setBaseURL(fallbackUrl);
     }
+  }
+
+  /**
+   * 注册系统功能处理器
+   */
+  private registerSystemHandlers(): void {
+    // 在系统默认浏览器中打开外部链接
+    ipcMain.handle('open-external', async (_event, url: string) => {
+      try {
+        log.info(`IPC: open-external - ${url}`);
+        await shell.openExternal(url);
+      } catch (error) {
+        log.error('Failed to open external URL:', error);
+        throw error;
+      }
+    });
   }
 
   /**
