@@ -17,7 +17,8 @@ export class BatchExecutor {
   private executingBatches: Set<string> = new Set();
   private stoppedBatches: Set<string> = new Set();
   private mainWindow: BrowserWindow | null = null;
-  private readonly STOP_CHECK_INTERVAL_MS = 1000; // 每1秒检查一次停止信号
+  private readonly LOCAL_CHECK_INTERVAL_MS = 1000; // 每1秒检查本地停止标记
+  private readonly SERVER_CHECK_INTERVAL_MS = 30000; // 每30秒检查服务器状态
 
   /**
    * 设置主窗口（用于发送 IPC 消息）
@@ -76,22 +77,43 @@ export class BatchExecutor {
     console.log(`   预计下次执行时间: ${nextExecutionTime.toLocaleString('zh-CN')}`);
     
     let waitedTime = 0;
+    let lastServerCheckTime = 0;
     
-    // 每1秒检查一次停止信号
+    // 使用精确的等待时间计算
+    const startTime = Date.now();
+    
     while (waitedTime < waitMs) {
-      const sleepTime = Math.min(this.STOP_CHECK_INTERVAL_MS, waitMs - waitedTime);
-      await sleep(sleepTime);
-      waitedTime += sleepTime;
-      
-      // 检查批次是否被停止
-      const shouldStop = await this.checkStopSignal(batchId);
-      if (shouldStop) {
-        console.log(`🛑 批次 ${batchId} 在等待期间被停止`);
+      // 检查本地停止标记（立即响应）
+      if (this.stoppedBatches.has(batchId)) {
+        console.log(`🛑 批次 ${batchId} 被本地停止`);
         return true;
       }
+      
+      // 每30秒检查一次服务器状态（减少 API 调用）
+      if (waitedTime - lastServerCheckTime >= this.SERVER_CHECK_INTERVAL_MS) {
+        try {
+          const response = await apiClient.get(`/api/publishing/batches/${batchId}`);
+          if (response.data?.success && response.data?.data) {
+            const info = response.data.data as BatchInfo;
+            if (info.pending_tasks === 0) {
+              console.log(`🛑 批次 ${batchId} 服务器显示无待处理任务`);
+              return true;
+            }
+          }
+        } catch (error: any) {
+          console.error(`⚠️  检查停止信号失败:`, error.message);
+        }
+        lastServerCheckTime = waitedTime;
+      }
+      
+      // 等待1秒
+      await sleep(this.LOCAL_CHECK_INTERVAL_MS);
+      
+      // 使用实际经过的时间，而不是累加（避免 API 调用延迟累积）
+      waitedTime = Date.now() - startTime;
     }
     
-    console.log(`✅ 等待完成`);
+    console.log(`✅ 等待完成，实际等待时间: ${Math.round(waitedTime / 60000)} 分钟`);
     return false;
   }
 
