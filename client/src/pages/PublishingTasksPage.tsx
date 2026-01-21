@@ -1071,6 +1071,128 @@ export default function PublishingTasksPage() {
         </Col>
       </Row>
 
+      {/* 桌面版下载引导卡片 */}
+      <Card 
+        style={{ 
+          marginBottom: 24, 
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          border: 'none',
+          borderRadius: 12
+        }}
+        styles={{ body: { padding: '24px 32px' } }}
+      >
+        <Row gutter={24} align="middle">
+          <Col flex="auto">
+            <div style={{ marginBottom: 16 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 600, display: 'block', marginBottom: 8 }}>
+                🚀 网页端发布功能正在建设中
+              </Text>
+              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
+                我们正在努力开发网页端的任务发布功能，敬请期待！目前请下载桌面版软件体验完整的发布功能。
+              </Text>
+            </div>
+            
+            {/* 下载按钮区域 - 横向排列 */}
+            <Space size="middle" wrap>
+              {/* Windows 版 */}
+              <a
+                href="https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Windows.exe"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: 'none' }}
+              >
+                <Button
+                  size="large"
+                  style={{
+                    background: 'rgba(255,255,255,0.95)',
+                    border: 'none',
+                    borderRadius: 8,
+                    height: 48,
+                    padding: '0 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#0078D4">
+                    <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                  </svg>
+                  <span style={{ color: '#1e293b', fontWeight: 500 }}>Windows 版</span>
+                </Button>
+              </a>
+              
+              {/* Mac Apple Silicon 版 */}
+              <a
+                href="https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Mac-Apple.dmg"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: 'none' }}
+              >
+                <Button
+                  size="large"
+                  style={{
+                    background: 'rgba(255,255,255,0.95)',
+                    border: 'none',
+                    borderRadius: 8,
+                    height: 48,
+                    padding: '0 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#555">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                  </svg>
+                  <span style={{ color: '#1e293b', fontWeight: 500 }}>Mac 版（Apple 芯片）</span>
+                </Button>
+              </a>
+              
+              {/* Mac Intel 版 */}
+              <a
+                href="https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Mac-Intel.dmg"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ textDecoration: 'none' }}
+              >
+                <Button
+                  size="large"
+                  style={{
+                    background: 'rgba(255,255,255,0.95)',
+                    border: 'none',
+                    borderRadius: 8,
+                    height: 48,
+                    padding: '0 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                >
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="#555">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                  </svg>
+                  <span style={{ color: '#1e293b', fontWeight: 500 }}>Mac 版（Intel 芯片）</span>
+                </Button>
+              </a>
+            </Space>
+            
+            {/* Mac 安装提示 */}
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 16v-4M12 8h.01"/>
+              </svg>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+                Mac 用户首次打开请右键点击应用，选择"打开"以允许运行
+              </Text>
+            </div>
+          </Col>
+        </Row>
+      </Card>
+
       {/* 文章选择区 - 暂时隐藏，功能保留 */}
       {/* <Card 
         title={

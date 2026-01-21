@@ -293,20 +293,22 @@ export default function HomePage() {
 
             {/* 右侧图片轮播 */}
             <div className="relative lg:flex hidden items-center group">
-              <div className="relative z-10 overflow-hidden rounded-2xl shadow-2xl w-full">
-                {/* 图片容器 - 16:9 比例 */}
-                <div className="relative aspect-[16/9]">
+              <div className="relative z-10 overflow-hidden rounded-2xl shadow-2xl w-full bg-gray-100">
+                {/* 图片容器 - 自适应图片比例 */}
+                <div className="relative">
                   {carouselImages.map((image, index) => (
                     <div
                       key={index}
-                      className={`absolute inset-0 transition-opacity duration-1000 ${
-                        index === currentImageIndex ? 'opacity-100' : 'opacity-0'
+                      className={`transition-opacity duration-1000 ${
+                        index === currentImageIndex 
+                          ? 'opacity-100 relative' 
+                          : 'opacity-0 absolute inset-0'
                       }`}
                     >
                       <img
                         src={image.src}
                         alt={image.alt}
-                        className="w-full h-full object-cover"
+                        className="w-full h-auto object-contain"
                       />
                     </div>
                   ))}
@@ -320,8 +322,8 @@ export default function HomePage() {
                       onClick={() => goToImage(index)}
                       className={`w-2 h-2 rounded-full transition-all duration-300 ${
                         index === currentImageIndex
-                          ? 'bg-white w-8'
-                          : 'bg-white/50 hover:bg-white/75'
+                          ? 'bg-blue-600 w-8'
+                          : 'bg-gray-400/50 hover:bg-gray-400/75'
                       }`}
                       aria-label={`切换到第 ${index + 1} 张图片`}
                     />
