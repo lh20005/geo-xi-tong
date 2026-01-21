@@ -732,6 +732,7 @@ export class DashboardService {
   /**
    * 获取发布趋势数据
    * 返回每日发布成功/失败数量和成功率
+   * 注意：使用 publishing_tasks 表而非 publishing_records，因为任务状态（成功/失败/超时）记录在 tasks 表中
    */
   async getPublishingTrend(userId: number, startDate?: string, endDate?: string) {
     const end = endDate ? new Date(endDate) : new Date();
@@ -740,6 +741,7 @@ export class DashboardService {
     const client = await pool.connect();
     
     try {
+      // 使用 DATE() 函数进行日期比较，确保包含 endDate 当天的全部数据
       const query = `
         WITH date_series AS (
           SELECT generate_series(
@@ -752,10 +754,10 @@ export class DashboardService {
           SELECT 
             DATE(created_at) AS date,
             COUNT(*) FILTER (WHERE status = 'success' OR status = 'completed') AS success_count,
-            COUNT(*) FILTER (WHERE status = 'failed') AS failed_count,
-            COUNT(*) AS total_count
-          FROM publishing_records
-          WHERE user_id = $3 AND created_at >= $1 AND created_at <= $2
+            COUNT(*) FILTER (WHERE status IN ('failed', 'timeout')) AS failed_count,
+            COUNT(*) FILTER (WHERE status IN ('success', 'completed', 'failed', 'timeout')) AS total_count
+          FROM publishing_tasks
+          WHERE user_id = $3 AND DATE(created_at) >= DATE($1) AND DATE(created_at) <= DATE($2)
           GROUP BY DATE(created_at)
         )
         SELECT 

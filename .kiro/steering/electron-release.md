@@ -203,7 +203,8 @@ npm run build:all
 - https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest.yml
 - https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest-mac.yml
 
-在客户端点击"检查更新"验证自动更新功能。
+## 存档流程
+将历次打包文件归档到 `打包历史/` 目录，并且按照“打包的日期+修复内容简介”为文件夹的名称归档存放。
 
 ---
 
