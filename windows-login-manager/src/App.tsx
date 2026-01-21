@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { HashRouter as Router, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { App as AntApp } from 'antd';
 import { AppProvider, useApp } from './context/AppContext';
 import Layout from './components/Layout';
@@ -9,6 +9,36 @@ import { ipcBridge } from './services/ipc';
 import { getUserWebSocketService } from './services/UserWebSocketService';
 import { routes } from './routes';
 import './App.css';
+
+// 内部组件，用于处理登录后的导航
+function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const hasNavigated = useRef(false);
+
+  // 登录成功后，如果当前不在有效路径，导航到工作台
+  useEffect(() => {
+    if (!hasNavigated.current) {
+      // 检查当前路径是否是根路径或空路径
+      if (location.pathname === '/' || location.pathname === '') {
+        console.log('[App] 登录成功，导航到工作台');
+        navigate('/dashboard', { replace: true });
+      }
+      hasNavigated.current = true;
+    }
+  }, [navigate, location.pathname]);
+
+  return (
+    <Layout onLogout={onLogout}>
+      <StorageWarningBanner />
+      <Routes>
+        {routes.map((route, index) => (
+          <Route key={index} path={route.path} element={route.element} />
+        ))}
+      </Routes>
+    </Layout>
+  );
+}
 
 function AppContent() {
   const { setUser } = useApp();
@@ -115,14 +145,7 @@ function AppContent() {
 
   return (
     <Router>
-      <Layout onLogout={handleLogout}>
-        <StorageWarningBanner />
-        <Routes>
-          {routes.map((route, index) => (
-            <Route key={index} path={route.path} element={route.element} />
-          ))}
-        </Routes>
-      </Layout>
+      <AuthenticatedApp onLogout={handleLogout} />
     </Router>
   );
 }

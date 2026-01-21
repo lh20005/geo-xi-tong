@@ -1,7 +1,12 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 
+// 生产环境默认服务器地址（硬编码作为后备）
+const PRODUCTION_SERVER_URL = 'https://www.jzgeo.cc';
+
 // 获取 API 基础 URL
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+// 生产环境优先使用硬编码的服务器地址，确保打包后能正常工作
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (import.meta.env.PROD ? PRODUCTION_SERVER_URL : 'http://localhost:3000');
 
 /**
  * 统一的 API 客户端

@@ -147,7 +147,7 @@ class ApplicationManager {
       height: 800,
       minWidth: 800,
       minHeight: 600,
-      title: '平台登录管理器',
+      title: 'Ai智软精准GEO优化系统',
       backgroundColor: '#ffffff',
       icon: path.join(__dirname, '../build/icon.png'),
       webPreferences: {
@@ -306,7 +306,14 @@ class ApplicationManager {
 
     const menu = Menu.buildFromTemplate(template);
     Menu.setApplicationMenu(menu);
-    logger.info('Application menu set');
+    
+    // Windows 平台隐藏菜单栏
+    if (process.platform === 'win32') {
+      Menu.setApplicationMenu(null);
+      logger.info('Application menu hidden on Windows');
+    } else {
+      logger.info('Application menu set');
+    }
   }
 
   /**

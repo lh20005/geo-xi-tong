@@ -7,13 +7,26 @@
 const isDevelopment = import.meta.env.DEV;
 const isProduction = import.meta.env.PROD;
 
+// 生产环境默认服务器地址（硬编码作为后备）
+const PRODUCTION_SERVER_URL = 'https://www.jzgeo.cc';
+
 // 在 Electron 环境中，使用环境变量或默认值
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+// 生产环境优先使用硬编码的服务器地址，确保打包后能正常工作
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (isProduction ? PRODUCTION_SERVER_URL : 'http://localhost:3000');
 
 // 构建 WebSocket URL，确保包含 /ws 路径
-let wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || API_BASE_URL.replace('http', 'ws');
+let wsBaseUrl = import.meta.env.VITE_WS_BASE_URL || 
+  (isProduction ? 'wss://www.jzgeo.cc/ws' : API_BASE_URL.replace('http', 'ws'));
 if (!wsBaseUrl.endsWith('/ws')) {
   wsBaseUrl = wsBaseUrl.replace(/\/$/, '') + '/ws';
+}
+
+// 调试日志（仅开发环境）
+if (isDevelopment) {
+  console.log('[Config] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+  console.log('[Config] API_BASE_URL:', API_BASE_URL);
+  console.log('[Config] isProduction:', isProduction);
 }
 
 export const config = {
