@@ -1,19 +1,20 @@
 {
   "name": "ai-geo-system",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Ai智软精准GEO优化系统 - 基于Electron的桌面应用",
   "main": "dist-electron/main.js",
   "author": "Your Company",
   "license": "MIT",
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:electron && vite build && electron-builder",
+    "prebuild": "node scripts/prebuild-clean.js",
+    "build": "npm run prebuild && npm run build:electron && vite build && electron-builder",
     "build:electron": "tsc -p electron/tsconfig.json && tsc -p electron/preload/tsconfig.json",
-    "build:win": "npm run build:electron && vite build && electron-builder --win",
-    "build:mac": "npm run build:electron && vite build && electron-builder --mac",
-    "build:mac-x64": "npm run build:electron && vite build && electron-builder --mac --x64",
-    "build:mac-arm": "npm run build:electron && vite build && electron-builder --mac --arm64",
-    "build:all": "npm run build:electron && vite build && electron-builder --win --mac",
+    "build:win": "npm run prebuild && npm run build:electron && vite build && electron-builder --win",
+    "build:mac": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac",
+    "build:mac-x64": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac --x64",
+    "build:mac-arm": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac --arm64",
+    "build:all": "npm run prebuild && npm run build:electron && vite build && electron-builder --win --mac",
     "preview": "vite preview",
     "electron:dev": "npm run build:electron && concurrently \"vite\" \"wait-on http://localhost:5174 && cross-env NODE_ENV=development electron dist-electron/main.js\"",
     "lint": "eslint . --ext .ts,.tsx",
@@ -34,6 +35,7 @@
     "electron-store": "^8.1.0",
     "electron-updater": "^6.1.7",
     "form-data": "^4.0.5",
+    "playwright": "^1.57.0",
     "qrcode.react": "^3.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -85,7 +87,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "node_modules"
+      "node_modules/playwright/**/*",
+      "node_modules/playwright-core/**/*"
     ],
     "win": {
       "target": [
@@ -124,13 +127,9 @@
         }
       ],
       "icon": "build/icon.icns",
-      "hardenedRuntime": true,
+      "hardenedRuntime": false,
       "gatekeeperAssess": false,
-      "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "signIgnore": [
-        "node_modules"
-      ]
+      "identity": null
     },
     "dmg": {
       "contents": [

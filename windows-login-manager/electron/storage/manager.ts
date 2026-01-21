@@ -7,6 +7,15 @@ import crypto from 'crypto';
  * 存储管理器
  * 使用Electron safeStorage API实现加密存储
  * Requirements: 7.1, 7.2, 7.7, 11.9
+ * 
+ * 重要说明：
+ * electron-store 的数据存储在 app.getPath('userData') 目录：
+ * - macOS: ~/Library/Application Support/<app-name>/
+ * - Windows: %APPDATA%/<app-name>/
+ * - Linux: ~/.config/<app-name>/
+ * 
+ * 这个目录是用户特定的，不会被打包进 app.asar 中。
+ * 每个用户安装应用后都会有一个全新的空目录。
  */
 
 // 定义存储的数据类型
@@ -36,11 +45,66 @@ interface Account {
   last_used_at?: Date;
 }
 
+// 存储版本标记 - 用于检测首次安装或强制重新登录
+// 使用 package.json 中的版本号，每次发布新版本都会触发清理
+const STORAGE_INITIALIZED_KEY = '_storage_initialized';
+// 从 package.json 读取版本号，确保每次发布新版本都会清除旧的认证数据
+const CURRENT_STORAGE_VERSION = app.getVersion(); // 例如 "1.0.0"
+
 // 创建加密存储实例
 const store = new Store({
   name: 'platform-login-manager',
   encryptionKey: 'your-encryption-key-here', // 在生产环境中应该使用更安全的密钥管理
 });
+
+/**
+ * 初始化存储 - 确保首次启动时是干净状态
+ * 这个函数会在打包后的生产环境中检查是否需要清理旧数据
+ * 
+ * 重要：这个函数会在每次版本更新时清除认证数据，
+ * 确保用户需要重新登录，防止旧版本的敏感数据泄露
+ */
+function initializeStorage(): void {
+  try {
+    const storedVersion = store.get(STORAGE_INITIALIZED_KEY) as string | undefined;
+    
+    // 如果版本不匹配或不存在，说明是首次安装或版本更新，需要重置
+    if (storedVersion !== CURRENT_STORAGE_VERSION) {
+      log.info(`Storage initialization: version mismatch (stored: ${storedVersion}, current: ${CURRENT_STORAGE_VERSION})`);
+      log.info('Clearing ALL authentication data for fresh start...');
+      
+      // 清除所有认证相关数据（Electron Store）
+      store.delete('auth_tokens');
+      store.delete('user');
+      store.delete('accounts_cache');
+      
+      // 设置版本标记
+      store.set(STORAGE_INITIALIZED_KEY, CURRENT_STORAGE_VERSION);
+      
+      log.info('✅ Storage initialized successfully - user will see clean login page');
+    } else {
+      log.info('Storage version matches, skipping cleanup');
+    }
+  } catch (error) {
+    log.error('Error initializing storage:', error);
+    // 出错时也尝试清理，确保安全
+    try {
+      store.delete('auth_tokens');
+      store.delete('user');
+      store.delete('accounts_cache');
+      store.set(STORAGE_INITIALIZED_KEY, CURRENT_STORAGE_VERSION);
+      log.info('Storage cleared due to initialization error');
+    } catch (e) {
+      log.error('Failed to clear data on error:', e);
+    }
+  }
+}
+
+// 在打包后的生产环境中执行初始化
+// 注意：这会在每次版本更新时清除认证数据
+if (app.isPackaged) {
+  initializeStorage();
+}
 
 class StorageManager {
   private static instance: StorageManager;

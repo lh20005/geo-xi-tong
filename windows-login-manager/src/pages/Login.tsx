@@ -14,18 +14,19 @@ export default function Login({ onLoginSuccess }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberUsername, setRememberUsername] = useState(false);
 
-  // 从localStorage加载保存的账户信息
+  // 从localStorage加载保存的用户名（不再保存密码）
   useEffect(() => {
+    // 安全清理：移除旧版本可能存储的密码
+    localStorage.removeItem('savedPassword');
+    
     const savedUsername = localStorage.getItem('savedUsername');
-    const savedPassword = localStorage.getItem('savedPassword');
-    const savedRememberMe = localStorage.getItem('rememberMe') === 'true';
+    const savedRemember = localStorage.getItem('rememberUsername') === 'true';
 
-    if (savedRememberMe && savedUsername && savedPassword) {
+    if (savedRemember && savedUsername) {
       setUsername(savedUsername);
-      setPassword(savedPassword);
-      setRememberMe(true);
+      setRememberUsername(true);
     }
   }, []);
 
@@ -46,16 +47,17 @@ export default function Login({ onLoginSuccess }: LoginProps) {
       if (result.success && result.user) {
         console.log('登录成功:', result.user);
         
-        // 保存或清除账户信息
-        if (rememberMe) {
+        // 只保存用户名，不保存密码
+        if (rememberUsername) {
           localStorage.setItem('savedUsername', username);
-          localStorage.setItem('savedPassword', password);
-          localStorage.setItem('rememberMe', 'true');
+          localStorage.setItem('rememberUsername', 'true');
         } else {
           localStorage.removeItem('savedUsername');
-          localStorage.removeItem('savedPassword');
-          localStorage.removeItem('rememberMe');
+          localStorage.removeItem('rememberUsername');
         }
+        // 确保清除旧版本可能存储的密码
+        localStorage.removeItem('savedPassword');
+        localStorage.removeItem('rememberMe');
         
         onLoginSuccess(result.user);
       } else {
@@ -130,11 +132,11 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             <label className="checkbox-label">
               <input
                 type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
+                checked={rememberUsername}
+                onChange={(e) => setRememberUsername(e.target.checked)}
                 disabled={loading}
               />
-              <span>记住账号密码</span>
+              <span>记住用户名</span>
             </label>
           </div>
 
