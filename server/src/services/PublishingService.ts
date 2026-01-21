@@ -79,9 +79,19 @@ export class PublishingService {
       }
     }
 
-    // 获取文章内容用于快照
+    // 获取文章内容和蒸馏信息用于快照（在创建任务时保存，避免文章删除后丢失）
     const articleResult = await pool.query(
-      'SELECT title, content, keyword, image_url FROM articles WHERE id = $1',
+      `SELECT 
+        a.title, a.content, a.keyword, a.image_url,
+        COALESCE(a.topic_question_snapshot, t.question) as topic_question,
+        COALESCE(a.distillation_keyword_snapshot, d.keyword) as distillation_keyword,
+        COALESCE(gt.article_setting_name, ast.name) as article_setting_name
+       FROM articles a
+       LEFT JOIN topics t ON a.topic_id = t.id
+       LEFT JOIN distillations d ON a.distillation_id = d.id
+       LEFT JOIN generation_tasks gt ON a.task_id = gt.id
+       LEFT JOIN article_settings ast ON gt.article_setting_id = ast.id
+       WHERE a.id = $1`,
       [input.article_id]
     );
     
@@ -94,8 +104,9 @@ export class PublishingService {
     const result = await pool.query(
       `INSERT INTO publishing_tasks 
        (article_id, account_id, platform_id, user_id, config, scheduled_at, status, batch_id, batch_order, interval_minutes,
-        article_title, article_content, article_keyword, article_image_url) 
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) 
+        article_title, article_content, article_keyword, article_image_url,
+        topic_question_snapshot, distillation_keyword_snapshot, article_setting_name_snapshot) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) 
        RETURNING id, article_id, account_id, platform_id, user_id, config, scheduled_at, status, 
                  batch_id, batch_order, interval_minutes, retry_count, max_retries,
                  created_at, updated_at, article_title, article_keyword`,
@@ -113,7 +124,10 @@ export class PublishingService {
         article.title,
         article.content,
         article.keyword,
-        article.image_url
+        article.image_url,
+        article.topic_question || '',
+        article.distillation_keyword || '',
+        article.article_setting_name || ''
       ]
     );
 
@@ -744,6 +758,32 @@ export class PublishingService {
       return deletedCount;
     } catch (error) {
       console.error('清理旧发布任务失败:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * 清理旧的发布记录
+   * 删除超过指定天数的发布记录
+   * @param daysToKeep 保留天数，默认10天
+   * @returns 删除的记录数量
+   */
+  async cleanupOldRecords(daysToKeep: number = 10): Promise<number> {
+    try {
+      const result = await pool.query(
+        `DELETE FROM publishing_records 
+         WHERE created_at < NOW() - INTERVAL '1 day' * $1
+         RETURNING id`,
+        [daysToKeep]
+      );
+      
+      const deletedCount = result.rowCount || 0;
+      if (deletedCount > 0) {
+        console.log(`🧹 清理了 ${deletedCount} 条超过 ${daysToKeep} 天的旧发布记录`);
+      }
+      return deletedCount;
+    } catch (error) {
+      console.error('清理旧发布记录失败:', error);
       return 0;
     }
   }

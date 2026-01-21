@@ -389,12 +389,28 @@ router.put('/tasks/:id/status', async (req, res) => {
         const account = await accountService.getAccountById(task.account_id, userId, false);
         
         if (account) {
-          // 获取文章的蒸馏结果和文章设置信息（在删除文章前）
+          // 优先从任务快照获取蒸馏信息（任务创建时已保存，不受文章删除影响）
+          // 如果任务快照没有，再尝试从文章表获取（兼容旧任务）
           let topicQuestion = '';
           let articleSettingName = '';
           let distillationKeyword = '';
           
-          if (task.article_id) {
+          // 先获取任务的快照字段
+          const taskSnapshotResult = await pool.query(
+            `SELECT topic_question_snapshot, distillation_keyword_snapshot, article_setting_name_snapshot 
+             FROM publishing_tasks WHERE id = $1`,
+            [taskId]
+          );
+          
+          if (taskSnapshotResult.rows.length > 0) {
+            const snapshot = taskSnapshotResult.rows[0];
+            topicQuestion = snapshot.topic_question_snapshot || '';
+            distillationKeyword = snapshot.distillation_keyword_snapshot || '';
+            articleSettingName = snapshot.article_setting_name_snapshot || '';
+          }
+          
+          // 如果任务快照没有数据，尝试从文章表获取（兼容旧任务）
+          if (!topicQuestion && !distillationKeyword && !articleSettingName && task.article_id) {
             const articleInfoResult = await pool.query(
               `SELECT 
                 COALESCE(a.topic_question_snapshot, t.question) as topic_question,

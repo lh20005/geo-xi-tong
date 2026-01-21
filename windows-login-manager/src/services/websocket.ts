@@ -48,15 +48,16 @@ export class WebSocketClient {
     this.token = token;
 
     try {
+      // 在 URL 中添加 token 参数，服务器端在连接时验证
+      const urlWithToken = `${this.url}?token=${encodeURIComponent(token)}`;
       console.log(`Connecting to WebSocket: ${this.url}`);
-      this.ws = new WebSocket(this.url);
+      this.ws = new WebSocket(urlWithToken);
 
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.reconnectAttempts = 0;
         
-        // Authenticate
-        this.authenticate();
+        // 服务器已在连接时验证 token，无需再发送 auth 消息
         
         // Start heartbeat
         this.startHeartbeat();

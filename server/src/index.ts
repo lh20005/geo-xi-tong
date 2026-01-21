@@ -320,6 +320,46 @@ async function startServer() {
     
     schedulePublishingTaskCleanup();
     
+    // 安排每日清理旧发布记录（凌晨4:30执行）
+    const schedulePublishingRecordCleanup = async () => {
+      const { publishingService } = await import('./services/PublishingService');
+      
+      const now = new Date();
+      const next430AM = new Date(now);
+      next430AM.setHours(4, 30, 0, 0);
+      
+      if (next430AM <= now) {
+        next430AM.setDate(next430AM.getDate() + 1);
+      }
+      
+      const timeUntilNext = next430AM.getTime() - now.getTime();
+      
+      setTimeout(async () => {
+        try {
+          console.log('[RecordCleanup] 开始每日发布记录清理...');
+          const deletedCount = await publishingService.cleanupOldRecords(10); // 保留10天
+          console.log(`[RecordCleanup] 清理完成: 删除 ${deletedCount} 条旧记录`);
+        } catch (error) {
+          console.error('[RecordCleanup] 发布记录清理失败:', error);
+        }
+        
+        // 安排下一次清理（24小时后）
+        setInterval(async () => {
+          try {
+            console.log('[RecordCleanup] 开始每日发布记录清理...');
+            const deletedCount = await publishingService.cleanupOldRecords(10);
+            console.log(`[RecordCleanup] 清理完成: 删除 ${deletedCount} 条旧记录`);
+          } catch (error) {
+            console.error('[RecordCleanup] 发布记录清理失败:', error);
+          }
+        }, 24 * 60 * 60 * 1000);
+      }, timeUntilNext);
+      
+      console.log(`✅ 发布记录清理已安排，下次运行时间: ${next430AM.toLocaleString('zh-CN')}`);
+    };
+    
+    schedulePublishingRecordCleanup();
+    
     // 创建HTTP服务器
     const server = createServer(app);
     

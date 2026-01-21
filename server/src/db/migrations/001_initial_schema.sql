@@ -633,7 +633,18 @@ CREATE TABLE IF NOT EXISTS publishing_tasks (
   batch_order INTEGER DEFAULT 0,
   interval_minutes INTEGER DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  -- 文章快照字段（创建任务时保存，避免文章删除后丢失）
+  article_title TEXT,
+  article_content TEXT,
+  article_keyword VARCHAR(255),
+  article_image_url TEXT,
+  account_name_snapshot VARCHAR(255),
+  real_username_snapshot VARCHAR(255),
+  -- 蒸馏信息快照字段（创建任务时保存，避免文章删除后丢失）
+  topic_question_snapshot TEXT,
+  distillation_keyword_snapshot VARCHAR(255),
+  article_setting_name_snapshot VARCHAR(255)
 );
 
 CREATE INDEX IF NOT EXISTS idx_publishing_tasks_user_id ON publishing_tasks(user_id);
