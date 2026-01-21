@@ -79,6 +79,22 @@ export class BrowserAutomationService {
         userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       });
 
+      // 隐藏自动化标记，防止被平台检测
+      await this.context.addInitScript(() => {
+        // 隐藏 navigator.webdriver 标记
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+        
+        // 修复 Chrome 插件数组（空数组会被检测）
+        Object.defineProperty(navigator, 'plugins', {
+          get: () => [1, 2, 3, 4, 5]
+        });
+        
+        // 修复 languages（确保不为空）
+        Object.defineProperty(navigator, 'languages', {
+          get: () => ['zh-CN', 'zh', 'en']
+        });
+      });
+
       // 设置默认超时
       this.context.setDefaultTimeout(opts.timeout!);
       this.context.setDefaultNavigationTimeout(opts.timeout!);
