@@ -1,5 +1,5 @@
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater';
-import { dialog, BrowserWindow, ipcMain, app } from 'electron';
+import { dialog, BrowserWindow, ipcMain, app, Notification } from 'electron';
 import { Logger } from '../logger/logger';
 import log from 'electron-log';
 
@@ -21,6 +21,12 @@ export interface UpdateInfoResult {
   updateAvailable: boolean;
   releaseNotes?: string;
   releaseDate?: string;
+  downloadUrl?: string;  // 手动下载链接
+  platformInfo?: {       // 平台信息
+    platform: string;
+    arch: string;
+    displayName: string;
+  };
 }
 
 /**
@@ -37,6 +43,7 @@ export class AutoUpdater {
     message: '就绪'
   };
   private latestUpdateInfo: UpdateInfo | null = null;
+  private feedUrl: string = '';  // 保存更新服务器 URL，用于生成手动下载链接
 
   private constructor() {
     this.logger = Logger.getInstance();
@@ -56,7 +63,7 @@ export class AutoUpdater {
    */
   private configureUpdater(): void {
     // 配置 electron-updater
-    autoUpdater.autoDownload = false;
+    autoUpdater.autoDownload = true;  // 启用后台静默下载
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowDowngrade = false;
     
@@ -73,6 +80,7 @@ export class AutoUpdater {
    */
   public setFeedURL(url: string): void {
     this.logger.info(`Setting update feed URL: ${url}`);
+    this.feedUrl = url;  // 保存 URL 用于生成手动下载链接
     
     autoUpdater.setFeedURL({
       provider: 'generic',
@@ -161,6 +169,9 @@ export class AutoUpdater {
         releaseNotes: releaseNotes,
         releaseDate: info.releaseDate
       });
+      
+      // 发送系统通知
+      this.showUpdateNotification(info.version);
     });
   }
 
@@ -195,12 +206,15 @@ export class AutoUpdater {
 
     // 获取更新信息
     ipcMain.handle('updater:get-info', async (): Promise<UpdateInfoResult> => {
+      const platformInfo = this.getPlatformInfo();
       return {
         currentVersion: this.getCurrentVersion(),
         latestVersion: this.latestUpdateInfo?.version,
         updateAvailable: this.currentStatus.status === 'available' || this.currentStatus.status === 'downloaded',
         releaseNotes: this.currentStatus.releaseNotes,
-        releaseDate: this.currentStatus.releaseDate
+        releaseDate: this.currentStatus.releaseDate,
+        downloadUrl: this.getManualDownloadUrl(),
+        platformInfo: platformInfo
       };
     });
   }
@@ -441,6 +455,110 @@ export class AutoUpdater {
           this.logger.info('User chose to install update later');
         }
       });
+  }
+
+  /**
+   * 显示更新下载完成的系统通知
+   */
+  private showUpdateNotification(version: string): void {
+    try {
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title: 'GEO优化系统 - 更新已就绪',
+          body: `新版本 ${version} 已下载完成，点击查看详情`,
+          icon: undefined, // 使用默认图标
+          silent: false
+        });
+        
+        notification.on('click', () => {
+          // 点击通知时聚焦主窗口并导航到更新页面
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            if (this.mainWindow.isMinimized()) {
+              this.mainWindow.restore();
+            }
+            this.mainWindow.show();
+            this.mainWindow.focus();
+            // 发送事件通知渲染进程导航到更新页面
+            this.mainWindow.webContents.send('navigate-to-update');
+          }
+        });
+        
+        notification.show();
+        this.logger.info('Update notification shown');
+      }
+    } catch (error) {
+      this.logger.error('Failed to show update notification:', error);
+    }
+  }
+
+  /**
+   * 获取手动下载链接
+   * 根据当前平台和架构返回对应的安装包下载链接
+   */
+  public getManualDownloadUrl(): string {
+    if (!this.feedUrl) {
+      return '';
+    }
+    
+    // 获取平台和架构信息
+    const platform = process.platform;
+    const arch = process.arch;  // 'x64', 'arm64', 'ia32' 等
+    const version = this.latestUpdateInfo?.version || this.getCurrentVersion();
+    
+    // 构建下载链接（基于 electron-builder 的默认命名规则）
+    let fileName = '';
+    if (platform === 'win32') {
+      // Windows: 区分 x64 和 arm64
+      if (arch === 'arm64') {
+        fileName = `GEO优化系统-Setup-${version}-arm64.exe`;
+      } else {
+        fileName = `GEO优化系统-Setup-${version}.exe`;  // x64 是默认的，不带后缀
+      }
+    } else if (platform === 'darwin') {
+      // macOS: 区分 Intel (x64) 和 Apple Silicon (arm64)
+      if (arch === 'arm64') {
+        fileName = `GEO优化系统-${version}-arm64.dmg`;
+      } else {
+        fileName = `GEO优化系统-${version}.dmg`;  // Intel 版本
+      }
+    } else {
+      // Linux: 区分 x64 和 arm64
+      if (arch === 'arm64') {
+        fileName = `GEO优化系统-${version}-arm64.AppImage`;
+      } else {
+        fileName = `GEO优化系统-${version}.AppImage`;
+      }
+    }
+    
+    // URL 编码中文文件名
+    const encodedFileName = encodeURIComponent(fileName);
+    return `${this.feedUrl}/${encodedFileName}`;
+  }
+
+  /**
+   * 获取当前平台和架构信息（用于 UI 显示）
+   */
+  public getPlatformInfo(): { platform: string; arch: string; displayName: string } {
+    const platform = process.platform;
+    const arch = process.arch;
+    
+    let displayName = '';
+    if (platform === 'win32') {
+      displayName = arch === 'arm64' ? 'Windows (ARM64)' : 'Windows (x64)';
+    } else if (platform === 'darwin') {
+      displayName = arch === 'arm64' ? 'macOS (Apple Silicon)' : 'macOS (Intel)';
+    } else {
+      displayName = arch === 'arm64' ? 'Linux (ARM64)' : 'Linux (x64)';
+    }
+    
+    return { platform, arch, displayName };
+  }
+
+  /**
+   * 获取更新服务器 URL
+   */
+  public getFeedUrl(): string {
+    return this.feedUrl;
   }
 }
 

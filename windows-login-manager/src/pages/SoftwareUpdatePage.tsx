@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, Progress, Tag, Space, Typography, Alert, Descriptions, Result } from 'antd';
+import { Card, Button, Progress, Tag, Space, Typography, Alert, Descriptions, Result, Divider } from 'antd';
 import { 
   CloudDownloadOutlined, 
   CheckCircleOutlined, 
@@ -7,7 +7,8 @@ import {
   DownloadOutlined,
   RocketOutlined,
   InfoCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  LinkOutlined
 } from '@ant-design/icons';
 import type { UpdateStatus, UpdateInfoResult } from '../types/electron';
 
@@ -92,6 +93,17 @@ const SoftwareUpdatePage = () => {
       }
     } catch (error) {
       console.error('安装更新失败:', error);
+    }
+  };
+
+  // 手动下载
+  const handleManualDownload = () => {
+    if (updateInfo?.downloadUrl) {
+      if (window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal(updateInfo.downloadUrl);
+      } else {
+        window.open(updateInfo.downloadUrl, '_blank');
+      }
     }
   };
 
@@ -317,6 +329,37 @@ const SoftwareUpdatePage = () => {
         showIcon
         style={{ marginTop: 24 }}
       />
+
+      {/* 手动下载区域 */}
+      <Card style={{ marginTop: 24 }}>
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Text strong>
+            <LinkOutlined style={{ marginRight: 8 }} />
+            手动下载安装包
+          </Text>
+          <Text type="secondary">
+            如果自动更新失败，您可以手动下载安装包进行更新
+          </Text>
+          <Divider style={{ margin: '12px 0' }} />
+          {updateInfo?.platformInfo && (
+            <Text type="secondary">
+              当前系统: {updateInfo.platformInfo.displayName}
+            </Text>
+          )}
+          <Button 
+            icon={<DownloadOutlined />}
+            onClick={handleManualDownload}
+            disabled={!updateInfo?.downloadUrl}
+          >
+            下载 {updateInfo?.platformInfo?.displayName || ''} 安装包
+          </Button>
+          {updateInfo?.downloadUrl && (
+            <Text type="secondary" style={{ fontSize: 12, wordBreak: 'break-all' }}>
+              下载地址: {updateInfo.downloadUrl}
+            </Text>
+          )}
+        </Space>
+      </Card>
     </div>
   );
 };

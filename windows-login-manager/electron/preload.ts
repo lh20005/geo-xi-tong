@@ -93,8 +93,10 @@ export interface ElectronAPI {
       updateAvailable: boolean;
       releaseNotes?: string;
       releaseDate?: string;
+      downloadUrl?: string;
     }>;
     onStatusChanged: (callback: (status: any) => void) => () => void;
+    onNavigateToUpdate: (callback: () => void) => () => void;
   };
 }
 
@@ -260,6 +262,13 @@ const electronAPI = {
       ipcRenderer.on('updater:status-changed', listener);
       return () => {
         ipcRenderer.removeListener('updater:status-changed', listener);
+      };
+    },
+    onNavigateToUpdate: (callback: () => void) => {
+      const listener = () => callback();
+      ipcRenderer.on('navigate-to-update', listener);
+      return () => {
+        ipcRenderer.removeListener('navigate-to-update', listener);
       };
     },
   },

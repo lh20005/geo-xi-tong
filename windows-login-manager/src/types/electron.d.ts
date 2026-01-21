@@ -25,6 +25,32 @@ export interface QueueStatusEvent {
   executingBatches: string[];
 }
 
+// 更新状态类型
+export interface UpdateStatus {
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error';
+  message: string;
+  progress?: number;
+  version?: string;
+  releaseNotes?: string;
+  releaseDate?: string;
+  error?: string;
+}
+
+// 更新信息类型
+export interface UpdateInfoResult {
+  currentVersion: string;
+  latestVersion?: string;
+  updateAvailable: boolean;
+  releaseNotes?: string;
+  releaseDate?: string;
+  downloadUrl?: string;
+  platformInfo?: {
+    platform: string;
+    arch: string;
+    displayName: string;
+  };
+}
+
 // 发布任务管理 API
 export interface PublishingAPI {
   // 队列控制
@@ -44,17 +70,31 @@ export interface PublishingAPI {
   onQueueStatus: (callback: (data: QueueStatusEvent) => void) => () => void;
 }
 
+// 更新器 API
+export interface UpdaterAPI {
+  getVersion: () => Promise<string>;
+  getStatus: () => Promise<UpdateStatus>;
+  checkForUpdates: () => Promise<{ success: boolean; message: string; updateAvailable?: boolean }>;
+  downloadUpdate: () => Promise<{ success: boolean; message: string }>;
+  installUpdate: () => Promise<{ success: boolean; message: string }>;
+  getInfo: () => Promise<UpdateInfoResult>;
+  onStatusChanged: (callback: (status: UpdateStatus) => void) => () => void;
+  onNavigateToUpdate: (callback: () => void) => () => void;
+}
+
 // 扩展 Window 接口
 declare global {
   interface Window {
     publishing?: PublishingAPI;
     electronAPI?: {
       openExternal: (url: string) => Promise<void>;
+      updater?: UpdaterAPI;
       // 其他 API 方法在 preload.ts 中定义
       [key: string]: any;
     };
     electron?: {
       openExternal: (url: string) => Promise<void>;
+      updater?: UpdaterAPI;
       [key: string]: any;
     };
   }

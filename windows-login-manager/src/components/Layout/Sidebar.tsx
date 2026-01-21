@@ -1,4 +1,4 @@
-import { Layout, Menu, Modal, message } from 'antd';
+import { Layout, Menu, Modal, message, Badge } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import {
@@ -39,6 +39,7 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [userIsAdmin, setUserIsAdmin] = useState(isAdmin());
+  const [hasUpdate, setHasUpdate] = useState(false);
 
   // 监听用户信息变化，实时更新管理员状态
   useEffect(() => {
@@ -62,6 +63,46 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       window.removeEventListener('userInfoUpdated', checkAdminStatus);
     };
   }, []);
+
+  // 监听更新状态
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    let cleanupNavigate: (() => void) | undefined;
+
+    const checkUpdateStatus = async () => {
+      try {
+        if (window.electronAPI?.updater) {
+          const status = await window.electronAPI.updater.getStatus();
+          // 有新版本可用或已下载完成时显示红点
+          setHasUpdate(status.status === 'available' || status.status === 'downloaded');
+        }
+      } catch (error) {
+        console.error('[Sidebar] 检查更新状态失败:', error);
+      }
+    };
+
+    // 初始检查
+    checkUpdateStatus();
+
+    // 监听更新状态变化
+    if (window.electronAPI?.updater?.onStatusChanged) {
+      cleanup = window.electronAPI.updater.onStatusChanged((status) => {
+        setHasUpdate(status.status === 'available' || status.status === 'downloaded');
+      });
+    }
+
+    // 监听导航到更新页面的事件（从系统通知点击）
+    if (window.electronAPI?.updater?.onNavigateToUpdate) {
+      cleanupNavigate = window.electronAPI.updater.onNavigateToUpdate(() => {
+        navigate('/software-update');
+      });
+    }
+
+    return () => {
+      if (cleanup) cleanup();
+      if (cleanupNavigate) cleanupNavigate();
+    };
+  }, [navigate]);
 
   const handleLogout = () => {
     Modal.confirm({
@@ -220,8 +261,29 @@ export default function Sidebar({ onLogout }: SidebarProps) {
     },
     {
       key: '/software-update',
-      icon: <CloudDownloadOutlined />,
-      label: '升级软件',
+      icon: hasUpdate ? (
+        <Badge dot offset={[-2, 2]}>
+          <CloudDownloadOutlined />
+        </Badge>
+      ) : (
+        <CloudDownloadOutlined />
+      ),
+      label: hasUpdate ? (
+        <span>
+          升级软件
+          <Badge 
+            count="新" 
+            style={{ 
+              marginLeft: 8, 
+              backgroundColor: '#ff4d4f',
+              fontSize: 10,
+              padding: '0 4px',
+              height: 16,
+              lineHeight: '16px'
+            }} 
+          />
+        </span>
+      ) : '升级软件',
     },
     {
       key: 'visit-website',

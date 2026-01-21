@@ -9,7 +9,11 @@
     "dev": "vite",
     "build": "npm run build:electron && vite build && electron-builder",
     "build:electron": "tsc -p electron/tsconfig.json && tsc -p electron/preload/tsconfig.json",
-    "build:win": "npm run build -- --win",
+    "build:win": "npm run build:electron && vite build && electron-builder --win",
+    "build:mac": "npm run build:electron && vite build && electron-builder --mac",
+    "build:mac-x64": "npm run build:electron && vite build && electron-builder --mac --x64",
+    "build:mac-arm": "npm run build:electron && vite build && electron-builder --mac --arm64",
+    "build:all": "npm run build:electron && vite build && electron-builder --win --mac",
     "preview": "vite preview",
     "electron:dev": "npm run build:electron && concurrently \"vite\" \"wait-on http://localhost:5174 && cross-env NODE_ENV=development electron dist-electron/main.js\"",
     "lint": "eslint . --ext .ts,.tsx",
@@ -150,6 +154,9 @@
       "provider": "generic",
       "url": "https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases",
       "useMultipleRangeRequest": false
+    },
+    "releaseInfo": {
+      "releaseNotesFile": "CHANGELOG.md"
     }
   }
 }
