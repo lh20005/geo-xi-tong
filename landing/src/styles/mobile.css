@@ -1,0 +1,676 @@
+/* ============================================
+   GEO 营销页面 - 手机端专属优化样式
+   ============================================
+   设计原则：
+   1. 内容优先 - 重要信息放在首屏
+   2. 触摸友好 - 按钮和链接足够大
+   3. 阅读舒适 - 字体大小和行高适配小屏
+   4. 视觉层次 - 清晰的信息层级
+   5. 性能优先 - 减少不必要的动画
+   ============================================ */
+
+/* ============ 基础重置 ============ */
+@media (max-width: 768px) {
+  /* 禁用桌面端的 hover 效果，避免触摸设备上的粘滞 */
+  * {
+    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.15);
+  }
+
+  /* 确保触摸目标足够大 (WCAG 建议 44x44px) */
+  button,
+  a,
+  [role="button"],
+  input[type="submit"],
+  .clickable {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* 平滑滚动 */
+  html {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 防止横向滚动 */
+  body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+}
+
+/* ============ 导航栏优化 ============ */
+@media (max-width: 768px) {
+  /* 导航栏高度固定，Logo 和标题缩小 */
+  nav {
+    height: 56px !important;
+  }
+
+  nav .text-lg,
+  nav .text-2xl {
+    font-size: 1rem !important;
+  }
+
+  /* 移动端菜单面板 */
+  .mobile-menu-panel {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: white;
+    z-index: 40;
+    overflow-y: auto;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* ============ Hero Section 移动端优化 ============ */
+@media (max-width: 768px) {
+  /* Hero 区域紧凑布局 */
+  .hero-section {
+    padding-top: 4rem !important;
+    padding-bottom: 2rem !important;
+    min-height: auto !important;
+  }
+
+  /* 主标题 - 更大更醒目 */
+  .hero-section h1 {
+    font-size: 1.75rem !important;
+    line-height: 1.35 !important;
+    margin-bottom: 1rem !important;
+    padding: 0 0.5rem;
+  }
+
+  /* 渐变文字保持清晰 */
+  .hero-section h1 span {
+    display: inline !important;
+  }
+
+  /* 标签徽章 */
+  .hero-section .badge {
+    font-size: 0.7rem !important;
+    padding: 0.375rem 0.75rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  /* 核心数据 - 横向滚动或换行 */
+  .hero-stats {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 0.75rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .hero-stats > div {
+    flex: 0 0 auto;
+  }
+
+  .hero-stats .text-2xl {
+    font-size: 1.25rem !important;
+  }
+
+  .hero-stats .text-xs {
+    font-size: 0.65rem !important;
+  }
+
+  /* 分隔线隐藏 */
+  .hero-stats .w-px {
+    display: none !important;
+  }
+
+  /* CTA 按钮 - 全宽 */
+  .hero-cta {
+    width: 100% !important;
+    padding: 0 1rem !important;
+  }
+
+  .hero-cta a,
+  .hero-cta button {
+    width: 100% !important;
+    padding: 0.875rem 1.5rem !important;
+    font-size: 1rem !important;
+    justify-content: center !important;
+  }
+
+  /* 信任标识 - 两列布局 */
+  .trust-badges {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+    padding: 0 0.5rem !important;
+  }
+
+  .trust-badges > div {
+    justify-content: flex-start !important;
+  }
+
+  .trust-badges .text-sm {
+    font-size: 0.75rem !important;
+  }
+
+  /* 轮播图 - 移动端显示 */
+  .hero-carousel {
+    display: block !important;
+    margin-top: 1.5rem !important;
+    padding: 0 1rem !important;
+  }
+
+  .hero-carousel img {
+    border-radius: 0.75rem !important;
+  }
+
+  /* 隐藏装饰元素 */
+  .hero-section .animate-blob {
+    display: none !important;
+  }
+}
+
+/* ============ 价格方案 Section 移动端优化 ============ */
+@media (max-width: 768px) {
+  #pricing {
+    padding: 2.5rem 0 !important;
+  }
+
+  #pricing h2 {
+    font-size: 1.5rem !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 1rem;
+  }
+
+  /* 套餐卡片 - 横向滑动 */
+  .pricing-cards-container {
+    display: flex !important;
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 1rem 1rem 1rem !important;  /* 增加顶部 padding 为标签留空间 */
+    gap: 1rem !important;
+    scrollbar-width: none !important;
+  }
+
+  .pricing-cards-container::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* 单个套餐卡片 */
+  .pricing-card {
+    flex: 0 0 280px !important;
+    scroll-snap-align: center !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+    margin-top: 0.5rem !important;  /* 为顶部标签留出空间 */
+  }
+
+  /* 卡片内部优化 */
+  .pricing-card h3 {
+    font-size: 1.125rem !important;
+  }
+
+  .pricing-card .text-4xl {
+    font-size: 2rem !important;
+  }
+
+  /* 功能列表紧凑 */
+  .pricing-card ul {
+    font-size: 0.75rem !important;
+  }
+
+  .pricing-card ul li {
+    padding: 0.25rem 0 !important;
+  }
+
+  /* 购买按钮 */
+  .pricing-card button,
+  .pricing-card a {
+    padding: 0.625rem 1rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* 滑动指示器 */
+  .pricing-scroll-indicator {
+    display: flex !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    margin-top: 1rem !important;
+  }
+
+  .pricing-scroll-indicator span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #d1d5db;
+    transition: all 0.3s;
+  }
+
+  .pricing-scroll-indicator span.active {
+    width: 24px;
+    border-radius: 4px;
+    background: #3b82f6;
+  }
+}
+
+/* ============ 核心功能 Section 移动端优化 ============ */
+@media (max-width: 768px) {
+  #features {
+    padding: 2.5rem 0 !important;
+  }
+
+  #features h2 {
+    font-size: 1.375rem !important;
+    line-height: 1.4 !important;
+    margin-bottom: 0.75rem !important;
+    padding: 0 1rem;
+  }
+
+  #features > div > p {
+    font-size: 0.875rem !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 1rem;
+  }
+
+  /* 功能卡片 - 单列布局 */
+  .features-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+    padding: 0 1rem !important;
+  }
+
+  .feature-card {
+    padding: 1.25rem !important;
+    border-radius: 1rem !important;
+  }
+
+  /* 图标缩小 */
+  .feature-card .icon-wrapper {
+    width: 3rem !important;
+    height: 3rem !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .feature-card .icon-wrapper span {
+    font-size: 1.5rem !important;
+  }
+
+  .feature-card h3 {
+    font-size: 1.125rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  .feature-card p {
+    font-size: 0.8125rem !important;
+    line-height: 1.5 !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  .feature-card ul {
+    font-size: 0.75rem !important;
+  }
+
+  .feature-card ul li {
+    padding: 0.125rem 0 !important;
+  }
+
+  /* 工作流程图 - 垂直布局 */
+  .workflow-container {
+    padding: 1.5rem 1rem !important;
+    margin-top: 1.5rem !important;
+  }
+
+  .workflow-container h3 {
+    font-size: 1.125rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .workflow-steps {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+
+  .workflow-step {
+    display: flex !important;
+    align-items: center !important;
+    gap: 1rem !important;
+    text-align: left !important;
+  }
+
+  .workflow-step .step-number {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    font-size: 1rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .workflow-step h4 {
+    font-size: 0.9375rem !important;
+    margin-bottom: 0.125rem !important;
+  }
+
+  .workflow-step p {
+    font-size: 0.75rem !important;
+  }
+
+  /* 隐藏箭头 */
+  .workflow-arrow {
+    display: none !important;
+  }
+}
+
+/* ============ 产品优势 Section 移动端优化 ============ */
+@media (max-width: 768px) {
+  #advantages {
+    padding: 2.5rem 0 !important;
+  }
+
+  #advantages h2 {
+    font-size: 1.375rem !important;
+    margin-bottom: 0.75rem !important;
+    padding: 0 1rem;
+  }
+
+  #advantages > div > p {
+    font-size: 0.875rem !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 1rem;
+  }
+
+  /* 优势卡片 - 紧凑布局 */
+  .advantages-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    padding: 0 1rem !important;
+  }
+
+  .advantage-card {
+    padding: 1rem !important;
+    border-radius: 0.75rem !important;
+  }
+
+  .advantage-card .flex {
+    gap: 0.75rem !important;
+  }
+
+  .advantage-card .icon-wrapper {
+    width: 2.75rem !important;
+    height: 2.75rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  .advantage-card .icon-wrapper span {
+    font-size: 1.25rem !important;
+  }
+
+  .advantage-card h3 {
+    font-size: 1rem !important;
+    margin-bottom: 0.375rem !important;
+  }
+
+  .advantage-card p {
+    font-size: 0.8125rem !important;
+    line-height: 1.5 !important;
+  }
+
+  /* 核心优势总结卡片 */
+  .advantages-summary {
+    margin: 1.5rem 1rem 0 !important;
+    padding: 1.5rem 1rem !important;
+    border-radius: 1rem !important;
+  }
+
+  .advantages-summary h3 {
+    font-size: 1.125rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  .advantages-summary > p {
+    font-size: 0.8125rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  .advantages-summary .grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .advantages-summary .text-5xl {
+    font-size: 2rem !important;
+  }
+
+  .advantages-summary .text-lg {
+    font-size: 0.875rem !important;
+  }
+
+  .advantages-summary .text-sm {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* ============ 应用案例 Section 移动端优化 ============ */
+@media (max-width: 768px) {
+  #cases {
+    padding: 2.5rem 0 !important;
+  }
+
+  #cases h2 {
+    font-size: 1.375rem !important;
+    margin-bottom: 0.75rem !important;
+    padding: 0 1rem;
+  }
+
+  #cases > div > p {
+    font-size: 0.875rem !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 1rem;
+  }
+
+  /* 案例卡片 - 横向滑动 */
+  .cases-grid {
+    display: flex !important;
+    overflow-x: auto !important;
+    scroll-snap-type: x mandatory !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 0 1rem 1rem !important;
+    gap: 1rem !important;
+    scrollbar-width: none !important;
+  }
+
+  .cases-grid::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .case-card {
+    flex: 0 0 260px !important;
+    scroll-snap-align: center !important;
+    min-width: 260px !important;
+  }
+
+  .case-card img {
+    height: 140px !important;
+  }
+
+  .case-card .p-6 {
+    padding: 1rem !important;
+  }
+
+  .case-card h3 {
+    font-size: 1rem !important;
+  }
+
+  .case-card p {
+    font-size: 0.8125rem !important;
+  }
+
+  /* 查看更多按钮 */
+  .cases-cta {
+    margin-top: 1rem !important;
+    padding: 0 1rem !important;
+  }
+
+  .cases-cta a {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 0.875rem 1.5rem !important;
+  }
+}
+
+/* ============ CTA Section 移动端优化 ============ */
+@media (max-width: 768px) {
+  .cta-section {
+    padding: 3rem 0 !important;
+  }
+
+  .cta-section h2 {
+    font-size: 1.5rem !important;
+    line-height: 1.35 !important;
+    margin-bottom: 0.75rem !important;
+    padding: 0 1rem;
+  }
+
+  .cta-section p {
+    font-size: 0.9375rem !important;
+    margin-bottom: 1.5rem !important;
+    padding: 0 1rem;
+  }
+
+  .cta-section a,
+  .cta-section button {
+    width: calc(100% - 2rem) !important;
+    margin: 0 1rem !important;
+    padding: 0.875rem 1.5rem !important;
+    font-size: 1rem !important;
+    justify-content: center !important;
+  }
+
+  /* 隐藏背景光效 */
+  .cta-section .blur-\[120px\],
+  .cta-section .blur-\[100px\] {
+    display: none !important;
+  }
+}
+
+/* ============ Footer 移动端优化 ============ */
+@media (max-width: 768px) {
+  footer {
+    padding: 2rem 0 !important;
+  }
+
+  /* 底部版权区域 */
+  footer .border-t {
+    margin-top: 0 !important;
+    padding-top: 1.25rem !important;
+  }
+
+  footer .border-t .flex {
+    flex-direction: column !important;
+    gap: 0.625rem !important;
+  }
+
+  footer .border-t a {
+    font-size: 0.75rem !important;
+  }
+}
+
+/* ============ 小屏手机额外优化 (< 375px) ============ */
+@media (max-width: 374px) {
+  /* 更小的字体 */
+  .hero-section h1 {
+    font-size: 1.5rem !important;
+  }
+
+  #pricing h2,
+  #features h2,
+  #advantages h2,
+  #cases h2 {
+    font-size: 1.25rem !important;
+  }
+
+  /* 套餐卡片更窄 */
+  .pricing-card {
+    flex: 0 0 250px !important;
+    min-width: 250px !important;
+    max-width: 250px !important;
+  }
+
+  /* 案例卡片更窄 */
+  .case-card {
+    flex: 0 0 230px !important;
+    min-width: 230px !important;
+  }
+
+  /* 按钮字体 */
+  button,
+  a {
+    font-size: 0.875rem !important;
+  }
+}
+
+/* ============ 触摸反馈 ============ */
+@media (hover: none) and (pointer: coarse) {
+  button:active,
+  a:active,
+  .clickable:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease-out;
+  }
+
+  /* 卡片按压效果 */
+  .pricing-card:active,
+  .feature-card:active,
+  .advantage-card:active,
+  .case-card:active {
+    transform: scale(0.98);
+    transition: transform 0.15s ease-out;
+  }
+}
+
+/* ============ 安全区域适配 (iPhone X+) ============ */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 768px) {
+    footer {
+      padding-bottom: calc(2.5rem + env(safe-area-inset-bottom)) !important;
+    }
+
+    .mobile-menu-panel {
+      padding-bottom: env(safe-area-inset-bottom) !important;
+    }
+  }
+}
+
+/* ============ 横屏模式优化 ============ */
+@media (max-width: 768px) and (orientation: landscape) {
+  .hero-section {
+    padding-top: 3rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  .hero-section h1 {
+    font-size: 1.5rem !important;
+  }
+
+  /* 横屏时套餐卡片可以更宽 */
+  .pricing-card {
+    flex: 0 0 320px !important;
+    min-width: 320px !important;
+    max-width: 320px !important;
+  }
+}
+
+/* ============ 减少动画 (用户偏好) ============ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============ 深色模式支持 (可选) ============ */
+@media (prefers-color-scheme: dark) {
+  /* 如果需要支持深色模式，在这里添加样式 */
+}

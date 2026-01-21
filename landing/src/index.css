@@ -1,3 +1,6 @@
+/* 导入移动端专属样式 */
+@import './styles/mobile.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
