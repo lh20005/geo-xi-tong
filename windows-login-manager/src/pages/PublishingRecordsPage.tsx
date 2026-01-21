@@ -206,7 +206,6 @@ export default function PublishingRecordsPage() {
       key: 'action',
       width: 140,
       align: 'center' as const,
-      fixed: 'right' as const,
       render: (_: any, record: PublishingRecord) => (
         <Space>
           <Tooltip title="查看详情">

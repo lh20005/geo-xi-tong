@@ -364,7 +364,7 @@ export default function ArticleListPage() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 220,
       align: 'center' as const,
       render: (_: any, record: any) => (
         <Space>
@@ -442,7 +442,7 @@ export default function ArticleListPage() {
       </Card>
 
       <Card title="文章管理" variant="borderless" extra={<Space><Button onClick={refreshAll} icon={<ReloadOutlined />} loading={loading}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
-        <ResizableTable<Article> tableId="article-list" columns={columns} dataSource={articles} rowKey="id" loading={loading} scroll={{ x: 1200 }} pagination={{ current: page, pageSize, total, onChange: (newPage, newPageSize) => { setPage(newPage); if (newPageSize && newPageSize !== pageSize) { setPageSize(newPageSize); setPage(1); } }, showSizeChanger: true, showQuickJumper: true, showTotal: (total) => `共 ${total} 条记录`, pageSizeOptions: ['10', '20', '50', '100'] }} />
+        <ResizableTable<Article> tableId="article-list" columns={columns} dataSource={articles} rowKey="id" loading={loading} scroll={{ x: 1400 }} pagination={{ current: page, pageSize, total, onChange: (newPage, newPageSize) => { setPage(newPage); if (newPageSize && newPageSize !== pageSize) { setPageSize(newPageSize); setPage(1); } }, showSizeChanger: true, showQuickJumper: true, showTotal: (total) => `共 ${total} 条记录`, pageSizeOptions: ['10', '20', '50', '100'] }} />
       </Card>
 
       <Modal title={<Space><EyeOutlined /><span>文章预览</span>{viewModal && <Tag color="blue">{viewModal.keyword}</Tag>}</Space>} open={!!viewModal} onCancel={() => setViewModal(null)} width={900} footer={[<Button key="copy" icon={<CopyOutlined />} onClick={() => handleCopy(viewModal.content, viewModal.imageUrl || viewModal.image_url)}>复制文章</Button>, <Button key="close" type="primary" onClick={() => setViewModal(null)}>关闭</Button>]}>

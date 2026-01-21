@@ -81,9 +81,28 @@ const ResizableTitle: React.FC<ResizableTitleProps> = (props) => {
   );
 };
 
+// 列宽存储版本号 - 当需要重置所有用户的列宽时，增加此版本号
+const COLUMN_WIDTH_VERSION = 3;
+
 // 存储列宽的工具函数
 const getStoredColumnWidths = (tableId: string): Record<string, number> => {
   try {
+    // 检查版本号
+    const storedVersion = localStorage.getItem('table_column_widths_version');
+    if (storedVersion !== String(COLUMN_WIDTH_VERSION)) {
+      // 版本不匹配，清除所有旧的列宽数据
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('table_column_widths_')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach(key => localStorage.removeItem(key));
+      localStorage.setItem('table_column_widths_version', String(COLUMN_WIDTH_VERSION));
+      return {};
+    }
+    
     const stored = localStorage.getItem(`table_column_widths_${tableId}`);
     return stored ? JSON.parse(stored) : {};
   } catch {
@@ -122,8 +141,9 @@ function ResizableTable<T extends object>({
       if (key) {
         const definedWidth = col.width || 150;
         const storedWidth = stored[key];
-        // 优先使用存储的宽度，如果没有存储则使用列定义的宽度
-        initial[key] = storedWidth || definedWidth;
+        // 使用存储的宽度，但确保不小于列定义的宽度
+        // 这样可以防止之前保存的较小宽度导致内容被截断
+        initial[key] = storedWidth ? Math.max(storedWidth, definedWidth) : definedWidth;
       }
     });
     
@@ -141,8 +161,8 @@ function ResizableTable<T extends object>({
       if (key) {
         const definedWidth = col.width || 150;
         const storedWidth = stored[key];
-        // 优先使用存储的宽度，如果没有存储则使用列定义的宽度
-        newWidths[key] = storedWidth || definedWidth;
+        // 使用存储的宽度，但确保不小于列定义的宽度
+        newWidths[key] = storedWidth ? Math.max(storedWidth, definedWidth) : definedWidth;
       }
     });
     
@@ -150,36 +170,45 @@ function ResizableTable<T extends object>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableId]); // 只依赖 tableId，不依赖 initialColumns
 
+  // 获取列定义的宽度
+  const getColumnDefinedWidth = useCallback((key: string): number => {
+    const col = initialColumns.find((c: any) => (c.key || c.dataIndex) === key);
+    return (col as any)?.width || 150;
+  }, [initialColumns]);
+
   // 处理列宽调整
   const handleResize = useCallback(
     (key: string) =>
       (_: React.SyntheticEvent, { size }: ResizeCallbackData) => {
+        const definedWidth = getColumnDefinedWidth(key);
         setColumnWidths((prev) => {
           const newWidths = {
             ...prev,
-            [key]: Math.max(size.width, 30), // 最小30px，防止列完全消失
+            // 使用列定义的宽度作为最小值，防止列被拖得太小
+            [key]: Math.max(size.width, definedWidth),
           };
           // 保存到 localStorage
           setStoredColumnWidths(tableId, newWidths);
           return newWidths;
         });
       },
-    [tableId]
+    [tableId, getColumnDefinedWidth]
   );
 
   // 构建带有调整后宽度的列配置
   const resizableColumns = initialColumns.map((col: any) => {
     const key = col.key || col.dataIndex;
-    const width = key ? (columnWidths[key] || col.width || 150) : (col.width || 150);
+    const definedWidth = col.width || 150;
+    const width = key ? (columnWidths[key] || definedWidth) : definedWidth;
 
-    // fixed 列也支持拖拽，不设置最小宽度限制
+    // fixed 列也支持拖拽
     return {
       ...col,
       width,
       onHeaderCell: () => ({
         width,
         onResize: key ? handleResize(key) : undefined,
-        minWidth: 30, // 设置一个很小的最小值，防止列完全消失
+        minWidth: definedWidth, // 使用列定义的宽度作为最小值
       }),
     };
   });
@@ -227,6 +256,7 @@ function ResizableTable<T extends object>({
       columns={resizableColumns}
       components={components}
       bordered
+      tableLayout="fixed"
     />
   );
 }

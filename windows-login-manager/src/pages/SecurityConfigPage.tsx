@@ -174,7 +174,6 @@ const SecurityConfigPage: React.FC = () => {
       title: '操作',
       key: 'action',
       width: 150,
-      fixed: 'right',
       render: (_, record: SecurityConfig) => (
         <Space>
           <Button

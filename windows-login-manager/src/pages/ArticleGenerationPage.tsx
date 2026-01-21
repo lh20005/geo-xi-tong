@@ -476,7 +476,6 @@ export default function ArticleGenerationPage() {
       key: 'action',
       width: 150,
       align: 'center' as const,
-      fixed: 'right' as const,
       render: (_: any, record: GenerationTask) => (
         <Space size="small">
           {(record.status === 'running' || record.status === 'pending') && (

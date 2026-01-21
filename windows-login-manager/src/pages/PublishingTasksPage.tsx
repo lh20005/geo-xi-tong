@@ -1073,7 +1073,6 @@ export default function PublishingTasksPage() {
       key: 'action',
       width: 280,
       align: 'center' as const,
-      fixed: 'right' as const,
       render: (_: any, record: PublishingTask) => (
         <Space size="small">
           <Tooltip title="查看日志">

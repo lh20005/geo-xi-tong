@@ -138,9 +138,8 @@ export default function ConversionTargetPage() {
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: 220,
       align: 'center',
-      fixed: 'right',
       render: (_: any, record: ConversionTarget) => (
         <Space size="small">
           <Button
