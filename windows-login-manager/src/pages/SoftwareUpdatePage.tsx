@@ -353,11 +353,6 @@ const SoftwareUpdatePage = () => {
           >
             下载 {updateInfo?.platformInfo?.displayName || ''} 安装包
           </Button>
-          {updateInfo?.downloadUrl && (
-            <Text type="secondary" style={{ fontSize: 12, wordBreak: 'break-all' }}>
-              下载地址: {updateInfo.downloadUrl}
-            </Text>
-          )}
         </Space>
       </Card>
     </div>

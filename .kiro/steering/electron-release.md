@@ -1,7 +1,3 @@
----
-inclusion: manual
----
-
 # Electron 桌面应用打包发布规范
 
 ## 版本管理
@@ -62,12 +58,30 @@ npm run build:mac-arm  # macOS Apple Silicon 单独
 每次发布需上传到 `/releases/` 目录：
 ```
 releases/
-├── GEO优化系统-Setup-{version}.exe      # Windows
-├── GEO优化系统-{version}.dmg            # macOS Intel
-├── GEO优化系统-{version}-arm64.dmg      # macOS Apple Silicon
-├── latest.yml                            # Windows 更新元数据
-└── latest-mac.yml                        # macOS 更新元数据
+├── Ai智软精准GEO优化系统-Setup-{version}.exe   # Windows（自动更新用）
+├── Ai智软精准GEO优化系统-{version}.dmg         # macOS Intel（自动更新用）
+├── Ai智软精准GEO优化系统-{version}-arm64.dmg   # macOS Apple Silicon（自动更新用）
+├── latest.yml                                   # Windows 更新元数据
+├── latest-mac.yml                               # macOS 更新元数据
+└── latest/                                      # 营销页面下载（固定链接）
+    ├── GEO优化系统-Windows.exe
+    ├── GEO优化系统-Mac-Intel.dmg
+    └── GEO优化系统-Mac-Apple.dmg
 ```
+
+### latest/ 目录说明（重要）
+
+营销页面的下载链接指向 `latest/` 目录，使用固定文件名，**无需随版本更新**。
+
+每次发布新版本后，需要将打包文件复制到 `latest/` 目录并重命名：
+
+| 原始文件名 | latest/ 目录文件名 |
+|-----------|-------------------|
+| `Ai智软精准GEO优化系统-Setup-{version}.exe` | `GEO优化系统-Windows.exe` |
+| `Ai智软精准GEO优化系统-{version}.dmg` | `GEO优化系统-Mac-Intel.dmg` |
+| `Ai智软精准GEO优化系统-{version}-arm64.dmg` | `GEO优化系统-Mac-Apple.dmg` |
+
+**此步骤由 Kiro 在每次打包发布时自动执行。**
 
 ---
 

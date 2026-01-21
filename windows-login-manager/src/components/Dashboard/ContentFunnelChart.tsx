@@ -51,22 +51,36 @@ export default function ContentFunnelChart({ data, loading }: ContentFunnelChart
     );
   }
 
-  // 漏斗数据：从大到小排列，确保倒三角形效果
-  const maxValue = Math.max(
-    data.topics || 1,
-    data.articles || 1,
-    data.successfulPublishes || 1
-  );
-
-  // 漏斗层级数据（从上到下）
+  // 漏斗层级数据（固定顺序：话题 → 文章 → 发布）
+  // 使用固定的漏斗比例，确保即使没有数据也保持漏斗形状
+  const hasData = data.topics > 0 || data.articles > 0 || data.successfulPublishes > 0;
+  
+  // 漏斗形状的固定比例值（用于显示形状）
+  const shapeValues = [100, 70, 40];
+  
+  // 如果有数据，使用实际值；否则使用固定比例保持漏斗形状
   const funnelLayers = [
-    { name: '生成话题', value: data.topics, displayValue: data.topics },
-    { name: '生成文章', value: data.articles, displayValue: data.articles },
-    { name: '发布成功', value: data.successfulPublishes, displayValue: data.successfulPublishes }
+    { 
+      name: '生成话题', 
+      value: hasData ? (data.topics || 0.1) : shapeValues[0], 
+      displayValue: data.topics 
+    },
+    { 
+      name: '生成文章', 
+      value: hasData ? (data.articles || 0.1) : shapeValues[1], 
+      displayValue: data.articles 
+    },
+    { 
+      name: '发布成功', 
+      value: hasData ? (data.successfulPublishes || 0.1) : shapeValues[2], 
+      displayValue: data.successfulPublishes 
+    }
   ];
 
-  // 按值从大到小排序，确保漏斗形状正确
-  funnelLayers.sort((a, b) => b.value - a.value);
+  // 计算最大值用于漏斗比例
+  const maxValue = hasData 
+    ? Math.max(data.topics || 1, data.articles || 1, data.successfulPublishes || 1)
+    : 100;
 
   // 颜色配置
   const funnelColors = [
@@ -99,10 +113,10 @@ export default function ContentFunnelChart({ data, loading }: ContentFunnelChart
         bottom: 30,
         width: '70%',
         min: 0,
-        max: maxValue || 100,
-        minSize: '15%',
+        max: maxValue,
+        minSize: '20%',
         maxSize: '100%',
-        sort: 'descending',
+        sort: 'none',  // 保持固定顺序：话题 → 文章 → 发布
         gap: 3,
         label: {
           show: true,
