@@ -81,6 +81,7 @@ export default function PlatformManagementPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
+  const [subscriptionLoading, setSubscriptionLoading] = useState(true); // 订阅信息加载状态
 
   // 数据获取函数
   const fetchPlatformsAndAccounts = useCallback(async () => {
@@ -164,6 +165,7 @@ export default function PlatformManagementPage() {
 
   // 获取用户订阅信息
   const fetchSubscription = async () => {
+    setSubscriptionLoading(true);
     try {
       console.log('[订阅] 开始获取订阅信息...');
       const response = await apiClient.get('/subscription/current');
@@ -187,6 +189,8 @@ export default function PlatformManagementPage() {
       console.error('[订阅] 获取订阅信息失败:', error);
       // 获取失败时默认为免费版
       setSubscription({ plan_code: 'free', plan_name: '免费版', status: 'active' });
+    } finally {
+      setSubscriptionLoading(false);
     }
   };
 
@@ -406,7 +410,7 @@ export default function PlatformManagementPage() {
     activeAccounts: accounts.filter(a => a.status === 'active').length
   };
 
-  if (loading) {
+  if (loading || subscriptionLoading) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 0' }}>
         <Spin size="large" />
