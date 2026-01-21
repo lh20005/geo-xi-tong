@@ -1,6 +1,6 @@
 {
   "name": "ai-geo-system",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Ai智软精准GEO优化系统 - 基于Electron的桌面应用",
   "main": "dist-electron/main.js",
   "author": "Your Company",
@@ -14,7 +14,8 @@
     "build:mac": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac",
     "build:mac-x64": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac --x64",
     "build:mac-arm": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac --arm64",
-    "build:all": "npm run prebuild && npm run build:electron && vite build && electron-builder --win --mac",
+    "build:all": "npm run prebuild && npm run build:electron && vite build && electron-builder --win --mac && node scripts/postbuild-latest.js",
+    "postbuild:latest": "node scripts/postbuild-latest.js",
     "preview": "vite preview",
     "electron:dev": "npm run build:electron && concurrently \"vite\" \"wait-on http://localhost:5174 && cross-env NODE_ENV=development electron dist-electron/main.js\"",
     "lint": "eslint . --ext .ts,.tsx",

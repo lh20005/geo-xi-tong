@@ -101,7 +101,82 @@ sensitiveFiles.forEach(pattern => {
 });
 
 // ============================================
-// 3. 清理构建目录
+// 3. 存档旧的打包文件
+// ============================================
+console.log('\n📦 检查是否需要存档旧的打包文件...');
+const releasePath = path.join(projectRoot, 'release');
+const archiveBasePath = path.join(projectRoot, '打包历史');
+
+if (fs.existsSync(releasePath)) {
+  // 检查 release 目录是否有打包文件
+  const releaseFiles = fs.readdirSync(releasePath);
+  const hasPackageFiles = releaseFiles.some(f => 
+    f.endsWith('.exe') || f.endsWith('.dmg') || f.endsWith('.zip') || f.endsWith('.yml')
+  );
+  
+  if (hasPackageFiles) {
+    // 从 latest.yml 读取版本号
+    const latestYmlPath = path.join(releasePath, 'latest.yml');
+    let version = 'unknown';
+    let releaseNotes = '';
+    
+    if (fs.existsSync(latestYmlPath)) {
+      const ymlContent = fs.readFileSync(latestYmlPath, 'utf-8');
+      const versionMatch = ymlContent.match(/^version:\s*(.+)$/m);
+      if (versionMatch) {
+        version = versionMatch[1].trim();
+      }
+      // 提取更新说明的第一条
+      const notesMatch = ymlContent.match(/##\s*\[\d+\.\d+\.\d+\].*?\n+###\s*\S+\n+[-*]\s*[^\n]+/);
+      if (notesMatch) {
+        const noteLineMatch = notesMatch[0].match(/[-*]\s*[🔧⚡📊🎉]*\s*(.+)/);
+        if (noteLineMatch) {
+          releaseNotes = noteLineMatch[1].trim()
+            .replace(/[/:*?"<>|\\]/g, '') // 移除文件名非法字符
+            .substring(0, 30); // 限制长度
+        }
+      }
+    }
+    
+    // 生成存档目录名：日期+版本+简介
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    const archiveName = releaseNotes 
+      ? `${dateStr}-v${version}-${releaseNotes}`
+      : `${dateStr}-v${version}`;
+    const archivePath = path.join(archiveBasePath, archiveName);
+    
+    // 检查是否已存在相同版本的存档
+    if (!fs.existsSync(archivePath)) {
+      // 创建存档目录
+      fs.mkdirSync(archivePath, { recursive: true });
+      
+      // 复制打包文件到存档目录
+      const filesToArchive = releaseFiles.filter(f => 
+        f.endsWith('.exe') || f.endsWith('.dmg') || f.endsWith('.zip') || 
+        f.endsWith('.yml') || f.endsWith('.blockmap')
+      );
+      
+      filesToArchive.forEach(file => {
+        const src = path.join(releasePath, file);
+        const dest = path.join(archivePath, file);
+        fs.copyFileSync(src, dest);
+      });
+      
+      console.log(`   ✅ 已存档 v${version} 到: 打包历史/${archiveName}/`);
+      console.log(`      存档文件数: ${filesToArchive.length}`);
+    } else {
+      console.log(`   ⏭️  v${version} 已存在存档，跳过`);
+    }
+  } else {
+    console.log('   ℹ️  release 目录无打包文件，无需存档');
+  }
+} else {
+  console.log('   ℹ️  release 目录不存在，无需存档');
+}
+
+// ============================================
+// 4. 清理构建目录
 // ============================================
 console.log('\n🧹 清理构建目录...');
 const buildDirs = ['dist', 'dist-electron', 'release'];
