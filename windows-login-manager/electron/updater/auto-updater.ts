@@ -67,6 +67,12 @@ export class AutoUpdater {
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowDowngrade = false;
     
+    // macOS: 禁用代码签名验证（因为我们没有 Apple Developer 证书）
+    // 这允许未签名的应用进行自动更新
+    if (process.platform === 'darwin') {
+      autoUpdater.forceDevUpdateConfig = true;
+    }
+    
     // 配置日志
     autoUpdater.logger = log;
     (autoUpdater.logger as any).transports.file.level = 'info';

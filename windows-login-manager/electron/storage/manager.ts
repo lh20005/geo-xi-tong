@@ -2,6 +2,8 @@ import { safeStorage, app } from 'electron';
 import Store from 'electron-store';
 import log from 'electron-log';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * 存储管理器
@@ -21,6 +23,7 @@ import crypto from 'crypto';
  * 1. 版本更新时自动清除认证数据
  * 2. 首次安装时确保干净状态
  * 3. 所有敏感数据使用 safeStorage 加密
+ * 4. 自动修复损坏的存储文件
  */
 
 // 定义存储的数据类型
@@ -56,10 +59,49 @@ const STORAGE_INITIALIZED_KEY = '_storage_initialized';
 // 从 package.json 读取版本号，确保每次发布新版本都会清除旧的认证数据
 const CURRENT_STORAGE_VERSION = app.getVersion(); // 例如 "1.0.0"
 
+// 存储文件名
+const STORE_NAME = 'platform-login-manager';
+
+/**
+ * 检查并修复损坏的存储文件
+ * 在创建 Store 实例之前调用，防止 JSON 解析错误导致应用崩溃
+ */
+function checkAndRepairStorageFile(): void {
+  try {
+    const userDataPath = app.getPath('userData');
+    const storePath = path.join(userDataPath, `${STORE_NAME}.json`);
+    
+    // 检查文件是否存在
+    if (!fs.existsSync(storePath)) {
+      log.info('Storage file does not exist, will be created on first use');
+      return;
+    }
+    
+    // 尝试读取并解析文件
+    const content = fs.readFileSync(storePath, 'utf-8');
+    JSON.parse(content);
+    log.info('Storage file integrity check passed');
+  } catch (error) {
+    // 文件损坏，删除它
+    log.warn('Storage file is corrupted, deleting and recreating...', error);
+    try {
+      const userDataPath = app.getPath('userData');
+      const storePath = path.join(userDataPath, `${STORE_NAME}.json`);
+      fs.unlinkSync(storePath);
+      log.info('Corrupted storage file deleted successfully');
+    } catch (deleteError) {
+      log.error('Failed to delete corrupted storage file:', deleteError);
+    }
+  }
+}
+
+// 在创建 Store 之前检查文件完整性
+checkAndRepairStorageFile();
+
 // 创建加密存储实例
 // 注意：encryptionKey 只是 electron-store 的基础加密，敏感数据还会使用 safeStorage 二次加密
 const store = new Store({
-  name: 'platform-login-manager',
+  name: STORE_NAME,
   // 使用随机生成的密钥，每次安装都不同（基于 machineId）
   // 这确保即使 store 文件被复制到其他机器也无法解密
   encryptionKey: process.env.ELECTRON_STORE_KEY || 'geo-system-default-key',
@@ -449,10 +491,6 @@ class StorageManager {
   async repair(): Promise<void> {
     try {
       log.warn('Attempting to repair storage...');
-      
-      // 备份当前存储
-      const backupPath = `${store.path}.backup`;
-      // 这里应该实现备份逻辑
       
       // 清除损坏的数据
       await this.clearAll();

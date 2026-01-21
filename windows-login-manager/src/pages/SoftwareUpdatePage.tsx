@@ -290,8 +290,15 @@ const SoftwareUpdatePage = () => {
       {updateStatus.status === 'error' && updateStatus.error && (
         <Alert
           message="更新检查失败"
-          description={updateStatus.error}
-          type="error"
+          description={
+            updateStatus.error.includes('signature') || updateStatus.error.includes('签名') ? (
+              <div>
+                <p>macOS 系统签名验证失败，这是因为应用未使用 Apple 开发者证书签名。</p>
+                <p><strong>解决方案：</strong>请使用下方的"手动下载安装包"功能下载最新版本，然后手动安装。</p>
+              </div>
+            ) : updateStatus.error
+          }
+          type={updateStatus.error.includes('signature') || updateStatus.error.includes('签名') ? 'warning' : 'error'}
           showIcon
           style={{ marginBottom: 16 }}
         />
@@ -340,6 +347,15 @@ const SoftwareUpdatePage = () => {
           <Text type="secondary">
             如果自动更新失败，您可以手动下载安装包进行更新
           </Text>
+          {updateInfo?.platformInfo?.platform === 'darwin' && (
+            <Alert
+              message="macOS 用户请注意"
+              description="由于应用未使用 Apple 开发者证书签名，macOS 用户需要手动下载 DMG 文件安装更新。"
+              type="info"
+              showIcon
+              style={{ marginTop: 8 }}
+            />
+          )}
           <Divider style={{ margin: '12px 0' }} />
           {updateInfo?.platformInfo && (
             <Text type="secondary">
@@ -347,6 +363,7 @@ const SoftwareUpdatePage = () => {
             </Text>
           )}
           <Button 
+            type={updateInfo?.platformInfo?.platform === 'darwin' ? 'primary' : 'default'}
             icon={<DownloadOutlined />}
             onClick={handleManualDownload}
             disabled={!updateInfo?.downloadUrl}
