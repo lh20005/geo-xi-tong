@@ -511,7 +511,7 @@ export class AgentService {
     try {
       // 1. 检测短时间内大量佣金（1小时内超过10笔）
       const highFrequencyResult = await pool.query(`
-        SELECT agent_id, COUNT(*) as count, SUM(amount) as total
+        SELECT agent_id, COUNT(*) as count, SUM(commission_amount) as total
         FROM commission_records
         WHERE created_at > NOW() - INTERVAL '1 hour'
         GROUP BY agent_id
@@ -532,12 +532,12 @@ export class AgentService {
 
       // 2. 检测单日佣金金额异常（超过5000元）
       const highAmountResult = await pool.query(`
-        SELECT agent_id, SUM(amount) as total, COUNT(*) as count
+        SELECT agent_id, SUM(commission_amount) as total, COUNT(*) as count
         FROM commission_records
         WHERE created_at >= CURRENT_DATE
           AND status IN ('pending', 'processing', 'settled')
         GROUP BY agent_id
-        HAVING SUM(amount) > 500000
+        HAVING SUM(commission_amount) > 500000
       `);
 
       for (const row of highAmountResult.rows) {

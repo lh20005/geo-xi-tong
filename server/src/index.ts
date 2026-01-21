@@ -18,6 +18,7 @@ import { securityCheckService } from './services/SecurityCheckService';
 import { schedulerService } from './services/SchedulerService';
 import { SecurityService } from './services/SecurityService';
 import { authService } from './services/AuthService';
+import { monitoringService } from './services/MonitoringService';
 
 // 加载环境变量 - 直接从 server 目录读取
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -151,6 +152,9 @@ app.use(errorHandler);
 // 初始化加密服务并启动服务器
 async function startServer() {
   try {
+    // 记录服务启动
+    await monitoringService.recordServiceStart();
+    
     // 初始化默认管理员账号
     console.log('👤 初始化管理员账号...');
     await authService.initializeDefaultAdmin();
@@ -371,6 +375,11 @@ async function startServer() {
     server.listen(PORT, () => {
       console.log(`🚀 服务器运行在 http://localhost:${PORT}`);
       console.log(`🔌 WebSocket服务运行在 ws://localhost:${PORT}/ws`);
+      
+      // 发送 PM2 ready 信号（用于 wait_ready 配置）
+      if (process.send) {
+        process.send('ready');
+      }
     });
   } catch (error) {
     console.error('❌ 服务器启动失败:', error);
@@ -381,6 +390,10 @@ async function startServer() {
 // 优雅关闭
 process.on('SIGTERM', async () => {
   console.log('收到 SIGTERM 信号，正在关闭服务器...');
+  
+  // 记录服务停止
+  await monitoringService.recordServiceStop('收到 SIGTERM 信号');
+  
   // 本地发布迁移：taskScheduler 已禁用
   // taskScheduler.stop();
   schedulerService.stop();
@@ -398,14 +411,30 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('收到 SIGINT 信号，正在关闭服务器...');
+  
+  // 记录服务停止
+  await monitoringService.recordServiceStop('收到 SIGINT 信号');
+  
   // 本地发布迁移：taskScheduler 已禁用
   // taskScheduler.stop();
   schedulerService.stop();
   const webSocketService = getWebSocketService();
   webSocketService.close();
   process.exit(0);
+});
+
+// 捕获未处理的异常
+process.on('uncaughtException', async (error) => {
+  console.error('未捕获的异常:', error);
+  await monitoringService.recordServiceStop(`未捕获的异常: ${error.message}`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', async (reason, promise) => {
+  console.error('未处理的 Promise 拒绝:', reason);
+  // 不退出进程，只记录
 });
 
 startServer();

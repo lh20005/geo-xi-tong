@@ -25,6 +25,7 @@ import {
   DollarOutlined,
   CloudDownloadOutlined,
   GlobalOutlined,
+  MonitorOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 import logoImg from '/images/logo.png';
@@ -246,6 +247,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
           key: '/admin/agents',
           icon: <DollarOutlined />,
           label: '代理商管理',
+        },
+        {
+          key: '/admin/commission-monitor',
+          icon: <MonitorOutlined />,
+          label: '佣金监控',
         },
       ],
     }] : []),

@@ -5,6 +5,7 @@ import { pool } from '../db/database';
 import { commissionService } from './CommissionService';
 import { profitSharingService } from './ProfitSharingService';
 import { agentService } from './AgentService';
+import { monitoringService } from './MonitoringService';
 
 /**
  * 定时任务调度服务
@@ -35,6 +36,12 @@ export class SchedulerService {
 
     // 6. 代理商异常检测任务（每6小时执行）
     this.scheduleAgentAnomalyDetectionTask();
+
+    // 7. 佣金结算异常监控任务（每30分钟执行）
+    this.scheduleCommissionAnomalyCheckTask();
+
+    // 8. 服务事件清理任务（每天凌晨4点执行）
+    this.scheduleServiceEventCleanupTask();
 
     console.log('✅ 定时任务调度器已启动');
   }
@@ -243,6 +250,9 @@ export class SchedulerService {
    */
   private scheduleCommissionSettlementTask() {
     const task = cron.schedule('0 2 * * *', async () => {
+      const taskName = '佣金结算任务';
+      monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始执行佣金结算任务...');
         
@@ -251,13 +261,16 @@ export class SchedulerService {
         
         if (pendingCommissions.length === 0) {
           console.log('[定时任务] 没有待结算的佣金');
+          monitoringService.recordTaskComplete(taskName, '没有待结算佣金');
           return;
         }
 
         console.log(`[定时任务] 发现 ${pendingCommissions.length} 笔待结算佣金`);
+        monitoringService.recordCommissionSettlementStart(pendingCommissions.length);
 
         let successCount = 0;
         let failCount = 0;
+        let skippedCount = 0;
 
         for (const commission of pendingCommissions) {
           try {
@@ -265,11 +278,13 @@ export class SchedulerService {
             const agent = await agentService.getAgentById(commission.agentId);
             if (!agent || !agent.wechatOpenid || !agent.receiverAdded) {
               console.log(`[定时任务] 佣金 ${commission.id} 跳过：代理商未绑定微信或未添加为接收方`);
+              skippedCount++;
               continue;
             }
 
             if (agent.status !== 'active') {
               console.log(`[定时任务] 佣金 ${commission.id} 跳过：代理商已暂停`);
+              skippedCount++;
               continue;
             }
 
@@ -284,16 +299,21 @@ export class SchedulerService {
             if (!transactionId) {
               console.log(`[定时任务] 佣金 ${commission.id} 跳过：订单无交易号`);
               await commissionService.updateCommissionStatus(commission.id, 'cancelled', '订单无微信交易号');
+              await monitoringService.recordProfitSharingError(commission.id, '订单无微信交易号', {
+                orderId: commission.orderId
+              });
               failCount++;
               continue;
             }
 
             // 检查分账限额
             const amountInFen = Math.round(commission.commissionAmount * 100);
-            const limitCheck = await profitSharingService.checkProfitSharingLimits(amountInFen, orderAmount);
+            const orderAmountInFen = Math.round(orderAmount * 100);
+            const limitCheck = await profitSharingService.checkProfitSharingLimits(amountInFen, orderAmountInFen);
             if (!limitCheck.allowed) {
               console.log(`[定时任务] 佣金 ${commission.id} 跳过：${limitCheck.reason}`);
               // 不取消，等待下次结算
+              skippedCount++;
               continue;
             }
 
@@ -313,19 +333,29 @@ export class SchedulerService {
             } else {
               // 分账请求失败
               await commissionService.updateCommissionStatus(commission.id, 'cancelled', result.message);
+              await monitoringService.recordProfitSharingError(commission.id, result.message || '分账请求失败', {
+                transactionId,
+                outOrderNo: result.outOrderNo
+              });
               console.log(`[定时任务] 佣金 ${commission.id} 分账请求失败: ${result.message}`);
               failCount++;
             }
           } catch (error: any) {
             console.error(`[定时任务] 处理佣金 ${commission.id} 失败:`, error);
             await commissionService.updateCommissionStatus(commission.id, 'cancelled', error.message);
+            await monitoringService.recordProfitSharingError(commission.id, error.message, {
+              stack: error.stack
+            });
             failCount++;
           }
         }
 
-        console.log(`[定时任务] 佣金结算完成: 成功 ${successCount}, 失败 ${failCount}`);
-      } catch (error) {
+        console.log(`[定时任务] 佣金结算完成: 成功 ${successCount}, 失败 ${failCount}, 跳过 ${skippedCount}`);
+        await monitoringService.recordCommissionSettlementComplete(successCount, failCount, skippedCount);
+        monitoringService.recordTaskComplete(taskName, `成功 ${successCount}, 失败 ${failCount}, 跳过 ${skippedCount}`);
+      } catch (error: any) {
         console.error('[定时任务] 佣金结算任务失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
@@ -401,6 +431,9 @@ export class SchedulerService {
    */
   private scheduleAgentAnomalyDetectionTask() {
     const task = cron.schedule('0 */6 * * *', async () => {
+      const taskName = '代理商异常检测任务';
+      monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始执行代理商异常检测...');
         
@@ -411,13 +444,64 @@ export class SchedulerService {
         } else {
           console.log('[定时任务] 未发现异常代理商');
         }
-      } catch (error) {
+        
+        monitoringService.recordTaskComplete(taskName, `暂停 ${suspendedCount} 个异常代理商`);
+      } catch (error: any) {
         console.error('[定时任务] 代理商异常检测任务失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
     this.tasks.push(task);
     console.log('✅ 代理商异常检测任务已安排（每6小时执行）');
+  }
+
+  /**
+   * 佣金结算异常监控任务
+   * 每30分钟执行，检查是否有异常情况需要告警
+   */
+  private scheduleCommissionAnomalyCheckTask() {
+    const task = cron.schedule('*/30 * * * *', async () => {
+      try {
+        const result = await monitoringService.checkCommissionAnomalies();
+        
+        if (result.hasAnomalies) {
+          console.warn('[监控] 检测到佣金结算异常:');
+          result.anomalies.forEach(anomaly => {
+            console.warn(`  - ${anomaly}`);
+          });
+        }
+      } catch (error) {
+        console.error('[监控] 佣金异常检查失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 佣金结算异常监控任务已安排（每30分钟执行）');
+  }
+
+  /**
+   * 服务事件清理任务
+   * 每天凌晨4点执行，清理超过30天的服务事件记录
+   */
+  private scheduleServiceEventCleanupTask() {
+    const task = cron.schedule('0 4 * * *', async () => {
+      try {
+        console.log('[定时任务] 开始清理过期服务事件...');
+        
+        const result = await pool.query('SELECT cleanup_old_service_events()');
+        const deletedCount = result.rows[0]?.cleanup_old_service_events || 0;
+        
+        if (deletedCount > 0) {
+          console.log(`[定时任务] 已清理 ${deletedCount} 条过期服务事件`);
+        }
+      } catch (error) {
+        console.error('[定时任务] 服务事件清理失败:', error);
+      }
+    });
+
+    this.tasks.push(task);
+    console.log('✅ 服务事件清理任务已安排（每天04:00执行）');
   }
 }
 

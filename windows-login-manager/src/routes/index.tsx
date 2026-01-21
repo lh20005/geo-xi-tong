@@ -40,6 +40,7 @@ const TokenDebugPage = lazy(() => import('../pages/TokenDebugPage'));
 const OrderManagementPage = lazy(() => import('../pages/OrderManagementPage'));
 const UserManagementPage = lazy(() => import('../pages/UserManagementPage'));
 const AgentManagementPage = lazy(() => import('../pages/AgentManagementPage'));
+const CommissionMonitorPage = lazy(() => import('../pages/CommissionMonitorPage'));
 const PaymentPage = lazy(() => import('../pages/PaymentPage'));
 
 // 登录管理器原有页面
@@ -303,6 +304,14 @@ export const routes = [
     element: (
       <Suspense fallback={<LoadingFallback />}>
         <AgentManagementPage />
+      </Suspense>
+    )
+  },
+  {
+    path: '/admin/commission-monitor',
+    element: (
+      <Suspense fallback={<LoadingFallback />}>
+        <CommissionMonitorPage />
       </Suspense>
     )
   },

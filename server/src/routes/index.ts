@@ -33,6 +33,7 @@ import adminStorageRouter from './admin/storage';
 import storageProductsRouter from './storageProducts';
 import userSubscriptionsRouter from './admin/userSubscriptions';
 import agentRouter from './agent';
+import monitoringRouter from './monitoring';
 
 export const apiRouter = Router();
 
@@ -71,6 +72,7 @@ apiRouter.use('/publishing', platformAccountsRouter);
 apiRouter.use('/publishing', publishingTasksRouter);
 apiRouter.use('/publishing', publishingRecordsRouter);
 apiRouter.use('/dashboard', dashboardRouter);
+apiRouter.use('/monitoring', monitoringRouter);  // 监控API
 
 apiRouter.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'GEO优化系统运行正常（多租户模式）' });

@@ -39,6 +39,7 @@ import UserManagementPage from './pages/UserManagementPage';
 import UserCenterPage from './pages/UserCenterPage';
 import PaymentPage from './pages/PaymentPage';
 import AgentManagementPage from './pages/AgentManagementPage';
+import CommissionMonitorPage from './pages/CommissionMonitorPage';
 
 const { Content } = Layout;
 
@@ -220,6 +221,7 @@ function App() {
                     <Route path="/admin/orders" element={<AdminRoute><OrderManagementPage /></AdminRoute>} />
                     <Route path="/admin/users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
                     <Route path="/admin/agents" element={<AdminRoute><AgentManagementPage /></AdminRoute>} />
+                    <Route path="/admin/commission-monitor" element={<AdminRoute><CommissionMonitorPage /></AdminRoute>} />
                     <Route path="/user-center" element={<UserCenterPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
