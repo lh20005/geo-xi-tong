@@ -104,12 +104,10 @@ export interface PublishingTrendData {
   successRates: number[];
 }
 
-// 内容转化漏斗数据
+// 内容转化漏斗数据（近一周累计）
 export interface ContentFunnelData {
-  distillations: number;
   topics: number;
   articles: number;
-  publishedArticles: number;
   successfulPublishes: number;
 }
 

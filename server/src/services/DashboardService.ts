@@ -787,29 +787,39 @@ export class DashboardService {
 
   /**
    * 获取内容转化漏斗数据
-   * 展示从蒸馏到发布的完整转化流程
+   * 展示近一周的累计数据（基于创建时间，不受删除影响）
+   * 统计周期：近7天
    */
   async getContentFunnel(userId: number, startDate?: string, endDate?: string) {
     const client = await pool.connect();
     
     try {
+      // 统计近一周的数据，基于 created_at 时间
       const query = `
+        WITH week_range AS (
+          SELECT 
+            CURRENT_DATE - interval '6 days' AS start_date,
+            CURRENT_DATE + interval '1 day' AS end_date
+        )
         SELECT 
-          (SELECT COUNT(*) FROM distillations WHERE user_id = $1) AS distillations,
-          (SELECT COUNT(*) FROM topics WHERE user_id = $1) AS topics,
-          (SELECT COUNT(*) FROM articles WHERE user_id = $1) AS articles,
-          (SELECT COUNT(*) FROM articles WHERE user_id = $1 AND is_published = true) AS published_articles,
-          (SELECT COUNT(*) FROM publishing_records WHERE user_id = $1 AND (status = 'success' OR status = 'completed')) AS successful_publishes
+          (SELECT COUNT(*) FROM topics WHERE user_id = $1 
+           AND created_at >= (SELECT start_date FROM week_range)
+           AND created_at < (SELECT end_date FROM week_range)) AS topics,
+          (SELECT COUNT(*) FROM articles WHERE user_id = $1 
+           AND created_at >= (SELECT start_date FROM week_range)
+           AND created_at < (SELECT end_date FROM week_range)) AS articles,
+          (SELECT COUNT(*) FROM publishing_records WHERE user_id = $1 
+           AND (status = 'success' OR status = 'completed')
+           AND created_at >= (SELECT start_date FROM week_range)
+           AND created_at < (SELECT end_date FROM week_range)) AS successful_publishes
       `;
 
       const result = await client.query(query, [userId]);
       const row = result.rows[0];
 
       return {
-        distillations: parseInt(row.distillations) || 0,
         topics: parseInt(row.topics) || 0,
         articles: parseInt(row.articles) || 0,
-        publishedArticles: parseInt(row.published_articles) || 0,
         successfulPublishes: parseInt(row.successful_publishes) || 0
       };
     } finally {

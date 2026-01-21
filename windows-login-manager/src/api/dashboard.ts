@@ -196,7 +196,7 @@ export async function getPublishingTrend(params?: QueryParams): Promise<Publishi
 }
 
 /**
- * 获取内容转化漏斗数据
+ * 获取内容转化漏斗数据（近一周累计）
  */
 export async function getContentFunnel(params?: QueryParams): Promise<ContentFunnelData> {
   try {
@@ -204,7 +204,7 @@ export async function getContentFunnel(params?: QueryParams): Promise<ContentFun
     return response.data;
   } catch (error) {
     console.error('获取内容漏斗失败:', error);
-    return { distillations: 0, topics: 0, articles: 0, publishedArticles: 0, successfulPublishes: 0 };
+    return { topics: 0, articles: 0, successfulPublishes: 0 };
   }
 }
 

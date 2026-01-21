@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { 
   Card, Tag, Button, Space, Modal, Typography, message, 
   Row, Col, Statistic, Select, Tooltip, Empty, Popconfirm 
@@ -28,11 +28,16 @@ import { useCacheStore } from '../stores/cacheStore';
 const { Text } = Typography;
 const { Option } = Select;
 
+// 缓存数据类型，包含 records 和 total
+interface RecordsCacheData {
+  records: PublishingRecord[];
+  total: number;
+}
+
 export default function PublishingRecordsPage() {
   const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [total, setTotal] = useState(0);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [viewModal, setViewModal] = useState<PublishingRecord | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
@@ -43,15 +48,17 @@ export default function PublishingRecordsPage() {
     [platformFilter, page, pageSize]
   );
 
-  // 获取发布记录
-  const fetchRecords = useCallback(async () => {
+  // 获取发布记录（返回包含 records 和 total 的对象）
+  const fetchRecords = useCallback(async (): Promise<RecordsCacheData> => {
     const filters: any = {};
     if (platformFilter !== 'all') {
       filters.platform_id = platformFilter;
     }
     const response = await getPublishingRecords(page, pageSize, filters);
-    setTotal(response.total || 0);
-    return response.records || [];
+    return {
+      records: response.records || [],
+      total: response.total || 0
+    };
   }, [page, pageSize, platformFilter]);
 
   // 获取统计数据
@@ -66,15 +73,19 @@ export default function PublishingRecordsPage() {
 
   // 使用缓存
   const {
-    data: records,
+    data: recordsData,
     loading,
     refreshing,
     refresh: refreshRecords,
     isFromCache
-  } = useCachedData<PublishingRecord[]>(recordsCacheKey, fetchRecords, {
+  } = useCachedData<RecordsCacheData>(recordsCacheKey, fetchRecords, {
     deps: [page, pageSize, platformFilter],
     onError: (error) => message.error(error.message || '加载发布记录失败'),
   });
+
+  // 从缓存数据中提取 records 和 total
+  const records = recordsData?.records || [];
+  const total = recordsData?.total || 0;
 
   const { data: stats, refresh: refreshStats } = useCachedData<PublishingStats>(
     'publishingRecords:stats',
@@ -302,13 +313,13 @@ export default function PublishingRecordsPage() {
           </Space>
         }
       >
-        {(records || []).length === 0 && !loading ? (
+        {records.length === 0 && !loading ? (
           <Empty description="暂无发布记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
           <ResizableTable<PublishingRecord>
             tableId="publishing-records-list"
             columns={columns} 
-            dataSource={records || []} 
+            dataSource={records} 
             rowKey="id" 
             loading={loading}
             rowSelection={rowSelection}
