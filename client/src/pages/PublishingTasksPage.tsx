@@ -1179,15 +1179,26 @@ export default function PublishingTasksPage() {
               </a>
             </Space>
             
-            {/* Mac 安装提示 */}
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 16v-4M12 8h.01"/>
-              </svg>
-              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
-                Mac 用户首次打开请右键点击应用，选择"打开"以允许运行
-              </Text>
+            {/* 安装提示 */}
+            <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+                  Mac 用户首次打开请右键点击应用，选择"打开"以允许运行
+                </Text>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
+                  <path d="M9 12l2 2 4-4"/>
+                  <path d="M20.618 5.984A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                </svg>
+                <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
+                  Windows 版若被360误报，请点击"信任"或添加白名单，软件安全无毒
+                </Text>
+              </div>
             </div>
           </Col>
         </Row>
