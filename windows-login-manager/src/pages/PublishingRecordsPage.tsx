@@ -1,12 +1,11 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Tag, Button, Space, Modal, Typography, message, 
-  Row, Col, Statistic, Select, Tooltip, Empty, Popconfirm 
+  Row, Col, Statistic, Select, Empty, Popconfirm, Tooltip 
 } from 'antd';
 import { 
   ReloadOutlined, EyeOutlined, CopyOutlined, DeleteOutlined,
-  CheckCircleOutlined, CalendarOutlined, ExclamationCircleOutlined,
-  CloudSyncOutlined
+  CheckCircleOutlined, CalendarOutlined, ExclamationCircleOutlined
 } from '@ant-design/icons';
 import { 
   getPublishingRecords,
@@ -22,88 +21,74 @@ import {
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
 import { processArticleContent } from '../utils/articleUtils';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { Text } = Typography;
 const { Option } = Select;
 
-// 缓存数据类型，包含 records 和 total
-interface RecordsCacheData {
-  records: PublishingRecord[];
-  total: number;
-}
-
 export default function PublishingRecordsPage() {
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [viewModal, setViewModal] = useState<PublishingRecord | null>(null);
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([]);
+  const [records, setRecords] = useState<PublishingRecord[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [stats, setStats] = useState<PublishingStats | null>(null);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
 
-  // 缓存 key
-  const recordsCacheKey = useMemo(() => 
-    `publishingRecords:list:${platformFilter}:${page}:${pageSize}`,
-    [platformFilter, page, pageSize]
-  );
-
-  // 获取发布记录（返回包含 records 和 total 的对象）
-  const fetchRecords = useCallback(async (): Promise<RecordsCacheData> => {
-    const filters: any = {};
-    if (platformFilter !== 'all') {
-      filters.platform_id = platformFilter;
+  // 获取发布记录
+  const fetchRecords = useCallback(async () => {
+    setLoading(true);
+    try {
+      const filters: any = {};
+      if (platformFilter !== 'all') {
+        filters.platform_id = platformFilter;
+      }
+      const response = await getPublishingRecords(page, pageSize, filters);
+      setRecords(response.records || []);
+      setTotal(response.total || 0);
+    } catch (error: any) {
+      message.error(error.message || '加载发布记录失败');
+    } finally {
+      setLoading(false);
     }
-    const response = await getPublishingRecords(page, pageSize, filters);
-    return {
-      records: response.records || [],
-      total: response.total || 0
-    };
   }, [page, pageSize, platformFilter]);
 
   // 获取统计数据
   const fetchStats = useCallback(async () => {
-    return await getPublishingStats();
+    try {
+      const data = await getPublishingStats();
+      setStats(data);
+    } catch (error) {
+      console.error('加载统计数据失败:', error);
+    }
   }, []);
 
   // 获取平台列表
   const fetchPlatforms = useCallback(async () => {
-    return await getPlatforms();
+    try {
+      const data = await getPlatforms();
+      setPlatforms(data);
+    } catch (error) {
+      console.error('加载平台列表失败:', error);
+    }
   }, []);
 
-  // 使用缓存
-  const {
-    data: recordsData,
-    loading,
-    refreshing,
-    refresh: refreshRecords,
-    isFromCache
-  } = useCachedData<RecordsCacheData>(recordsCacheKey, fetchRecords, {
-    deps: [page, pageSize, platformFilter],
-    onError: (error) => message.error(error.message || '加载发布记录失败'),
-  });
+  // 初始加载
+  useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
 
-  // 从缓存数据中提取 records 和 total
-  const records = recordsData?.records || [];
-  const total = recordsData?.total || 0;
+  useEffect(() => {
+    fetchStats();
+    fetchPlatforms();
+  }, []);
 
-  const { data: stats, refresh: refreshStats } = useCachedData<PublishingStats>(
-    'publishingRecords:stats',
-    fetchStats,
-    { onError: (error) => console.error('加载统计数据失败:', error) }
-  );
-
-  const { data: platforms } = useCachedData<Platform[]>(
-    'publishingRecords:platforms',
-    fetchPlatforms,
-    { onError: (error) => console.error('加载平台列表失败:', error) }
-  );
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('publishingRecords:');
-    await Promise.all([refreshRecords(true), refreshStats(true)]);
-  }, [invalidateCacheByPrefix, refreshRecords, refreshStats]);
+  // 刷新数据
+  const refreshData = useCallback(async () => {
+    await Promise.all([fetchRecords(), fetchStats()]);
+  }, [fetchRecords, fetchStats]);
 
   const handleView = async (record: PublishingRecord) => {
     try {
@@ -124,7 +109,7 @@ export default function PublishingRecordsPage() {
     try {
       await deletePublishingRecord(id);
       message.success('删除成功');
-      invalidateAndRefresh();
+      refreshData();
     } catch (error: any) {
       message.error(error.message || '删除失败');
     }
@@ -139,7 +124,7 @@ export default function PublishingRecordsPage() {
       await batchDeletePublishingRecords(selectedRowKeys);
       message.success(`已删除 ${selectedRowKeys.length} 条记录`);
       setSelectedRowKeys([]);
-      invalidateAndRefresh();
+      refreshData();
     } catch (error: any) {
       message.error(error.message || '批量删除失败');
     }
@@ -281,14 +266,6 @@ export default function PublishingRecordsPage() {
             <CheckCircleOutlined style={{ color: '#52c41a' }} />
             <span>发布记录</span>
             <Text type="secondary" style={{ fontSize: 14, fontWeight: 'normal' }}>（文章发布成功后自动归档到此处）</Text>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && (
-              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-            )}
           </Space>
         }
         variant="borderless"
@@ -309,7 +286,7 @@ export default function PublishingRecordsPage() {
               <Option value="all">全部平台</Option>
               {(platforms || []).map(p => (<Option key={p.platform_id} value={p.platform_id}>{p.platform_name}</Option>))}
             </Select>
-            <Button onClick={() => invalidateAndRefresh()} icon={<ReloadOutlined />}>刷新</Button>
+            <Button onClick={() => refreshData()} icon={<ReloadOutlined />} loading={loading}>刷新</Button>
           </Space>
         }
       >

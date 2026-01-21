@@ -1,10 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { Card, Table, Button, Modal, Input, message, Space, Tag, Form, Tooltip } from 'antd';
-import { SettingOutlined, EditOutlined, HistoryOutlined, DownloadOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Table, Button, Modal, Input, message, Space, Tag, Form } from 'antd';
+import { SettingOutlined, EditOutlined, HistoryOutlined, DownloadOutlined, ReloadOutlined } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import type { ColumnsType } from 'antd/es/table';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { TextArea } = Input;
 
@@ -29,7 +27,8 @@ interface ConfigHistory {
 }
 
 const SecurityConfigPage: React.FC = () => {
-  const { invalidateCacheByPrefix } = useCacheStore();
+  const [configs, setConfigs] = useState<SecurityConfig[]>([]);
+  const [loading, setLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState<SecurityConfig | null>(null);
@@ -38,29 +37,25 @@ const SecurityConfigPage: React.FC = () => {
 
   // 数据获取函数
   const fetchConfigs = useCallback(async () => {
-    const response = await apiClient.get('/security/config');
-    if (response.data.success) {
-      return response.data.data || [];
+    setLoading(true);
+    try {
+      const response = await apiClient.get('/security/config');
+      if (response.data.success) {
+        setConfigs(response.data.data || []);
+      } else {
+        setConfigs(response.data || []);
+      }
+    } catch (error: any) {
+      message.error(error.message || '获取配置失败');
+    } finally {
+      setLoading(false);
     }
-    return response.data || [];
   }, []);
 
-  // 使用缓存 Hook
-  const {
-    data: configs,
-    loading,
-    refreshing,
-    refresh,
-    isFromCache
-  } = useCachedData<SecurityConfig[]>('config:security', fetchConfigs, {
-    onError: (error) => message.error(error.message || '获取配置失败'),
-  });
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('config:');
-    await refresh(true);
-  }, [invalidateCacheByPrefix, refresh]);
+  // 初始加载
+  useEffect(() => {
+    fetchConfigs();
+  }, [fetchConfigs]);
 
   const handleEdit = (config: SecurityConfig) => {
     setSelectedConfig(config);
@@ -88,7 +83,7 @@ const SecurityConfigPage: React.FC = () => {
         setEditModalVisible(false);
         setSelectedConfig(null);
         form.resetFields();
-        invalidateAndRefresh();
+        fetchConfigs();
       } else {
         message.error(response.data.message || '更新配置失败');
       }
@@ -250,23 +245,13 @@ const SecurityConfigPage: React.FC = () => {
     <div style={{ padding: '24px' }}>
       <h1 style={{ marginBottom: '24px' }}>
         <SettingOutlined /> 安全配置管理
-        <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
-          {isFromCache && !refreshing && (
-            <Tooltip title="数据来自缓存">
-              <Tag color="gold">缓存</Tag>
-            </Tooltip>
-          )}
-          {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
-        </Space>
       </h1>
 
       <Card style={{ marginBottom: '24px' }}>
         <Space>
-          <Tooltip title="刷新数据">
-            <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => refresh(true)}>
-              刷新
-            </Button>
-          </Tooltip>
+          <Button icon={<ReloadOutlined spin={loading} />} onClick={fetchConfigs}>
+            刷新
+          </Button>
           <Button icon={<DownloadOutlined />} onClick={handleExport}>
             导出配置
           </Button>

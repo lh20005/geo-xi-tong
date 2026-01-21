@@ -11,7 +11,6 @@ import {
   Input,
   Typography,
   Checkbox,
-  Tooltip,
 } from 'antd';
 import {
   EditOutlined,
@@ -19,11 +18,8 @@ import {
   FileTextOutlined,
   ArrowLeftOutlined,
   ReloadOutlined,
-  CloudSyncOutlined,
 } from '@ant-design/icons';
 import axios from 'axios';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -31,36 +27,31 @@ const { TextArea } = Input;
 export default function TopicsPage() {
   const { distillationId } = useParams();
   const navigate = useNavigate();
-  const { invalidateCacheByPrefix } = useCacheStore();
+  const [topics, setTopics] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [editModal, setEditModal] = useState<any>(null);
   const [editValue, setEditValue] = useState('');
   const [selectedTopics, setSelectedTopics] = useState<number[]>([]);
 
-  // 缓存 key
-  const cacheKey = `topics:distillation:${distillationId}`;
-
-  // 使用缓存加载话题
+  // 加载话题
   const fetchTopics = useCallback(async () => {
-    const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
-    return response.data.topics;
+    setLoading(true);
+    try {
+      const response = await axios.get(`/api/topics/distillation/${distillationId}/stats`);
+      setTopics(response.data.topics || []);
+    } catch (error) {
+      message.error('加载话题失败');
+    } finally {
+      setLoading(false);
+    }
   }, [distillationId]);
 
-  const {
-    data: topics,
-    loading,
-    refreshing,
-    refresh: refreshTopics,
-    isFromCache
-  } = useCachedData(cacheKey, fetchTopics, {
-    deps: [distillationId],
-    onError: () => message.error('加载话题失败'),
-  });
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('topics:');
-    await refreshTopics(true);
-  }, [invalidateCacheByPrefix, refreshTopics]);
+  // 初始加载
+  useEffect(() => {
+    if (distillationId) {
+      fetchTopics();
+    }
+  }, [distillationId, fetchTopics]);
 
   const handleEdit = (topic: any) => {
     setEditModal(topic);
@@ -74,7 +65,7 @@ export default function TopicsPage() {
       });
       message.success('话题更新成功');
       setEditModal(null);
-      invalidateAndRefresh();
+      fetchTopics();
     } catch (error) {
       message.error('更新失败');
     }
@@ -88,7 +79,7 @@ export default function TopicsPage() {
         try {
           await axios.delete(`/api/topics/${topicId}`);
           message.success('删除成功');
-          invalidateAndRefresh();
+          fetchTopics();
         } catch (error) {
           message.error('删除失败');
         }
@@ -129,17 +120,9 @@ export default function TopicsPage() {
         variant="borderless"
         extra={
           <Space>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && (
-              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-            )}
             <Button
               icon={<ReloadOutlined />}
-              onClick={() => refreshTopics(true)}
+              onClick={fetchTopics}
               loading={loading}
             >
               刷新

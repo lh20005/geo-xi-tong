@@ -1,19 +1,17 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   Table, Button, Modal, Form, Input, InputNumber, Switch, 
   message, Card, Tag, Space, Timeline, Descriptions,
-  Popconfirm, Select, Spin, Tooltip, Statistic, Row, Col
+  Popconfirm, Select, Spin, Statistic, Row, Col, Tooltip
 } from 'antd';
 import { 
   PlusOutlined, EditOutlined, DeleteOutlined, 
   HistoryOutlined, SettingOutlined, ShoppingOutlined,
-  DollarOutlined, UserOutlined, RocketOutlined, CloudSyncOutlined, ReloadOutlined
+  DollarOutlined, UserOutlined, RocketOutlined, ReloadOutlined
 } from '@ant-design/icons';
 import { apiClient } from '../api/client';
 import { ensureTokensSync } from '../utils/tokenSync';
 import type { ColumnsType } from 'antd/es/table';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { TextArea } = Input;
 
@@ -77,7 +75,10 @@ const featureOptions = [
 ];
 
 const ProductManagementPage = () => {
-  const { invalidateCacheByPrefix } = useCacheStore();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [boosterStats, setBoosterStats] = useState<BoosterStats[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [boosterStatsLoading, setBoosterStatsLoading] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [historyModalVisible, setHistoryModalVisible] = useState(false);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
@@ -86,44 +87,48 @@ const ProductManagementPage = () => {
   const [planTypeFilter, setPlanTypeFilter] = useState<'all' | 'base' | 'booster'>('all');
   const [form] = Form.useForm();
 
-  // 构建缓存 key
-  const plansCacheKey = useMemo(() => `products:plans:${planTypeFilter}`, [planTypeFilter]);
-
   // 套餐列表获取函数
   const loadPlans = useCallback(async () => {
-    await ensureTokensSync();
-    let url = '/admin/products/plans?include_inactive=true';
-    if (planTypeFilter !== 'all') {
-      url += `&plan_type=${planTypeFilter}`;
+    setLoading(true);
+    try {
+      await ensureTokensSync();
+      let url = '/admin/products/plans?include_inactive=true';
+      if (planTypeFilter !== 'all') {
+        url += `&plan_type=${planTypeFilter}`;
+      }
+      const response = await apiClient.get(url);
+      setPlans(response.data.data || []);
+    } catch (error) {
+      console.error('加载套餐失败:', error);
+      message.error('加载套餐失败');
+    } finally {
+      setLoading(false);
     }
-    const response = await apiClient.get(url);
-    return response.data.data || [];
   }, [planTypeFilter]);
 
   // 加量包统计获取函数
   const loadBoosterStats = useCallback(async () => {
-    const response = await apiClient.get('/admin/products/booster-stats');
-    return response.data.data || [];
+    setBoosterStatsLoading(true);
+    try {
+      const response = await apiClient.get('/admin/products/booster-stats');
+      setBoosterStats(response.data.data || []);
+    } catch (error) {
+      console.error('加载加量包统计失败:', error);
+    } finally {
+      setBoosterStatsLoading(false);
+    }
   }, []);
 
-  // 使用缓存 hook
-  const { data: plans, loading, refreshing, refresh, isFromCache } = useCachedData<Plan[]>(
-    plansCacheKey,
-    loadPlans,
-    { deps: [planTypeFilter] }
-  );
-
-  const { data: boosterStats, loading: boosterStatsLoading, refresh: refreshBoosterStats } = useCachedData<BoosterStats[]>(
-    'products:boosterStats',
-    loadBoosterStats,
-    { deps: [] }
-  );
+  // 初始加载
+  useEffect(() => {
+    loadPlans();
+    loadBoosterStats();
+  }, [loadPlans, loadBoosterStats]);
 
   // 刷新数据的辅助函数
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('products:');
-    await Promise.all([refresh(true), refreshBoosterStats(true)]);
-  }, [invalidateCacheByPrefix, refresh, refreshBoosterStats]);
+  const refreshData = useCallback(async () => {
+    await Promise.all([loadPlans(), loadBoosterStats()]);
+  }, [loadPlans, loadBoosterStats]);
 
   // 加载配置历史
   const loadHistory = async (planId?: number) => {
@@ -253,7 +258,7 @@ const ProductManagementPage = () => {
       }
       
       setEditModalVisible(false);
-      invalidateAndRefresh();
+      refreshData();
     } catch (error: any) {
       console.error('[ProductManagement] 保存失败:', error);
       if (error.response) {
@@ -272,7 +277,7 @@ const ProductManagementPage = () => {
     try {
       await apiClient.delete(`/admin/products/plans/${planId}`);
       message.success('套餐删除成功');
-      invalidateAndRefresh();
+      refreshData();
     } catch (error: any) {
       message.error(error.response?.data?.message || '删除失败');
     }
@@ -480,12 +485,10 @@ const ProductManagementPage = () => {
               <Select.Option value="base">基础套餐</Select.Option>
               <Select.Option value="booster">加量包</Select.Option>
             </Select>
-            {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
-            {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
             <Tooltip title="刷新数据">
               <Button
-                icon={<ReloadOutlined spin={refreshing} />}
-                onClick={() => invalidateAndRefresh()}
+                icon={<ReloadOutlined spin={loading} />}
+                onClick={refreshData}
               />
             </Tooltip>
             <Button icon={<HistoryOutlined />} onClick={() => handleViewHistory()}>

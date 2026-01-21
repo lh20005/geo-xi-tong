@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Card, Row, Col, Button, Space, Tag, App,
   Checkbox, Statistic, Modal, Typography, Tooltip, Empty,
@@ -25,8 +25,6 @@ import {
 } from '../api/publishing';
 import ArticlePreview from '../components/ArticlePreview';
 import ResizableTable from '../components/ResizableTable';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { Text } = Typography;
 
@@ -69,14 +67,18 @@ const getPlatformIcon = (platformId: string): string => {
 export default function PublishingTasksPage() {
   // 使用 App 组件的 hooks API
   const { message } = App.useApp();
-  const { invalidateCacheByPrefix } = useCacheStore();
   
   // 文章选择
+  const [articles, setArticles] = useState<Article[]>([]);
+  const [articlesLoading, setArticlesLoading] = useState(false);
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
   const [articlePage, setArticlePage] = useState(1);
   const [articlePageSize, setArticlePageSize] = useState(10);
+  const [articleTotal, setArticleTotal] = useState(0);
 
   // 平台选择
+  const [platforms, setPlatforms] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccounts, setSelectedAccounts] = useState<Set<number>>(new Set());
 
   // 任务管理
@@ -143,64 +145,46 @@ export default function PublishingTasksPage() {
     todayPublished: 0
   });
 
-  // 草稿文章缓存 key
-  const articlesCacheKey = useMemo(() => 
-    `publishingTasks:articles:${articlePage}:${articlePageSize}`,
-    [articlePage, articlePageSize]
-  );
-
   // 草稿文章数据获取函数
-  const fetchDraftArticles = useCallback(async () => {
-    const response = await getArticles(articlePage, articlePageSize, { publishStatus: 'unpublished' });
-    return response;
-  }, [articlePage, articlePageSize]);
-
-  // 使用缓存 Hook 获取草稿文章
-  const {
-    data: articlesData,
-    loading: articlesLoading,
-    refresh: refreshArticles
-  } = useCachedData(articlesCacheKey, fetchDraftArticles, {
-    deps: [articlePage, articlePageSize],
-    onError: () => message.error('加载草稿文章失败'),
-  });
-
-  const articles = articlesData?.articles || [];
-  const articleTotal = articlesData?.total || 0;
+  const loadDraftArticles = useCallback(async () => {
+    setArticlesLoading(true);
+    try {
+      const response = await getArticles(articlePage, articlePageSize, { publishStatus: 'unpublished' });
+      setArticles(response.articles || []);
+      setArticleTotal(response.total || 0);
+      setStats(prev => ({ ...prev, draftArticles: response.total || 0 }));
+    } catch (error) {
+      message.error('加载草稿文章失败');
+    } finally {
+      setArticlesLoading(false);
+    }
+  }, [articlePage, articlePageSize, message]);
 
   // 平台和账号数据获取函数
-  const fetchPlatformsAndAccounts = useCallback(async () => {
-    const [platformsData, accountsData] = await Promise.all([
-      getPlatforms(),
-      getAccounts()
-    ]);
-    return { platforms: platformsData, accounts: accountsData };
-  }, []);
-
-  // 使用缓存 Hook 获取平台和账号
-  const {
-    data: platformData,
-    refresh: refreshPlatforms
-  } = useCachedData('publishingTasks:platforms', fetchPlatformsAndAccounts, {
-    onError: () => message.error('加载平台信息失败'),
-  });
-
-  const platforms = platformData?.platforms || [];
-  const accounts = (platformData?.accounts || []).filter((acc: Account) => acc.status === 'active');
-
-  // 更新统计数据
-  useEffect(() => {
-    if (articlesData) {
-      setStats(prev => ({ ...prev, draftArticles: articlesData.total || 0 }));
-    }
-  }, [articlesData]);
-
-  useEffect(() => {
-    if (platformData) {
-      const boundPlatforms = new Set(platformData.accounts?.map((acc: Account) => acc.platform_id) || []).size;
+  const loadPlatformsAndAccounts = useCallback(async () => {
+    try {
+      const [platformsData, accountsData] = await Promise.all([
+        getPlatforms(),
+        getAccounts()
+      ]);
+      setPlatforms(platformsData);
+      const activeAccounts = (accountsData || []).filter((acc: Account) => acc.status === 'active');
+      setAccounts(activeAccounts);
+      const boundPlatforms = new Set(accountsData?.map((acc: Account) => acc.platform_id) || []).size;
       setStats(prev => ({ ...prev, boundPlatforms }));
+    } catch (error) {
+      message.error('加载平台信息失败');
     }
-  }, [platformData]);
+  }, [message]);
+
+  // 初始加载
+  useEffect(() => {
+    loadDraftArticles();
+  }, [loadDraftArticles]);
+
+  useEffect(() => {
+    loadPlatformsAndAccounts();
+  }, [loadPlatformsAndAccounts]);
 
   useEffect(() => {
     loadTasks();
@@ -416,8 +400,7 @@ export default function PublishingTasksPage() {
           
           // 刷新任务列表和文章列表（文章发布后状态会变化）
           loadTasks();
-          invalidateCacheByPrefix('publishingTasks:articles');
-          refreshArticles(true);
+          loadDraftArticles();
           
           // 触发本地批次执行
           if (window.publishing) {
@@ -1222,7 +1205,7 @@ export default function PublishingTasksPage() {
         extra={
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={() => refreshArticles(true)}
+            onClick={loadDraftArticles}
           >
             刷新
           </Button>
@@ -1275,7 +1258,7 @@ export default function PublishingTasksPage() {
         extra={
           <Button 
             icon={<ReloadOutlined />} 
-            onClick={() => refreshPlatforms(true)}
+            onClick={loadPlatformsAndAccounts}
           >
             刷新
           </Button>

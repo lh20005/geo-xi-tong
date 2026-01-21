@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Button, Card, Pagination, message, Space, Empty, Modal, Tag, Tooltip } from 'antd';
-import { PlusOutlined, EditOutlined, CloudSyncOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Button, Card, Pagination, message, Space, Empty, Modal } from 'antd';
+import { PlusOutlined, EditOutlined } from '@ant-design/icons';
 import ArticleSettingList from '../components/ArticleSettingList';
 import ArticleSettingModal from '../components/ArticleSettingModal';
 import type { ArticleSetting, ArticleSettingFormData } from '../types/articleSettings';
@@ -10,12 +10,10 @@ import {
   updateArticleSetting,
   deleteArticleSetting,
 } from '../api/articleSettings';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 export default function ArticleSettingsPage() {
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [settings, setSettings] = useState<ArticleSetting[]>([]);
+  const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
@@ -23,52 +21,26 @@ export default function ArticleSettingsPage() {
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
   const [selectedSetting, setSelectedSetting] = useState<ArticleSetting | null>(null);
 
-  // 生成缓存 key
-  const cacheKey = useMemo(() => 
-    `articleSettings:list:${currentPage}:${pageSize}`,
-    [currentPage, pageSize]
-  );
-
   // 数据获取函数
-  const fetchData = useCallback(async () => {
-    const response = await fetchArticleSettings(currentPage, pageSize);
-    return response;
+  const loadSettings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetchArticleSettings(currentPage, pageSize);
+      setSettings(response.settings || []);
+      setTotal(response.total || 0);
+    } catch (error: any) {
+      message.error(error.message || '获取文章设置列表失败');
+    } finally {
+      setLoading(false);
+    }
   }, [currentPage, pageSize]);
 
-  // 使用缓存 Hook
-  const {
-    data: cachedData,
-    loading,
-    refreshing,
-    refresh: refreshSettings,
-    isFromCache
-  } = useCachedData(cacheKey, fetchData, {
-    deps: [currentPage, pageSize],
-    onError: (error) => message.error(error.message || '获取文章设置列表失败'),
-  });
-
-  // 处理缓存数据
+  // 初始加载和依赖变化时重新加载
   useEffect(() => {
-    if (cachedData) {
-      setSettings(cachedData.settings || []);
-      setTotal(cachedData.total || 0);
-    }
-  }, [cachedData]);
+    loadSettings();
+  }, [loadSettings]);
 
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('articleSettings:');
-    await refreshSettings(true);
-  }, [invalidateCacheByPrefix, refreshSettings]);
 
-  // 获取文章设置列表
-  const loadSettings = useCallback(async (page: number = currentPage) => {
-    if (page !== currentPage) {
-      setCurrentPage(page);
-    } else {
-      await refreshSettings(true);
-    }
-  }, [currentPage, refreshSettings]);
 
   // 处理创建
   const handleCreate = () => {
@@ -108,8 +80,9 @@ export default function ArticleSettingsPage() {
           // 如果当前页没有数据了，返回上一页
           if (settings.length === 1 && currentPage > 1) {
             setCurrentPage(currentPage - 1);
+          } else {
+            loadSettings();
           }
-          invalidateAndRefresh();
         } catch (error: any) {
           message.error(error.message || '删除失败');
         }
@@ -124,12 +97,15 @@ export default function ArticleSettingsPage() {
         await createArticleSetting(data);
         message.success('创建成功');
         // 创建后跳转到第一页
-        setCurrentPage(1);
-        invalidateAndRefresh();
+        if (currentPage === 1) {
+          loadSettings();
+        } else {
+          setCurrentPage(1);
+        }
       } else if (modalMode === 'edit' && selectedSetting) {
         await updateArticleSetting(selectedSetting.id, data);
         message.success('更新成功');
-        invalidateAndRefresh();
+        loadSettings();
       }
       setModalVisible(false);
       setSelectedSetting(null);
@@ -156,14 +132,6 @@ export default function ArticleSettingsPage() {
           <Space>
             <EditOutlined style={{ color: '#1890ff' }} />
             <span>文章设置</span>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && (
-              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-            )}
           </Space>
         }
         extra={

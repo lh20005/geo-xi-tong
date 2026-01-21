@@ -1,12 +1,10 @@
-import { useState, useCallback, useMemo } from 'react';
-import { Card, Button, Space, Upload, Empty, Input, Tag, Tooltip, App, Modal } from 'antd';
-import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined, CloudSyncOutlined, ReloadOutlined } from '@ant-design/icons';
+import { useState, useEffect, useCallback } from 'react';
+import { Card, Button, Space, Upload, Empty, Input, Tag, App, Modal, Tooltip } from 'antd';
+import { BookOutlined, UploadOutlined, DeleteOutlined, EyeOutlined, SearchOutlined, ArrowLeftOutlined, FileTextOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import ResizableTable from '../components/ResizableTable';
 import { ipcBridge } from '../services/ipc';
 import type { UploadFile } from 'antd';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 interface KnowledgeDocument {
   id: number;
@@ -29,7 +27,8 @@ export default function KnowledgeBaseDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { message, modal } = App.useApp();
-  const { invalidateCacheByPrefix } = useCacheStore();
+  const [knowledgeBase, setKnowledgeBase] = useState<KnowledgeBase | null>(null);
+  const [loading, setLoading] = useState(false);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [viewModalVisible, setViewModalVisible] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<any>(null);
@@ -37,39 +36,30 @@ export default function KnowledgeBaseDetailPage() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [uploading, setUploading] = useState(false);
 
-  // 生成缓存 key
-  const cacheKey = useMemo(() => `knowledgeBaseDetail:${id}`, [id]);
-
   // 数据获取函数
-  const fetchKnowledgeBase = useCallback(async () => {
-    if (!id) return null;
-    const res = await ipcBridge.getKnowledgeBase(parseInt(id));
-    if (res.success && res.data) {
-      return res.data;
+  const loadKnowledgeBase = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    try {
+      const res = await ipcBridge.getKnowledgeBase(parseInt(id));
+      if (res.success && res.data) {
+        setKnowledgeBase(res.data);
+      } else {
+        throw new Error(res.error || '加载失败');
+      }
+    } catch (error: any) {
+      message.error(error.message || '加载知识库失败');
+    } finally {
+      setLoading(false);
     }
-    throw new Error(res.error || '加载失败');
-  }, [id]);
+  }, [id, message]);
 
-  // 使用缓存 Hook
-  const {
-    data: knowledgeBase,
-    loading: _loading,
-    refreshing,
-    refresh,
-    isFromCache
-  } = useCachedData<KnowledgeBase | null>(cacheKey, fetchKnowledgeBase, {
-    deps: [id],
-    onError: (error) => message.error(error.message || '加载知识库失败'),
-  });
-  void _loading; // 保留以备将来使用
+  // 初始加载
+  useEffect(() => {
+    loadKnowledgeBase();
+  }, [loadKnowledgeBase]);
 
   const documents = knowledgeBase?.documents || [];
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('knowledgeBase');
-    await refresh(true);
-  }, [invalidateCacheByPrefix, refresh]);
 
   const handleUploadDocuments = async () => {
     if (fileList.length === 0) {
@@ -120,7 +110,7 @@ export default function KnowledgeBaseDetailPage() {
       
       setUploadModalVisible(false);
       setFileList([]);
-      invalidateAndRefresh();
+      loadKnowledgeBase();
     } catch (error: any) {
       console.error('上传失败:', error);
       // 处理存储空间不足的错误
@@ -149,7 +139,7 @@ export default function KnowledgeBaseDetailPage() {
           const res = await ipcBridge.deleteKnowledgeBaseDocument(docId);
           if (!res.success) throw new Error(res.error || '删除失败');
           message.success('文档删除成功');
-          invalidateAndRefresh();
+          loadKnowledgeBase();
         } catch (error: any) {
           message.error(error.message || '删除文档失败');
         }
@@ -173,7 +163,7 @@ export default function KnowledgeBaseDetailPage() {
 
   const handleSearch = async () => {
     if (!searchKeyword.trim()) {
-      refresh(true);
+      loadKnowledgeBase();
       return;
     }
 
@@ -306,14 +296,8 @@ export default function KnowledgeBaseDetailPage() {
         }
         extra={
           <Space>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
             <Tooltip title="刷新数据">
-              <Button icon={<ReloadOutlined spin={refreshing} />} onClick={() => refresh(true)}>
+              <Button icon={<ReloadOutlined spin={loading} />} onClick={loadKnowledgeBase}>
                 刷新
               </Button>
             </Tooltip>

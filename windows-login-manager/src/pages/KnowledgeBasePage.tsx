@@ -1,10 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, Space, Modal, Input, Empty, Row, Col, Tag, App, Tooltip } from 'antd';
-import { BookOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
+import { Card, Button, Space, Modal, Input, Empty, Row, Col, Tag, App } from 'antd';
+import { BookOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { ipcBridge } from '../services/ipc';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { TextArea } = Input;
 
@@ -20,8 +18,8 @@ interface KnowledgeBase {
 export default function KnowledgeBasePage() {
   const navigate = useNavigate();
   const { message, modal } = App.useApp();
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -30,49 +28,27 @@ export default function KnowledgeBasePage() {
   const [kbDescription, setKbDescription] = useState('');
 
   // 数据获取函数
-  const fetchKnowledgeBases = useCallback(async () => {
-    const res = await ipcBridge.getKnowledgeBases();
-    if (res.success && res.data) {
-      return res.data.knowledgeBases || [];
-    }
-    throw new Error(res.error || '加载失败');
-  }, []);
-
-  // 使用缓存 Hook 获取知识库列表
-  const {
-    data: kbData,
-    loading,
-    refreshing,
-    refresh: refreshKnowledgeBases,
-    isFromCache
-  } = useCachedData<KnowledgeBase[]>(
-    'knowledgeBase:list',
-    fetchKnowledgeBases,
-    {
-      onError: (error) => {
-        console.error('加载知识库失败:', error);
-        message.error('加载知识库失败');
-      }
-    }
-  );
-
-  // 更新本地状态
-  useEffect(() => {
-    if (kbData) {
-      setKnowledgeBases(kbData);
-    }
-  }, [kbData]);
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('knowledgeBase:');
-    await refreshKnowledgeBases(true);
-  }, [invalidateCacheByPrefix, refreshKnowledgeBases]);
-
-  // 加载数据（用于手动刷新）
   const loadKnowledgeBases = useCallback(async () => {
-    await refreshKnowledgeBases(true);
-  }, [refreshKnowledgeBases]);
+    setLoading(true);
+    try {
+      const res = await ipcBridge.getKnowledgeBases();
+      if (res.success && res.data) {
+        setKnowledgeBases(res.data.knowledgeBases || []);
+      } else {
+        throw new Error(res.error || '加载失败');
+      }
+    } catch (error: any) {
+      console.error('加载知识库失败:', error);
+      message.error('加载知识库失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [message]);
+
+  // 初始加载
+  useEffect(() => {
+    loadKnowledgeBases();
+  }, [loadKnowledgeBases]);
 
   const handleCreateKnowledgeBase = async () => {
     if (!kbName.trim()) {
@@ -93,7 +69,7 @@ export default function KnowledgeBasePage() {
       setCreateModalVisible(false);
       setKbName('');
       setKbDescription('');
-      invalidateAndRefresh();
+      loadKnowledgeBases();
     } catch (error: any) {
       message.error(error.message || '创建知识库失败');
     } finally {
@@ -113,7 +89,7 @@ export default function KnowledgeBasePage() {
           const res = await ipcBridge.deleteKnowledgeBase(id);
           if (!res.success) throw new Error(res.error || '删除失败');
           message.success('知识库删除成功');
-          invalidateAndRefresh();
+          loadKnowledgeBases();
         } catch (error: any) {
           message.error(error.message || '删除知识库失败');
         }
@@ -144,7 +120,7 @@ export default function KnowledgeBasePage() {
       message.success('知识库更新成功');
       setEditModalVisible(false);
       setEditingKb(null);
-      invalidateAndRefresh();
+      loadKnowledgeBases();
     } catch (error: any) {
       message.error(error.message || '更新失败');
     } finally {
@@ -163,14 +139,6 @@ export default function KnowledgeBasePage() {
         }
         extra={
           <Space>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && (
-              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-            )}
             <Button
               icon={<ReloadOutlined />}
               onClick={loadKnowledgeBases}

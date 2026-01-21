@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Row, Col, Statistic, Alert, Table, Tag, Tabs, Tooltip, Button, Space } from 'antd';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Card, Row, Col, Statistic, Alert, Table, Tag, Tabs, Button, Space, Tooltip } from 'antd';
 import {
   SafetyOutlined,
   WarningOutlined,
@@ -7,12 +7,9 @@ import {
   UserOutlined,
   ClockCircleOutlined,
   ExclamationCircleOutlined,
-  CloudSyncOutlined,
   ReloadOutlined
 } from '@ant-design/icons';
 import { apiClient } from '../api/client';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 
 const { TabPane } = Tabs;
 
@@ -35,36 +32,38 @@ interface SecurityEvent {
 }
 
 const SecurityDashboardPage: React.FC = () => {
-  const { invalidateCacheByPrefix } = useCacheStore();
+  const [metrics, setMetrics] = useState<SecurityMetrics | null>(null);
+  const [events, setEvents] = useState<SecurityEvent[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // 数据获取函数
-  const fetchSecurityData = useCallback(async () => {
-    // 获取安全指标
-    const metricsRes = await apiClient.get('/security/metrics');
-    // 获取最近的安全事件
-    const eventsRes = await apiClient.get('/security/events?limit=20');
-    
-    return {
-      metrics: metricsRes.data as SecurityMetrics,
-      events: eventsRes.data.events || []
-    };
+  const loadSecurityData = useCallback(async () => {
+    setLoading(true);
+    try {
+      // 获取安全指标
+      const metricsRes = await apiClient.get('/security/metrics');
+      // 获取最近的安全事件
+      const eventsRes = await apiClient.get('/security/events?limit=20');
+      
+      setMetrics(metricsRes.data as SecurityMetrics);
+      setEvents(eventsRes.data.events || []);
+    } catch (error) {
+      console.error('加载安全数据失败:', error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // 使用缓存 hook
-  const { data, loading, refreshing, refresh, isFromCache } = useCachedData(
-    'securityDashboard:main',
-    fetchSecurityData,
-    { deps: [] }
-  );
-
-  const metrics = data?.metrics || null;
-  const events = data?.events || [];
+  // 初始加载
+  useEffect(() => {
+    loadSecurityData();
+  }, [loadSecurityData]);
 
   // 每30秒自动刷新
   useEffect(() => {
-    const interval = setInterval(() => refresh(true), 30000);
+    const interval = setInterval(loadSecurityData, 30000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [loadSecurityData]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -120,14 +119,12 @@ const SecurityDashboardPage: React.FC = () => {
       <h1 style={{ marginBottom: '24px' }}>
         <SafetyOutlined /> 安全仪表板
         <Space style={{ marginLeft: 16, fontSize: 14, fontWeight: 'normal' }}>
-          {isFromCache && !refreshing && <Tag color="gold">缓存</Tag>}
-          {refreshing && <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>}
           <Tooltip title="刷新数据">
             <Button
               type="text"
               size="small"
-              icon={<ReloadOutlined spin={refreshing} />}
-              onClick={() => refresh(true)}
+              icon={<ReloadOutlined spin={loading} />}
+              onClick={loadSecurityData}
             />
           </Tooltip>
         </Space>

@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag, Tooltip } from 'antd';
-import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined, CloudSyncOutlined } from '@ant-design/icons';
+import { Card, Button, message, Space, Modal, Input, Upload, Empty, Row, Col, Tag } from 'antd';
+import { PictureOutlined, PlusOutlined, DeleteOutlined, EditOutlined, EyeOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '../api/client';
 import { API_BASE_URL } from '../config/env';
-import { useCachedData } from '../hooks/useCachedData';
-import { useCacheStore } from '../stores/cacheStore';
 import type { UploadFile } from 'antd';
 
 interface Album {
@@ -18,8 +16,8 @@ interface Album {
 
 export default function GalleryPage() {
   const navigate = useNavigate();
-  const { invalidateCacheByPrefix } = useCacheStore();
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [loading, setLoading] = useState(false);
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [albumName, setAlbumName] = useState('');
   const [fileList, setFileList] = useState<UploadFile[]>([]);
@@ -27,45 +25,28 @@ export default function GalleryPage() {
 
   // 数据获取函数
   const fetchAlbums = useCallback(async () => {
-    const response = await apiClient.get('/gallery/albums');
-    return Array.isArray(response.data.albums) ? response.data.albums : [];
+    setLoading(true);
+    try {
+      const response = await apiClient.get('/gallery/albums');
+      const data = Array.isArray(response.data.albums) ? response.data.albums : [];
+      setAlbums(data);
+    } catch (error: any) {
+      console.error('加载相册失败:', error);
+      message.error('加载相册失败');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // 使用缓存 Hook 获取相册列表
-  const {
-    data: albumsData,
-    loading,
-    refreshing,
-    refresh: refreshAlbums,
-    isFromCache
-  } = useCachedData<Album[]>(
-    'gallery:albums',
-    fetchAlbums,
-    {
-      onError: (error) => {
-        console.error('加载相册失败:', error);
-        message.error('加载相册失败');
-      }
-    }
-  );
-
-  // 更新本地状态
+  // 初始加载
   useEffect(() => {
-    if (albumsData) {
-      setAlbums(albumsData);
-    }
-  }, [albumsData]);
-
-  // 使缓存失效并刷新
-  const invalidateAndRefresh = useCallback(async () => {
-    invalidateCacheByPrefix('gallery:');
-    await refreshAlbums(true);
-  }, [invalidateCacheByPrefix, refreshAlbums]);
+    fetchAlbums();
+  }, [fetchAlbums]);
 
   // 加载数据（用于手动刷新）
   const loadAlbums = useCallback(async () => {
-    await refreshAlbums(true);
-  }, [refreshAlbums]);
+    await fetchAlbums();
+  }, [fetchAlbums]);
 
   const handleCreateAlbum = async () => {
     if (!albumName.trim()) {
@@ -95,7 +76,7 @@ export default function GalleryPage() {
       setCreateModalVisible(false);
       setAlbumName('');
       setFileList([]);
-      invalidateAndRefresh();
+      fetchAlbums();
     } catch (error: any) {
       message.error(error.message || '创建相册失败');
     } finally {
@@ -114,7 +95,7 @@ export default function GalleryPage() {
         try {
           await apiClient.delete(`/gallery/albums/${id}`);
           message.success('相册删除成功');
-          invalidateAndRefresh();
+          fetchAlbums();
         } catch (error: any) {
           message.error(error.message || '删除相册失败');
         }
@@ -148,7 +129,7 @@ export default function GalleryPage() {
         try {
           await apiClient.patch(`/gallery/albums/${id}`, { name: newName.trim() });
           message.success('相册名称更新成功');
-          invalidateAndRefresh();
+          fetchAlbums();
         } catch (error: any) {
           message.error(error.message || '更新失败');
           return Promise.reject();
@@ -182,14 +163,6 @@ export default function GalleryPage() {
         }
         extra={
           <Space>
-            {isFromCache && !refreshing && (
-              <Tooltip title="数据来自缓存">
-                <Tag color="gold">缓存</Tag>
-              </Tooltip>
-            )}
-            {refreshing && (
-              <Tag icon={<CloudSyncOutlined spin />} color="processing">更新中</Tag>
-            )}
             <Button
               icon={<ReloadOutlined />}
               onClick={loadAlbums}
