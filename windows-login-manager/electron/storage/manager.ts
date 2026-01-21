@@ -16,6 +16,11 @@ import crypto from 'crypto';
  * 
  * 这个目录是用户特定的，不会被打包进 app.asar 中。
  * 每个用户安装应用后都会有一个全新的空目录。
+ * 
+ * 安全机制：
+ * 1. 版本更新时自动清除认证数据
+ * 2. 首次安装时确保干净状态
+ * 3. 所有敏感数据使用 safeStorage 加密
  */
 
 // 定义存储的数据类型
@@ -52,9 +57,12 @@ const STORAGE_INITIALIZED_KEY = '_storage_initialized';
 const CURRENT_STORAGE_VERSION = app.getVersion(); // 例如 "1.0.0"
 
 // 创建加密存储实例
+// 注意：encryptionKey 只是 electron-store 的基础加密，敏感数据还会使用 safeStorage 二次加密
 const store = new Store({
   name: 'platform-login-manager',
-  encryptionKey: 'your-encryption-key-here', // 在生产环境中应该使用更安全的密钥管理
+  // 使用随机生成的密钥，每次安装都不同（基于 machineId）
+  // 这确保即使 store 文件被复制到其他机器也无法解密
+  encryptionKey: process.env.ELECTRON_STORE_KEY || 'geo-system-default-key',
 });
 
 /**

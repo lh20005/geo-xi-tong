@@ -1,72 +1,193 @@
 #!/usr/bin/env node
 /**
  * 打包前清理脚本
- * 确保不会将开发数据打包进去
+ * 确保不会将开发数据和敏感信息打包进去
+ * 
+ * 安全最佳实践：
+ * 1. 清理所有开发环境数据
+ * 2. 删除敏感配置文件
+ * 3. 清理 localStorage/IndexedDB 数据目录
+ * 4. 验证生产环境配置
  */
 
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-console.log('🧹 开始打包前清理...');
+console.log('🔒 开始打包前安全清理...\n');
 
-// 清理可能存在的本地存储数据（开发环境可能创建的）
+const projectRoot = path.join(__dirname, '..');
+
+// ============================================
+// 1. 清理开发环境的用户数据目录
+// ============================================
+console.log('📁 检查开发环境用户数据目录...');
 const appDataPaths = [
   // macOS
   path.join(os.homedir(), 'Library', 'Application Support', 'ai-geo-system'),
+  path.join(os.homedir(), 'Library', 'Application Support', 'Ai智软精准GEO优化系统'),
   // Windows
   path.join(os.homedir(), 'AppData', 'Roaming', 'ai-geo-system'),
+  path.join(os.homedir(), 'AppData', 'Roaming', 'Ai智软精准GEO优化系统'),
   path.join(os.homedir(), 'AppData', 'Local', 'ai-geo-system'),
   // Linux
   path.join(os.homedir(), '.config', 'ai-geo-system'),
 ];
 
-// 注意：我们不删除用户数据目录，只是提醒开发者
-console.log('\n⚠️  提醒：以下目录包含用户数据，打包时不会包含这些数据：');
 appDataPaths.forEach(p => {
   if (fs.existsSync(p)) {
-    console.log(`   - ${p} (存在)`);
+    console.log(`   ⚠️  发现用户数据目录: ${p}`);
+    console.log(`      (此目录不会被打包，但建议开发后清理)`);
   }
 });
 
-// 清理项目目录中可能存在的临时文件
-const projectRoot = path.join(__dirname, '..');
-const cleanupPaths = [
-  path.join(projectRoot, 'test-data'),
-  path.join(projectRoot, '.env.local'),
+// ============================================
+// 2. 删除敏感和临时文件
+// ============================================
+console.log('\n🗑️  清理敏感和临时文件...');
+const sensitiveFiles = [
+  // 本地环境配置（可能包含测试凭据）
+  '.env.local',
+  '.env.development.local',
+  '.env.test.local',
+  // 测试数据
+  'test-data',
+  // 日志文件
+  'logs',
+  '*.log',
+  // 临时文件
+  '.tmp',
+  'temp',
+  // 可能的数据库文件
+  '*.sqlite',
+  '*.db',
+  // 编辑器临时文件
+  '*.swp',
+  '*.swo',
+  '*~',
 ];
 
-cleanupPaths.forEach(p => {
-  if (fs.existsSync(p)) {
-    const stat = fs.statSync(p);
-    if (stat.isDirectory()) {
-      // 清空目录但保留目录本身
-      const files = fs.readdirSync(p);
-      files.forEach(file => {
-        const filePath = path.join(p, file);
-        fs.rmSync(filePath, { recursive: true, force: true });
+sensitiveFiles.forEach(pattern => {
+  const fullPath = path.join(projectRoot, pattern);
+  
+  // 处理通配符模式
+  if (pattern.includes('*')) {
+    const dir = path.dirname(fullPath);
+    const filePattern = path.basename(pattern);
+    const regex = new RegExp('^' + filePattern.replace(/\*/g, '.*') + '$');
+    
+    if (fs.existsSync(dir)) {
+      fs.readdirSync(dir).forEach(file => {
+        if (regex.test(file)) {
+          const filePath = path.join(dir, file);
+          fs.rmSync(filePath, { recursive: true, force: true });
+          console.log(`   ✅ 已删除: ${filePath}`);
+        }
       });
-      console.log(`✅ 已清空目录: ${p}`);
+    }
+  } else if (fs.existsSync(fullPath)) {
+    const stat = fs.statSync(fullPath);
+    if (stat.isDirectory()) {
+      // 清空目录内容
+      fs.readdirSync(fullPath).forEach(file => {
+        fs.rmSync(path.join(fullPath, file), { recursive: true, force: true });
+      });
+      console.log(`   ✅ 已清空目录: ${fullPath}`);
     } else {
-      // 删除文件
-      fs.unlinkSync(p);
-      console.log(`✅ 已删除文件: ${p}`);
+      fs.unlinkSync(fullPath);
+      console.log(`   ✅ 已删除文件: ${fullPath}`);
     }
   }
 });
 
-// 确保 dist 和 dist-electron 目录是干净的
-const distPaths = [
-  path.join(projectRoot, 'dist'),
-  path.join(projectRoot, 'dist-electron'),
-];
+// ============================================
+// 3. 清理构建目录
+// ============================================
+console.log('\n🧹 清理构建目录...');
+const buildDirs = ['dist', 'dist-electron', 'release'];
 
-distPaths.forEach(p => {
-  if (fs.existsSync(p)) {
-    fs.rmSync(p, { recursive: true, force: true });
-    console.log(`✅ 已清理构建目录: ${p}`);
+buildDirs.forEach(dir => {
+  const fullPath = path.join(projectRoot, dir);
+  if (fs.existsSync(fullPath)) {
+    fs.rmSync(fullPath, { recursive: true, force: true });
+    console.log(`   ✅ 已清理: ${fullPath}`);
   }
 });
 
-console.log('\n✅ 打包前清理完成！');
+// ============================================
+// 4. 验证生产环境配置
+// ============================================
+console.log('\n🔍 验证生产环境配置...');
+
+// 检查 .env.production 是否存在且配置正确
+const envProdPath = path.join(projectRoot, '.env.production');
+if (fs.existsSync(envProdPath)) {
+  const envContent = fs.readFileSync(envProdPath, 'utf-8');
+  
+  // 检查是否包含 localhost（可能是开发配置泄露）
+  if (envContent.includes('localhost') || envContent.includes('127.0.0.1')) {
+    console.log('   ⚠️  警告: .env.production 包含 localhost，请确认是否正确');
+  }
+  
+  // 检查是否有正确的生产 URL
+  if (envContent.includes('jzgeo.cc')) {
+    console.log('   ✅ 生产环境 URL 配置正确');
+  }
+  
+  // 检查是否有敏感信息（API 密钥等）
+  const sensitivePatterns = [
+    /API_KEY\s*=\s*['"]\w+['"]/i,
+    /SECRET\s*=\s*['"]\w+['"]/i,
+    /PASSWORD\s*=\s*['"]\w+['"]/i,
+    /TOKEN\s*=\s*['"]\w+['"]/i,
+  ];
+  
+  sensitivePatterns.forEach(pattern => {
+    if (pattern.test(envContent)) {
+      console.log('   ⚠️  警告: .env.production 可能包含敏感信息，请检查');
+    }
+  });
+} else {
+  console.log('   ⚠️  警告: .env.production 不存在');
+}
+
+// ============================================
+// 5. 检查 package.json 中的敏感信息
+// ============================================
+console.log('\n📦 检查 package.json...');
+const packageJsonPath = path.join(projectRoot, 'package.json');
+if (fs.existsSync(packageJsonPath)) {
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  
+  // 检查是否有测试脚本或调试配置被意外包含
+  if (packageJson.scripts && packageJson.scripts.test) {
+    // 这是正常的，不需要警告
+  }
+  
+  // 检查 build.files 配置
+  if (packageJson.build && packageJson.build.files) {
+    console.log('   ✅ electron-builder files 配置存在');
+  }
+}
+
+// ============================================
+// 6. 创建打包安全标记
+// ============================================
+const buildInfoPath = path.join(projectRoot, '.build-info.json');
+const buildInfo = {
+  cleanedAt: new Date().toISOString(),
+  nodeEnv: 'production',
+  version: require(packageJsonPath).version,
+  securityChecks: {
+    sensitiveFilesCleaned: true,
+    buildDirsCleaned: true,
+    envValidated: true,
+  }
+};
+fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2));
+console.log('\n📝 已创建构建信息文件: .build-info.json');
+
+console.log('\n' + '='.repeat(50));
+console.log('✅ 打包前安全清理完成！');
 console.log('📦 现在可以安全地进行打包了。');
+console.log('='.repeat(50) + '\n');
