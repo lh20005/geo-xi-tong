@@ -24,6 +24,7 @@ import {
   LogoutOutlined,
   DollarOutlined,
   CloudDownloadOutlined,
+  GlobalOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 import logoImg from '/images/logo.png';
@@ -223,6 +224,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       label: '升级软件',
     },
     {
+      key: 'visit-website',
+      icon: <GlobalOutlined />,
+      label: '前往网站',
+    },
+    {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: '退出登录',
@@ -232,6 +238,14 @@ export default function Sidebar({ onLogout }: SidebarProps) {
   const handleMenuClick = ({ key }: { key: string }) => {
     if (key === 'logout') {
       handleLogout();
+    } else if (key === 'visit-website') {
+      // 通过 Electron 打开外部浏览器
+      if (window.electronAPI?.openExternal) {
+        window.electronAPI.openExternal('https://www.jzgeo.cc/');
+      } else {
+        // 降级方案：直接打开（在非 Electron 环境下）
+        window.open('https://www.jzgeo.cc/', '_blank');
+      }
     } else {
       navigate(key);
     }
