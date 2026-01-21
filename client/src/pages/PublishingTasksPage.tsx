@@ -13,7 +13,7 @@ import {
   EyeInvisibleOutlined, DownOutlined, RightOutlined
 } from '@ant-design/icons';
 import { 
-  getArticles, getArticle, Article 
+  getArticles, Article 
 } from '../api/articles';
 import { 
   getPlatforms, getAccounts, Platform, Account,
@@ -28,8 +28,7 @@ import ResizableTable from '../components/ResizableTable';
 
 const { Text } = Typography;
 
-// 平台图标映射 - 与平台管理页面保持一致
-// 使用 import.meta.env.BASE_URL 获取正确的基础路径
+/* 平台图标映射 - 暂时隐藏，功能保留
 const getPlatformIcon = (platformId: string): string => {
   const baseUrl = import.meta.env.BASE_URL || '/';
   
@@ -66,15 +65,16 @@ const getPlatformIcon = (platformId: string): string => {
   // 其他平台使用默认路径
   return `${baseUrl}platform-icons/${platformId}.png`;
 };
+*/
 
 export default function PublishingTasksPage() {
-  // 文章选择
+  // 文章选择 - 暂时隐藏，功能保留（变量仍需保留以供其他函数引用）
   const [articles, setArticles] = useState<Article[]>([]);
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<number>>(new Set());
-  const [articlesLoading, setArticlesLoading] = useState(false);
-  const [articlePage, setArticlePage] = useState(1);
-  const [articlePageSize, setArticlePageSize] = useState(10);
-  const [articleTotal, setArticleTotal] = useState(0);
+  const [, setArticlesLoading] = useState(false);
+  const [articlePage] = useState(1);
+  const [articlePageSize] = useState(10);
+  const [, setArticleTotal] = useState(0);
 
   // 平台选择
   const [platforms, setPlatforms] = useState<Platform[]>([]);
@@ -434,8 +434,7 @@ export default function PublishingTasksPage() {
   }, [logsModal.logs.length, logsModal.visible]);
 
 
-
-  // 预览文章
+  /* 预览文章 - 暂时隐藏，功能保留
   const handlePreviewArticle = async (article: Article) => {
     try {
       // 先显示模态框，显示加载状态
@@ -460,6 +459,7 @@ export default function PublishingTasksPage() {
       setPreviewModal({ visible: false, article: null, loading: false });
     }
   };
+  */
 
   // 立即执行任务
   const handleExecuteTask = async (taskId: number) => {
@@ -707,7 +707,7 @@ export default function PublishingTasksPage() {
     }
   };
 
-  // 文章选择处理
+  /* 文章选择处理 - 暂时隐藏，功能保留
   const handleArticleSelect = (articleId: number, checked: boolean) => {
     const newSelected = new Set(selectedArticleIds);
     if (checked) {
@@ -725,8 +725,9 @@ export default function PublishingTasksPage() {
       setSelectedArticleIds(new Set());
     }
   };
+  */
 
-  // 平台选择处理
+  /* 平台选择处理 - 暂时隐藏，功能保留
   const handleAccountSelect = (accountId: number) => {
     const newSelected = new Set(selectedAccounts);
     if (newSelected.has(accountId)) {
@@ -736,6 +737,7 @@ export default function PublishingTasksPage() {
     }
     setSelectedAccounts(newSelected);
   };
+  */
 
   // 获取状态标签
   const getStatusTag = (status: string, errorMessage?: string) => {
@@ -809,7 +811,7 @@ export default function PublishingTasksPage() {
     };
   };
 
-  // 文章表格列
+  /* 文章表格列 - 暂时隐藏，功能保留
   const articleColumns = [
     {
       title: (
@@ -896,6 +898,7 @@ export default function PublishingTasksPage() {
       render: (text: string) => new Date(text).toLocaleString('zh-CN'),
     },
   ];
+  */
 
   // 任务表格列
   const taskColumns = [
@@ -1068,8 +1071,8 @@ export default function PublishingTasksPage() {
         </Col>
       </Row>
 
-      {/* 文章选择区 */}
-      <Card 
+      {/* 文章选择区 - 暂时隐藏，功能保留 */}
+      {/* <Card 
         title={
           <Space>
             <FileTextOutlined style={{ color: '#1890ff' }} />
@@ -1119,10 +1122,10 @@ export default function PublishingTasksPage() {
             size="small"
           />
         )}
-      </Card>
+      </Card> */}
 
-      {/* 平台选择区 */}
-      <Card 
+      {/* 平台选择区 - 暂时隐藏，功能保留 */}
+      {/* <Card 
         title={
           <Space>
             <CloudUploadOutlined style={{ color: '#52c41a' }} />
@@ -1240,7 +1243,7 @@ export default function PublishingTasksPage() {
             })}
           </Row>
         )}
-      </Card>
+      </Card> */}
 
       {/* 发布配置和操作 */}
       {(selectedArticleIds.size > 0 || selectedAccounts.size > 0) && (
