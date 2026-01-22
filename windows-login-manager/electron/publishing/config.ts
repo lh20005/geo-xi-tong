@@ -15,6 +15,103 @@ export interface BrowserLaunchOptions {
 }
 
 /**
+ * 获取捆绑的 Playwright Chromium 路径
+ * 打包后的应用会在 resources/playwright-browsers 目录下查找
+ */
+function getBundledChromiumPath(): string | undefined {
+  const platform = process.platform;
+  const arch = process.arch; // 'x64' 或 'arm64'
+  const isPackaged = app.isPackaged;
+  
+  // 确定 playwright-browsers 目录位置
+  let browsersBasePath: string;
+  if (isPackaged) {
+    // 打包后：在 resources 目录下
+    browsersBasePath = path.join(process.resourcesPath, 'playwright-browsers');
+  } else {
+    // 开发模式：在项目根目录下
+    browsersBasePath = path.join(__dirname, '..', '..', 'playwright-browsers');
+  }
+  
+  console.log(`[Browser] 查找捆绑的 Chromium，基础路径: ${browsersBasePath}`);
+  console.log(`[Browser] 当前平台: ${platform}, 架构: ${arch}`);
+  
+  if (!fs.existsSync(browsersBasePath)) {
+    console.log(`[Browser] 捆绑浏览器目录不存在: ${browsersBasePath}`);
+    return undefined;
+  }
+  
+  // 查找 chromium-* 目录（排除 chromium_headless_shell）
+  const dirs = fs.readdirSync(browsersBasePath);
+  const chromiumDir = dirs.find(d => d.startsWith('chromium-') || d === 'chromium');
+  
+  if (!chromiumDir) {
+    console.log('[Browser] 未找到 chromium 目录');
+    return undefined;
+  }
+  
+  const chromiumBasePath = path.join(browsersBasePath, chromiumDir);
+  console.log(`[Browser] Chromium 基础目录: ${chromiumBasePath}`);
+  
+  // 列出 chromium 目录下的所有子目录
+  let chromiumSubDirs: string[] = [];
+  try {
+    chromiumSubDirs = fs.readdirSync(chromiumBasePath).filter(d => 
+      fs.statSync(path.join(chromiumBasePath, d)).isDirectory()
+    );
+    console.log(`[Browser] Chromium 子目录: ${chromiumSubDirs.join(', ')}`);
+  } catch (e) {
+    console.log('[Browser] 无法读取 Chromium 子目录');
+  }
+  
+  // 根据平台和架构确定可执行文件路径
+  // Playwright 新版本使用不同的目录结构
+  let executablePaths: string[] = [];
+  
+  if (platform === 'darwin') {
+    // macOS: 尝试多种可能的路径
+    const macDirs = arch === 'arm64' 
+      ? ['chrome-mac-arm64', 'chrome-mac-x64', 'chrome-mac'] 
+      : ['chrome-mac-x64', 'chrome-mac', 'chrome-mac-arm64'];
+    
+    for (const macDir of macDirs) {
+      // 新版 Playwright: Google Chrome for Testing.app
+      executablePaths.push(
+        path.join(chromiumBasePath, macDir, 'Google Chrome for Testing.app', 'Contents', 'MacOS', 'Google Chrome for Testing')
+      );
+      // 旧版 Playwright: Chromium.app
+      executablePaths.push(
+        path.join(chromiumBasePath, macDir, 'Chromium.app', 'Contents', 'MacOS', 'Chromium')
+      );
+    }
+  } else if (platform === 'win32') {
+    // Windows: 尝试多种可能的路径
+    const winDirs = ['chrome-win64', 'chrome-win', 'chrome-win32'];
+    for (const winDir of winDirs) {
+      executablePaths.push(path.join(chromiumBasePath, winDir, 'chrome.exe'));
+    }
+  } else {
+    // Linux
+    const linuxDirs = ['chrome-linux64', 'chrome-linux'];
+    for (const linuxDir of linuxDirs) {
+      executablePaths.push(path.join(chromiumBasePath, linuxDir, 'chrome'));
+    }
+  }
+  
+  // 尝试找到存在的可执行文件
+  for (const execPath of executablePaths) {
+    console.log(`[Browser] 尝试路径: ${execPath}`);
+    if (fs.existsSync(execPath)) {
+      console.log(`[Browser] ✅ 找到捆绑的 Chromium: ${execPath}`);
+      return execPath;
+    }
+  }
+  
+  console.log(`[Browser] ❌ 捆绑的 Chromium 可执行文件不存在，已尝试路径: ${executablePaths.join(', ')}`);
+  return undefined;
+}
+
+/**
  * 获取标准的浏览器启动配置
  * 适配 Playwright API
  */
@@ -25,9 +122,22 @@ export function getStandardBrowserConfig(options: {
   // Electron 环境默认使用可视化模式（非 headless）
   const defaultHeadless = process.env.BROWSER_HEADLESS === 'true';
   
-  return {
+  // 优先级：1. 传入的路径 2. 捆绑的 Chromium 3. 系统 Chrome 4. Playwright 默认（channel: 'chrome'）
+  let executablePath = options.executablePath || getBundledChromiumPath() || findChromeExecutable();
+  let channel: string | undefined = undefined;
+  
+  if (executablePath) {
+    console.log(`[Browser] 使用浏览器: ${executablePath}`);
+  } else {
+    // 没有找到任何浏览器，尝试使用 Playwright 的 channel 功能
+    // 这会让 Playwright 自动查找系统安装的 Chrome
+    console.log('[Browser] ⚠️ 未找到捆绑浏览器或系统 Chrome');
+    console.log('[Browser] 尝试使用 Playwright channel: chrome');
+    channel = 'chrome';
+  }
+  
+  const config: BrowserLaunchOptions = {
     headless: options.headless ?? defaultHeadless,
-    executablePath: options.executablePath || findChromeExecutable(),
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -38,10 +148,20 @@ export function getStandardBrowserConfig(options: {
     ],
     timeout: 30000
   };
+  
+  if (executablePath) {
+    config.executablePath = executablePath;
+  }
+  
+  // 注意：channel 需要在 chromium.launch() 时传入，这里只是记录
+  // Playwright 的 channel 选项可以是 'chrome', 'chrome-beta', 'msedge' 等
+  (config as any).channel = channel;
+  
+  return config;
 }
 
 /**
- * 查找系统Chrome路径
+ * 查找系统Chrome路径（作为后备方案）
  */
 export function findChromeExecutable(): string | undefined {
   const platform = process.platform;
@@ -82,7 +202,7 @@ export function findChromeExecutable(): string | undefined {
   for (const chromePath of chromePaths) {
     try {
       if (fs.existsSync(chromePath)) {
-        console.log(`✅ 找到Chrome浏览器: ${chromePath}`);
+        console.log(`[Browser] 找到系统 Chrome: ${chromePath}`);
         return chromePath;
       }
     } catch (e) {
@@ -90,7 +210,7 @@ export function findChromeExecutable(): string | undefined {
     }
   }
 
-  console.log('⚠️  未找到系统Chrome，将使用Playwright内置浏览器');
+  console.log('[Browser] ⚠️ 未找到系统 Chrome');
   return undefined;
 }
 

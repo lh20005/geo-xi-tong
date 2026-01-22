@@ -1,6 +1,6 @@
 {
   "name": "ai-geo-system",
-  "version": "1.1.7",
+  "version": "1.2.2",
   "description": "Ai智软精准GEO优化系统 - 基于Electron的桌面应用",
   "main": "dist-electron/main.js",
   "author": "Your Company",
@@ -8,13 +8,14 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/prebuild-clean.js",
+    "download:browsers": "node scripts/download-all-browsers.js",
     "build": "npm run prebuild && npm run build:electron && vite build && electron-builder",
     "build:electron": "tsc -p electron/tsconfig.json && tsc -p electron/preload/tsconfig.json",
-    "build:win": "npm run prebuild && npm run build:electron && vite build && electron-builder --win",
-    "build:mac": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac",
-    "build:mac-x64": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac --x64",
-    "build:mac-arm": "npm run prebuild && npm run build:electron && vite build && electron-builder --mac --arm64",
-    "build:all": "npm run prebuild && npm run build:electron && vite build && electron-builder --win --mac && node scripts/postbuild-latest.js",
+    "build:win": "node scripts/build-platform.js win",
+    "build:mac": "node scripts/build-platform.js mac-arm && node scripts/build-platform.js mac-x64",
+    "build:mac-x64": "node scripts/build-platform.js mac-x64",
+    "build:mac-arm": "node scripts/build-platform.js mac-arm",
+    "build:all": "node scripts/build-platform.js all && node scripts/postbuild-latest.js",
     "postbuild:latest": "node scripts/postbuild-latest.js",
     "preview": "vite preview",
     "electron:dev": "npm run build:electron && concurrently \"vite\" \"wait-on http://localhost:5174 && cross-env NODE_ENV=development electron dist-electron/main.js\"",
@@ -106,6 +107,13 @@
       "!**/.build-info.json",
       "!**/*.sqlite",
       "!**/*.db"
+    ],
+    "extraResources": [
+      {
+        "from": "playwright-browsers-target",
+        "to": "playwright-browsers",
+        "filter": ["**/*"]
+      }
     ],
     "asarUnpack": [
       "node_modules/playwright/**/*",

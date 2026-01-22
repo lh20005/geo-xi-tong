@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from 'electron';
+import { app, BrowserWindow, Menu, screen } from 'electron';
 import path from 'path';
 import { ipcHandler } from './ipc/handler';
 import { Logger } from './logger/logger';
@@ -135,11 +135,44 @@ class ApplicationManager {
     }
   }
 
+  // 设计稿基准分辨率（按 1920x1080 设计）
+  private readonly BASE_WIDTH = 1920;
+  private readonly BASE_HEIGHT = 1080;
+
+  /**
+   * 计算缩放因子
+   * 根据当前屏幕分辨率与设计稿基准分辨率的比例计算
+   */
+  private calculateZoomFactor(width: number, height: number): number {
+    // 分别计算宽度和高度的缩放比例，取较小值确保内容完全显示
+    const widthRatio = width / this.BASE_WIDTH;
+    const heightRatio = height / this.BASE_HEIGHT;
+    
+    // 取较小值，确保内容不会超出屏幕
+    let zoomFactor = Math.min(widthRatio, heightRatio);
+    
+    // 限制缩放范围：最小 0.6（太小看不清），最大 1.5（太大浪费空间）
+    zoomFactor = Math.max(0.6, Math.min(1.5, zoomFactor));
+    
+    return zoomFactor;
+  }
+
   /**
    * 创建主窗口
    */
   createMainWindow(): BrowserWindow {
     logger.info('Creating main window...');
+    
+    // 获取主显示器信息
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+    const displayScaleFactor = primaryDisplay.scaleFactor;
+    
+    logger.info(`Screen info: ${screenWidth}x${screenHeight}, displayScaleFactor: ${displayScaleFactor}`);
+    
+    // 计算页面缩放因子
+    const zoomFactor = this.calculateZoomFactor(screenWidth, screenHeight);
+    logger.info(`Calculated zoomFactor: ${zoomFactor}`);
     
     // 创建窗口配置
     const windowConfig = {
@@ -155,10 +188,11 @@ class ApplicationManager {
         contextIsolation: true,
         sandbox: true,
         preload: path.join(__dirname, 'preload.js'),
-        webviewTag: true, // 启用 webview 标签
+        webviewTag: true,
+        zoomFactor: zoomFactor, // 设置初始缩放因子
       },
-      show: false, // 先不显示，等最大化后再显示
-      frame: true, // 使用原生窗口框架
+      show: false,
+      frame: true,
       titleBarStyle: 'default' as const,
     };
 
@@ -167,19 +201,35 @@ class ApplicationManager {
     // 窗口创建后立即最大化
     this.window.maximize();
     
-    // 最大化后显示窗口
-    this.window.show();
-    
-    logger.info('Main window created, maximized and shown');
+    logger.info(`Main window created, zoomFactor: ${zoomFactor}`);
 
     // 窗口准备好后的回调
     this.window.once('ready-to-show', () => {
       logger.info('Window ready-to-show event fired');
+      
       // 确保窗口是最大化的
       if (!this.window?.isMaximized()) {
-        logger.info('Window not maximized, maximizing now');
         this.window?.maximize();
       }
+      
+      // 应用缩放因子
+      if (this.window?.webContents) {
+        this.window.webContents.setZoomFactor(zoomFactor);
+        logger.info(`Applied zoomFactor: ${zoomFactor}`);
+      }
+      
+      // 显示窗口
+      this.window?.show();
+    });
+    
+    // 监听窗口大小变化，动态调整缩放
+    this.window.on('resize', () => {
+      this.handleWindowResize();
+    });
+    
+    // 监听显示器变化（用户移动窗口到不同显示器）
+    this.window.on('moved', () => {
+      this.handleDisplayChange();
     });
 
     // 加载应用
@@ -336,6 +386,49 @@ class ApplicationManager {
       }
       this.window.focus();
       logger.info('Main window focused');
+    }
+  }
+
+  /**
+   * 处理窗口大小变化，动态调整缩放因子
+   */
+  private handleWindowResize(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    
+    try {
+      const [width, height] = this.window.getSize();
+      const newZoomFactor = this.calculateZoomFactor(width, height);
+      
+      if (this.window.webContents) {
+        this.window.webContents.setZoomFactor(newZoomFactor);
+        logger.info(`Window resized to ${width}x${height}, new zoomFactor: ${newZoomFactor}`);
+      }
+    } catch (error) {
+      logger.error('Failed to handle window resize:', error);
+    }
+  }
+
+  /**
+   * 处理显示器变化（窗口移动到不同 DPI 的显示器）
+   */
+  private handleDisplayChange(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    
+    try {
+      const bounds = this.window.getBounds();
+      const currentDisplay = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y });
+      const { width, height } = currentDisplay.workAreaSize;
+      
+      // 重新计算缩放因子
+      const newZoomFactor = this.calculateZoomFactor(width, height);
+      
+      logger.info(`Display changed, workArea: ${width}x${height}, new zoomFactor: ${newZoomFactor}`);
+      
+      if (this.window.webContents) {
+        this.window.webContents.setZoomFactor(newZoomFactor);
+      }
+    } catch (error) {
+      logger.error('Failed to handle display change:', error);
     }
   }
 

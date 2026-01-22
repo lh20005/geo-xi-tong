@@ -19,6 +19,14 @@ dist/
 build/
 */dist/
 */build/
+release/
+*/release/
+
+# Playwright 浏览器（打包时使用）
+playwright-browsers/
+*/playwright-browsers/
+playwright-browsers-target/
+*/playwright-browsers-target/
 
 # 日志
 logs/

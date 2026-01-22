@@ -132,7 +132,30 @@ class IPCHandler {
     ipcMain.handle('open-external', async (_event, url: string) => {
       try {
         log.info(`IPC: open-external - ${url}`);
+        
+        // 获取主窗口当前的 zoomFactor（在打开外部链接前保存）
+        const mainWindow = appManager.getMainWindow();
+        let savedZoomFactor: number | null = null;
+        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+          savedZoomFactor = mainWindow.webContents.getZoomFactor();
+          log.info(`IPC: Saved zoomFactor before opening external: ${savedZoomFactor}`);
+        }
+        
         await shell.openExternal(url);
+        
+        // 打开外部链接后，延迟恢复 zoomFactor（Windows 上可能会丢失）
+        if (savedZoomFactor !== null && mainWindow && !mainWindow.isDestroyed()) {
+          // 使用短延迟确保窗口焦点恢复后再应用
+          setTimeout(() => {
+            if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents) {
+              const currentZoom = mainWindow.webContents.getZoomFactor();
+              if (Math.abs(currentZoom - savedZoomFactor!) > 0.01) {
+                log.info(`IPC: Restoring zoomFactor from ${currentZoom} to ${savedZoomFactor}`);
+                mainWindow.webContents.setZoomFactor(savedZoomFactor!);
+              }
+            }
+          }, 100);
+        }
       } catch (error) {
         log.error('Failed to open external URL:', error);
         throw error;

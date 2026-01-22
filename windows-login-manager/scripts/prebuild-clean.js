@@ -176,10 +176,10 @@ if (fs.existsSync(releasePath)) {
 }
 
 // ============================================
-// 4. 清理构建目录
+// 4. 清理构建目录（不清理 release，保留已打包的文件）
 // ============================================
 console.log('\n🧹 清理构建目录...');
-const buildDirs = ['dist', 'dist-electron', 'release'];
+const buildDirs = ['dist', 'dist-electron'];  // 不清理 release 目录
 
 buildDirs.forEach(dir => {
   const fullPath = path.join(projectRoot, dir);
@@ -188,6 +188,7 @@ buildDirs.forEach(dir => {
     console.log(`   ✅ 已清理: ${fullPath}`);
   }
 });
+console.log('   ℹ️  release 目录保留（支持分平台打包）');
 
 // ============================================
 // 4. 验证生产环境配置

@@ -9,6 +9,10 @@ dist-electron/
 release/
 out/
 
+# Playwright browsers (downloaded during build)
+playwright-browsers/
+playwright-browsers-target/
+
 # Logs
 logs/
 *.log

@@ -4,7 +4,7 @@
 
 ### 当前版本
 ```
-1.2.2
+1.1.7
 ```
 
 ### 版本号规则（语义化版本）
@@ -17,9 +17,6 @@
 ### 版本历史
 | 版本 | 发布日期 | 类型 | 说明 |
 |------|----------|------|------|
-| 1.2.2 | 2026-01-22 | Patch | 修复内置浏览器无法正确加载的问题 |
-| 1.2.1 | 2026-01-22 | Patch | 内置 Chromium 浏览器、修复缩放和下载链接问题 |
-| 1.2.0 | 2026-01-22 | Minor | 新增发布平台支持 |
 | 1.1.7 | 2026-01-22 | Patch | 修复浏览器启动失败和批次定时间隔问题 |
 | 1.1.6 | 2026-01-21 | Patch | 修复 macOS 更新检测失败问题 |
 | 1.1.5 | 2026-01-21 | Patch | 修复升级时"无法关闭"问题 |
@@ -81,77 +78,6 @@ npm run build:mac      # macOS (Intel + Apple Silicon，同时生成 dmg 和 zip
 npm run build:mac-x64  # macOS Intel 单独
 npm run build:mac-arm  # macOS Apple Silicon 单独
 ```
-
----
-
-## 内置浏览器打包规范（重要）
-
-### 浏览器目录结构
-
-每个平台的 Chromium 浏览器存放在独立目录：
-
-```
-playwright-browsers/
-├── win/                    # Windows x64
-│   └── chromium-1200/
-│       └── chrome-win64/
-│           └── chrome.exe
-├── mac-x64/                # macOS Intel
-│   └── chromium-1200/
-│       └── chrome-mac-x64/
-│           └── Google Chrome for Testing.app/
-└── mac-arm64/              # macOS Apple Silicon
-    └── chromium-1200/
-        └── chrome-mac-arm64/
-            └── Google Chrome for Testing.app/
-```
-
-### 打包前准备
-
-浏览器已预先下载到 `playwright-browsers/` 目录，**无需每次打包前下载**。
-
-如需重新下载（首次或浏览器版本更新时）：
-```bash
-npm run download:browsers
-```
-
-### 分平台打包机制
-
-**重要：必须分平台打包，每个平台使用对应的浏览器！**
-
-打包脚本 `scripts/build-platform.js` 会：
-1. 检查目标平台的浏览器是否存在
-2. 将对应平台的浏览器复制到 `playwright-browsers-target/` 目录
-3. 执行 electron-builder 打包（使用 `extraResources` 将浏览器打包进去）
-
-### 打包后验证（强制）
-
-**每次打包后必须验证浏览器是否正确打包！**
-
-#### Windows 验证方法
-```bash
-# 解压 exe 安装包或查看安装后的目录
-# 检查 resources/playwright-browsers/chromium-1200/chrome-win64/chrome.exe 是否存在
-```
-
-#### macOS 验证方法
-```bash
-# 挂载 DMG 或解压 ZIP
-# 检查 Contents/Resources/playwright-browsers/chromium-1200/ 目录
-
-# macOS ARM 应包含：chrome-mac-arm64/Google Chrome for Testing.app
-# macOS Intel 应包含：chrome-mac-x64/Google Chrome for Testing.app
-```
-
-### 常见问题
-
-| 问题 | 原因 | 解决方案 |
-|------|------|---------|
-| 浏览器启动失败 | 打包时使用了错误平台的浏览器 | 使用分平台打包命令 |
-| 找不到浏览器 | 浏览器未下载或路径错误 | 运行 `npm run download:browsers` |
-| 打包体积过大 | 包含了多个平台的浏览器 | 确保只打包目标平台的浏览器 |
-
----
 
 ### 打包输出文件
 打包完成后，`release/` 目录会生成：
@@ -291,12 +217,8 @@ npm run build:all
 - [ ] 版本号已更新 (`package.json`)
 - [ ] CHANGELOG.md 已更新
 - [ ] 代码已提交并打 tag
-- [ ] 浏览器已下载（`npm run download:browsers`）
 - [ ] Windows exe 已打包
 - [ ] macOS dmg + zip 已打包（两种架构）
-- [ ] **验证 Windows 包含 chrome-win64/chrome.exe**
-- [ ] **验证 macOS Intel 包含 chrome-mac-x64/**
-- [ ] **验证 macOS ARM 包含 chrome-mac-arm64/**
 - [ ] latest.yml 和 latest-mac.yml 包含正确的 releaseNotes
 - [ ] 所有文件已上传到 COS `/releases/` 目录
 - [ ] latest/ 目录已更新固定链接文件

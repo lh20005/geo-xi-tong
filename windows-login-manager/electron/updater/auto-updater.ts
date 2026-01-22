@@ -695,7 +695,7 @@ export class AutoUpdater {
 
   /**
    * 获取手动下载链接
-   * 根据当前平台和架构返回对应的安装包下载链接
+   * 使用 latest/ 目录的固定链接，与营销页面保持一致
    */
   public getManualDownloadUrl(): string {
     if (!this.feedUrl) {
@@ -705,36 +705,27 @@ export class AutoUpdater {
     // 获取平台和架构信息
     const platform = process.platform;
     const arch = process.arch;  // 'x64', 'arm64', 'ia32' 等
-    const version = this.latestUpdateInfo?.version || this.getCurrentVersion();
     
-    // 构建下载链接（基于 electron-builder 的默认命名规则）
+    // 使用 latest/ 目录的固定链接（与营销页面一致，无需随版本更新）
     let fileName = '';
     if (platform === 'win32') {
-      // Windows: 区分 x64 和 arm64
-      if (arch === 'arm64') {
-        fileName = `GEO优化系统-Setup-${version}-arm64.exe`;
-      } else {
-        fileName = `GEO优化系统-Setup-${version}.exe`;  // x64 是默认的，不带后缀
-      }
+      // Windows: 统一使用 x64 版本
+      fileName = 'GEO优化系统-Windows.exe';
     } else if (platform === 'darwin') {
       // macOS: 区分 Intel (x64) 和 Apple Silicon (arm64)
       if (arch === 'arm64') {
-        fileName = `GEO优化系统-${version}-arm64.dmg`;
+        fileName = 'GEO优化系统-Mac-Apple.dmg';
       } else {
-        fileName = `GEO优化系统-${version}.dmg`;  // Intel 版本
+        fileName = 'GEO优化系统-Mac-Intel.dmg';
       }
     } else {
-      // Linux: 区分 x64 和 arm64
-      if (arch === 'arm64') {
-        fileName = `GEO优化系统-${version}-arm64.AppImage`;
-      } else {
-        fileName = `GEO优化系统-${version}.AppImage`;
-      }
+      // Linux: 暂不支持，返回空
+      return '';
     }
     
-    // URL 编码中文文件名
+    // URL 编码中文文件名，使用 latest/ 子目录
     const encodedFileName = encodeURIComponent(fileName);
-    return `${this.feedUrl}/${encodedFileName}`;
+    return `${this.feedUrl}/latest/${encodedFileName}`;
   }
 
   /**
