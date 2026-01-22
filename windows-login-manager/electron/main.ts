@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, screen, shell } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { ipcHandler } from './ipc/handler';
 import { Logger } from './logger/logger';
 import { ErrorHandler } from './error/handler';
@@ -29,6 +30,11 @@ let mainWindow: BrowserWindow | null = null;
 class ApplicationManager {
   private window: BrowserWindow | null = null;
   private isQuitting = false;
+  
+  // 缩放管理相关
+  private targetZoomFactor = 1.0;
+  private zoomEnforceInterval: NodeJS.Timeout | null = null;
+  private readonly ZOOM_ENFORCE_INTERVAL_MS = 500; // 每 500ms 检查一次
 
   /**
    * 初始化应用程序
@@ -54,6 +60,9 @@ class ApplicationManager {
       // 等待应用准备就绪
       await app.whenReady();
       logger.info('App is ready');
+      
+      // 清除 Electron 缓存的缩放设置（解决 Windows 上缩放被重置的问题）
+      await this.clearZoomCache();
       
       // 初始化安全功能（需要在app ready之后）
       certificateValidator.initialize();
@@ -140,6 +149,42 @@ class ApplicationManager {
   private readonly BASE_HEIGHT = 1080;
 
   /**
+   * 清除 Electron 缓存的缩放设置
+   * Electron 会在 Preferences 文件中缓存 per_host_zoom_levels，导致缩放设置被覆盖
+   * 这个方法在应用启动时清除这些缓存
+   */
+  private async clearZoomCache(): Promise<void> {
+    try {
+      const userDataPath = app.getPath('userData');
+      const preferencesPath = path.join(userDataPath, 'Preferences');
+      
+      if (fs.existsSync(preferencesPath)) {
+        const content = fs.readFileSync(preferencesPath, 'utf-8');
+        const preferences = JSON.parse(content);
+        
+        // 清除 per_host_zoom_levels 缓存
+        if (preferences.partition && preferences.partition.per_host_zoom_levels) {
+          preferences.partition.per_host_zoom_levels = {};
+          logger.info('Cleared per_host_zoom_levels from partition');
+        }
+        
+        // 清除根级别的 per_host_zoom_levels
+        if (preferences.per_host_zoom_levels) {
+          preferences.per_host_zoom_levels = {};
+          logger.info('Cleared root per_host_zoom_levels');
+        }
+        
+        // 写回文件
+        fs.writeFileSync(preferencesPath, JSON.stringify(preferences, null, 2));
+        logger.info('Zoom cache cleared successfully');
+      }
+    } catch (error) {
+      // 如果清除失败，不影响应用启动
+      logger.warn('Failed to clear zoom cache (non-critical):', error);
+    }
+  }
+
+  /**
    * 计算缩放因子
    * 根据当前屏幕分辨率与设计稿基准分辨率的比例计算
    */
@@ -171,10 +216,10 @@ class ApplicationManager {
     logger.info(`Screen info: ${screenWidth}x${screenHeight}, displayScaleFactor: ${displayScaleFactor}`);
     
     // 计算页面缩放因子
-    const zoomFactor = this.calculateZoomFactor(screenWidth, screenHeight);
-    logger.info(`Calculated zoomFactor: ${zoomFactor}`);
+    this.targetZoomFactor = this.calculateZoomFactor(screenWidth, screenHeight);
+    logger.info(`Calculated targetZoomFactor: ${this.targetZoomFactor}`);
     
-    // 创建窗口配置
+    // 创建窗口配置 - 不在 webPreferences 中设置 zoomFactor，避免被缓存
     const windowConfig = {
       width: 1200,
       height: 800,
@@ -189,7 +234,7 @@ class ApplicationManager {
         sandbox: true,
         preload: path.join(__dirname, 'preload.js'),
         webviewTag: true,
-        zoomFactor: zoomFactor, // 设置初始缩放因子
+        // 不设置 zoomFactor，避免被 Electron 缓存覆盖
       },
       show: false,
       frame: true,
@@ -201,7 +246,7 @@ class ApplicationManager {
     // 窗口创建后立即最大化
     this.window.maximize();
     
-    logger.info(`Main window created, zoomFactor: ${zoomFactor}`);
+    logger.info(`Main window created, targetZoomFactor: ${this.targetZoomFactor}`);
 
     // 窗口准备好后的回调
     this.window.once('ready-to-show', () => {
@@ -212,37 +257,27 @@ class ApplicationManager {
         this.window?.maximize();
       }
       
-      // 应用缩放因子
-      if (this.window?.webContents) {
-        if (!this.window.webContents.isDestroyed()) {
-          this.window.webContents.setZoomFactor(zoomFactor);
-          // 禁用视觉缩放（捏合缩放）
-          this.window.webContents.setVisualZoomLevelLimits(1, 1);
-          logger.info(`Applied zoomFactor: ${zoomFactor}`);
-        }
-      }
+      // 强制应用缩放因子
+      this.enforceZoomFactor();
       
       // 显示窗口
       this.window?.show();
-    });
-
-    // 监听页面加载完成，重新应用缩放（防止被重置）
-    this.window.webContents.on('did-finish-load', () => {
-      // 安全检查：如果窗口已销毁，直接返回
-      if (!this.window || this.window.isDestroyed()) return;
-      if (this.window.webContents.isDestroyed()) return;
       
-      try {
-        const [width, height] = this.window.getSize();
-        const currentZoom = this.calculateZoomFactor(width, height);
-        this.window.webContents.setZoomFactor(currentZoom);
-        logger.info(`Page loaded, re-applied zoomFactor: ${currentZoom}`);
-      } catch (error) {
-        logger.error('Failed to re-apply zoom factor on load:', error);
-      }
+      // 启动缩放强制执行定时器
+      this.startZoomEnforcement();
     });
 
-    // 拦截缩放快捷键 (Ctrl+0, Ctrl+, Ctrl-, Ctrl+=)
+    // 监听页面加载完成，重新应用缩放
+    this.window.webContents.on('did-finish-load', () => {
+      this.enforceZoomFactor();
+    });
+
+    // 监听 DOM 准备完成
+    this.window.webContents.on('dom-ready', () => {
+      this.enforceZoomFactor();
+    });
+
+    // 拦截缩放快捷键 (Ctrl+0, Ctrl+-, Ctrl+=, Ctrl++)
     this.window.webContents.on('before-input-event', (event, input) => {
       if (this.window?.webContents.isDestroyed()) return;
       
@@ -262,6 +297,11 @@ class ApplicationManager {
     // 监听显示器变化（用户移动窗口到不同显示器）
     this.window.on('moved', () => {
       this.handleDisplayChange();
+    });
+    
+    // 监听窗口获得焦点，重新应用缩放（解决从外部链接返回后缩放丢失的问题）
+    this.window.on('focus', () => {
+      this.enforceZoomFactor();
     });
 
     // 加载应用
@@ -296,9 +336,13 @@ class ApplicationManager {
 
     // 窗口关闭事件
     this.window.on('close', (event) => {
+      // 停止缩放强制执行
+      this.stopZoomEnforcement();
+      
       // 移除事件监听器，防止内存泄漏或销毁后访问
       if (this.window && !this.window.isDestroyed() && this.window.webContents) {
         this.window.webContents.removeAllListeners('did-finish-load');
+        this.window.webContents.removeAllListeners('dom-ready');
         this.window.webContents.removeAllListeners('before-input-event');
       }
 
@@ -311,12 +355,65 @@ class ApplicationManager {
 
     this.window.on('closed', () => {
       logger.info('Window closed');
+      this.stopZoomEnforcement();
       this.window = null;
       mainWindow = null;
     });
 
     mainWindow = this.window;
     return this.window;
+  }
+
+  /**
+   * 强制应用缩放因子
+   * 这个方法会检查当前缩放是否正确，如果不正确则强制设置
+   */
+  private enforceZoomFactor(): void {
+    if (!this.window || this.window.isDestroyed()) return;
+    if (!this.window.webContents || this.window.webContents.isDestroyed()) return;
+    
+    try {
+      const currentZoom = this.window.webContents.getZoomFactor();
+      const diff = Math.abs(currentZoom - this.targetZoomFactor);
+      
+      // 如果差异超过 0.01，则强制设置
+      if (diff > 0.01) {
+        this.window.webContents.setZoomFactor(this.targetZoomFactor);
+        logger.info(`Enforced zoomFactor: ${currentZoom} -> ${this.targetZoomFactor}`);
+      }
+      
+      // 禁用视觉缩放（捏合缩放）
+      this.window.webContents.setVisualZoomLevelLimits(1, 1);
+    } catch (error) {
+      logger.error('Failed to enforce zoom factor:', error);
+    }
+  }
+
+  /**
+   * 启动缩放强制执行定时器
+   * 定期检查并强制应用正确的缩放因子
+   */
+  private startZoomEnforcement(): void {
+    // 先停止已有的定时器
+    this.stopZoomEnforcement();
+    
+    // 启动新的定时器
+    this.zoomEnforceInterval = setInterval(() => {
+      this.enforceZoomFactor();
+    }, this.ZOOM_ENFORCE_INTERVAL_MS);
+    
+    logger.info('Zoom enforcement started');
+  }
+
+  /**
+   * 停止缩放强制执行定时器
+   */
+  private stopZoomEnforcement(): void {
+    if (this.zoomEnforceInterval) {
+      clearInterval(this.zoomEnforceInterval);
+      this.zoomEnforceInterval = null;
+      logger.info('Zoom enforcement stopped');
+    }
   }
 
   /**
@@ -364,10 +461,10 @@ class ApplicationManager {
           { role: 'forceReload', label: '强制重新加载' },
           { role: 'toggleDevTools', label: '开发者工具' },
           { type: 'separator' },
-          { role: 'resetZoom', label: '实际大小' },
-          { role: 'zoomIn', label: '放大' },
-          { role: 'zoomOut', label: '缩小' },
-          { type: 'separator' },
+          // 移除缩放选项，防止用户手动更改缩放
+          // { role: 'resetZoom', label: '实际大小' },
+          // { role: 'zoomIn', label: '放大' },
+          // { role: 'zoomOut', label: '缩小' },
           { role: 'togglefullscreen', label: '全屏' },
         ],
       },
@@ -436,10 +533,13 @@ class ApplicationManager {
       const [width, height] = this.window.getSize();
       const newZoomFactor = this.calculateZoomFactor(width, height);
       
-      if (this.window.webContents) {
-        this.window.webContents.setZoomFactor(newZoomFactor);
-        logger.info(`Window resized to ${width}x${height}, new zoomFactor: ${newZoomFactor}`);
-      }
+      // 更新目标缩放因子
+      this.targetZoomFactor = newZoomFactor;
+      
+      // 立即应用
+      this.enforceZoomFactor();
+      
+      logger.info(`Window resized to ${width}x${height}, new targetZoomFactor: ${newZoomFactor}`);
     } catch (error) {
       logger.error('Failed to handle window resize:', error);
     }
@@ -459,11 +559,13 @@ class ApplicationManager {
       // 重新计算缩放因子
       const newZoomFactor = this.calculateZoomFactor(width, height);
       
-      logger.info(`Display changed, workArea: ${width}x${height}, new zoomFactor: ${newZoomFactor}`);
+      // 更新目标缩放因子
+      this.targetZoomFactor = newZoomFactor;
       
-      if (this.window.webContents) {
-        this.window.webContents.setZoomFactor(newZoomFactor);
-      }
+      logger.info(`Display changed, workArea: ${width}x${height}, new targetZoomFactor: ${newZoomFactor}`);
+      
+      // 立即应用
+      this.enforceZoomFactor();
     } catch (error) {
       logger.error('Failed to handle display change:', error);
     }
@@ -474,6 +576,9 @@ class ApplicationManager {
    */
   handleAppQuit(): void {
     logger.info('Application quitting...');
+    
+    // 停止缩放强制执行
+    this.stopZoomEnforcement();
     
     // 停止任务队列
     try {
