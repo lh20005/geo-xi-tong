@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { ipcBridge } from '../services/ipc';
 import { config } from '../config/env';
-import logoImg from '/images/logo.png';
+// 使用相对路径引用 public 目录中的图片
+const logoImg = './images/logo.png';
 import './Login.css';
 
 interface LoginProps {

@@ -1196,7 +1196,7 @@ export default function UserManualPage() {
                   }}
                 >
                   <img 
-                    src="/images/qrcode.jpg" 
+                    src="./images/qrcode.jpg" 
                     alt="客服微信二维码" 
                     style={{ 
                       width: 200, 

@@ -28,32 +28,32 @@ import ResizableTable from '../components/ResizableTable';
 
 const { Text } = Typography;
 
-// 平台图标映射 - 与平台管理页面保持一致
+// 平台图标映射 - 与平台管理页面保持一致（使用相对路径，兼容 Electron 打包）
 const getPlatformIcon = (platformId: string): string => {
-  // 特殊平台使用指定路径
+  // 特殊平台使用指定路径（使用相对路径 ./ 而非绝对路径 /）
   const specialIcons: Record<string, string> = {
-    'baijiahao': '/images/baijiahao.png',
-    'baidu': '/images/baijiahao.png',
-    'toutiao': '/images/toutiaohao.png',
-    'toutiaohao': '/images/toutiaohao.png',
-    'xiaohongshu': '/images/xiaohongshu.png',
-    'xhs': '/images/xiaohongshu.png',
-    'weixin': '/images/gongzhonghao.png',
-    'gongzhonghao': '/images/gongzhonghao.png',
-    'wechat': '/images/gongzhonghao.png',
-    'douyin': '/images/douyin.jpeg',
-    'sohu': '/images/souhu.jpeg',
-    'souhu': '/images/souhu.jpeg',
-    'wangyi': '/images/wangyi.png',
-    'netease': '/images/wangyi.png',
-    'bilibili': '/images/bili.png',
-    'bili': '/images/bili.png',
-    'qq': '/images/qie.png',
-    'qie': '/images/qie.png',
-    'penguin': '/images/qie.png',
-    'zhihu': '/images/zhihu.png',
-    'csdn': '/images/csdn.png',
-    'jianshu': '/images/jianshu.png'
+    'baijiahao': './images/baijiahao.png',
+    'baidu': './images/baijiahao.png',
+    'toutiao': './images/toutiaohao.png',
+    'toutiaohao': './images/toutiaohao.png',
+    'xiaohongshu': './images/xiaohongshu.png',
+    'xhs': './images/xiaohongshu.png',
+    'weixin': './images/gongzhonghao.png',
+    'gongzhonghao': './images/gongzhonghao.png',
+    'wechat': './images/gongzhonghao.png',
+    'douyin': './images/douyin.jpeg',
+    'sohu': './images/souhu.jpeg',
+    'souhu': './images/souhu.jpeg',
+    'wangyi': './images/wangyi.png',
+    'netease': './images/wangyi.png',
+    'bilibili': './images/bili.png',
+    'bili': './images/bili.png',
+    'qq': './images/qie.png',
+    'qie': './images/qie.png',
+    'penguin': './images/qie.png',
+    'zhihu': './images/zhihu.png',
+    'csdn': './images/csdn.png',
+    'jianshu': './images/jianshu.png'
   };
   
   if (specialIcons[platformId]) {
@@ -61,7 +61,7 @@ const getPlatformIcon = (platformId: string): string => {
   }
   
   // 其他平台使用默认路径
-  return `/platform-icons/${platformId}.png`;
+  return `./platform-icons/${platformId}.png`;
 };
 
 export default function PublishingTasksPage() {

@@ -28,7 +28,8 @@ import {
   MonitorOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
-import logoImg from '/images/logo.png';
+// 使用相对路径引用 public 目录中的图片
+const logoImg = './images/logo.png';
 
 const { Sider } = Layout;
 
