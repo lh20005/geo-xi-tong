@@ -55,3 +55,15 @@ screenshots/
 !client/public/**/*.png
 !landing/public/**/*.png
 node_modules
+
+# Installers and binary packages (Global)
+*.dmg
+*.pkg
+*.exe
+*.zip
+*.7z
+*.tar.gz
+*.rpm
+*.deb
+*.snap
+*.AppImage
