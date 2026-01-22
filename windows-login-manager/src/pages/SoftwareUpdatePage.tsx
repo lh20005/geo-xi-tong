@@ -214,24 +214,35 @@ const SoftwareUpdatePage = () => {
             <Space>
               <RocketOutlined />
               <span>新版本 {updateStatus.version}</span>
+              {updateStatus.releaseDate && (
+                <Text type="secondary" style={{ fontSize: 12, fontWeight: 'normal' }}>
+                  ({new Date(updateStatus.releaseDate).toLocaleDateString('zh-CN')})
+                </Text>
+              )}
             </Space>
           }
           style={{ marginTop: 16 }}
         >
           {updateStatus.releaseNotes ? (
             <div>
-              <Title level={5}>更新内容</Title>
-              <Paragraph style={{ whiteSpace: 'pre-wrap' }}>
-                {updateStatus.releaseNotes}
-              </Paragraph>
+              <Title level={5} style={{ marginBottom: 12 }}>更新内容</Title>
+              <div 
+                style={{ 
+                  maxHeight: 200, 
+                  overflowY: 'auto',
+                  padding: '12px 16px',
+                  backgroundColor: '#fafafa',
+                  borderRadius: 6,
+                  border: '1px solid #f0f0f0'
+                }}
+              >
+                <Paragraph style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                  {updateStatus.releaseNotes}
+                </Paragraph>
+              </div>
             </div>
           ) : (
             <Text type="secondary">暂无更新说明</Text>
-          )}
-          {updateStatus.releaseDate && (
-            <Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-              发布时间: {new Date(updateStatus.releaseDate).toLocaleString('zh-CN')}
-            </Text>
           )}
         </Card>
       );

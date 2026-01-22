@@ -112,6 +112,98 @@ function prepareBrowserForPlatform(platform) {
 }
 
 /**
+ * 验证打包后浏览器是否正确打入
+ */
+function verifyBrowserInPackage(platform) {
+  const config = PLATFORMS[platform];
+  const releaseDir = path.join(projectRoot, 'release');
+  
+  console.log(`\n🔍 验证 ${config.name} 包中的浏览器...`);
+  
+  let checkPath;
+  let expectedFile;
+  
+  if (platform === 'win') {
+    // Windows: 检查 win-unpacked 目录
+    checkPath = path.join(releaseDir, 'win-unpacked', 'resources', 'playwright-browsers');
+    expectedFile = path.join(checkPath, 'chromium-1200', 'chrome-win64', 'chrome.exe');
+  } else if (platform === 'mac-x64') {
+    // macOS Intel: 检查 mac 目录
+    const appName = 'Ai智软精准GEO优化系统.app';
+    checkPath = path.join(releaseDir, 'mac', appName, 'Contents', 'Resources', 'playwright-browsers');
+    expectedFile = path.join(checkPath, 'chromium-1200', 'chrome-mac-x64', 'Google Chrome for Testing.app');
+  } else if (platform === 'mac-arm') {
+    // macOS ARM: 检查 mac-arm64 目录
+    const appName = 'Ai智软精准GEO优化系统.app';
+    checkPath = path.join(releaseDir, 'mac-arm64', appName, 'Contents', 'Resources', 'playwright-browsers');
+    expectedFile = path.join(checkPath, 'chromium-1200', 'chrome-mac-arm64', 'Google Chrome for Testing.app');
+  }
+  
+  // 检查浏览器目录是否存在
+  if (!fs.existsSync(checkPath)) {
+    console.error(`   ❌ 浏览器目录不存在: ${checkPath}`);
+    return false;
+  }
+  
+  // 检查浏览器可执行文件/应用是否存在
+  if (!fs.existsSync(expectedFile)) {
+    console.error(`   ❌ 浏览器文件不存在: ${expectedFile}`);
+    return false;
+  }
+  
+  // 检查是否打入了错误平台的浏览器
+  const chromiumDir = path.join(checkPath, 'chromium-1200');
+  if (fs.existsSync(chromiumDir)) {
+    const contents = fs.readdirSync(chromiumDir);
+    
+    if (platform === 'win') {
+      // Windows 包不应该包含 mac 浏览器
+      if (contents.some(f => f.includes('mac'))) {
+        console.error(`   ❌ Windows 包中包含了 macOS 浏览器！`);
+        return false;
+      }
+      if (!contents.includes('chrome-win64')) {
+        console.error(`   ❌ Windows 包中缺少 chrome-win64 目录！`);
+        return false;
+      }
+    } else if (platform === 'mac-x64') {
+      // macOS Intel 包应该只包含 x64 浏览器
+      if (contents.includes('chrome-win64')) {
+        console.error(`   ❌ macOS Intel 包中包含了 Windows 浏览器！`);
+        return false;
+      }
+      if (contents.includes('chrome-mac-arm64')) {
+        console.error(`   ❌ macOS Intel 包中包含了 ARM 浏览器！`);
+        return false;
+      }
+      if (!contents.includes('chrome-mac-x64')) {
+        console.error(`   ❌ macOS Intel 包中缺少 chrome-mac-x64 目录！`);
+        return false;
+      }
+    } else if (platform === 'mac-arm') {
+      // macOS ARM 包应该只包含 arm64 浏览器
+      if (contents.includes('chrome-win64')) {
+        console.error(`   ❌ macOS ARM 包中包含了 Windows 浏览器！`);
+        return false;
+      }
+      if (contents.includes('chrome-mac-x64')) {
+        console.error(`   ❌ macOS ARM 包中包含了 Intel 浏览器！`);
+        return false;
+      }
+      if (!contents.includes('chrome-mac-arm64')) {
+        console.error(`   ❌ macOS ARM 包中缺少 chrome-mac-arm64 目录！`);
+        return false;
+      }
+    }
+    
+    console.log(`   ✅ 浏览器目录内容: ${contents.join(', ')}`);
+  }
+  
+  console.log(`   ✅ 浏览器验证通过: ${expectedFile}`);
+  return true;
+}
+
+/**
  * 执行打包
  */
 function buildPlatform(platform) {
@@ -158,6 +250,14 @@ function buildPlatform(platform) {
     });
     
     console.log(`\n✅ ${config.name} 打包完成！`);
+    
+    // 验证浏览器是否正确打入包中
+    const verified = verifyBrowserInPackage(platform);
+    if (!verified) {
+      console.error(`\n❌ ${config.name} 浏览器验证失败！请检查打包配置。`);
+      return false;
+    }
+    
     return true;
   } catch (error) {
     console.error(`\n❌ ${config.name} 打包失败:`, error.message);

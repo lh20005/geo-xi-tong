@@ -486,6 +486,12 @@ export class AutoUpdater {
 
   /**
    * 安装更新（退出并安装）
+   * 
+   * Windows 更新流程：
+   * 1. 停止所有后台任务（任务队列、浏览器）
+   * 2. 断开 WebSocket 连接
+   * 3. 关闭所有窗口
+   * 4. 调用 quitAndInstall
    */
   public installUpdate(): { success: boolean; message: string } {
     if (this.currentStatus.status !== 'downloaded') {
@@ -494,13 +500,73 @@ export class AutoUpdater {
 
     try {
       this.logger.info('Installing update and restarting');
-      // 设置为 false 表示不静默安装，true 表示安装后强制重启
-      autoUpdater.quitAndInstall(false, true);
+      
+      // 1. 先进行清理工作
+      this.prepareForUpdate();
+      
+      // 2. 延迟执行 quitAndInstall，给清理工作足够时间
+      setTimeout(() => {
+        this.logger.info('Executing quitAndInstall...');
+        // isSilent=true: 静默安装，不显示安装界面
+        // isForceRunAfter=true: 安装后强制启动应用
+        // 注意：在 Windows 上，NSIS 安装程序会先尝试关闭应用
+        autoUpdater.quitAndInstall(true, true);
+      }, 1000);
+      
       return { success: true, message: '正在安装更新...' };
     } catch (err) {
       const error = err as Error;
       this.logger.error('Failed to install update:', error);
       return { success: false, message: error.message || '安装更新失败' };
+    }
+  }
+
+  /**
+   * 准备更新：清理所有后台资源
+   */
+  private prepareForUpdate(): void {
+    this.logger.info('Preparing for update: cleaning up resources...');
+    
+    try {
+      // 停止定期检查更新
+      this.stopPeriodicCheck();
+      
+      // 导入并停止任务队列
+      const { taskQueue } = require('../publishing/taskQueue');
+      taskQueue.stop();
+      this.logger.info('Task queue stopped');
+      
+      // 导入并强制关闭浏览器
+      const { browserAutomationService } = require('../publishing/browser');
+      browserAutomationService.forceCloseBrowser().catch((err: Error) => {
+        this.logger.error('Failed to close browser:', err);
+      });
+      this.logger.info('Browser cleanup initiated');
+      
+      // 导入并断开 WebSocket 连接
+      const { wsManager } = require('../websocket/manager');
+      wsManager.disconnect();
+      this.logger.info('WebSocket disconnected');
+      
+      // 断开用户管理 WebSocket
+      const { userWsManager } = require('../websocket/userManager');
+      userWsManager.disconnect();
+      this.logger.info('User WebSocket disconnected');
+      
+      // 关闭主窗口
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.destroy();
+        this.logger.info('Main window destroyed');
+      }
+      
+      // 释放单实例锁，允许安装程序启动新实例
+      app.releaseSingleInstanceLock();
+      this.logger.info('Single instance lock released');
+      
+      this.logger.info('Resource cleanup completed');
+    } catch (error) {
+      this.logger.error('Error during update preparation:', error);
+      // 即使清理失败，也继续尝试更新
     }
   }
 

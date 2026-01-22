@@ -4,7 +4,7 @@
 
 ### 当前版本
 ```
-1.2.2
+1.2.5
 ```
 
 ### 版本号规则（语义化版本）
@@ -17,6 +17,9 @@
 ### 版本历史
 | 版本 | 发布日期 | 类型 | 说明 |
 |------|----------|------|------|
+| 1.2.5 | 2026-01-22 | Patch | 修复 Windows 安装时"无法关闭"问题（增强进程关闭机制） |
+| 1.2.4 | 2026-01-22 | Patch | 优化升级软件页面更新内容显示 |
+| 1.2.3 | 2026-01-22 | Patch | 修复 Windows 更新时"无法关闭"问题 |
 | 1.2.2 | 2026-01-22 | Patch | 修复内置浏览器无法正确加载的问题 |
 | 1.2.1 | 2026-01-22 | Patch | 内置 Chromium 浏览器、修复缩放和下载链接问题 |
 | 1.2.0 | 2026-01-22 | Minor | 新增发布平台支持 |
@@ -72,12 +75,9 @@
 ```bash
 cd windows-login-manager
 
-# 打包所有平台（推荐）
-npm run build:all
 
-# 或分别打包
+# 必须打包，每个软件包必须分别打包
 npm run build:win      # Windows x64
-npm run build:mac      # macOS (Intel + Apple Silicon，同时生成 dmg 和 zip)
 npm run build:mac-x64  # macOS Intel 单独
 npm run build:mac-arm  # macOS Apple Silicon 单独
 ```

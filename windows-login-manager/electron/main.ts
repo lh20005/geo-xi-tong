@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, screen } from 'electron';
+import { app, BrowserWindow, Menu, screen, shell } from 'electron';
 import path from 'path';
 import { ipcHandler } from './ipc/handler';
 import { Logger } from './logger/logger';
@@ -214,12 +214,44 @@ class ApplicationManager {
       
       // 应用缩放因子
       if (this.window?.webContents) {
-        this.window.webContents.setZoomFactor(zoomFactor);
-        logger.info(`Applied zoomFactor: ${zoomFactor}`);
+        if (!this.window.webContents.isDestroyed()) {
+          this.window.webContents.setZoomFactor(zoomFactor);
+          // 禁用视觉缩放（捏合缩放）
+          this.window.webContents.setVisualZoomLevelLimits(1, 1);
+          logger.info(`Applied zoomFactor: ${zoomFactor}`);
+        }
       }
       
       // 显示窗口
       this.window?.show();
+    });
+
+    // 监听页面加载完成，重新应用缩放（防止被重置）
+    this.window.webContents.on('did-finish-load', () => {
+      // 安全检查：如果窗口已销毁，直接返回
+      if (!this.window || this.window.isDestroyed()) return;
+      if (this.window.webContents.isDestroyed()) return;
+      
+      try {
+        const [width, height] = this.window.getSize();
+        const currentZoom = this.calculateZoomFactor(width, height);
+        this.window.webContents.setZoomFactor(currentZoom);
+        logger.info(`Page loaded, re-applied zoomFactor: ${currentZoom}`);
+      } catch (error) {
+        logger.error('Failed to re-apply zoom factor on load:', error);
+      }
+    });
+
+    // 拦截缩放快捷键 (Ctrl+0, Ctrl+, Ctrl-, Ctrl+=)
+    this.window.webContents.on('before-input-event', (event, input) => {
+      if (this.window?.webContents.isDestroyed()) return;
+      
+      if (input.control || input.meta) {
+        if (['0', '-', '=', '+'].includes(input.key)) {
+          event.preventDefault();
+          logger.info(`Prevented zoom shortcut: ${input.key}`);
+        }
+      }
     });
     
     // 监听窗口大小变化，动态调整缩放
@@ -264,6 +296,12 @@ class ApplicationManager {
 
     // 窗口关闭事件
     this.window.on('close', (event) => {
+      // 移除事件监听器，防止内存泄漏或销毁后访问
+      if (this.window && !this.window.isDestroyed() && this.window.webContents) {
+        this.window.webContents.removeAllListeners('did-finish-load');
+        this.window.webContents.removeAllListeners('before-input-event');
+      }
+
       if (!this.isQuitting && process.platform === 'darwin') {
         event.preventDefault();
         this.window?.hide();
@@ -345,7 +383,6 @@ class ApplicationManager {
           {
             label: '查看日志',
             click: () => {
-              const { shell } = require('electron');
               shell.openPath(logger.getLogPath());
               logger.info('Opening logs folder');
             },
@@ -446,21 +483,39 @@ class ApplicationManager {
       logger.error('Failed to stop task queue:', error);
     }
     
-    // 断开WebSocket连接
-    try {
-      wsManager.disconnect();
-      logger.info('WebSocket disconnected');
-    } catch (error) {
-      logger.error('Failed to disconnect WebSocket:', error);
-    }
+    // 导入并强制关闭浏览器
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { browserAutomationService } = require('./publishing/browser');
+        if (browserAutomationService) {
+            browserAutomationService.forceCloseBrowser().catch((err: Error) => {
+                logger.error('Failed to force close browser:', err);
+            });
+            logger.info('Browser force close initiated');
+        }
+      } catch (err) {
+        logger.error('Failed to load browser service for cleanup:', err);
+      }
     
-    // 断开用户管理WebSocket连接
-    try {
-      userWsManager.disconnect();
-      logger.info('User WebSocket disconnected');
-    } catch (error) {
-      logger.error('Failed to disconnect User WebSocket:', error);
-    }
+    // 导入并断开 WebSocket 连接
+      try {
+        if (wsManager) {
+            wsManager.disconnect();
+            logger.info('WebSocket disconnected');
+        }
+      } catch (error) {
+        logger.error('Failed to disconnect WebSocket:', error);
+      }
+    
+    // 导入并断开用户管理 WebSocket 连接
+      try {
+        if (userWsManager) {
+            userWsManager.disconnect();
+            logger.info('User WebSocket disconnected');
+        }
+      } catch (error) {
+        logger.error('Failed to disconnect User WebSocket:', error);
+      }
     
     // 清理资源
     if (this.window && !this.window.isDestroyed()) {
