@@ -1,5 +1,5 @@
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater';
-import { dialog, BrowserWindow, ipcMain, app, Notification } from 'electron';
+import { dialog, BrowserWindow, ipcMain, app, Notification, net } from 'electron';
 import { Logger } from '../logger/logger';
 import log from 'electron-log';
 
@@ -27,6 +27,18 @@ export interface UpdateInfoResult {
     arch: string;
     displayName: string;
   };
+}
+
+// macOS latest-mac.yml 文件结构
+interface MacUpdateYml {
+  version: string;
+  releaseDate?: string;
+  releaseNotes?: string;
+  files: Array<{
+    url: string;
+    sha512: string;
+    size: number;
+  }>;
 }
 
 /**
@@ -234,6 +246,8 @@ export class AutoUpdater {
 
   /**
    * 检查更新
+   * macOS: 由于没有签名，使用自定义 HTTP 请求检查 latest-mac.yml
+   * Windows: 使用标准的 electron-updater
    */
   public async checkForUpdates(): Promise<{ success: boolean; message: string; updateAvailable?: boolean }> {
     if (process.env.NODE_ENV === 'development') {
@@ -245,6 +259,12 @@ export class AutoUpdater {
       };
     }
 
+    // macOS: 使用自定义检查逻辑绕过签名验证
+    if (process.platform === 'darwin') {
+      return await this.checkForUpdatesMacOS();
+    }
+
+    // Windows: 使用标准的 electron-updater
     try {
       this.logger.info('Manually checking for updates');
       const result = await autoUpdater.checkForUpdates();
@@ -267,6 +287,182 @@ export class AutoUpdater {
       this.logger.error('Failed to check for updates:', error);
       return { success: false, message: error.message || '检查更新失败' };
     }
+  }
+
+  /**
+   * macOS 专用：通过 HTTP 请求检查更新
+   * 绕过 electron-updater 的签名验证
+   */
+  private async checkForUpdatesMacOS(): Promise<{ success: boolean; message: string; updateAvailable?: boolean }> {
+    this.logger.info('macOS: Checking for updates via HTTP...');
+    
+    this.updateStatus({
+      status: 'checking',
+      message: '正在检查更新...'
+    });
+
+    try {
+      const ymlUrl = `${this.feedUrl}/latest-mac.yml`;
+      this.logger.info(`Fetching: ${ymlUrl}`);
+      
+      const ymlContent = await this.fetchUrl(ymlUrl);
+      const updateInfo = this.parseSimpleYaml(ymlContent);
+      
+      if (!updateInfo || !updateInfo.version) {
+        throw new Error('无法解析更新信息');
+      }
+
+      const currentVersion = this.getCurrentVersion();
+      const latestVersion = updateInfo.version;
+      const updateAvailable = this.compareVersions(latestVersion, currentVersion) > 0;
+
+      this.logger.info(`Current: ${currentVersion}, Latest: ${latestVersion}, Update available: ${updateAvailable}`);
+
+      // 保存更新信息供后续使用
+      this.latestUpdateInfo = {
+        version: latestVersion,
+        releaseDate: updateInfo.releaseDate || new Date().toISOString(),
+        releaseNotes: updateInfo.releaseNotes || '',
+        files: [],
+        path: '',
+        sha512: ''
+      } as UpdateInfo;
+
+      if (updateAvailable) {
+        this.updateStatus({
+          status: 'available',
+          message: `发现新版本 ${latestVersion}`,
+          version: latestVersion,
+          releaseNotes: updateInfo.releaseNotes || '',
+          releaseDate: updateInfo.releaseDate
+        });
+        return {
+          success: true,
+          message: `发现新版本 ${latestVersion}`,
+          updateAvailable: true
+        };
+      } else {
+        this.updateStatus({
+          status: 'not-available',
+          message: '当前已是最新版本',
+          version: currentVersion
+        });
+        return {
+          success: true,
+          message: '当前已是最新版本',
+          updateAvailable: false
+        };
+      }
+    } catch (err) {
+      const error = err as Error;
+      this.logger.error('macOS update check failed:', error);
+      
+      this.updateStatus({
+        status: 'error',
+        message: '更新检查失败',
+        error: error.message
+      });
+      
+      return { 
+        success: false, 
+        message: error.message || '检查更新失败' 
+      };
+    }
+  }
+
+  /**
+   * 简单的 YAML 解析器（仅支持 latest-mac.yml 格式）
+   */
+  private parseSimpleYaml(content: string): MacUpdateYml {
+    const result: MacUpdateYml = {
+      version: '',
+      releaseDate: '',
+      releaseNotes: '',
+      files: []
+    };
+
+    const lines = content.split('\n');
+    let inReleaseNotes = false;
+    let releaseNotesLines: string[] = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      
+      // 检测 releaseNotes 多行字符串
+      if (trimmed.startsWith('releaseNotes:')) {
+        const value = trimmed.substring('releaseNotes:'.length).trim();
+        if (value.startsWith('|') || value.startsWith('>')) {
+          inReleaseNotes = true;
+          continue;
+        } else if (value) {
+          // 单行 releaseNotes，去掉引号
+          result.releaseNotes = value.replace(/^["']|["']$/g, '');
+        }
+        continue;
+      }
+
+      // 处理多行 releaseNotes
+      if (inReleaseNotes) {
+        if (line.startsWith('  ') || line.startsWith('\t')) {
+          releaseNotesLines.push(line.substring(2) || line.substring(1));
+        } else if (trimmed && !trimmed.startsWith('-')) {
+          inReleaseNotes = false;
+          result.releaseNotes = releaseNotesLines.join('\n').trim();
+        }
+      }
+
+      // 解析 version
+      if (trimmed.startsWith('version:')) {
+        result.version = trimmed.substring('version:'.length).trim().replace(/^["']|["']$/g, '');
+      }
+
+      // 解析 releaseDate
+      if (trimmed.startsWith('releaseDate:')) {
+        result.releaseDate = trimmed.substring('releaseDate:'.length).trim().replace(/^["']|["']$/g, '');
+      }
+    }
+
+    // 如果还在处理 releaseNotes，保存它
+    if (inReleaseNotes && releaseNotesLines.length > 0) {
+      result.releaseNotes = releaseNotesLines.join('\n').trim();
+    }
+
+    return result;
+  }
+
+  /**
+   * 使用 Electron net 模块获取 URL 内容
+   */
+  private fetchUrl(url: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const request = net.request(url);
+      let data = '';
+
+      request.on('response', (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`HTTP ${response.statusCode}: 无法获取更新信息`));
+          return;
+        }
+
+        response.on('data', (chunk) => {
+          data += chunk.toString();
+        });
+
+        response.on('end', () => {
+          resolve(data);
+        });
+
+        response.on('error', (error: Error) => {
+          reject(error);
+        });
+      });
+
+      request.on('error', (error: Error) => {
+        reject(error);
+      });
+
+      request.end();
+    });
   }
 
   /**

@@ -263,13 +263,52 @@ export class PublishingService {
     status: PublishingTask['status'],
     errorMessage?: string
   ): Promise<void> {
+    // 防止并发执行：如果尝试将状态更新为 running，使用原子更新确保唯一性
+    if (status === 'running') {
+      // 使用带条件的 UPDATE 语句，确保同一用户同一时间只有一个任务在运行
+      // 这里的逻辑是：只有当该用户没有其他 running 状态的任务时，才允许更新当前任务为 running
+      const result = await pool.query(
+        `UPDATE publishing_tasks 
+         SET status = 'running', 
+             started_at = CURRENT_TIMESTAMP, 
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1 
+           AND NOT EXISTS (
+             SELECT 1 FROM publishing_tasks 
+             WHERE user_id = (SELECT user_id FROM publishing_tasks WHERE id = $1) 
+             AND status = 'running' 
+             AND id != $1
+           )
+         RETURNING id`,
+        [taskId]
+      );
+
+      if (result.rows.length === 0) {
+        // 更新失败，需要区分是任务不存在还是并发冲突
+        const check = await pool.query('SELECT status FROM publishing_tasks WHERE id = $1', [taskId]);
+        
+        if (check.rows.length === 0) {
+          throw new Error('任务不存在');
+        }
+        
+        // 如果当前任务已经是 running，则认为是幂等操作，不报错
+        if (check.rows[0].status === 'running') {
+          return;
+        }
+        
+        // 否则，说明有其他任务正在运行
+        throw new Error('并发控制：当前已有正在执行的任务，请等待其完成');
+      }
+      
+      // 更新成功，直接返回
+      return;
+    }
+
     const updates: string[] = ['status = $1', 'updated_at = CURRENT_TIMESTAMP'];
     const params: any[] = [status];
     let paramIndex = 2;
 
-    if (status === 'running') {
-      updates.push(`started_at = CURRENT_TIMESTAMP`);
-    }
+
 
     if (status === 'success' || status === 'failed' || status === 'cancelled') {
       updates.push(`completed_at = CURRENT_TIMESTAMP`);

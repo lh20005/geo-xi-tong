@@ -54,3 +54,6 @@ test-data/
 # Temporary files
 .tmp/
 temp/
+
+# Packaging History
+打包历史/

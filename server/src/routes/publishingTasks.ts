@@ -206,6 +206,26 @@ router.get('/tasks', async (req, res) => {
       paramIndex++;
     }
 
+    // 并发控制：如果是查询待执行任务（status=pending），且当前有正在运行的任务，则暂时返回空列表
+    // 这可以防止多个客户端（或同一客户端的多个进程）同时拉取任务并尝试执行
+    // 注意：如果是查询特定 batch_id，则不拦截，因为 BatchExecutor 需要获取批次内所有任务
+    if (status === 'pending' && !batch_id) {
+      const runningRes = await pool.query(
+        "SELECT id FROM publishing_tasks WHERE user_id = $1 AND status = 'running' LIMIT 1",
+        [userId]
+      );
+      if (runningRes.rows.length > 0) {
+        console.log(`[并发控制] 用户 #${userId} 有任务正在运行，暂不返回 pending 任务列表`);
+        return res.json({
+          success: true,
+          data: {
+            tasks: [],
+            total: 0
+          }
+        });
+      }
+    }
+
     const whereClause = `WHERE ${conditions.join(' AND ')}`;
 
     // 获取总数

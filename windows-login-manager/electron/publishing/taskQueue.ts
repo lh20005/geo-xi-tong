@@ -1,6 +1,11 @@
 /**
  * 任务队列
  * 本地发布模块 - 负责检查和执行定时任务（包括批次任务）
+ * 
+ * 核心规则：
+ * 1. 任务必须串行执行
+ * 2. batchExecutor 内部使用 Promise 链保证串行
+ * 3. 本模块只负责触发执行，不负责串行控制
  */
 
 import { BrowserWindow } from 'electron';
@@ -11,7 +16,6 @@ import { LocalTask, QueueStatusEvent } from './types';
 
 /**
  * 任务队列
- * 负责检查和执行定时任务（包括批次任务）
  */
 export class TaskQueue {
   private intervalId: NodeJS.Timeout | null = null;
@@ -19,6 +23,8 @@ export class TaskQueue {
   private checkInterval = 10000; // 每10秒检查一次
   private executingTasks: Set<number> = new Set();
   private mainWindow: BrowserWindow | null = null;
+  // 单任务执行锁
+  private singleTaskExecuting = false;
 
   /**
    * 设置主窗口（用于发送 IPC 消息）
@@ -192,23 +198,34 @@ export class TaskQueue {
       const tasks = response.data.data.tasks as LocalTask[];
       
       // 找出所有有 batch_id 的任务，按批次分组
-      const batchIds = new Set<string>();
+      const batchMap = new Map<string, { createdAt: Date; tasks: LocalTask[] }>();
       for (const task of tasks) {
         if (task.batch_id) {
-          batchIds.add(task.batch_id);
+          if (!batchMap.has(task.batch_id)) {
+            batchMap.set(task.batch_id, {
+              createdAt: new Date(task.created_at ?? Date.now()),
+              tasks: []
+            });
+          }
+          const batch = batchMap.get(task.batch_id)!;
+          batch.tasks.push(task);
+          const taskCreatedAt = new Date(task.created_at ?? Date.now());
+          if (taskCreatedAt < batch.createdAt) {
+            batch.createdAt = taskCreatedAt;
+          }
         }
       }
 
-      if (batchIds.size > 0) {
-        // 只执行第一个批次（队列模式）
-        const batchId = Array.from(batchIds)[0];
+      if (batchMap.size > 0) {
+        // 按创建时间排序，获取最早创建的批次
+        const sortedBatches = Array.from(batchMap.entries())
+          .sort((a, b) => a[1].createdAt.getTime() - b[1].createdAt.getTime());
         
-        console.log(`🚀 开始执行队列中的第一个批次: ${batchId}`);
-        if (batchIds.size > 1) {
-          console.log(`📋 剩余 ${batchIds.size - 1} 个批次在队列中等待`);
-        }
+        const [batchId] = sortedBatches[0];
         
-        // 异步执行批次
+        console.log(`🚀 开始执行队列中的批次: ${batchId}`);
+        
+        // 执行批次（batchExecutor 内部会处理串行）
         batchExecutor.executeBatch(batchId).catch(error => {
           console.error(`批次 ${batchId} 执行失败:`, error);
         });
@@ -225,13 +242,23 @@ export class TaskQueue {
    */
   private async checkAndExecuteTasks(): Promise<void> {
     try {
-      // 0. 检测超时任务（最优先）
+      // 0. 检测超时任务
       await this.detectTimeoutTasks();
 
       // 1. 检查批次任务
       await this.checkAndExecuteBatches();
 
-      // 2. 检查普通定时任务（没有 batch_id 的任务）
+      // 2. 如果有批次在执行，不执行普通任务
+      if (batchExecutor.isExecuting()) {
+        return;
+      }
+
+      // 3. 如果有单任务在执行，不启动新任务
+      if (this.singleTaskExecuting) {
+        return;
+      }
+
+      // 4. 检查普通定时任务（没有 batch_id 的任务）
       const response = await apiClient.get('/api/publishing/tasks', {
         params: { status: 'pending' }
       });
@@ -245,49 +272,41 @@ export class TaskQueue {
       // 过滤出非批次任务且已到执行时间的任务
       const now = new Date();
       const pendingTasks = tasks.filter(task => {
-        // 跳过批次任务
         if (task.batch_id) return false;
-        
-        // 检查是否已到执行时间
         if (task.scheduled_at) {
-          const scheduledTime = new Date(task.scheduled_at);
-          return scheduledTime <= now;
+          return new Date(task.scheduled_at) <= now;
         }
-        
-        // 没有定时时间的任务立即执行
         return true;
       });
 
-      if (pendingTasks.length > 0) {
-        // 统计重试任务和新任务
-        const retryTasks = pendingTasks.filter(t => t.retry_count > 0);
-        const newTasks = pendingTasks.filter(t => t.retry_count === 0);
-        
-        if (retryTasks.length > 0) {
-          console.log(`🔄 发现 ${retryTasks.length} 个重试任务`);
-        }
-        if (newTasks.length > 0) {
-          console.log(`📋 发现 ${newTasks.length} 个新任务`);
-        }
-
-        for (const task of pendingTasks) {
-          // 避免重复执行
-          if (this.executingTasks.has(task.id)) {
-            continue;
-          }
-
-          this.executingTasks.add(task.id);
-          
-          const taskType = task.retry_count > 0 ? '重试' : '新';
-          console.log(`▶️  开始执行${taskType}任务 #${task.id} (重试次数: ${task.retry_count}/${task.max_retries})`);
-
-          // 异步执行任务，不阻塞其他任务
-          publishingExecutor.executeTask(task.id)
-            .finally(() => {
-              this.executingTasks.delete(task.id);
-            });
-        }
+      if (pendingTasks.length === 0) {
+        return;
       }
+
+      // 按创建时间排序
+      pendingTasks.sort((a, b) => {
+        const timeA = new Date(a.created_at ?? Date.now()).getTime();
+        const timeB = new Date(b.created_at ?? Date.now()).getTime();
+        return timeA - timeB;
+      });
+
+      // 只执行第一个任务
+      const task = pendingTasks[0];
+      
+      if (this.executingTasks.has(task.id)) {
+        return;
+      }
+
+      this.executingTasks.add(task.id);
+      this.singleTaskExecuting = true;
+      
+      console.log(`▶️  开始执行任务 #${task.id}`);
+
+      publishingExecutor.executeTask(task.id)
+        .finally(() => {
+          this.executingTasks.delete(task.id);
+          this.singleTaskExecuting = false;
+        });
     } catch (error) {
       console.error('❌ 检查定时任务失败:', error);
     }
@@ -298,17 +317,25 @@ export class TaskQueue {
    */
   async executeTask(taskId: number): Promise<{ success: boolean; error?: string }> {
     try {
-      // 检查任务是否已在执行
+      if (batchExecutor.isExecuting()) {
+        return { success: false, error: '有批次正在执行中，请等待完成' };
+      }
+
+      if (this.singleTaskExecuting) {
+        return { success: false, error: '有任务正在执行中，请等待完成' };
+      }
+
       if (this.executingTasks.has(taskId)) {
         return { success: false, error: '任务正在执行中' };
       }
 
       this.executingTasks.add(taskId);
+      this.singleTaskExecuting = true;
       
-      // 异步执行任务
       publishingExecutor.executeTask(taskId)
         .finally(() => {
           this.executingTasks.delete(taskId);
+          this.singleTaskExecuting = false;
         });
 
       return { success: true };
@@ -322,16 +349,21 @@ export class TaskQueue {
    */
   async executeBatch(batchId: string): Promise<{ success: boolean; error?: string }> {
     try {
-      // 检查是否有批次正在执行
       if (batchExecutor.isExecuting()) {
-        const executing = batchExecutor.getExecutingBatches();
         return { 
           success: false, 
-          error: `有批次正在执行中: ${executing.join(', ')}` 
+          error: `有批次正在执行中: ${batchExecutor.getExecutingBatches().join(', ')}` 
         };
       }
 
-      // 异步执行批次
+      if (this.singleTaskExecuting) {
+        return { 
+          success: false, 
+          error: '有任务正在执行中，请等待完成' 
+        };
+      }
+
+      // 执行批次
       batchExecutor.executeBatch(batchId).catch(error => {
         console.error(`批次 ${batchId} 执行失败:`, error);
       });

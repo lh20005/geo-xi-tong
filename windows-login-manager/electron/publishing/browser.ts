@@ -65,6 +65,14 @@ export class BrowserAutomationService {
     const opts = { ...this.defaultOptions, ...options };
 
     try {
+      // 如果浏览器已经在运行，先关闭它
+      if (this.browser) {
+        this.log('warning', '⚠️ 检测到浏览器已在运行，先关闭旧实例...');
+        await this.forceCloseBrowser();
+        // 等待一小段时间确保资源完全释放
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
       // 使用统一的浏览器配置
       const launchOptions = getStandardBrowserConfig({
         headless: opts.headless

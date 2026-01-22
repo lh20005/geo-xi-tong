@@ -1,3 +1,7 @@
+// 备份时间: 2026-01-22
+// 原路径: windows-login-manager/src/components/Publishing/PublishingConfigModal.tsx
+// 删除原因: 未被使用的冗余代码，Electron 应用中所有发布任务都通过 PublishingTasksPage 完成
+
 import { useState, useEffect } from 'react';
 import { Modal, Form, Select, DatePicker, Input, Space, message, Alert, Tag, Table, Checkbox, Typography } from 'antd';
 import { ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
@@ -286,7 +290,7 @@ export default function PublishingConfigModal({
       onCancel={handleCancel}
       confirmLoading={loading}
       width={1200}
-      destroyOnClose
+      destroyOnHidden
       okText={`创建发布任务 ${selectedArticleIds.size > 0 ? `(${selectedArticleIds.size} 篇)` : ''}`}
       cancelText="取消"
       okButtonProps={{ disabled: selectedArticleIds.size === 0 }}

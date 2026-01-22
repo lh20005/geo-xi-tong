@@ -1,3 +1,7 @@
+// 备份时间: 2026-01-22
+// 原路径: client/src/components/Publishing/PublishingConfigModal.tsx
+// 删除原因: Web 端发布功能已废弃，所有发布任务统一通过 Electron 桌面应用的 PublishingTasksPage 完成
+
 import { useState, useEffect } from 'react';
 import { Modal, Form, Select, DatePicker, Input, Space, message, Alert, Tag, Table, Checkbox, Typography } from 'antd';
 import { ClockCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
@@ -286,7 +290,7 @@ export default function PublishingConfigModal({
       onCancel={handleCancel}
       confirmLoading={loading}
       width={1200}
-      destroyOnHidden
+      destroyOnClose
       okText={`创建发布任务 ${selectedArticleIds.size > 0 ? `(${selectedArticleIds.size} 篇)` : ''}`}
       cancelText="取消"
       okButtonProps={{ disabled: selectedArticleIds.size === 0 }}
