@@ -236,8 +236,15 @@ class APIClient {
         expiresIn,
         user
       };
-    } catch (error) {
+    } catch (error: any) {
       log.error('Login failed:', error);
+      // 提取服务器返回的错误消息
+      const serverMessage = error.response?.data?.message;
+      if (serverMessage) {
+        const customError = new Error(serverMessage);
+        (customError as any).response = error.response;
+        throw customError;
+      }
       throw error;
     }
   }
