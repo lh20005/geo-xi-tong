@@ -131,6 +131,11 @@ export default function Sidebar({ onLogout }: SidebarProps) {
       label: '工作台',
     },
     {
+      key: '/user-manual',
+      icon: <BookOutlined />,
+      label: '使用说明书',
+    },
+    {
       key: '/conversion-targets',
       icon: <AimOutlined />,
       label: '转化目标',
@@ -256,11 +261,6 @@ export default function Sidebar({ onLogout }: SidebarProps) {
         },
       ],
     }] : []),
-    {
-      key: '/user-manual',
-      icon: <BookOutlined />,
-      label: '使用说明书',
-    },
     {
       key: '/user-center',
       icon: <UserOutlined />,

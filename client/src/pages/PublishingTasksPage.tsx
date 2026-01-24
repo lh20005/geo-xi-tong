@@ -1085,10 +1085,7 @@ export default function PublishingTasksPage() {
           <Col flex="auto">
             <div style={{ marginBottom: 16 }}>
               <Text style={{ color: '#fff', fontSize: 18, fontWeight: 600, display: 'block', marginBottom: 8 }}>
-                🚀 网页端发布功能正在建设中
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
-                我们正在努力开发网页端的任务发布功能，敬请期待！目前请下载桌面版软件体验完整的发布功能。
+                🚀 网页端发布功能正在建设中，请下载桌面端操作发布文章功能
               </Text>
             </div>
             
