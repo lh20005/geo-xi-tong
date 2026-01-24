@@ -35,6 +35,7 @@ const { RangePicker } = DatePicker;
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [timeRange, setTimeRange] = useState<TimeRange>({
     startDate: dayjs().subtract(30, 'days').format('YYYY-MM-DD'),
     endDate: dayjs().format('YYYY-MM-DD'),
@@ -45,6 +46,13 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 数据获取函数
   const loadData = useCallback(async () => {
@@ -117,48 +125,52 @@ export default function Dashboard() {
       <div style={{ 
         background: '#fff',
         borderBottom: '1px solid #e8e8e8',
-        padding: '16px 32px',
+        padding: isMobile ? '12px 16px' : '16px 32px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
       }}>
         <div style={{ 
           display: 'flex', 
+          flexDirection: isMobile ? 'column' : 'row',
           justifyContent: 'space-between', 
-          alignItems: 'center',
+          alignItems: isMobile ? 'stretch' : 'center',
+          gap: isMobile ? 12 : 0,
           maxWidth: 1600,
           margin: '0 auto'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <DashboardOutlined style={{ fontSize: 28, color: '#1890ff' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <DashboardOutlined style={{ fontSize: isMobile ? 24 : 28, color: '#1890ff' }} />
             <div>
-              <Title level={3} style={{ margin: 0, color: '#262626', fontWeight: 600 }}>
+              <Title level={isMobile ? 4 : 3} style={{ margin: 0, color: '#262626', fontWeight: 600 }}>
                 数据工作台
               </Title>
-              <Text type="secondary" style={{ fontSize: 13 }}>
-                实时监控 · 数据分析 · 运营决策
-                {lastUpdate && (
-                  <span style={{ marginLeft: 12, color: '#52c41a' }}>
-                    ● 最后更新: {dayjs(lastUpdate).format('HH:mm:ss')}
-                  </span>
-                )}
-              </Text>
+              {!isMobile && (
+                <Text type="secondary" style={{ fontSize: 13 }}>
+                  实时监控 · 数据分析 · 运营决策
+                  {lastUpdate && (
+                    <span style={{ marginLeft: 12, color: '#52c41a' }}>
+                      ● 最后更新: {dayjs(lastUpdate).format('HH:mm:ss')}
+                    </span>
+                  )}
+                </Text>
+              )}
             </div>
           </div>
           
-          <Space size="middle">
+          <Space size="small" wrap style={{ justifyContent: isMobile ? 'space-between' : 'flex-end' }}>
             <Select
               value={timeRange.preset}
               onChange={(value) => handleTimeRangeChange(value as any)}
-              style={{ width: 130 }}
-              size="large"
+              style={{ width: isMobile ? 100 : 130 }}
+              size={isMobile ? 'middle' : 'large'}
               options={[
-                { label: '最近7天', value: '7d' },
-                { label: '最近30天', value: '30d' },
-                { label: '最近90天', value: '90d' },
+                { label: '7天', value: '7d' },
+                { label: '30天', value: '30d' },
+                { label: '90天', value: '90d' },
                 { label: '自定义', value: 'custom' }
               ]}
             />
             
-            {timeRange.preset === 'custom' && (
+            {timeRange.preset === 'custom' && !isMobile && (
               <RangePicker
                 size="large"
                 value={[dayjs(timeRange.startDate), dayjs(timeRange.endDate)]}
@@ -175,9 +187,9 @@ export default function Dashboard() {
               icon={<ReloadOutlined spin={loading} />}
               onClick={loadData}
               loading={loading}
-              size="large"
+              size={isMobile ? 'middle' : 'large'}
             >
-              刷新数据
+              {isMobile ? '刷新' : '刷新数据'}
             </Button>
           </Space>
         </div>
@@ -187,7 +199,7 @@ export default function Dashboard() {
       <div style={{ 
         maxWidth: 1600, 
         margin: '0 auto', 
-        padding: '24px 32px 32px' 
+        padding: isMobile ? '16px' : '24px 32px 32px' 
       }}>
         {/* 代理商视图面板 - 顶部醒目位置 */}
         <AgentDashboardPanel onRefresh={loadData} />
@@ -195,47 +207,58 @@ export default function Dashboard() {
         {/* 订阅概览 */}
         <SubscriptionOverview />
 
-        {/* 快捷操作区 */}
+        {/* 快捷操作区 - 移动端简化 */}
         <Card 
           style={{ 
             marginBottom: 16,
             borderRadius: 8,
             boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
           }}
-          styles={{ body: { padding: '16px 20px' } }}
+          styles={{ body: { padding: isMobile ? '12px' : '16px 20px' } }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between', 
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: isMobile ? 12 : 0
+          }}>
             <Text strong style={{ fontSize: 15, color: '#262626' }}>快捷操作</Text>
-            <Space size="middle">
+            <Space size="small" wrap style={{ justifyContent: isMobile ? 'center' : 'flex-end' }}>
               <Button 
                 type="primary" 
                 icon={<ThunderboltOutlined />}
                 onClick={() => navigate('/distillation')}
                 style={{ borderRadius: 6 }}
+                size={isMobile ? 'middle' : 'middle'}
               >
-                新建蒸馏
+                {isMobile ? '蒸馏' : '新建蒸馏'}
               </Button>
               <Button 
                 icon={<FileTextOutlined />}
                 onClick={() => navigate('/article-generation')}
                 style={{ borderRadius: 6 }}
+                size={isMobile ? 'middle' : 'middle'}
               >
-                生成文章
+                {isMobile ? '文章' : '生成文章'}
               </Button>
               <Button 
                 icon={<RocketOutlined />}
                 onClick={() => navigate('/publishing-tasks')}
                 style={{ borderRadius: 6 }}
+                size={isMobile ? 'middle' : 'middle'}
               >
-                发布任务
+                {isMobile ? '发布' : '发布任务'}
               </Button>
-              <Button 
-                icon={<SettingOutlined />}
-                onClick={() => navigate('/user-center')}
-                style={{ borderRadius: 6 }}
-              >
-                个人中心
-              </Button>
+              {!isMobile && (
+                <Button 
+                  icon={<SettingOutlined />}
+                  onClick={() => navigate('/user-center')}
+                  style={{ borderRadius: 6 }}
+                >
+                  个人中心
+                </Button>
+              )}
             </Space>
           </div>
         </Card>
@@ -254,7 +277,7 @@ export default function Dashboard() {
         <Divider orientation="left" style={{ 
           marginTop: 24, 
           marginBottom: 20,
-          fontSize: 16,
+          fontSize: isMobile ? 14 : 16,
           fontWeight: 600,
           color: '#262626'
         }}>

@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Layout, message, App as AntApp } from 'antd';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import StorageWarningBanner from './components/StorageWarningBanner';
@@ -43,9 +43,24 @@ import CommissionMonitorPage from './pages/CommissionMonitorPage';
 
 const { Content } = Layout;
 
+// 移动端断点
+const MOBILE_BREAKPOINT = 768;
+
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(false);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 初始化 token 检查器（自动检测并清除过期 token）
   useEffect(() => {
@@ -189,10 +204,18 @@ function App() {
           <ProtectedRoute>
             <Layout style={{ minHeight: '100vh' }}>
               <Sidebar />
-              <Layout style={{ marginLeft: 240 }}>
+              <Layout style={{ 
+                marginLeft: isMobile ? 0 : 240,
+                transition: 'margin-left 0.3s',
+              }}>
                 <Header />
                 <StorageWarningBanner />
-                <Content style={{ margin: '24px', background: '#fff', borderRadius: 8 }}>
+                <Content style={{ 
+                  margin: isMobile ? '12px' : '24px', 
+                  background: '#fff', 
+                  borderRadius: 8,
+                  minHeight: 'auto',
+                }}>
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/conversion-targets" element={<ConversionTargetPage />} />

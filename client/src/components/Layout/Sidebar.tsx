@@ -1,5 +1,6 @@
-import { Layout, Menu, Modal, message } from 'antd';
+import { Layout, Menu, Modal, message, Drawer } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import {
   DashboardOutlined,
   SettingOutlined,
@@ -23,16 +24,38 @@ import {
   LogoutOutlined,
   DollarOutlined,
   MonitorOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
 import { isAdmin } from '../../utils/auth';
 import { config } from '../../config/env';
 
 const { Sider } = Layout;
 
+// 移动端断点
+const MOBILE_BREAKPOINT = 768;
+
 export default function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
   const userIsAdmin = isAdmin();
+  const [isMobile, setIsMobile] = useState(false);
+  const [drawerVisible, setDrawerVisible] = useState(false);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= MOBILE_BREAKPOINT);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // 路由变化时关闭抽屉
+  useEffect(() => {
+    setDrawerVisible(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     Modal.confirm({
@@ -217,6 +240,90 @@ export default function Sidebar() {
     }
   };
 
+  // 菜单内容组件
+  const MenuContent = () => (
+    <>
+      <div
+        style={{
+          height: 64,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0 16px',
+          color: '#fff',
+          fontSize: 18,
+          fontWeight: 600,
+          borderBottom: '1px solid rgba(255,255,255,0.1)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <img 
+            src={`${import.meta.env.BASE_URL}images/logo.png`}
+            alt="Logo" 
+            style={{ 
+              width: 28, 
+              height: 28, 
+              marginRight: 8,
+              borderRadius: 6
+            }} 
+          />
+          GEO优化系统
+        </div>
+        {isMobile && (
+          <CloseOutlined 
+            onClick={() => setDrawerVisible(false)}
+            style={{ fontSize: 18, cursor: 'pointer' }}
+          />
+        )}
+      </div>
+      <Menu
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        items={menuItems}
+        onClick={handleMenuClick}
+        style={{
+          background: 'transparent',
+          border: 'none',
+          marginTop: 16,
+        }}
+        theme="dark"
+      />
+    </>
+  );
+
+  // 移动端：使用 Drawer
+  if (isMobile) {
+    return (
+      <>
+        {/* 移动端菜单按钮 - 通过 Header 组件触发 */}
+        <Drawer
+          placement="left"
+          open={drawerVisible}
+          onClose={() => setDrawerVisible(false)}
+          width={240}
+          styles={{
+            body: { padding: 0 },
+            header: { display: 'none' },
+          }}
+          style={{
+            background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+          }}
+        >
+          <div style={{
+            background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)',
+            minHeight: '100%',
+          }}>
+            <MenuContent />
+          </div>
+        </Drawer>
+        
+        {/* 暴露打开方法给 Header */}
+        <MobileMenuTrigger onOpen={() => setDrawerVisible(true)} />
+      </>
+    );
+  }
+
+  // 桌面端：固定侧边栏
   return (
     <Sider
       width={240}
@@ -231,42 +338,20 @@ export default function Sidebar() {
         bottom: 0,
       }}
     >
-      <div
-        style={{
-          height: 64,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#fff',
-          fontSize: 20,
-          fontWeight: 600,
-          borderBottom: '1px solid rgba(255,255,255,0.1)',
-        }}
-      >
-        <img 
-          src={`${import.meta.env.BASE_URL}images/logo.png`}
-          alt="Logo" 
-          style={{ 
-            width: 32, 
-            height: 32, 
-            marginRight: 8,
-            borderRadius: 6
-          }} 
-        />
-        GEO优化系统
-      </div>
-      <Menu
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        items={menuItems}
-        onClick={handleMenuClick}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          marginTop: 16,
-        }}
-        theme="dark"
-      />
+      <MenuContent />
     </Sider>
   );
+}
+
+// 移动端菜单触发器组件 - 用于在 Header 中显示菜单按钮
+function MobileMenuTrigger({ onOpen }: { onOpen: () => void }) {
+  useEffect(() => {
+    // 将打开方法暴露到全局，供 Header 调用
+    (window as any).__openMobileSidebar = onOpen;
+    return () => {
+      delete (window as any).__openMobileSidebar;
+    };
+  }, [onOpen]);
+  
+  return null;
 }

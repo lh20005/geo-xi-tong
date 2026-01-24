@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   Card, Button, Space, Tag, Modal, Typography, message, 
-  Row, Col, Statistic, Select, Input, Checkbox 
+  Row, Col, Statistic, Select, Input, Checkbox, List, Drawer
 } from 'antd';
 import { 
   EyeOutlined, DeleteOutlined, CopyOutlined, EditOutlined,
-  SearchOutlined, ReloadOutlined 
+  SearchOutlined, ReloadOutlined, FilterOutlined
 } from '@ant-design/icons';
 import { 
   getArticles, getArticleStats, batchDeleteArticles, deleteAllArticles,
@@ -30,6 +30,8 @@ interface FilterState {
 export default function ArticleListPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [filterDrawerVisible, setFilterDrawerVisible] = useState(false);
   
   const [articles, setArticles] = useState<Article[]>([]);
   const [stats, setStats] = useState<ArticleStats>({ total: 0, published: 0, unpublished: 0 });
@@ -47,6 +49,13 @@ export default function ArticleListPage() {
   const [viewModal, setViewModal] = useState<any>(null);
   const [editModal, setEditModal] = useState<any>(null);
   const [editorVisible, setEditorVisible] = useState(false);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -366,159 +375,340 @@ export default function ArticleListPage() {
     },
   ];
 
+  // 移动端文章卡片渲染
+  const renderMobileArticleCard = (article: Article) => (
+    <Card 
+      size="small" 
+      style={{ marginBottom: 12 }}
+      actions={[
+        <Button type="link" size="small" icon={<EyeOutlined />} onClick={() => handleView(article.id)}>查看</Button>,
+        <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(article.id)}>编辑</Button>,
+        <Button type="link" size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(article.id)}>删除</Button>,
+      ]}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <Checkbox
+          checked={selectedIds.has(article.id)}
+          onChange={(e) => handleSelectOne(article.id, e.target.checked)}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ 
+            fontWeight: 500, 
+            marginBottom: 8,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {article.title || '无标题'}
+          </div>
+          <Space wrap size={[4, 4]}>
+            <Tag color="blue">{article.keyword}</Tag>
+            {article.isPublished ? (
+              <Tag color="success">已发布</Tag>
+            ) : (
+              <Tag color="default">草稿</Tag>
+            )}
+          </Space>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+            {new Date(article.createdAt).toLocaleString('zh-CN')}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+
+  // 筛选抽屉内容（移动端）
+  const filterDrawerContent = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <div style={{ marginBottom: 8, color: '#64748b', fontSize: 14 }}>发布状态</div>
+        <Select 
+          style={{ width: '100%' }} 
+          value={filters.publishStatus} 
+          onChange={(value) => handleFilterChange('publishStatus', value)}
+        >
+          <Option value="all">全部</Option>
+          <Option value="published">已发布</Option>
+          <Option value="unpublished">未发布</Option>
+        </Select>
+      </div>
+      
+      <div>
+        <div style={{ marginBottom: 8, color: '#64748b', fontSize: 14 }}>关键词筛选</div>
+        <Select 
+          style={{ width: '100%' }} 
+          placeholder="选择关键词" 
+          allowClear 
+          showSearch
+          optionFilterProp="children"
+          value={filters.keyword || undefined} 
+          onChange={(value) => handleFilterChange('keyword', value || '')}
+        >
+          {keywords.map(k => (
+            <Option key={k.keyword} value={k.keyword}>
+              {k.keyword} ({k.count})
+            </Option>
+          ))}
+        </Select>
+      </div>
+      
+      <div>
+        <div style={{ marginBottom: 8, color: '#64748b', fontSize: 14 }}>搜索内容</div>
+        <Input 
+          placeholder="输入关键词搜索" 
+          value={filters.searchKeyword} 
+          onChange={(e) => handleFilterChange('searchKeyword', e.target.value)}
+          allowClear
+        />
+      </div>
+      
+      <Space style={{ marginTop: 8 }}>
+        <Button onClick={handleClearFilters}>清除筛选</Button>
+        <Button type="primary" onClick={() => { loadArticles(); setFilterDrawerVisible(false); }}>
+          应用筛选
+        </Button>
+      </Space>
+    </div>
+  );
+
   return (
-    <div style={{ padding: 24 }}>
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={8}>
+    <div style={{ padding: isMobile ? 12 : 24 }}>
+      {/* 统计卡片 */}
+      <Row gutter={[12, 12]} style={{ marginBottom: isMobile ? 16 : 24 }}>
+        <Col xs={8} sm={8}>
           <Card size="small" hoverable onClick={() => handleStatsClick('all')} style={{ textAlign: 'center' }}>
-            <Statistic title="总文章数" value={stats.total} valueStyle={{ color: '#1890ff' }} />
+            <Statistic 
+              title={isMobile ? '总数' : '总文章数'} 
+              value={stats.total} 
+              valueStyle={{ color: '#1890ff', fontSize: isMobile ? 20 : 24 }} 
+            />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={8} sm={8}>
           <Card size="small" hoverable onClick={() => handleStatsClick('published')} style={{ textAlign: 'center' }}>
-            <Statistic title="已发布" value={stats.published} valueStyle={{ color: '#52c41a' }} />
+            <Statistic 
+              title="已发布" 
+              value={stats.published} 
+              valueStyle={{ color: '#52c41a', fontSize: isMobile ? 20 : 24 }} 
+            />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={8} sm={8}>
           <Card size="small" hoverable onClick={() => handleStatsClick('unpublished')} style={{ textAlign: 'center' }}>
-            <Statistic title="未发布" value={stats.unpublished} valueStyle={{ color: '#faad14' }} />
+            <Statistic 
+              title="未发布" 
+              value={stats.unpublished} 
+              valueStyle={{ color: '#faad14', fontSize: isMobile ? 20 : 24 }} 
+            />
           </Card>
         </Col>
       </Row>
 
-      {/* 筛选工具栏 - 与生成文章页面风格一致 */}
-      <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
-        <Row gutter={16}>
-          <Col span={5}>
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ color: '#64748b', fontSize: 14 }}>
-                <SearchOutlined /> 发布状态
-              </span>
-            </div>
-            <Select 
-              size="large"
-              style={{ width: '100%' }} 
-              value={filters.publishStatus} 
-              onChange={(value) => handleFilterChange('publishStatus', value)}
-            >
-              <Option value="all">全部</Option>
-              <Option value="published">已发布</Option>
-              <Option value="unpublished">未发布</Option>
-            </Select>
-          </Col>
-          
-          <Col span={5}>
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ color: '#64748b', fontSize: 14 }}>
-                <SearchOutlined /> 关键词筛选
-              </span>
-            </div>
-            <Select 
-              size="large"
-              style={{ width: '100%' }} 
-              placeholder="选择关键词" 
-              allowClear 
-              showSearch
-              optionFilterProp="children"
-              value={filters.keyword || undefined} 
-              onChange={(value) => handleFilterChange('keyword', value || '')}
-            >
-              {keywords.map(k => (
-                <Option key={k.keyword} value={k.keyword}>
-                  {k.keyword} ({k.count})
-                </Option>
-              ))}
-            </Select>
-          </Col>
-          
-          <Col span={7}>
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ color: '#64748b', fontSize: 14 }}>
-                <SearchOutlined /> 搜索内容
-              </span>
-            </div>
-            <Input 
-              size="large"
-              style={{ width: '100%' }} 
-              placeholder="输入关键词搜索" 
-              value={filters.searchKeyword} 
-              onChange={(e) => handleFilterChange('searchKeyword', e.target.value)}
-              onPressEnter={() => setPage(1)}
-              allowClear
-              suffix={<SearchOutlined style={{ color: '#94a3b8' }} />}
-            />
-          </Col>
-          
-          <Col span={3}>
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
-            </div>
+      {/* 移动端：筛选按钮和抽屉 */}
+      {isMobile ? (
+        <>
+          <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
             <Button 
-              size="large"
-              block
-              icon={<ReloadOutlined />} 
-              onClick={handleClearFilters}
-              disabled={filters.publishStatus === 'all' && !filters.keyword && !filters.searchKeyword}
+              icon={<FilterOutlined />} 
+              onClick={() => setFilterDrawerVisible(true)}
+              style={{ flex: 1 }}
             >
-              清除筛选
+              筛选
             </Button>
-          </Col>
-          
-          <Col span={4}>
-            <div style={{ marginBottom: 8 }}>
-              <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
-            </div>
             <Button 
-              size="large"
-              type="primary" 
-              block
               icon={<ReloadOutlined />} 
               onClick={loadArticles}
+              loading={loading}
             >
               刷新
             </Button>
-          </Col>
-        </Row>
-      </div>
+          </div>
+          <Drawer
+            title="筛选条件"
+            placement="bottom"
+            open={filterDrawerVisible}
+            onClose={() => setFilterDrawerVisible(false)}
+            height="auto"
+          >
+            {filterDrawerContent}
+          </Drawer>
+        </>
+      ) : (
+        /* 桌面端：筛选工具栏 */
+        <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
+          <Row gutter={16}>
+            <Col span={5}>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ color: '#64748b', fontSize: 14 }}>
+                  <SearchOutlined /> 发布状态
+                </span>
+              </div>
+              <Select 
+                size="large"
+                style={{ width: '100%' }} 
+                value={filters.publishStatus} 
+                onChange={(value) => handleFilterChange('publishStatus', value)}
+              >
+                <Option value="all">全部</Option>
+                <Option value="published">已发布</Option>
+                <Option value="unpublished">未发布</Option>
+              </Select>
+            </Col>
+            
+            <Col span={5}>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ color: '#64748b', fontSize: 14 }}>
+                  <SearchOutlined /> 关键词筛选
+                </span>
+              </div>
+              <Select 
+                size="large"
+                style={{ width: '100%' }} 
+                placeholder="选择关键词" 
+                allowClear 
+                showSearch
+                optionFilterProp="children"
+                value={filters.keyword || undefined} 
+                onChange={(value) => handleFilterChange('keyword', value || '')}
+              >
+                {keywords.map(k => (
+                  <Option key={k.keyword} value={k.keyword}>
+                    {k.keyword} ({k.count})
+                  </Option>
+                ))}
+              </Select>
+            </Col>
+            
+            <Col span={7}>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ color: '#64748b', fontSize: 14 }}>
+                  <SearchOutlined /> 搜索内容
+                </span>
+              </div>
+              <Input 
+                size="large"
+                style={{ width: '100%' }} 
+                placeholder="输入关键词搜索" 
+                value={filters.searchKeyword} 
+                onChange={(e) => handleFilterChange('searchKeyword', e.target.value)}
+                onPressEnter={() => setPage(1)}
+                allowClear
+                suffix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+              />
+            </Col>
+            
+            <Col span={3}>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
+              </div>
+              <Button 
+                size="large"
+                block
+                icon={<ReloadOutlined />} 
+                onClick={handleClearFilters}
+                disabled={filters.publishStatus === 'all' && !filters.keyword && !filters.searchKeyword}
+              >
+                清除筛选
+              </Button>
+            </Col>
+            
+            <Col span={4}>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
+              </div>
+              <Button 
+                size="large"
+                type="primary" 
+                block
+                icon={<ReloadOutlined />} 
+                onClick={loadArticles}
+              >
+                刷新
+              </Button>
+            </Col>
+          </Row>
+        </div>
+      )}
 
-      <Card style={{ marginBottom: 16, backgroundColor: '#e6f7ff' }}>
-        <Space>
-          {selectedIds.size > 0 ? (
-            <>
-              <Text strong>已选中 {selectedIds.size} 篇文章</Text>
-              <Button danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>删除选中</Button>
-            </>
-          ) : (
-            <Text type="secondary">可以在下方表格中选择文章进行批量操作</Text>
-          )}
-        </Space>
-      </Card>
+      {/* 批量操作提示 */}
+      {selectedIds.size > 0 && (
+        <Card size="small" style={{ marginBottom: 12, backgroundColor: '#e6f7ff' }}>
+          <Space wrap>
+            <Text strong>已选中 {selectedIds.size} 篇</Text>
+            <Button size="small" danger icon={<DeleteOutlined />} onClick={handleBatchDelete}>
+              删除选中
+            </Button>
+          </Space>
+        </Card>
+      )}
 
-      <Card title="文章管理" variant="borderless" extra={<Space><Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button><Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button></Space>}>
-        <ResizableTable<Article>
-          tableId="article-list"
-          columns={columns} 
-          dataSource={articles} 
-          rowKey="id" 
-          loading={loading} 
-          scroll={{ x: 1200 }}
-          pagination={{ 
-            current: page, 
-            pageSize, 
-            total, 
-            onChange: (newPage, newPageSize) => {
-              setPage(newPage);
-              if (newPageSize && newPageSize !== pageSize) {
-                setPageSize(newPageSize);
-                setPage(1);
-              }
-            }, 
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-            pageSizeOptions: ['10', '20', '50', '100']
-          }} 
-        />
+      {/* 文章列表 */}
+      <Card 
+        title={isMobile ? '文章列表' : '文章管理'} 
+        variant="borderless" 
+        extra={
+          !isMobile && (
+            <Space>
+              <Button onClick={loadArticles} icon={<ReloadOutlined />}>刷新</Button>
+              <Button danger disabled={total === 0} onClick={handleDeleteAll}>删除所有</Button>
+            </Space>
+          )
+        }
+        styles={{ body: { padding: isMobile ? 12 : 24 } }}
+      >
+        {isMobile ? (
+          /* 移动端：卡片列表 */
+          <>
+            <div style={{ marginBottom: 12 }}>
+              <Checkbox
+                checked={isAllSelected}
+                indeterminate={isSomeSelected}
+                onChange={(e) => handleSelectAll(e.target.checked)}
+              >
+                全选当前页
+              </Checkbox>
+            </div>
+            <List
+              loading={loading}
+              dataSource={articles}
+              renderItem={renderMobileArticleCard}
+              pagination={{
+                current: page,
+                pageSize,
+                total,
+                onChange: (newPage) => setPage(newPage),
+                size: 'small',
+                simple: true,
+              }}
+            />
+          </>
+        ) : (
+          /* 桌面端：表格 */
+          <ResizableTable<Article>
+            tableId="article-list"
+            columns={columns} 
+            dataSource={articles} 
+            rowKey="id" 
+            loading={loading} 
+            scroll={{ x: 1200 }}
+            pagination={{ 
+              current: page, 
+              pageSize, 
+              total, 
+              onChange: (newPage, newPageSize) => {
+                setPage(newPage);
+                if (newPageSize && newPageSize !== pageSize) {
+                  setPageSize(newPageSize);
+                  setPage(1);
+                }
+              }, 
+              showSizeChanger: true,
+              showQuickJumper: true,
+              showTotal: (total) => `共 ${total} 条记录`,
+              pageSizeOptions: ['10', '20', '50', '100']
+            }} 
+          />
+        )}
       </Card>
 
       <Modal 

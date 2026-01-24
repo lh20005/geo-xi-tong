@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar } from 'antd';
+import { Card, Row, Col, Progress, Tag, Button, Table, Modal, message, Space, Statistic, Descriptions, Tabs, Input, Form, Avatar, List } from 'antd';
 import { CrownOutlined, ReloadOutlined, RocketOutlined, HistoryOutlined, WarningOutlined, UserOutlined, KeyOutlined, SafetyOutlined, DatabaseOutlined, DollarOutlined, MailOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -74,6 +74,7 @@ interface PasswordFormValues {
 
 const UserCenterPage = () => {
   const location = useLocation();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [usageStats, setUsageStats] = useState<UsageStats[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -105,6 +106,13 @@ const UserCenterPage = () => {
   const [emailCodeSent, setEmailCodeSent] = useState(false);
   const [emailCountdown, setEmailCountdown] = useState(0);
   const [emailStep, setEmailStep] = useState<'verify' | 'change'>('verify'); // 更换邮箱步骤
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 邮箱验证码倒计时
   useEffect(() => {
@@ -544,14 +552,20 @@ const UserCenterPage = () => {
   };
 
   return (
-    <div style={{ padding: 24 }}>
-      <Tabs activeKey={activeTab} onChange={setActiveTab} size="large">
+    <div style={{ padding: isMobile ? 12 : 24 }}>
+      <Tabs 
+        activeKey={activeTab} 
+        onChange={setActiveTab} 
+        size={isMobile ? 'small' : 'large'}
+        tabPosition={isMobile ? 'top' : 'top'}
+        style={{ overflow: 'visible' }}
+      >
         {/* 订阅管理标签页 */}
         <TabPane
           tab={
             <span>
               <CrownOutlined />
-              订阅管理
+              {isMobile ? '订阅' : '订阅管理'}
             </span>
           }
           key="subscription"
@@ -568,71 +582,87 @@ const UserCenterPage = () => {
                 }
                 loading={loading}
                 extra={
-                  subscription ? (
-                    <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
-                      升级套餐
-                    </Button>
-                  ) : (
-                    <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
-                      查看套餐
-                    </Button>
+                  !isMobile && (
+                    subscription ? (
+                      <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
+                        升级套餐
+                      </Button>
+                    ) : (
+                      <Button type="primary" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
+                        查看套餐
+                      </Button>
+                    )
                   )
                 }
+                styles={{ body: { padding: isMobile ? 12 : 24 } }}
               >
                 {subscription ? (
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Statistic
-                        title="当前套餐"
-                        value={subscription.plan_name}
-                        valueStyle={{ color: '#1890ff' }}
-                        prefix={<CrownOutlined />}
-                      />
-                    </Col>
-                    <Col span={8}>
-                      <Statistic
-                        title="到期时间"
-                        value={daysUntilExpiry > 36000 ? '永久有效' : new Date(subscription.end_date).toLocaleDateString('zh-CN')}
-                        valueStyle={{ color: daysUntilExpiry > 36000 ? '#52c41a' : (showExpiryWarning ? '#ff4d4f' : '#3f8600') }}
-                      />
-                      {showExpiryWarning && daysUntilExpiry <= 36000 && (
-                        <Tag color="warning" style={{ marginTop: 8 }}>
-                          <WarningOutlined /> 还有 {daysUntilExpiry} 天到期
-                        </Tag>
-                      )}
-                    </Col>
-                    <Col span={8}>
-                      <Statistic
-                        title="订阅状态"
-                        value={subscription.status === 'active' ? '正常' : '已过期'}
-                        valueStyle={{ color: subscription.status === 'active' ? '#3f8600' : '#cf1322' }}
-                      />
-                    </Col>
-
-                  </Row>
+                  <>
+                    <Row gutter={[12, 12]}>
+                      <Col xs={24} sm={8}>
+                        <Statistic
+                          title="当前套餐"
+                          value={subscription.plan_name}
+                          valueStyle={{ color: '#1890ff', fontSize: isMobile ? 18 : 24 }}
+                          prefix={<CrownOutlined />}
+                        />
+                      </Col>
+                      <Col xs={12} sm={8}>
+                        <Statistic
+                          title="到期时间"
+                          value={daysUntilExpiry > 36000 ? '永久' : new Date(subscription.end_date).toLocaleDateString('zh-CN')}
+                          valueStyle={{ 
+                            color: daysUntilExpiry > 36000 ? '#52c41a' : (showExpiryWarning ? '#ff4d4f' : '#3f8600'),
+                            fontSize: isMobile ? 16 : 24
+                          }}
+                        />
+                        {showExpiryWarning && daysUntilExpiry <= 36000 && (
+                          <Tag color="warning" style={{ marginTop: 8 }}>
+                            <WarningOutlined /> {daysUntilExpiry}天
+                          </Tag>
+                        )}
+                      </Col>
+                      <Col xs={12} sm={8}>
+                        <Statistic
+                          title="状态"
+                          value={subscription.status === 'active' ? '正常' : '已过期'}
+                          valueStyle={{ 
+                            color: subscription.status === 'active' ? '#3f8600' : '#cf1322',
+                            fontSize: isMobile ? 16 : 24
+                          }}
+                        />
+                      </Col>
+                    </Row>
+                    {isMobile && (
+                      <Button 
+                        type="primary" 
+                        block 
+                        style={{ marginTop: 16 }}
+                        icon={<RocketOutlined />} 
+                        onClick={handleNavigateToPricing}
+                      >
+                        升级套餐
+                      </Button>
+                    )}
+                  </>
                 ) : (
-                  <div style={{ textAlign: 'center', padding: '60px 0' }}>
+                  <div style={{ textAlign: 'center', padding: isMobile ? '30px 0' : '60px 0' }}>
                     <div style={{ 
-                      fontSize: 64, 
+                      fontSize: isMobile ? 48 : 64, 
                       color: '#d9d9d9', 
                       marginBottom: 16 
                     }}>
                       <CrownOutlined />
                     </div>
-                    <p style={{ fontSize: 18, color: '#262626', marginBottom: 8, fontWeight: 500 }}>
+                    <p style={{ fontSize: isMobile ? 16 : 18, color: '#262626', marginBottom: 8, fontWeight: 500 }}>
                       您还没有订阅任何套餐
                     </p>
-                    <p style={{ fontSize: 14, color: '#8c8c8c', marginBottom: 24 }}>
-                      订阅套餐后即可使用完整功能，包括关键词蒸馏、AI内容生成、多平台发布等
+                    <p style={{ fontSize: isMobile ? 12 : 14, color: '#8c8c8c', marginBottom: 24 }}>
+                      订阅后即可使用完整功能
                     </p>
-                    <Space size="large">
-                      <Button type="primary" size="large" icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
-                        立即订阅
-                      </Button>
-                      <Button size="large" onClick={handleNavigateToPricing}>
-                        查看套餐详情
-                      </Button>
-                    </Space>
+                    <Button type="primary" size={isMobile ? 'middle' : 'large'} icon={<RocketOutlined />} onClick={handleNavigateToPricing}>
+                      立即订阅
+                    </Button>
                   </div>
                 )}
               </Card>
@@ -640,35 +670,31 @@ const UserCenterPage = () => {
 
             {/* 使用统计卡片 */}
             <Col span={24}>
-              <Card title="使用统计" extra={<Button icon={<ReloadOutlined />} onClick={fetchUsageStats}>刷新</Button>}>
-                <Row gutter={[16, 16]}>
+              <Card 
+                title="使用统计" 
+                extra={<Button icon={<ReloadOutlined />} onClick={fetchUsageStats} size={isMobile ? 'small' : 'middle'}>刷新</Button>}
+                styles={{ body: { padding: isMobile ? 12 : 24 } }}
+              >
+                <Row gutter={[12, 12]}>
                   {usageStats.map(stat => (
-                    <Col span={12} key={stat.feature_code}>
+                    <Col xs={24} sm={12} key={stat.feature_code}>
                       <Card size="small" variant="borderless" style={{ background: '#fafafa' }}>
                         <div style={{ marginBottom: 8 }}>
                           <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                            <span style={{ fontWeight: 500 }}>{stat.feature_name}</span>
-                            <span style={{ color: '#8c8c8c', fontSize: 12 }}>
-                              {stat.reset_period === 'daily' ? '每日重置' : 
-                               stat.reset_period === 'monthly' ? (
-                                 stat.reset_time 
-                                   ? `下次重置: ${new Date(stat.reset_time).toLocaleDateString('zh-CN')}`
-                                   : '每月重置'
-                               ) : stat.reset_period === 'yearly' ? (
-                                 stat.reset_time 
-                                   ? `下次重置: ${new Date(stat.reset_time).toLocaleDateString('zh-CN')}`
-                                   : '每年重置'
-                               ) : '永久'}
+                            <span style={{ fontWeight: 500, fontSize: isMobile ? 13 : 14 }}>{stat.feature_name}</span>
+                            <span style={{ color: '#8c8c8c', fontSize: isMobile ? 11 : 12 }}>
+                              {stat.reset_period === 'daily' ? '每日' : 
+                               stat.reset_period === 'monthly' ? '每月' : 
+                               stat.reset_period === 'yearly' ? '每年' : '永久'}
                             </span>
                           </Space>
                         </div>
                         <Progress
                           percent={stat.percentage}
                           strokeColor={getProgressColor(stat.percentage)}
+                          size={isMobile ? 'small' : 'default'}
                           format={() => {
-                            // 存储空间需要特殊处理，显示为容量格式（MB/GB）
                             if (stat.feature_code === 'storage_space') {
-                              // used 和 limit 已经是 MB 单位，直接格式化
                               return `${formatStorageMB(stat.used)} / ${stat.limit === -1 ? '无限' : formatStorageMB(stat.limit)}`;
                             }
                             return `${stat.used} / ${stat.limit === -1 ? '∞' : stat.limit}`;
@@ -687,7 +713,7 @@ const UserCenterPage = () => {
                                 onClick={handleNavigateToPricing}
                                 style={{ padding: 0, height: 'auto' }}
                               >
-                                立即升级
+                                升级
                               </Button>
                             </Space>
                           </div>
@@ -711,7 +737,7 @@ const UserCenterPage = () => {
           tab={
             <span>
               <HistoryOutlined />
-              订单记录
+              {isMobile ? '订单' : '订单记录'}
             </span>
           }
           key="orders"
@@ -723,15 +749,52 @@ const UserCenterPage = () => {
                 订单记录
               </Space>
             }
-            extra={<Button icon={<ReloadOutlined />} onClick={fetchOrders}>刷新</Button>}
+            extra={<Button icon={<ReloadOutlined />} onClick={fetchOrders} size={isMobile ? 'small' : 'middle'}>刷新</Button>}
+            styles={{ body: { padding: isMobile ? 12 : 24 } }}
           >
-            <Table
-              columns={orderColumns}
-              dataSource={Array.isArray(orders) ? orders : []}
-              rowKey="order_no"
-              loading={ordersLoading}
-              pagination={{ pageSize: 10 }}
-            />
+            {isMobile ? (
+              /* 移动端：卡片列表 */
+              <List
+                loading={ordersLoading}
+                dataSource={Array.isArray(orders) ? orders : []}
+                renderItem={(order: Order) => (
+                  <Card size="small" style={{ marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <span style={{ fontWeight: 500 }}>{order.plan_name}</span>
+                      <span style={{ color: '#1890ff', fontWeight: 500 }}>¥{formatPrice(order.amount)}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 8 }}>
+                      订单号：{order.order_no}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: 12, color: '#8c8c8c' }}>
+                        {new Date(order.created_at).toLocaleDateString('zh-CN')}
+                      </span>
+                      {(() => {
+                        const statusMap: any = {
+                          pending: { text: '待支付', color: 'orange' },
+                          paid: { text: '已支付', color: 'green' },
+                          closed: { text: '已关闭', color: 'default' },
+                          refunded: { text: '已退款', color: 'red' }
+                        };
+                        const s = statusMap[order.status] || { text: order.status, color: 'default' };
+                        return <Tag color={s.color}>{s.text}</Tag>;
+                      })()}
+                    </div>
+                  </Card>
+                )}
+                pagination={{ pageSize: 10, size: 'small', simple: true }}
+              />
+            ) : (
+              /* 桌面端：表格 */
+              <Table
+                columns={orderColumns}
+                dataSource={Array.isArray(orders) ? orders : []}
+                rowKey="order_no"
+                loading={ordersLoading}
+                pagination={{ pageSize: 10 }}
+              />
+            )}
           </Card>
         </TabPane>
 
@@ -740,39 +803,67 @@ const UserCenterPage = () => {
           tab={
             <span>
               <UserOutlined />
-              个人信息
+              {isMobile ? '信息' : '个人信息'}
             </span>
           }
           key="profile"
         >
           <Row gutter={[16, 16]}>
             <Col span={24}>
-              <Card title="基本信息">
+              <Card title="基本信息" styles={{ body: { padding: isMobile ? 12 : 24 } }}>
                 {userProfile ? (
-                  <Descriptions column={2} bordered>
-                    <Descriptions.Item label="用户名" span={2}>
-                      <Space>
-                        <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
-                        <span style={{ fontSize: 16, fontWeight: 500 }}>{userProfile.username}</span>
-                      </Space>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="角色">
-                      <Tag color={userProfile.role === 'admin' ? 'purple' : 'blue'}>
-                        {userProfile.role === 'admin' ? '管理员' : '普通用户'}
-                      </Tag>
-                    </Descriptions.Item>
-                    <Descriptions.Item label="用户ID">
-                      {userProfile.id}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="注册时间">
-                      {new Date(userProfile.createdAt).toLocaleString('zh-CN')}
-                    </Descriptions.Item>
-                    <Descriptions.Item label="最后登录">
-                      {userProfile.lastLoginAt 
-                        ? new Date(userProfile.lastLoginAt).toLocaleString('zh-CN')
-                        : '从未登录'}
-                    </Descriptions.Item>
-                  </Descriptions>
+                  isMobile ? (
+                    /* 移动端：简化布局 */
+                    <div>
+                      <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                        <Avatar size={64} icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+                        <div style={{ marginTop: 8, fontSize: 18, fontWeight: 500 }}>{userProfile.username}</div>
+                        <Tag color={userProfile.role === 'admin' ? 'purple' : 'blue'} style={{ marginTop: 4 }}>
+                          {userProfile.role === 'admin' ? '管理员' : '普通用户'}
+                        </Tag>
+                      </div>
+                      <div style={{ background: '#fafafa', padding: 12, borderRadius: 8 }}>
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ color: '#8c8c8c' }}>用户ID：</span>
+                          <span>{userProfile.id}</span>
+                        </div>
+                        <div style={{ marginBottom: 8 }}>
+                          <span style={{ color: '#8c8c8c' }}>注册时间：</span>
+                          <span>{new Date(userProfile.createdAt).toLocaleDateString('zh-CN')}</span>
+                        </div>
+                        <div>
+                          <span style={{ color: '#8c8c8c' }}>最后登录：</span>
+                          <span>{userProfile.lastLoginAt ? new Date(userProfile.lastLoginAt).toLocaleDateString('zh-CN') : '从未'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* 桌面端：描述列表 */
+                    <Descriptions column={2} bordered>
+                      <Descriptions.Item label="用户名" span={2}>
+                        <Space>
+                          <Avatar icon={<UserOutlined />} style={{ backgroundColor: '#1890ff' }} />
+                          <span style={{ fontSize: 16, fontWeight: 500 }}>{userProfile.username}</span>
+                        </Space>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="角色">
+                        <Tag color={userProfile.role === 'admin' ? 'purple' : 'blue'}>
+                          {userProfile.role === 'admin' ? '管理员' : '普通用户'}
+                        </Tag>
+                      </Descriptions.Item>
+                      <Descriptions.Item label="用户ID">
+                        {userProfile.id}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="注册时间">
+                        {new Date(userProfile.createdAt).toLocaleString('zh-CN')}
+                      </Descriptions.Item>
+                      <Descriptions.Item label="最后登录">
+                        {userProfile.lastLoginAt 
+                          ? new Date(userProfile.lastLoginAt).toLocaleString('zh-CN')
+                          : '从未登录'}
+                      </Descriptions.Item>
+                    </Descriptions>
+                  )
                 ) : (
                   <div style={{ textAlign: 'center', padding: '40px 0' }}>
                     <p style={{ color: '#8c8c8c' }}>加载中...</p>
@@ -789,6 +880,7 @@ const UserCenterPage = () => {
                     账户安全
                   </Space>
                 }
+                styles={{ body: { padding: isMobile ? 12 : 24 } }}
               >
                 <Space direction="vertical" size="large" style={{ width: '100%' }}>
                   {/* 邮箱管理 */}
@@ -801,7 +893,7 @@ const UserCenterPage = () => {
                         </Tag>
                       )}
                     </div>
-                    <div style={{ color: '#8c8c8c', marginBottom: 16 }}>
+                    <div style={{ color: '#8c8c8c', marginBottom: 16, fontSize: isMobile ? 12 : 14 }}>
                       {userProfile?.email 
                         ? `当前邮箱：${userProfile.email}`
                         : '尚未绑定邮箱'}
@@ -809,6 +901,7 @@ const UserCenterPage = () => {
                     <Button 
                       icon={<MailOutlined />} 
                       onClick={() => setEmailModalVisible(true)}
+                      block={isMobile}
                     >
                       更换邮箱
                     </Button>
@@ -819,12 +912,13 @@ const UserCenterPage = () => {
                     <div style={{ marginBottom: 8 }}>
                       <strong>密码</strong>
                     </div>
-                    <div style={{ color: '#8c8c8c', marginBottom: 16 }}>
+                    <div style={{ color: '#8c8c8c', marginBottom: 16, fontSize: isMobile ? 12 : 14 }}>
                       定期修改密码可以提高账户安全性
                     </div>
                     <Button 
                       icon={<KeyOutlined />} 
                       onClick={() => setPasswordModalVisible(true)}
+                      block={isMobile}
                     >
                       修改密码
                     </Button>
@@ -840,7 +934,7 @@ const UserCenterPage = () => {
           tab={
             <span>
               <DollarOutlined />
-              代理商中心
+              {isMobile ? '代理' : '代理商中心'}
             </span>
           }
           key="agent"
@@ -866,7 +960,7 @@ const UserCenterPage = () => {
           tab={
             <span>
               <DatabaseOutlined />
-              存储空间
+              {isMobile ? '存储' : '存储空间'}
             </span>
           }
           key="storage"
