@@ -372,6 +372,12 @@ export class SchedulerService {
       try {
         console.log('[定时任务] 开始查询分账结果...');
         
+        // 先标记超时的记录为失败
+        const timeoutCount = await profitSharingService.markTimeoutRecordsAsFailed();
+        if (timeoutCount > 0) {
+          console.log(`[定时任务] 已标记 ${timeoutCount} 条超时分账记录为失败`);
+        }
+        
         // 获取处理中的分账记录
         const pendingRecords = await profitSharingService.getPendingProfitSharingRecords();
         
@@ -408,10 +414,15 @@ export class SchedulerService {
               );
               await commissionService.updateCommissionStatus(record.commissionId, 'cancelled', result.failReason);
               console.log(`[定时任务] 分账 ${record.outOrderNo} 失败: ${result.failReason}`);
+            } else {
+              // processing 状态，增加重试次数
+              await profitSharingService.incrementRetryCount(record.outOrderNo);
+              console.log(`[定时任务] 分账 ${record.outOrderNo} 仍在处理中 (重试 ${record.retryCount + 1})`);
             }
-            // processing 状态继续等待
           } catch (error: any) {
             console.error(`[定时任务] 查询分账 ${record.outOrderNo} 失败:`, error);
+            // 查询出错也增加重试次数
+            await profitSharingService.incrementRetryCount(record.outOrderNo);
           }
         }
 

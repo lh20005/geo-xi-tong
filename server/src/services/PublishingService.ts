@@ -265,14 +265,71 @@ export class PublishingService {
   ): Promise<void> {
     // 防止并发执行：如果尝试将状态更新为 running，使用原子更新确保唯一性
     if (status === 'running') {
+      // 先进行间隔检查（在设置 started_at 之前）
+      const taskRes = await pool.query('SELECT batch_id, batch_order, status FROM publishing_tasks WHERE id = $1', [taskId]);
+      if (taskRes.rows.length === 0) {
+        throw new Error('任务不存在');
+      }
+      
+      // 如果任务已经是 running，则认为是幂等操作，不报错
+      if (taskRes.rows[0].status === 'running') {
+        return;
+      }
+      
+      const { batch_id, batch_order } = taskRes.rows[0];
+      
+      // 批次任务的间隔检查
+      if (batch_id && batch_order > 0) {
+        // 查找最近的一个前序任务（不再假设 order 连续）
+        const prevTaskRes = await pool.query(
+          `SELECT id, status, completed_at, interval_minutes FROM publishing_tasks 
+           WHERE batch_id = $1 AND batch_order < $2
+           ORDER BY batch_order DESC
+           LIMIT 1`,
+          [batch_id, batch_order]
+        );
+
+        if (prevTaskRes.rows.length > 0) {
+          const prevTask = prevTaskRes.rows[0];
+          
+          // 调试日志
+          console.log(`[间隔检查] Task #${taskId} (Order ${batch_order}) -> Prev Task #${prevTask.id} (Status: ${prevTask.status})`);
+
+          // 1. 严格串行检查：前一个任务必须已完成
+          if (prevTask.status === 'pending' || prevTask.status === 'running') {
+            console.warn(`[间隔检查] 拦截：前一个任务 #${prevTask.id} 尚未完成`);
+            throw new Error(`顺序控制：前一个任务 #${prevTask.id} 尚未完成，请稍后重试`);
+          }
+
+          // 2. 时间间隔检查
+          if (prevTask.completed_at) {
+            const completedAt = new Date(prevTask.completed_at).getTime();
+            const intervalMinutes = Number(prevTask.interval_minutes) || 0; // 强制转为数字
+            const nextAllowedTime = completedAt + intervalMinutes * 60 * 1000;
+            const now = Date.now();
+
+            console.log(`[间隔检查] Completed: ${prevTask.completed_at}, Interval: ${intervalMinutes}m, Allow: ${new Date(nextAllowedTime).toISOString()}, Now: ${new Date(now).toISOString()}`);
+
+            if (now < nextAllowedTime) {
+              const waitSeconds = Math.ceil((nextAllowedTime - now) / 1000);
+              throw new Error(`间隔控制：需等待 ${waitSeconds} 秒后才能执行`);
+            }
+          } else {
+            // 任务已完成但没有时间戳？属于异常情况，建议等待
+            console.warn(`[间隔检查] 前一个任务 #${prevTask.id} 已完成但无 completed_at`);
+          }
+        }
+      }
+      
+      // 间隔检查通过后，再执行原子更新
       // 使用带条件的 UPDATE 语句，确保同一用户同一时间只有一个任务在运行
-      // 这里的逻辑是：只有当该用户没有其他 running 状态的任务时，才允许更新当前任务为 running
       const result = await pool.query(
         `UPDATE publishing_tasks 
          SET status = 'running', 
              started_at = CURRENT_TIMESTAMP, 
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1 
+           AND status = 'pending'
            AND NOT EXISTS (
              SELECT 1 FROM publishing_tasks 
              WHERE user_id = (SELECT user_id FROM publishing_tasks WHERE id = $1) 
@@ -296,7 +353,7 @@ export class PublishingService {
           return;
         }
         
-        // 否则，说明有其他任务正在运行
+        // 否则，说明有其他任务正在运行或状态已变更
         throw new Error('并发控制：当前已有正在执行的任务，请等待其完成');
       }
       

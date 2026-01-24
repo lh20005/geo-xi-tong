@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS profit_sharing_records (
   amount INTEGER NOT NULL,  -- 分账金额（分）
   status VARCHAR(20) NOT NULL DEFAULT 'pending',  -- pending/processing/success/failed
   fail_reason TEXT,
+  retry_count INTEGER DEFAULT 0,  -- 查询重试次数
   request_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   finish_time TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

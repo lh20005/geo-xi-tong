@@ -556,27 +556,38 @@ export class AgentService {
       }
 
       // 3. 检测邀请用户付费率异常高（付费率超过80%且付费用户超过5人）
+      // 使用子查询计算邀请用户数和付费用户数
       const highConversionResult = await pool.query(`
-        SELECT a.id as agent_id, a.invited_users, a.paid_users,
-               CASE WHEN a.invited_users > 0 
-                    THEN a.paid_users::float / a.invited_users 
-                    ELSE 0 END as conversion_rate
+        SELECT 
+          a.id as agent_id,
+          (SELECT COUNT(*) FROM users WHERE invited_by_agent = a.id) as invited_users,
+          (SELECT COUNT(DISTINCT cr.invited_user_id) 
+           FROM commission_records cr 
+           WHERE cr.agent_id = a.id AND cr.status IN ('pending', 'settled')) as paid_users
         FROM agents a
         WHERE a.status = 'active'
-          AND a.invited_users > 5
-          AND a.paid_users > 5
-          AND (a.paid_users::float / a.invited_users) > 0.8
+        HAVING (SELECT COUNT(*) FROM users WHERE invited_by_agent = a.id) > 5
+          AND (SELECT COUNT(DISTINCT cr.invited_user_id) 
+               FROM commission_records cr 
+               WHERE cr.agent_id = a.id AND cr.status IN ('pending', 'settled')) > 5
+          AND (SELECT COUNT(DISTINCT cr.invited_user_id) 
+               FROM commission_records cr 
+               WHERE cr.agent_id = a.id AND cr.status IN ('pending', 'settled'))::float / 
+              NULLIF((SELECT COUNT(*) FROM users WHERE invited_by_agent = a.id), 0) > 0.8
       `);
 
       for (const row of highConversionResult.rows) {
         if (!anomalies.find(a => a.agentId === row.agent_id)) {
+          const invitedUsers = parseInt(row.invited_users) || 0;
+          const paidUsers = parseInt(row.paid_users) || 0;
+          const conversionRate = invitedUsers > 0 ? (paidUsers / invitedUsers * 100).toFixed(1) : '0';
           anomalies.push({
             agentId: row.agent_id,
             reason: '邀请用户付费转化率异常',
             details: {
-              invitedUsers: row.invited_users,
-              paidUsers: row.paid_users,
-              conversionRate: (parseFloat(row.conversion_rate) * 100).toFixed(1) + '%'
+              invitedUsers,
+              paidUsers,
+              conversionRate: conversionRate + '%'
             }
           });
         }

@@ -269,6 +269,15 @@ export class ProfitSharingService {
 
   /**
    * 查询分账结果
+   * 
+   * 微信分账状态说明：
+   * - PROCESSING: 处理中
+   * - FINISHED: 分账完成（成功或失败需看 receivers 中的 result）
+   * 
+   * receivers 中的 result 状态：
+   * - PENDING: 待分账
+   * - SUCCESS: 分账成功
+   * - CLOSED: 已关闭（订单撤销或退款导致）
    */
   async queryProfitSharing(outOrderNo: string, transactionId: string): Promise<{
     status: ProfitSharingStatus;
@@ -289,20 +298,75 @@ export class ProfitSharingService {
       const data = typeof response.data === 'string' ? JSON.parse(response.data) : response.data;
 
       // 映射微信状态到系统状态
-      let status: ProfitSharingStatus = 'pending';
+      let status: ProfitSharingStatus = 'processing';
+      let failReason: string | undefined;
+      
       if (data.state === 'FINISHED') {
-        status = 'success';
+        // 分账单已完成，需要检查接收方的分账结果
+        const receiver = data.receivers?.[0];
+        if (receiver) {
+          if (receiver.result === 'SUCCESS') {
+            status = 'success';
+          } else if (receiver.result === 'CLOSED') {
+            status = 'failed';
+            failReason = receiver.fail_reason || '分账已关闭';
+          } else if (receiver.result === 'PENDING') {
+            // 仍在处理中
+            status = 'processing';
+          } else {
+            // 其他状态视为失败
+            status = 'failed';
+            failReason = receiver.fail_reason || `分账结果: ${receiver.result}`;
+          }
+        } else {
+          // 没有接收方信息，视为成功（分账单已完成）
+          status = 'success';
+        }
       } else if (data.state === 'PROCESSING') {
         status = 'processing';
       }
 
       return {
         status,
-        wechatOrderId: data.order_id
+        wechatOrderId: data.order_id,
+        failReason
       };
     } catch (error: any) {
+      const errorCode = error.response?.data?.code;
       const errorMsg = error.response?.data?.message || error.message;
-      console.error(`[ProfitSharingService] 查询分账结果失败: ${errorMsg}`);
+      console.error(`[ProfitSharingService] 查询分账结果失败: ${errorCode} - ${errorMsg}`);
+      
+      // 对于 RESOURCE_NOT_EXISTS 错误，检查订单的待分金额来判断分账是否已完成
+      if (errorCode === 'RESOURCE_NOT_EXISTS') {
+        console.log(`[ProfitSharingService] 分账单 ${outOrderNo} 查询返回记录不存在，检查待分金额...`);
+        
+        // 查询订单的待分金额
+        try {
+          const amountResponse = await this.wechatpay.v3.profitsharing.transactions[transactionId].amounts.get();
+          const amountData = typeof amountResponse.data === 'string' ? JSON.parse(amountResponse.data) : amountResponse.data;
+          
+          if (amountData.unsplit_amount === 0) {
+            // 待分金额为0，说明分账已完成
+            console.log(`[ProfitSharingService] 订单 ${transactionId} 待分金额为0，分账已完成`);
+            return { status: 'success' };
+          } else {
+            // 还有待分金额，继续等待
+            console.log(`[ProfitSharingService] 订单 ${transactionId} 待分金额: ${amountData.unsplit_amount}分，继续等待`);
+            return { status: 'processing', failReason: '分账处理中' };
+          }
+        } catch (amountError: any) {
+          console.error(`[ProfitSharingService] 查询待分金额失败: ${amountError.message}`);
+          // 查询待分金额也失败，保持 processing 状态继续重试
+          return { status: 'processing', failReason: '分账单处理中，请稍后查询' };
+        }
+      }
+      
+      // 对于频率限制错误，也保持 processing 状态
+      if (errorCode === 'FREQUENCY_LIMITED') {
+        console.log(`[ProfitSharingService] 查询频率受限，稍后重试`);
+        return { status: 'processing', failReason: '查询频率受限，稍后重试' };
+      }
+      
       return { status: 'failed', failReason: errorMsg };
     }
   }
@@ -389,6 +453,7 @@ export class ProfitSharingService {
 
   /**
    * 获取待处理的分账记录
+   * 只获取重试次数小于最大重试次数的记录
    */
   async getPendingProfitSharingRecords(): Promise<Array<{
     id: number;
@@ -396,12 +461,17 @@ export class ProfitSharingService {
     transactionId: string;
     outOrderNo: string;
     amount: number;
+    retryCount: number;
   }>> {
+    const maxRetries = parseInt(process.env.PROFIT_SHARING_MAX_RETRIES || '24'); // 默认24次（24小时）
+    
     const result = await pool.query(
-      `SELECT id, commission_id, transaction_id, out_order_no, amount
+      `SELECT id, commission_id, transaction_id, out_order_no, amount, COALESCE(retry_count, 0) as retry_count
        FROM profit_sharing_records
        WHERE status = 'processing'
-       ORDER BY created_at ASC`
+       AND COALESCE(retry_count, 0) < $1
+       ORDER BY created_at ASC`,
+      [maxRetries]
     );
 
     return result.rows.map(row => ({
@@ -409,8 +479,58 @@ export class ProfitSharingService {
       commissionId: row.commission_id,
       transactionId: row.transaction_id,
       outOrderNo: row.out_order_no,
-      amount: row.amount
+      amount: row.amount,
+      retryCount: row.retry_count
     }));
+  }
+
+  /**
+   * 增加分账记录的重试次数
+   */
+  async incrementRetryCount(outOrderNo: string): Promise<void> {
+    await pool.query(
+      `UPDATE profit_sharing_records SET retry_count = COALESCE(retry_count, 0) + 1 WHERE out_order_no = $1`,
+      [outOrderNo]
+    );
+  }
+
+  /**
+   * 标记超时的分账记录为失败
+   */
+  async markTimeoutRecordsAsFailed(): Promise<number> {
+    const maxRetries = parseInt(process.env.PROFIT_SHARING_MAX_RETRIES || '24');
+    
+    // 获取超时的记录
+    const timeoutRecords = await pool.query(
+      `SELECT psr.id, psr.out_order_no, psr.commission_id
+       FROM profit_sharing_records psr
+       WHERE psr.status = 'processing'
+       AND COALESCE(psr.retry_count, 0) >= $1`,
+      [maxRetries]
+    );
+
+    let count = 0;
+    for (const record of timeoutRecords.rows) {
+      // 更新分账记录状态
+      await pool.query(
+        `UPDATE profit_sharing_records 
+         SET status = 'failed', fail_reason = '查询超时，已达最大重试次数'
+         WHERE id = $1`,
+        [record.id]
+      );
+      
+      // 更新佣金记录状态
+      await pool.query(
+        `UPDATE commission_records 
+         SET status = 'cancelled', fail_reason = '分账查询超时', updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [record.commission_id]
+      );
+      
+      count++;
+    }
+
+    return count;
   }
 
   /**
