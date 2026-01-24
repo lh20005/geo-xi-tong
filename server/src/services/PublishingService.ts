@@ -365,9 +365,12 @@ export class PublishingService {
     const params: any[] = [status];
     let paramIndex = 2;
 
+    // 如果状态回退到 pending（重试场景），清除 started_at
+    if (status === 'pending') {
+      updates.push('started_at = NULL');
+    }
 
-
-    if (status === 'success' || status === 'failed' || status === 'cancelled') {
+    if (status === 'success' || status === 'failed' || status === 'cancelled' || status === 'timeout') {
       updates.push(`completed_at = CURRENT_TIMESTAMP`);
     }
 

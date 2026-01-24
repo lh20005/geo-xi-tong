@@ -528,9 +528,30 @@ router.put('/tasks/:id/status', async (req, res) => {
     });
   } catch (error: any) {
     console.error('更新任务状态失败:', error);
+    
+    // 检查是否是间隔控制或顺序控制错误
+    const errorMessage = error.message || '更新任务状态失败';
+    const isIntervalControl = errorMessage.includes('间隔控制') || errorMessage.includes('顺序控制');
+    const isConcurrencyControl = errorMessage.includes('并发控制');
+    
+    if (isIntervalControl || isConcurrencyControl) {
+      // 使用 429 状态码表示需要等待，而不是 500 错误
+      // 解析等待时间（如果有）
+      const waitMatch = errorMessage.match(/等待\s*(\d+)\s*秒/);
+      const retryAfter = waitMatch ? parseInt(waitMatch[1]) : 60;
+      
+      res.setHeader('Retry-After', retryAfter.toString());
+      return res.status(429).json({
+        success: false,
+        code: isIntervalControl ? 'INTERVAL_CONTROL' : 'CONCURRENCY_CONTROL',
+        message: errorMessage,
+        retryAfter: retryAfter
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: error.message || '更新任务状态失败'
+      message: errorMessage
     });
   }
 });
