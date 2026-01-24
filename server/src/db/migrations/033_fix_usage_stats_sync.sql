@@ -38,11 +38,13 @@ BEGIN
   END IF;
   
   -- 查找从锚点开始的使用量记录
+  -- 修复：比较日期部分而不是完整时间戳，避免时间精度问题
+  -- last_reset_at 可能被截断到日期（00:00:00），而 quota_reset_anchor 保留完整时间戳
   SELECT COALESCE(usage_count, 0) INTO v_usage
   FROM user_usage
   WHERE user_id = p_user_id 
     AND feature_code = p_feature_code
-    AND last_reset_at >= v_anchor
+    AND last_reset_at::DATE >= v_anchor::DATE
   ORDER BY last_reset_at DESC
   LIMIT 1;
   
