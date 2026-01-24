@@ -101,11 +101,14 @@ sensitiveFiles.forEach(pattern => {
 });
 
 // ============================================
-// 3. 存档旧的打包文件
+// 3. 存档旧的打包文件（仅当版本号不同时）
 // ============================================
 console.log('\n📦 检查是否需要存档旧的打包文件...');
 const releasePath = path.join(projectRoot, 'release');
 const archiveBasePath = path.join(projectRoot, '打包历史');
+
+// 获取当前 package.json 中的版本号
+const currentVersion = require(path.join(projectRoot, 'package.json')).version;
 
 if (fs.existsSync(releasePath)) {
   // 检查 release 目录是否有打包文件
@@ -115,21 +118,21 @@ if (fs.existsSync(releasePath)) {
   );
   
   if (hasPackageFiles) {
-    // 从 latest.yml 读取版本号
+    // 从 latest.yml 读取已打包的版本号
     const latestYmlPath = path.join(releasePath, 'latest.yml');
-    let version = 'unknown';
+    let existingVersion = null;
     let releaseNotes = '';
     
     if (fs.existsSync(latestYmlPath)) {
       const ymlContent = fs.readFileSync(latestYmlPath, 'utf-8');
       const versionMatch = ymlContent.match(/^version:\s*(.+)$/m);
       if (versionMatch) {
-        version = versionMatch[1].trim();
+        existingVersion = versionMatch[1].trim();
       }
       // 提取更新说明的第一条
       const notesMatch = ymlContent.match(/##\s*\[\d+\.\d+\.\d+\].*?\n+###\s*\S+\n+[-*]\s*[^\n]+/);
       if (notesMatch) {
-        const noteLineMatch = notesMatch[0].match(/[-*]\s*[🔧⚡📊🎉]*\s*(.+)/);
+        const noteLineMatch = notesMatch[0].match(/[-*]\s*[🔧⚡📊🎉🍎📦🔗⏱️]*\s*(.+)/);
         if (noteLineMatch) {
           releaseNotes = noteLineMatch[1].trim()
             .replace(/[/:*?"<>|\\]/g, '') // 移除文件名非法字符
@@ -138,35 +141,43 @@ if (fs.existsSync(releasePath)) {
       }
     }
     
-    // 生成存档目录名：日期+版本+简介
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-    const archiveName = releaseNotes 
-      ? `${dateStr}-v${version}-${releaseNotes}`
-      : `${dateStr}-v${version}`;
-    const archivePath = path.join(archiveBasePath, archiveName);
-    
-    // 检查是否已存在相同版本的存档
-    if (!fs.existsSync(archivePath)) {
-      // 创建存档目录
-      fs.mkdirSync(archivePath, { recursive: true });
+    // 只有当已打包版本与当前版本不同时才存档
+    // 如果没有 latest.yml 或版本号相同，说明是同一版本的分平台打包，不需要存档
+    if (existingVersion && existingVersion !== currentVersion) {
+      // 生成存档目录名：日期+版本+简介
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      const archiveName = releaseNotes 
+        ? `${dateStr}-v${existingVersion}-${releaseNotes}`
+        : `${dateStr}-v${existingVersion}`;
+      const archivePath = path.join(archiveBasePath, archiveName);
       
-      // 复制打包文件到存档目录
-      const filesToArchive = releaseFiles.filter(f => 
-        f.endsWith('.exe') || f.endsWith('.dmg') || f.endsWith('.zip') || 
-        f.endsWith('.yml') || f.endsWith('.blockmap')
-      );
-      
-      filesToArchive.forEach(file => {
-        const src = path.join(releasePath, file);
-        const dest = path.join(archivePath, file);
-        fs.copyFileSync(src, dest);
-      });
-      
-      console.log(`   ✅ 已存档 v${version} 到: 打包历史/${archiveName}/`);
-      console.log(`      存档文件数: ${filesToArchive.length}`);
+      // 检查是否已存在相同版本的存档
+      if (!fs.existsSync(archivePath)) {
+        // 创建存档目录
+        fs.mkdirSync(archivePath, { recursive: true });
+        
+        // 复制打包文件到存档目录
+        const filesToArchive = releaseFiles.filter(f => 
+          f.endsWith('.exe') || f.endsWith('.dmg') || f.endsWith('.zip') || 
+          f.endsWith('.yml') || f.endsWith('.blockmap')
+        );
+        
+        filesToArchive.forEach(file => {
+          const src = path.join(releasePath, file);
+          const dest = path.join(archivePath, file);
+          fs.copyFileSync(src, dest);
+        });
+        
+        console.log(`   ✅ 已存档旧版本 v${existingVersion} 到: 打包历史/${archiveName}/`);
+        console.log(`      存档文件数: ${filesToArchive.length}`);
+      } else {
+        console.log(`   ⏭️  v${existingVersion} 已存在存档，跳过`);
+      }
+    } else if (existingVersion === currentVersion) {
+      console.log(`   ⏭️  当前版本 v${currentVersion} 正在打包中，无需存档`);
     } else {
-      console.log(`   ⏭️  v${version} 已存在存档，跳过`);
+      console.log('   ⏭️  无法确定已打包版本，跳过存档');
     }
   } else {
     console.log('   ℹ️  release 目录无打包文件，无需存档');

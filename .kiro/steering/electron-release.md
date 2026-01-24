@@ -4,7 +4,7 @@
 
 ### 当前版本
 ```
-1.2.6
+1.2.7
 ```
 
 ### 版本号规则（语义化版本）
@@ -17,6 +17,7 @@
 ### 版本历史
 | 版本 | 发布日期 | 类型 | 说明 |
 |------|----------|------|------|
+| 1.2.7 | 2026-01-24 | Patch | 修复批次发布任务定时间隔问题 |
 | 1.2.6 | 2026-01-22 | Patch | 修复 Windows 上页面缩放无法保持的问题 |
 | 1.2.5 | 2026-01-22 | Patch | 修复 Windows 安装时"无法关闭"问题（增强进程关闭机制） |
 | 1.2.4 | 2026-01-22 | Patch | 优化升级软件页面更新内容显示 |
@@ -129,19 +130,35 @@ npm run download:browsers
 
 **每次打包后必须验证浏览器是否正确打包！**
 
-#### Windows 验证方法
+#### 自动验证（推荐）
+
+打包完成后自动执行验证脚本：
 ```bash
-# 解压 exe 安装包或查看安装后的目录
-# 检查 resources/playwright-browsers/chromium-1200/chrome-win64/chrome.exe 是否存在
+npm run verify:browsers
 ```
 
-#### macOS 验证方法
-```bash
-# 挂载 DMG 或解压 ZIP
-# 检查 Contents/Resources/playwright-browsers/chromium-1200/ 目录
+此脚本会检查：
+- 各平台是否包含正确的浏览器目录
+- 是否误打入其他平台的浏览器
+- 浏览器可执行文件是否存在
 
-# macOS ARM 应包含：chrome-mac-arm64/Google Chrome for Testing.app
-# macOS Intel 应包含：chrome-mac-x64/Google Chrome for Testing.app
+**注意：`npm run build:all` 命令已自动包含验证步骤。**
+
+#### 手动验证方法
+
+Windows:
+```bash
+# 检查 release/win-unpacked/resources/playwright-browsers/chromium-1200/chrome-win64/chrome.exe
+```
+
+macOS Intel:
+```bash
+# 检查 release/mac/Ai智软精准GEO优化系统.app/Contents/Resources/playwright-browsers/chromium-1200/chrome-mac-x64/
+```
+
+macOS ARM:
+```bash
+# 检查 release/mac-arm64/Ai智软精准GEO优化系统.app/Contents/Resources/playwright-browsers/chromium-1200/chrome-mac-arm64/
 ```
 
 ### 常见问题
@@ -295,9 +312,7 @@ npm run build:all
 - [ ] 浏览器已下载（`npm run download:browsers`）
 - [ ] Windows exe 已打包
 - [ ] macOS dmg + zip 已打包（两种架构）
-- [ ] **验证 Windows 包含 chrome-win64/chrome.exe**
-- [ ] **验证 macOS Intel 包含 chrome-mac-x64/**
-- [ ] **验证 macOS ARM 包含 chrome-mac-arm64/**
+- [ ] **运行 `npm run verify:browsers` 验证浏览器打包正确**
 - [ ] latest.yml 和 latest-mac.yml 包含正确的 releaseNotes
 - [ ] 所有文件已上传到 COS `/releases/` 目录
 - [ ] latest/ 目录已更新固定链接文件
