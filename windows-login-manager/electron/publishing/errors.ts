@@ -64,3 +64,19 @@ export class TaskCancelledError extends Error {
     Object.setPrototypeOf(this, TaskCancelledError.prototype);
   }
 }
+
+/**
+ * 间隔控制错误
+ * 当任务需要等待一段时间后重试时抛出
+ */
+export class IntervalControlError extends Error {
+  public readonly retryAfter: number;
+
+  constructor(retryAfter: number, message?: string) {
+    super(message || `需要等待 ${retryAfter} 秒后重试`);
+    this.name = 'IntervalControlError';
+    this.retryAfter = retryAfter;
+    
+    Object.setPrototypeOf(this, IntervalControlError.prototype);
+  }
+}
