@@ -82,18 +82,60 @@ export class PublishingExecutor {
 
   /**
    * 更新任务状态到服务器
+   * 支持 429 错误的智能重试（指数退避 + Retry-After）
    */
   private async updateTaskStatus(taskId: number, status: string, errorMessage?: string): Promise<void> {
-    try {
-      await apiClient.put(`/api/publishing/tasks/${taskId}/status`, {
-        status,
-        error_message: errorMessage
-      });
-      console.log(`✅ 任务 #${taskId} 状态已更新为 ${status}`);
-    } catch (error) {
-      console.error(`更新任务状态失败:`, error);
-      throw error;
+    const maxRetries = 5;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        await apiClient.put(`/api/publishing/tasks/${taskId}/status`, {
+          status,
+          error_message: errorMessage
+        });
+        console.log(`✅ 任务 #${taskId} 状态已更新为 ${status}`);
+        return;
+      } catch (error: any) {
+        const statusCode = error.response?.status;
+        const retryAfter = error.response?.headers?.['retry-after'];
+        const errorCode = error.response?.data?.code;
+        
+        // 处理 429 错误（间隔控制/并发控制）
+        if (statusCode === 429) {
+          attempt++;
+          
+          // 计算等待时间：优先使用 Retry-After，否则使用指数退避
+          let waitSeconds: number;
+          if (retryAfter) {
+            waitSeconds = parseInt(retryAfter, 10);
+          } else {
+            // 指数退避：30s, 60s, 120s, 240s, 480s
+            waitSeconds = 30 * Math.pow(2, attempt - 1);
+          }
+          
+          // 添加随机抖动（±10%）避免多任务同时重试
+          const jitter = waitSeconds * 0.1 * (Math.random() * 2 - 1);
+          waitSeconds = Math.round(waitSeconds + jitter);
+          
+          const reason = errorCode === 'INTERVAL_CONTROL' ? '间隔控制' : 
+                        errorCode === 'CONCURRENCY_CONTROL' ? '并发控制' : '限流';
+          
+          console.log(`⏳ 任务 #${taskId} 触发${reason}，等待 ${waitSeconds} 秒后重试 (${attempt}/${maxRetries})`);
+          await this.log(taskId, 'warning', `触发${reason}，等待 ${waitSeconds} 秒后重试`, { attempt, maxRetries, waitSeconds });
+          
+          await new Promise(resolve => setTimeout(resolve, waitSeconds * 1000));
+          continue;
+        }
+        
+        // 其他错误直接抛出
+        console.error(`更新任务状态失败:`, error);
+        throw error;
+      }
     }
+    
+    // 重试次数耗尽
+    throw new Error(`更新任务状态失败：重试 ${maxRetries} 次后仍触发限流`);
   }
 
   /**
@@ -392,6 +434,7 @@ export class PublishingExecutor {
 
   /**
    * 处理任务失败，包含重试逻辑
+   * 特殊处理 429 错误：不消耗重试次数，抛出特殊错误让批次执行器处理等待
    */
   private async handleTaskFailure(taskId: number, error: Error, isTimeout: boolean = false): Promise<void> {
     // 如果是取消错误，直接返回
@@ -399,6 +442,28 @@ export class PublishingExecutor {
       await this.log(taskId, 'info', '⚠️ 任务已被用户取消');
       await this.updateTaskStatus(taskId, 'cancelled', '任务已被用户取消');
       return;
+    }
+
+    // 检查是否是 429 错误（间隔控制/并发控制）
+    const is429Error = error.message?.includes('429') || 
+                       error.message?.includes('间隔控制') || 
+                       error.message?.includes('并发控制') ||
+                       error.message?.includes('限流');
+    
+    if (is429Error) {
+      // 429 错误不应该消耗重试次数
+      // 解析等待时间
+      const waitMatch = error.message?.match(/等待\s*(\d+)\s*秒/);
+      const waitSeconds = waitMatch ? parseInt(waitMatch[1]) : 60;
+      
+      await this.log(taskId, 'warning', `触发间隔/并发控制，需等待 ${waitSeconds} 秒`, { error: error.message });
+      console.log(`⏳ 任务 #${taskId} 触发间隔控制，需等待 ${waitSeconds} 秒后重试`);
+      
+      // 抛出特殊错误，让批次执行器知道需要等待后重试
+      const retryError = new Error(`RETRY_AFTER:${waitSeconds}:${error.message}`);
+      (retryError as any).isRetryable = true;
+      (retryError as any).retryAfterSeconds = waitSeconds;
+      throw retryError;
     }
 
     // 增加重试次数

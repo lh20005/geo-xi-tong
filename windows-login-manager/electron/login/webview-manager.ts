@@ -335,16 +335,24 @@ class WebViewManager {
 
   /**
    * 导航到 URL
+   * 添加错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
   async navigateTo(url: string): Promise<void> {
     if (!this.currentWebViewId || !this.parentWindow) {
       throw new Error('No WebView available');
     }
 
+    // 检查窗口是否已销毁
+    if (this.parentWindow.isDestroyed()) {
+      throw new Error('Parent window is destroyed');
+    }
+
+    const webViewId = this.currentWebViewId;
+
     try {
       await this.parentWindow.webContents.executeJavaScript(`
         (function() {
-          const webview = document.getElementById('${this.currentWebViewId}');
+          const webview = document.getElementById('${webViewId}');
           if (webview) {
             webview.src = '${url}';
             return true;
@@ -354,7 +362,13 @@ class WebViewManager {
       `);
 
       log.info(`Navigated to: ${url}`);
-    } catch (error) {
+    } catch (error: any) {
+      // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+      if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+          error.message?.includes('reply was never sent')) {
+        log.warn('WebView IPC error during navigation (webview may have been destroyed)');
+        throw new Error('WebView is no longer available');
+      }
       log.error('Navigation failed:', error);
       throw error;
     }
@@ -362,25 +376,83 @@ class WebViewManager {
 
   /**
    * 执行 JavaScript 代码
+   * 添加超时和错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
-  async executeJavaScript<T>(code: string): Promise<T> {
+  async executeJavaScript<T>(code: string, timeout: number = 10000): Promise<T> {
     if (!this.currentWebViewId || !this.parentWindow) {
       throw new Error('No WebView available');
     }
 
+    // 检查窗口是否已销毁
+    if (this.parentWindow.isDestroyed()) {
+      throw new Error('Parent window is destroyed');
+    }
+
+    const webViewId = this.currentWebViewId;
+
     try {
-      const result = await this.parentWindow.webContents.executeJavaScript(`
+      // 使用 Promise.race 添加超时控制
+      const resultPromise = this.parentWindow.webContents.executeJavaScript(`
         (function() {
-          const webview = document.getElementById('${this.currentWebViewId}');
-          if (webview) {
-            return webview.executeJavaScript(\`${code.replace(/`/g, '\\`')}\`);
-          }
-          throw new Error('WebView not found');
+          return new Promise((resolve, reject) => {
+            const webview = document.getElementById('${webViewId}');
+            if (!webview) {
+              reject(new Error('WebView not found'));
+              return;
+            }
+            
+            // 检查 webview 是否已经被销毁或正在加载
+            try {
+              if (webview.isLoading && webview.isLoading()) {
+                // 如果正在加载，等待加载完成
+                const loadHandler = () => {
+                  webview.removeEventListener('did-stop-loading', loadHandler);
+                  executeCode();
+                };
+                webview.addEventListener('did-stop-loading', loadHandler);
+                // 设置一个备用超时
+                setTimeout(() => {
+                  webview.removeEventListener('did-stop-loading', loadHandler);
+                  executeCode();
+                }, 3000);
+              } else {
+                executeCode();
+              }
+            } catch (e) {
+              // webview 可能已被销毁
+              reject(new Error('WebView is not accessible: ' + e.message));
+              return;
+            }
+            
+            function executeCode() {
+              try {
+                const result = webview.executeJavaScript(\`${code.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`);
+                if (result && typeof result.then === 'function') {
+                  result.then(resolve).catch(reject);
+                } else {
+                  resolve(result);
+                }
+              } catch (e) {
+                reject(e);
+              }
+            }
+          });
         })();
       `);
 
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('JavaScript execution timeout')), timeout);
+      });
+
+      const result = await Promise.race([resultPromise, timeoutPromise]);
       return result as T;
-    } catch (error) {
+    } catch (error: any) {
+      // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+      if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+          error.message?.includes('reply was never sent')) {
+        log.warn('WebView IPC error (webview may have been destroyed):', error.message);
+        throw new Error('WebView is no longer available');
+      }
       log.error('JavaScript execution failed:', error);
       throw error;
     }
@@ -388,22 +460,42 @@ class WebViewManager {
 
   /**
    * 获取当前 URL
+   * 添加错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
   async getCurrentURL(): Promise<string | null> {
     if (!this.currentWebViewId || !this.parentWindow) {
       return null;
     }
 
+    // 检查窗口是否已销毁
+    if (this.parentWindow.isDestroyed()) {
+      return null;
+    }
+
+    const webViewId = this.currentWebViewId;
+
     try {
       const url = await this.parentWindow.webContents.executeJavaScript(`
         (function() {
-          const webview = document.getElementById('${this.currentWebViewId}');
-          return webview ? webview.getURL() : null;
+          const webview = document.getElementById('${webViewId}');
+          if (!webview) return null;
+          try {
+            return webview.getURL();
+          } catch (e) {
+            console.error('[WebView] Failed to get URL:', e);
+            return null;
+          }
         })();
       `);
 
       return url;
-    } catch (error) {
+    } catch (error: any) {
+      // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+      if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+          error.message?.includes('reply was never sent')) {
+        log.warn('WebView IPC error when getting URL (webview may have been destroyed)');
+        return null;
+      }
       log.error('Failed to get current URL:', error);
       return null;
     }
@@ -411,22 +503,42 @@ class WebViewManager {
 
   /**
    * 获取页面标题
+   * 添加错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
   async getPageTitle(): Promise<string | null> {
     if (!this.currentWebViewId || !this.parentWindow) {
       return null;
     }
 
+    // 检查窗口是否已销毁
+    if (this.parentWindow.isDestroyed()) {
+      return null;
+    }
+
+    const webViewId = this.currentWebViewId;
+
     try {
       const title = await this.parentWindow.webContents.executeJavaScript(`
         (function() {
-          const webview = document.getElementById('${this.currentWebViewId}');
-          return webview ? webview.getTitle() : null;
+          const webview = document.getElementById('${webViewId}');
+          if (!webview) return null;
+          try {
+            return webview.getTitle();
+          } catch (e) {
+            console.error('[WebView] Failed to get title:', e);
+            return null;
+          }
         })();
       `);
 
       return title;
-    } catch (error) {
+    } catch (error: any) {
+      // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+      if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+          error.message?.includes('reply was never sent')) {
+        log.warn('WebView IPC error when getting title (webview may have been destroyed)');
+        return null;
+      }
       log.error('Failed to get page title:', error);
       return null;
     }
@@ -434,24 +546,55 @@ class WebViewManager {
 
   /**
    * 等待页面加载完成
+   * 添加错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
   async waitForLoad(timeout: number = 30000): Promise<void> {
     if (!this.currentWebViewId || !this.parentWindow) {
       throw new Error('No WebView available');
     }
 
+    // 检查窗口是否已销毁
+    if (this.parentWindow.isDestroyed()) {
+      throw new Error('Parent window is destroyed');
+    }
+
+    const webViewId = this.currentWebViewId;
+    const parentWindow = this.parentWindow;
+
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
+        clearInterval(checkInterval);
         reject(new Error('Page load timeout'));
       }, timeout);
 
       // 使用轮询检查加载状态
       const checkInterval = setInterval(async () => {
+        // 检查 webview 是否还存在
+        if (!this.currentWebViewId || this.currentWebViewId !== webViewId) {
+          clearTimeout(timer);
+          clearInterval(checkInterval);
+          reject(new Error('WebView was destroyed during wait'));
+          return;
+        }
+
+        // 检查窗口是否已销毁
+        if (parentWindow.isDestroyed()) {
+          clearTimeout(timer);
+          clearInterval(checkInterval);
+          reject(new Error('Parent window was destroyed during wait'));
+          return;
+        }
+
         try {
-          const isLoading = await this.parentWindow!.webContents.executeJavaScript(`
+          const isLoading = await parentWindow.webContents.executeJavaScript(`
             (function() {
-              const webview = document.getElementById('${this.currentWebViewId}');
-              return webview ? webview.isLoading() : false;
+              const webview = document.getElementById('${webViewId}');
+              if (!webview) return false;
+              try {
+                return webview.isLoading();
+              } catch (e) {
+                return false;
+              }
             })();
           `);
 
@@ -460,7 +603,15 @@ class WebViewManager {
             clearInterval(checkInterval);
             resolve();
           }
-        } catch (error) {
+        } catch (error: any) {
+          // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+          if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+              error.message?.includes('reply was never sent')) {
+            clearTimeout(timer);
+            clearInterval(checkInterval);
+            reject(new Error('WebView is no longer available'));
+            return;
+          }
           clearTimeout(timer);
           clearInterval(checkInterval);
           reject(error);
@@ -488,22 +639,40 @@ class WebViewManager {
 
   /**
    * 发送消息到 webview
+   * 添加错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
   async sendMessage(channel: string, data: any): Promise<void> {
     if (!this.currentWebViewId || !this.parentWindow) {
       throw new Error('No WebView available');
     }
 
+    // 检查窗口是否已销毁
+    if (this.parentWindow.isDestroyed()) {
+      throw new Error('Parent window is destroyed');
+    }
+
+    const webViewId = this.currentWebViewId;
+
     try {
       await this.parentWindow.webContents.executeJavaScript(`
         (function() {
-          const webview = document.getElementById('${this.currentWebViewId}');
+          const webview = document.getElementById('${webViewId}');
           if (webview) {
-            webview.send('${channel}', ${JSON.stringify(data)});
+            try {
+              webview.send('${channel}', ${JSON.stringify(data)});
+            } catch (e) {
+              console.error('[WebView] Failed to send message:', e);
+            }
           }
         })();
       `);
-    } catch (error) {
+    } catch (error: any) {
+      // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+      if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+          error.message?.includes('reply was never sent')) {
+        log.warn('WebView IPC error when sending message (webview may have been destroyed)');
+        throw new Error('WebView is no longer available');
+      }
       log.error('Failed to send message:', error);
       throw error;
     }
@@ -511,17 +680,32 @@ class WebViewManager {
 
   /**
    * 销毁 WebView
+   * 添加错误处理，避免 GUEST_VIEW_MANAGER_CALL 错误
    */
   async destroyWebView(): Promise<void> {
     if (!this.currentWebViewId || !this.parentWindow) {
       return;
     }
 
+    const webViewId = this.currentWebViewId;
+    const parentWindow = this.parentWindow;
+
+    // 先清除引用，防止重复调用
+    this.currentWebViewId = null;
+    this.parentWindow = null;
+    this.messageHandlers.clear();
+
+    // 检查窗口是否已销毁
+    if (parentWindow.isDestroyed()) {
+      log.info('WebView destroyed (parent window already destroyed)');
+      return;
+    }
+
     try {
       // 移除 webview 和工具栏，并恢复原来的样式
-      await this.parentWindow.webContents.executeJavaScript(`
+      await parentWindow.webContents.executeJavaScript(`
         (function() {
-          const webview = document.getElementById('${this.currentWebViewId}');
+          const webview = document.getElementById('${webViewId}');
           if (webview) {
             // 移除 resize 监听器
             if (webview._resizeHandler) {
@@ -556,14 +740,16 @@ class WebViewManager {
         })();
       `);
 
-      this.currentWebViewId = null;
-      this.parentWindow = null;
-      this.messageHandlers.clear();
-
       log.info('WebView destroyed');
-    } catch (error) {
+    } catch (error: any) {
+      // 特殊处理 GUEST_VIEW_MANAGER_CALL 错误
+      if (error.message?.includes('GUEST_VIEW_MANAGER_CALL') || 
+          error.message?.includes('reply was never sent')) {
+        log.warn('WebView IPC error during destroy (webview may have already been destroyed)');
+        return;
+      }
       log.error('Failed to destroy WebView:', error);
-      throw error;
+      // 不抛出错误，因为销毁操作应该是幂等的
     }
   }
 

@@ -14,7 +14,6 @@ import { publishingExecutor } from './executor';
 import { apiClient } from '../api/client';
 import { LocalTask, BatchInfo } from './types';
 import { sleep } from './utils';
-import { IntervalControlError } from './errors';
 
 /**
  * 批次执行器
@@ -78,6 +77,11 @@ export class BatchExecutor {
 
   /**
    * 执行单个批次的所有任务
+   * 
+   * 关键设计：严格串行执行
+   * 1. 每次只执行一个任务，等待其完成后再执行下一个
+   * 2. 在执行任务前检查间隔时间，确保满足间隔要求
+   * 3. 不依赖服务器端的间隔检查（429），而是在客户端主动等待
    */
   private async runBatch(batchId: string): Promise<void> {
     if (this.stoppedBatches.has(batchId)) {
@@ -102,7 +106,10 @@ export class BatchExecutor {
         return;
       }
 
-      console.log(`� 批次共有 ${tasks.length} 个任务\n`);
+      console.log(`📋 批次共有 ${tasks.length} 个任务\n`);
+
+      // 记录上一个成功完成的任务信息（用于计算间隔）
+      let lastCompletedTask: { id: number; completedAt: number; intervalMinutes: number } | null = null;
 
       // 串行执行每个任务
       for (let i = 0; i < tasks.length; i++) {
@@ -126,132 +133,158 @@ export class BatchExecutor {
         if (currentTask.status !== 'pending') {
           console.log(`⏭️  任务 #${task.id} 状态为 ${currentTask.status}，跳过执行`);
           
-          // 关键修复：即使任务已完成，如果它属于当前批次序列，也需要检查是否需要等待间隔
-          // 这样可以防止"断点续传"或重启后，忽略了已完成任务的间隔时间，导致后续任务立即执行
-          if (i < tasks.length - 1) {
-            // 优先使用 currentTask
-            const sourceTask = currentTask || task;
-            // 兼容可能的大小写问题，并确保转为数字
-            // @ts-expect-error - 忽略类型检查以处理可能的属性名差异
-            const rawInterval = sourceTask.intervalMinutes ?? sourceTask.interval_minutes;
+          // 如果任务已完成，更新 lastCompletedTask 以便后续任务计算间隔
+          if (currentTask.status === 'success' && currentTask.completed_at) {
+            const rawInterval = (task as any).intervalMinutes ?? task.interval_minutes;
+            lastCompletedTask = {
+              id: task.id,
+              completedAt: new Date(currentTask.completed_at).getTime(),
+              intervalMinutes: Number(rawInterval) || 0
+            };
+          }
+          continue;
+        }
+
+        // ========== 关键修复：在执行任务前，主动等待间隔时间 ==========
+        // 这样可以避免触发服务器端的 429 错误
+        if (lastCompletedTask && lastCompletedTask.intervalMinutes > 0) {
+          const waitDurationMs = lastCompletedTask.intervalMinutes * 60 * 1000;
+          const targetTime = lastCompletedTask.completedAt + waitDurationMs;
+          const now = Date.now();
+          const remainingMs = targetTime - now;
+          
+          if (remainingMs > 0) {
+            const remainingSeconds = Math.ceil(remainingMs / 1000);
+            console.log(`\n⏳ 等待间隔时间（剩余 ${remainingSeconds} 秒）...`);
+            console.log(`   [Debug] 前一个任务 #${lastCompletedTask.id} 完成于 ${new Date(lastCompletedTask.completedAt).toLocaleString()}`);
+            console.log(`   [Debug] 间隔 ${lastCompletedTask.intervalMinutes} 分钟，目标时间 ${new Date(targetTime).toLocaleString()}`);
+            
+            // 使用秒级等待，更精确
+            const stopped = await this.waitSecondsWithStopCheck(batchId, remainingSeconds);
+            if (stopped) {
+              console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+              break;
+            }
+            console.log(`✅ 间隔等待完成，开始执行任务 #${task.id}`);
+          }
+        } else if (i > 0 && !lastCompletedTask) {
+          // 如果没有 lastCompletedTask 但不是第一个任务，尝试从数据库获取前一个任务信息
+          const prevTask = tasks[i - 1];
+          const prevTaskData = await this.fetchTaskById(prevTask.id);
+          
+          if (prevTaskData && prevTaskData.completed_at) {
+            const rawInterval = (prevTask as any).intervalMinutes ?? prevTask.interval_minutes;
             const intervalMinutes = Number(rawInterval) || 0;
             
-            if (intervalMinutes > 0 && currentTask.completed_at) {
-              const completedAt = new Date(currentTask.completed_at).getTime();
+            if (intervalMinutes > 0) {
+              const completedAt = new Date(prevTaskData.completed_at).getTime();
               const waitDurationMs = intervalMinutes * 60 * 1000;
-              // 增加 5 秒缓冲时间
-              const targetTime = completedAt + waitDurationMs + 5000;
+              const targetTime = completedAt + waitDurationMs;
               const now = Date.now();
               const remainingMs = targetTime - now;
               
               if (remainingMs > 0) {
-                // 向上取整到分钟，确保 waitWithStopCheck 能处理
-                // 注意：waitWithStopCheck 最小单位是分钟，这里可能不够精确，但足够解决"立即执行"的问题
-                // 为了更好的体验，我们至少等待1分钟（如果剩余时间大于0）
-                const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60000));
+                const remainingSeconds = Math.ceil(remainingMs / 1000);
+                console.log(`\n⏳ 等待间隔时间（剩余 ${remainingSeconds} 秒）...`);
+                console.log(`   [Debug] 前一个任务 #${prevTask.id} 完成于 ${new Date(completedAt).toLocaleString()}`);
+                console.log(`   [Debug] 间隔 ${intervalMinutes} 分钟，目标时间 ${new Date(targetTime).toLocaleString()}`);
                 
-                console.log(`\n⏳ 任务 #${task.id} 已完成，但需补足间隔时间（剩余约 ${remainingMinutes} 分钟）...`);
-                console.log(`   [Debug] Interval: ${intervalMinutes}m, Completed: ${new Date(completedAt).toLocaleString()}, Target: ${new Date(targetTime).toLocaleString()}`);
-                
-                const stopped = await this.waitWithStopCheck(batchId, remainingMinutes);
+                const stopped = await this.waitSecondsWithStopCheck(batchId, remainingSeconds);
                 if (stopped) {
                   console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
                   break;
                 }
+                console.log(`✅ 间隔等待完成，开始执行任务 #${task.id}`);
               }
             }
           }
-          
-          continue;
         }
+        // ========== 间隔检查结束 ==========
 
-        // 获取间隔时间（在任务执行前获取，确保无论成功失败都能使用）
-        // @ts-expect-error - 忽略类型检查以处理可能的属性名差异
-        const rawInterval = currentTask.intervalMinutes ?? currentTask.interval_minutes;
-        const intervalMinutes = Number(rawInterval) || 0;
-        
         // 执行任务
         console.log(`\n${'─'.repeat(50)}`);
         console.log(`📝 执行任务 ${taskNumber}/${tasks.length}`);
         console.log(`   任务ID: #${task.id}`);
         console.log(`   文章: ${task.article_title}`);
         console.log(`   平台: ${task.platform_id}`);
-        console.log(`   间隔: ${intervalMinutes} 分钟（任务完成后）`);
         console.log(`   时间: ${new Date().toLocaleString('zh-CN')}`);
         console.log(`${'─'.repeat(50)}`);
 
         const taskStartTime = Date.now();
-        let finalTask: LocalTask | null = null;
         let taskSucceeded = false;
+        let retryCount = 0;
+        const maxRetries = 5; // 429 错误最大重试次数
         
-        try {
-          // 执行任务（这里会等待任务完成）
-          await publishingExecutor.executeTask(task.id);
-          
-          const duration = Math.round((Date.now() - taskStartTime) / 1000);
-          
-          // 检查任务最终状态
-          finalTask = await this.fetchTaskById(task.id);
-          if (finalTask?.status === 'success') {
-            console.log(`✅ 任务 #${task.id} 成功，耗时 ${duration}秒`);
-            taskSucceeded = true;
-          } else {
-            console.log(`❌ 任务 #${task.id} 失败，状态: ${finalTask?.status}，耗时 ${duration}秒`);
-          }
-        } catch (error: any) {
-          const duration = Math.round((Date.now() - taskStartTime) / 1000);
-          
-          // 处理间隔控制错误：等待指定时间后重试
-          if (error instanceof IntervalControlError) {
-            const waitSeconds = error.retryAfter || 60;
-            console.log(`⏳ 任务 #${task.id} 需要等待间隔时间 ${waitSeconds} 秒...`);
-            
-            // 等待间隔时间（转换为分钟，向上取整）
-            const waitMinutes = Math.ceil(waitSeconds / 60);
-            const stopped = await this.waitWithStopCheck(batchId, waitMinutes);
-            
-            if (stopped) {
-              console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+        while (!taskSucceeded && retryCount < maxRetries) {
+          try {
+            // 检查停止信号
+            if (this.stoppedBatches.has(batchId)) {
+              console.log(`\n🛑 批次 ${batchId} 被用户停止`);
               break;
             }
             
-            // 重新执行当前任务（通过减少索引，下次循环会再次执行）
-            console.log(`🔄 重新尝试执行任务 #${task.id}...`);
-            i--; // 回退索引，下次循环重新执行当前任务
-            continue;
+            // 执行任务（这里会等待任务完成）
+            await publishingExecutor.executeTask(task.id);
+            
+            const duration = Math.round((Date.now() - taskStartTime) / 1000);
+            
+            // 检查任务最终状态
+            const finalTask = await this.fetchTaskById(task.id);
+            if (finalTask?.status === 'success') {
+              console.log(`✅ 任务 #${task.id} 成功，耗时 ${duration}秒`);
+              taskSucceeded = true;
+              
+              // 更新 lastCompletedTask
+              const rawInterval = (task as any).intervalMinutes ?? task.interval_minutes;
+              lastCompletedTask = {
+                id: task.id,
+                completedAt: finalTask.completed_at ? new Date(finalTask.completed_at).getTime() : Date.now(),
+                intervalMinutes: Number(rawInterval) || 0
+              };
+            } else if (finalTask?.status === 'failed' || finalTask?.status === 'timeout' || finalTask?.status === 'cancelled') {
+              console.log(`❌ 任务 #${task.id} 最终状态: ${finalTask?.status}，耗时 ${duration}秒`);
+              taskSucceeded = true; // 任务已完成（虽然失败），不需要重试
+              // 失败的任务不更新 lastCompletedTask，这样下一个任务不需要等待间隔
+            } else {
+              // 任务状态仍是 pending，可能需要重试
+              console.log(`⚠️ 任务 #${task.id} 状态: ${finalTask?.status}，可能需要重试`);
+              taskSucceeded = true; // 避免无限循环
+            }
+          } catch (error: any) {
+            const duration = Math.round((Date.now() - taskStartTime) / 1000);
+            
+            // 检查是否是可重试的 429 错误
+            if (error.isRetryable && error.retryAfterSeconds) {
+              retryCount++;
+              const waitSeconds = error.retryAfterSeconds;
+              
+              console.log(`\n⏳ 任务 #${task.id} 触发间隔/并发控制，等待 ${waitSeconds} 秒后重试 (${retryCount}/${maxRetries})`);
+              
+              // 等待指定时间
+              const stopped = await this.waitSecondsWithStopCheck(batchId, waitSeconds);
+              if (stopped) {
+                console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+                break;
+              }
+              
+              // 继续重试
+              continue;
+            }
+            
+            // 其他错误，记录并继续
+            console.error(`❌ 任务 #${task.id} 异常，耗时 ${duration}秒:`, error.message);
+            taskSucceeded = true; // 避免无限循环
           }
-          
-          console.error(`❌ 任务 #${task.id} 异常，耗时 ${duration}秒:`, error.message);
         }
-
-        // 记录任务完成时间（无论成功失败）
-        const taskEndTime = Date.now();
+        
+        if (retryCount >= maxRetries) {
+          console.error(`❌ 任务 #${task.id} 重试次数已用完 (${maxRetries}次)`);
+        }
 
         // 检查停止信号
         if (this.stoppedBatches.has(batchId)) {
           console.log(`\n🛑 批次 ${batchId} 被用户停止`);
           break;
-        }
-
-        // 如果不是最后一个任务，等待间隔
-        // 关键：间隔是从任务完成后开始计算的
-        if (i < tasks.length - 1 && intervalMinutes > 0) {
-          // 增加 5 秒缓冲时间
-          const bufferMs = 5000;
-          const waitMs = (intervalMinutes * 60 * 1000) + bufferMs;
-          const waitMinutes = waitMs / 60000;
-          const waitSeconds = Math.ceil(waitMs / 1000);
-          
-          console.log(`\n⏳ 任务 #${task.id} 已${taskSucceeded ? '完成' : '结束'}，从现在开始等待 ${intervalMinutes} 分钟（+5秒缓冲）后执行下一个任务...`);
-          console.log(`   [Debug] Interval: ${intervalMinutes}m, Wait: ${waitSeconds}s, NextTaskAt: ${new Date(taskEndTime + waitMs).toLocaleString('zh-CN')}`);
-          
-          const stopped = await this.waitWithStopCheck(batchId, waitMinutes);
-          if (stopped) {
-            console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
-            break;
-          }
-        } else if (i < tasks.length - 1) {
-          console.log(`\n⏭️ 任务 #${task.id} 无间隔时间设置，立即执行下一个任务`);
         }
       }
 
@@ -273,16 +306,16 @@ export class BatchExecutor {
   }
 
   /**
-   * 等待指定时间，期间检查停止信号
+   * 等待指定秒数，期间检查停止信号
    */
-  private async waitWithStopCheck(batchId: string, minutes: number): Promise<boolean> {
-    if (minutes <= 0) return false;
+  private async waitSecondsWithStopCheck(batchId: string, seconds: number): Promise<boolean> {
+    if (seconds <= 0) return false;
     
-    const totalMs = minutes * 60 * 1000;
+    const totalMs = seconds * 1000;
     const startTime = Date.now();
     const endTime = startTime + totalMs;
     
-    console.log(`[BatchExecutor] Starting wait. Minutes: ${minutes}, TotalMs: ${totalMs}, EndTime: ${new Date(endTime).toLocaleString()}`);
+    console.log(`[BatchExecutor] Starting wait. Seconds: ${seconds}, EndTime: ${new Date(endTime).toLocaleString()}`);
     
     while (Date.now() < endTime) {
       // 检查停止信号

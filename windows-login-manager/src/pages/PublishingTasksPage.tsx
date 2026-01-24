@@ -362,11 +362,10 @@ export default function PublishingTasksPage() {
             for (const accountId of accountIds) {
               const account = accounts.find(a => a.id === accountId);
               if (account) {
-                // 判断是否是最后一个任务
-                const isLastTask = (i === articleIds.length - 1) && (accountId === accountIds[accountIds.length - 1]);
-                
-                // 除了最后一个任务，其他任务都设置间隔
-                const intervalMinutes = isLastTask ? 0 : publishInterval;
+                // 所有任务都设置相同的间隔时间
+                // interval_minutes 表示当前任务完成后，下一个任务需要等待的时间
+                // 最后一个任务的 interval_minutes 虽然不会被使用，但为了数据一致性也设置
+                const intervalMinutes = publishInterval;
                 
                 tasks.push(
                   createPublishingTask({
