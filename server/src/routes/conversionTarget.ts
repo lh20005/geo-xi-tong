@@ -15,14 +15,14 @@ conversionTargetRouter.use(requireTenantContext);
 const createConversionTargetSchema = z.object({
   companyName: z.string().min(2).max(255).trim(),
   industry: z.string().max(100).optional().or(z.literal('')),
-  website: z.string().url().optional().or(z.literal('')),
+  website: z.string().max(500).optional().or(z.literal('')),
   address: z.string().max(500).optional().or(z.literal(''))
 });
 
 const updateConversionTargetSchema = z.object({
   companyName: z.string().min(2).max(255).trim().optional(),
   industry: z.string().max(100).optional().or(z.literal('')),
-  website: z.string().url().optional().or(z.literal('')),
+  website: z.string().max(500).optional().or(z.literal('')),
   address: z.string().max(500).optional().or(z.literal(''))
 });
 
