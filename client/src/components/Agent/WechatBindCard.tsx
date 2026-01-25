@@ -306,84 +306,83 @@ export const WechatBindCard: React.FC<WechatBindCardProps> = ({ agent, onAgentUp
             </>
           ) : (
             <>
-              <Paragraph style={{ marginBottom: 24 }}>
-                请使用微信扫描下方小程序码完成绑定
-              </Paragraph>
-              
-              {qrCodeBase64 ? (
-                // 显示小程序码
-                <div style={{ 
-                  background: '#f5f5f5', 
-                  padding: '24px', 
-                  borderRadius: 12,
-                  marginBottom: 24,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center'
-                }}>
-                  <Image
-                    src={qrCodeBase64}
-                    alt="小程序码"
-                    width={200}
-                    height={200}
-                    preview={false}
-                    style={{ borderRadius: 8 }}
-                  />
-                  <Text type="secondary" style={{ marginTop: 12, fontSize: 12 }}>
-                    微信扫一扫，自动完成绑定
-                  </Text>
-                </div>
-              ) : (
-                // 降级显示绑定码
-                <div style={{ 
-                  background: '#f5f5f5', 
-                  padding: '24px 32px', 
-                  borderRadius: 12,
-                  marginBottom: 24
-                }}>
-                  <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                    请在小程序中输入绑定码：
+              {/* 第一步：扫码打开小程序 */}
+              {qrCodeBase64 && (
+                <div style={{ marginBottom: 20 }}>
+                  <Text strong style={{ display: 'block', marginBottom: 12, fontSize: 15 }}>
+                    第一步：微信扫码打开小程序
                   </Text>
                   <div style={{ 
-                    fontSize: 36, 
-                    fontWeight: 700, 
-                    letterSpacing: 8,
-                    fontFamily: 'monospace',
-                    color: '#1890ff'
+                    background: '#f5f5f5', 
+                    padding: '20px', 
+                    borderRadius: 12,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center'
                   }}>
-                    {bindCode}
+                    <Image
+                      src={qrCodeBase64}
+                      alt="小程序码"
+                      width={160}
+                      height={160}
+                      preview={false}
+                      style={{ borderRadius: 8 }}
+                    />
+                    <Text type="secondary" style={{ marginTop: 10, fontSize: 12 }}>
+                      微信扫一扫，打开小程序
+                    </Text>
                   </div>
                 </div>
               )}
               
-              <Space direction="vertical" size={8}>
-                <Text type="secondary">
-                  有效期：<Text strong style={{ color: countdown < 60 ? '#ff4d4f' : undefined }}>
-                    {formatCountdown(countdown)}
-                  </Text>
+              {/* 第二步：输入绑定码 */}
+              <div style={{ marginBottom: 20 }}>
+                <Text strong style={{ display: 'block', marginBottom: 12, fontSize: 15 }}>
+                  {qrCodeBase64 ? '第二步：在小程序中输入绑定码' : '请在小程序中输入绑定码'}
                 </Text>
-                
-                <Space>
-                  <Spin size="small" />
-                  <Text type="secondary">等待扫码绑定...</Text>
-                </Space>
-              </Space>
+                <div style={{ 
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+                  padding: '20px 24px', 
+                  borderRadius: 12,
+                  textAlign: 'center'
+                }}>
+                  <div style={{ 
+                    fontSize: 42, 
+                    fontWeight: 700, 
+                    letterSpacing: 12,
+                    fontFamily: 'monospace',
+                    color: '#ffffff',
+                    textShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                  }}>
+                    {bindCode}
+                  </div>
+                </div>
+                <div style={{ 
+                  marginTop: 12, 
+                  padding: '12px 16px', 
+                  background: '#fff7e6', 
+                  borderRadius: 8,
+                  border: '1px solid #ffd591'
+                }}>
+                  <Text style={{ fontSize: 13, color: '#ad6800' }}>
+                    💡 在小程序中点击「立即绑定」→ 输入上方6位数字 → 完成绑定
+                  </Text>
+                </div>
+              </div>
               
-              {!qrCodeBase64 && (
-                <Alert
-                  message="操作步骤"
-                  description={
-                    <ol style={{ margin: 0, paddingLeft: 20, textAlign: 'left' }}>
-                      <li>打开微信，搜索并进入小程序</li>
-                      <li>在小程序中找到"绑定代理商"功能</li>
-                      <li>输入上方6位绑定码</li>
-                      <li>确认绑定即可</li>
-                    </ol>
-                  }
-                  type="info"
-                  style={{ marginTop: 24, textAlign: 'left' }}
-                />
-              )}
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 16 }}>
+                  <Text type="secondary">
+                    有效期：<Text strong style={{ color: countdown < 60 ? '#ff4d4f' : '#52c41a' }}>
+                      {formatCountdown(countdown)}
+                    </Text>
+                  </Text>
+                  <Space>
+                    <Spin size="small" />
+                    <Text type="secondary">等待绑定...</Text>
+                  </Space>
+                </div>
+              </Space>
             </>
           )}
         </div>
