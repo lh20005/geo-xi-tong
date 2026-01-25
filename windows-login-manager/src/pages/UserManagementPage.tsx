@@ -23,6 +23,11 @@ interface User {
   isAgent?: boolean;
 }
 
+interface SubscriptionPlan {
+  plan_code: string;
+  plan_name: string;
+}
+
 export default function UserManagementPage() {
   const { message, modal } = App.useApp();
   const [page, setPage] = useState(1);
@@ -47,14 +52,32 @@ export default function UserManagementPage() {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedUsername, setSelectedUsername] = useState('');
 
+  // 套餐列表
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+
   // 获取套餐颜色
   const getPlanColor = (planName?: string) => {
     if (!planName || planName === '无订阅') return 'default';
-    if (planName.includes('体验')) return 'cyan';
-    if (planName.includes('专业')) return 'green';
-    if (planName.includes('企业')) return 'gold';
-    return 'purple';
+    // 根据套餐名称动态分配颜色
+    const colors = ['cyan', 'green', 'gold', 'purple', 'blue', 'magenta'];
+    const index = plans.findIndex(p => p.plan_name === planName);
+    return index >= 0 ? colors[index % colors.length] : 'purple';
   };
+
+  // 加载套餐列表
+  const loadPlans = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await axios.get(`${config.apiUrl}/subscription/plans`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (response.data.success) {
+        setPlans(response.data.data);
+      }
+    } catch (error) {
+      console.error('[UserManagement] Load plans error:', error);
+    }
+  }, []);
 
   // 数据获取函数
   const loadUsers = useCallback(async () => {
@@ -88,6 +111,11 @@ export default function UserManagementPage() {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  // 加载套餐列表
+  useEffect(() => {
+    loadPlans();
+  }, [loadPlans]);
 
   // WebSocket 订阅
   useEffect(() => {
@@ -436,15 +464,11 @@ export default function UserManagementPage() {
               value={subscriptionFilter || undefined}
             >
               <Select.Option value="">全部套餐</Select.Option>
-              <Select.Option value="体验版">
-                <Tag color="cyan">体验版</Tag>
-              </Select.Option>
-              <Select.Option value="专业版">
-                <Tag color="green">专业版</Tag>
-              </Select.Option>
-              <Select.Option value="企业版">
-                <Tag color="gold">企业版</Tag>
-              </Select.Option>
+              {plans.map((plan, index) => (
+                <Select.Option key={plan.plan_code} value={plan.plan_name}>
+                  <Tag color={['cyan', 'green', 'gold', 'purple', 'blue', 'magenta'][index % 6]}>{plan.plan_name}</Tag>
+                </Select.Option>
+              ))}
               <Select.Option value="无订阅">
                 <Tag color="default">无订阅</Tag>
               </Select.Option>
