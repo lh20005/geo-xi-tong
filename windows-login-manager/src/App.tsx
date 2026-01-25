@@ -49,6 +49,37 @@ function AppContent() {
     checkAuth();
   }, []);
 
+  // 监听 auth:logout 事件（token 过期时触发）
+  useEffect(() => {
+    const handleAuthLogout = async (event: CustomEvent<{ message?: string }>) => {
+      console.log('[App] 收到 auth:logout 事件，token 已过期');
+      
+      // 清除认证状态
+      try {
+        await ipcBridge.logout();
+      } catch (error) {
+        console.error('[App] 清除认证状态失败:', error);
+      }
+      
+      // 清除本地存储
+      localStorage.removeItem('user_info');
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      
+      // 更新状态，显示登录页面
+      setIsAuthenticated(false);
+      setUser(null);
+      
+      console.log('[App] 已自动登出，显示登录页面');
+    };
+
+    window.addEventListener('auth:logout', handleAuthLogout as EventListener);
+    
+    return () => {
+      window.removeEventListener('auth:logout', handleAuthLogout as EventListener);
+    };
+  }, [setUser]);
+
   // WebSocket 连接（用于存储警告等实时通知）- 必须在所有条件返回之前
   useEffect(() => {
     if (!isAuthenticated) return;
