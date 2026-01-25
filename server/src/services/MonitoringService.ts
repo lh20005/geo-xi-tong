@@ -167,7 +167,7 @@ export class MonitoringService {
   /**
    * 记录定时任务开始
    */
-  recordTaskStart(taskName: string): void {
+  async recordTaskStart(taskName: string): Promise<void> {
     const record: TaskExecutionRecord = {
       taskName,
       startTime: new Date(),
@@ -175,7 +175,7 @@ export class MonitoringService {
     };
     this.taskExecutions.set(taskName, record);
 
-    this.logEvent({
+    await this.logEvent({
       type: 'task_start',
       severity: 'info',
       message: `定时任务开始: ${taskName}`,
@@ -186,7 +186,7 @@ export class MonitoringService {
   /**
    * 记录定时任务完成
    */
-  recordTaskComplete(taskName: string, result?: string): void {
+  async recordTaskComplete(taskName: string, result?: string): Promise<void> {
     const record = this.taskExecutions.get(taskName);
     if (record) {
       record.endTime = new Date();
@@ -194,7 +194,7 @@ export class MonitoringService {
       record.result = result;
     }
 
-    this.logEvent({
+    await this.logEvent({
       type: 'task_complete',
       severity: 'info',
       message: `定时任务完成: ${taskName}`,
@@ -558,6 +558,19 @@ export class MonitoringService {
       fs.appendFileSync(this.logFilePath, logLine + '\n');
     } catch (error) {
       console.error('[MonitoringService] 写入日志文件失败:', error);
+    }
+
+    // 对于任务相关的事件，写入数据库（供前端查询）
+    const taskEventTypes = ['task_start', 'task_complete', 'task_error'];
+    if (taskEventTypes.includes(event.type)) {
+      try {
+        await pool.query(`
+          INSERT INTO service_events (event_type, severity, message, details)
+          VALUES ($1, $2, $3, $4)
+        `, [event.type, event.severity, event.message, JSON.stringify(event.details || {})]);
+      } catch (dbError) {
+        console.error('[MonitoringService] 记录任务事件到数据库失败:', dbError);
+      }
     }
   }
 

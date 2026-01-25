@@ -62,14 +62,21 @@ export class SchedulerService {
    */
   private scheduleOrderTimeoutTask() {
     const task = cron.schedule('*/5 * * * *', async () => {
+      const taskName = '订单超时关闭任务';
+      await monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始执行订单超时关闭任务...');
         const closedCount = await orderService.closeExpiredOrders();
         if (closedCount > 0) {
           console.log(`[定时任务] 已关闭 ${closedCount} 个超时订单`);
+          await monitoringService.recordTaskComplete(taskName, `关闭 ${closedCount} 个超时订单`);
+        } else {
+          await monitoringService.recordTaskComplete(taskName, '无超时订单');
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('[定时任务] 订单超时关闭任务失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
@@ -84,6 +91,9 @@ export class SchedulerService {
    */
   private scheduleSubscriptionBasedQuotaResetTask() {
     const task = cron.schedule('0 * * * *', async () => {
+      const taskName = '配额重置任务';
+      await monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始执行基于订阅周期的配额检查...');
         
@@ -109,6 +119,7 @@ export class SchedulerService {
 
         if (usersNeedingReset.rows.length === 0) {
           console.log('[定时任务] 没有用户需要配额重置');
+          await monitoringService.recordTaskComplete(taskName, '无需重置');
           return;
         }
 
@@ -168,8 +179,11 @@ export class SchedulerService {
         if (cleanupResult.rowCount && cleanupResult.rowCount > 0) {
           console.log(`[定时任务] 已清理 ${cleanupResult.rowCount} 条过期配额记录`);
         }
-      } catch (error) {
+        
+        await monitoringService.recordTaskComplete(taskName, `重置 ${resetCount} 个用户`);
+      } catch (error: any) {
         console.error('[定时任务] 基于订阅周期的配额检查失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
@@ -183,6 +197,9 @@ export class SchedulerService {
    */
   private scheduleSubscriptionExpiryCheckTask() {
     const task = cron.schedule('0 9 * * *', async () => {
+      const taskName = '订阅到期检查任务';
+      await monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始执行订阅到期检查任务...');
         
@@ -235,8 +252,11 @@ export class SchedulerService {
         if (expiredResult.rowCount && expiredResult.rowCount > 0) {
           console.log(`[定时任务] 已自动降级 ${expiredResult.rowCount} 个到期订阅`);
         }
-      } catch (error) {
+        
+        await monitoringService.recordTaskComplete(taskName, `即将到期 ${expiringSubscriptions.rows.length} 个，已降级 ${expiredResult.rowCount || 0} 个`);
+      } catch (error: any) {
         console.error('[定时任务] 订阅到期检查任务失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
@@ -251,7 +271,7 @@ export class SchedulerService {
   private scheduleCommissionSettlementTask() {
     const task = cron.schedule('0 2 * * *', async () => {
       const taskName = '佣金结算任务';
-      monitoringService.recordTaskStart(taskName);
+      await monitoringService.recordTaskStart(taskName);
       
       try {
         console.log('[定时任务] 开始执行佣金结算任务...');
@@ -261,7 +281,7 @@ export class SchedulerService {
         
         if (pendingCommissions.length === 0) {
           console.log('[定时任务] 没有待结算的佣金');
-          monitoringService.recordTaskComplete(taskName, '没有待结算佣金');
+          await monitoringService.recordTaskComplete(taskName, '没有待结算佣金');
           return;
         }
 
@@ -352,7 +372,7 @@ export class SchedulerService {
 
         console.log(`[定时任务] 佣金结算完成: 成功 ${successCount}, 失败 ${failCount}, 跳过 ${skippedCount}`);
         await monitoringService.recordCommissionSettlementComplete(successCount, failCount, skippedCount);
-        monitoringService.recordTaskComplete(taskName, `成功 ${successCount}, 失败 ${failCount}, 跳过 ${skippedCount}`);
+        await monitoringService.recordTaskComplete(taskName, `成功 ${successCount}, 失败 ${failCount}, 跳过 ${skippedCount}`);
       } catch (error: any) {
         console.error('[定时任务] 佣金结算任务失败:', error);
         await monitoringService.recordTaskError(taskName, error);
@@ -369,6 +389,9 @@ export class SchedulerService {
    */
   private scheduleProfitSharingQueryTask() {
     const task = cron.schedule('30 * * * *', async () => {
+      const taskName = '分账结果查询任务';
+      await monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始查询分账结果...');
         
@@ -383,10 +406,15 @@ export class SchedulerService {
         
         if (pendingRecords.length === 0) {
           console.log('[定时任务] 没有待查询的分账记录');
+          await monitoringService.recordTaskComplete(taskName, '无待查询记录');
           return;
         }
 
         console.log(`[定时任务] 发现 ${pendingRecords.length} 条待查询分账记录`);
+
+        let successCount = 0;
+        let failCount = 0;
+        let processingCount = 0;
 
         for (const record of pendingRecords) {
           try {
@@ -404,6 +432,7 @@ export class SchedulerService {
               );
               await commissionService.updateCommissionStatus(record.commissionId, 'settled');
               console.log(`[定时任务] 分账 ${record.outOrderNo} 成功`);
+              successCount++;
             } else if (result.status === 'failed') {
               // 分账失败
               await profitSharingService.updateProfitSharingRecord(
@@ -414,10 +443,12 @@ export class SchedulerService {
               );
               await commissionService.updateCommissionStatus(record.commissionId, 'cancelled', result.failReason);
               console.log(`[定时任务] 分账 ${record.outOrderNo} 失败: ${result.failReason}`);
+              failCount++;
             } else {
               // processing 状态，增加重试次数
               await profitSharingService.incrementRetryCount(record.outOrderNo);
               console.log(`[定时任务] 分账 ${record.outOrderNo} 仍在处理中 (重试 ${record.retryCount + 1})`);
+              processingCount++;
             }
           } catch (error: any) {
             console.error(`[定时任务] 查询分账 ${record.outOrderNo} 失败:`, error);
@@ -427,8 +458,10 @@ export class SchedulerService {
         }
 
         console.log('[定时任务] 分账结果查询完成');
-      } catch (error) {
+        await monitoringService.recordTaskComplete(taskName, `成功 ${successCount}, 失败 ${failCount}, 处理中 ${processingCount}`);
+      } catch (error: any) {
         console.error('[定时任务] 分账结果查询任务失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
@@ -443,7 +476,7 @@ export class SchedulerService {
   private scheduleAgentAnomalyDetectionTask() {
     const task = cron.schedule('0 */6 * * *', async () => {
       const taskName = '代理商异常检测任务';
-      monitoringService.recordTaskStart(taskName);
+      await monitoringService.recordTaskStart(taskName);
       
       try {
         console.log('[定时任务] 开始执行代理商异常检测...');
@@ -456,7 +489,7 @@ export class SchedulerService {
           console.log('[定时任务] 未发现异常代理商');
         }
         
-        monitoringService.recordTaskComplete(taskName, `暂停 ${suspendedCount} 个异常代理商`);
+        await monitoringService.recordTaskComplete(taskName, `暂停 ${suspendedCount} 个异常代理商`);
       } catch (error: any) {
         console.error('[定时任务] 代理商异常检测任务失败:', error);
         await monitoringService.recordTaskError(taskName, error);
@@ -473,6 +506,9 @@ export class SchedulerService {
    */
   private scheduleCommissionAnomalyCheckTask() {
     const task = cron.schedule('*/30 * * * *', async () => {
+      const taskName = '佣金结算异常监控任务';
+      await monitoringService.recordTaskStart(taskName);
+      
       try {
         const result = await monitoringService.checkCommissionAnomalies();
         
@@ -481,9 +517,13 @@ export class SchedulerService {
           result.anomalies.forEach(anomaly => {
             console.warn(`  - ${anomaly}`);
           });
+          await monitoringService.recordTaskComplete(taskName, `发现 ${result.anomalies.length} 个异常`);
+        } else {
+          await monitoringService.recordTaskComplete(taskName, '无异常');
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('[监控] 佣金异常检查失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
@@ -497,6 +537,9 @@ export class SchedulerService {
    */
   private scheduleServiceEventCleanupTask() {
     const task = cron.schedule('0 4 * * *', async () => {
+      const taskName = '服务事件清理任务';
+      await monitoringService.recordTaskStart(taskName);
+      
       try {
         console.log('[定时任务] 开始清理过期服务事件...');
         
@@ -506,8 +549,11 @@ export class SchedulerService {
         if (deletedCount > 0) {
           console.log(`[定时任务] 已清理 ${deletedCount} 条过期服务事件`);
         }
-      } catch (error) {
+        
+        await monitoringService.recordTaskComplete(taskName, `清理 ${deletedCount} 条记录`);
+      } catch (error: any) {
         console.error('[定时任务] 服务事件清理失败:', error);
+        await monitoringService.recordTaskError(taskName, error);
       }
     });
 
