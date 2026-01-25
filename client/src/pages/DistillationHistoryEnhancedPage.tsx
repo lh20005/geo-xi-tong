@@ -274,9 +274,9 @@ export default function DistillationHistoryEnhancedPage() {
           </Button>
         }
       >
-        {/* 统计卡片区域 */}
-        <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={6}>
+        {/* 统计卡片区域 - 移动端2x2布局 */}
+        <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small">
               <Statistic 
                 title="总记录数" 
@@ -286,7 +286,7 @@ export default function DistillationHistoryEnhancedPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small">
               <Statistic 
                 title="已使用" 
@@ -296,7 +296,7 @@ export default function DistillationHistoryEnhancedPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small">
               <Statistic 
                 title="未使用" 
@@ -306,7 +306,7 @@ export default function DistillationHistoryEnhancedPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small">
               <Statistic 
                 title="总使用次数" 
@@ -320,8 +320,8 @@ export default function DistillationHistoryEnhancedPage() {
 
         {/* 筛选工具栏 */}
         <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
-          <Row gutter={16} align="middle">
-            <Col span={6}>
+          <Row gutter={[16, 16]} align="middle">
+            <Col xs={24} sm={12} md={6}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <FilterOutlined /> 使用状态筛选
@@ -338,7 +338,7 @@ export default function DistillationHistoryEnhancedPage() {
                 <Option value="unused">未使用</Option>
               </Select>
             </Col>
-            <Col span={18}>
+            <Col xs={24} sm={12} md={18}>
               <div style={{ color: '#64748b', fontSize: 14 }}>
                 <span>点击列标题可以切换排序方式</span>
                 <span style={{ marginLeft: 16 }}>

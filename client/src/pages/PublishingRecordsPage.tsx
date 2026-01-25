@@ -234,8 +234,8 @@ export default function PublishingRecordsPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="总发布次数" 
@@ -245,7 +245,7 @@ export default function PublishingRecordsPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="今日发布" 
@@ -255,7 +255,7 @@ export default function PublishingRecordsPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="本周发布" 
@@ -265,7 +265,7 @@ export default function PublishingRecordsPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="本月发布" 

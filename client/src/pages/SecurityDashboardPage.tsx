@@ -119,9 +119,9 @@ const SecurityDashboardPage: React.FC = () => {
         <SafetyOutlined /> 安全仪表板
       </h1>
 
-      {/* 安全指标概览 */}
-      <Row gutter={16} style={{ marginBottom: '24px' }}>
-        <Col span={6}>
+      {/* 安全指标概览 - 移动端2x2布局 */}
+      <Row gutter={[12, 12]} style={{ marginBottom: '24px' }}>
+        <Col xs={12} sm={12} md={6}>
           <Card>
             <Statistic
               title="失败登录次数"
@@ -131,7 +131,7 @@ const SecurityDashboardPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card>
             <Statistic
               title="被封禁IP数量"
@@ -141,7 +141,7 @@ const SecurityDashboardPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card>
             <Statistic
               title="可疑活动次数"
@@ -151,7 +151,7 @@ const SecurityDashboardPage: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card>
             <Statistic
               title="活跃异常数量"

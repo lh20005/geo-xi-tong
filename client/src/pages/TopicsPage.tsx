@@ -27,11 +27,19 @@ const { TextArea } = Input;
 export default function TopicsPage() {
   const { distillationId } = useParams();
   const navigate = useNavigate();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [topics, setTopics] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [editModal, setEditModal] = useState<any>(null);
   const [editValue, setEditValue] = useState('');
   const [selectedTopics, setSelectedTopics] = useState<number[]>([]);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     loadTopics();
@@ -107,10 +115,10 @@ export default function TopicsPage() {
   };
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: isMobile ? 12 : 24 }}>
       <Card
         title={
-          <Space>
+          <Space wrap>
             <Button
               type="text"
               icon={<ArrowLeftOutlined />}
@@ -124,24 +132,27 @@ export default function TopicsPage() {
         }
         variant="borderless"
         extra={
-          <Space>
+          <Space size={isMobile ? 'small' : 'middle'} wrap>
             <Button
               icon={<ReloadOutlined />}
               onClick={() => loadTopics()}
               loading={loading}
+              size={isMobile ? 'small' : 'middle'}
             >
-              刷新
+              {isMobile ? '' : '刷新'}
             </Button>
             <Button
               type="primary"
               icon={<FileTextOutlined />}
               onClick={handleGenerateArticle}
               disabled={selectedTopics.length === 0}
+              size={isMobile ? 'small' : 'middle'}
             >
-              生成文章 ({selectedTopics.length})
+              {isMobile ? `生成(${selectedTopics.length})` : `生成文章 (${selectedTopics.length})`}
             </Button>
           </Space>
         }
+        styles={{ body: { padding: isMobile ? 12 : 24 } }}
       >
         <Title level={5} style={{ marginBottom: 16 }}>
           共 {topics.length} 个话题
@@ -153,15 +164,15 @@ export default function TopicsPage() {
           renderItem={(topic) => (
             <List.Item
               style={{
-                padding: '16px',
+                padding: isMobile ? '12px' : '16px',
                 background: '#f8fafc',
-                marginBottom: 12,
+                marginBottom: isMobile ? 8 : 12,
                 borderRadius: 8,
                 border: selectedTopics.includes(topic.topicId)
                   ? '2px solid #0ea5e9'
                   : '1px solid #e2e8f0',
               }}
-              actions={[
+              actions={isMobile ? undefined : [
                 <Button
                   type="text"
                   icon={<EditOutlined />}
@@ -190,19 +201,41 @@ export default function TopicsPage() {
                 }
                 title={
                   <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                    <div style={{ fontSize: 15, color: '#1e293b' }}>
+                    <div style={{ fontSize: isMobile ? 14 : 15, color: '#1e293b', wordBreak: 'break-word' }}>
                       {topic.question}
                     </div>
-                    <Space size={8}>
+                    <Space size={8} wrap>
                       <Tag color={topic.usageCount === 0 ? 'default' : 'blue'}>
                         已使用 {topic.usageCount} 次
                       </Tag>
-                      {topic.lastUsedAt && (
+                      {topic.lastUsedAt && !isMobile && (
                         <span style={{ fontSize: 12, color: '#64748b' }}>
                           最后使用: {new Date(topic.lastUsedAt).toLocaleString('zh-CN')}
                         </span>
                       )}
                     </Space>
+                    {/* 移动端操作按钮 */}
+                    {isMobile && (
+                      <Space size="small" style={{ marginTop: 8 }}>
+                        <Button
+                          type="text"
+                          size="small"
+                          icon={<EditOutlined />}
+                          onClick={() => handleEdit(topic)}
+                        >
+                          编辑
+                        </Button>
+                        <Button
+                          type="text"
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleDelete(topic.topicId)}
+                        >
+                          删除
+                        </Button>
+                      </Space>
+                    )}
                   </Space>
                 }
               />

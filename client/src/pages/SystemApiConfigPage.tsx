@@ -224,8 +224,8 @@ const SystemApiConfigPage: React.FC = () => {
       </p>
 
       {quota && (
-        <Row gutter={16} style={{ marginBottom: '24px' }}>
-          <Col span={6}>
+        <Row gutter={[16, 16]} style={{ marginBottom: '24px' }}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="每日配额"
@@ -235,7 +235,7 @@ const SystemApiConfigPage: React.FC = () => {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="每月配额"

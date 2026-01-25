@@ -413,10 +413,10 @@ export default function AgentManagementPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* 统计卡片 */}
+      {/* 统计卡片 - 移动端2x2布局 */}
       {stats && (
-        <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={6}>
+        <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="代理商总数"
@@ -425,7 +425,7 @@ export default function AgentManagementPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="活跃代理商"
@@ -435,7 +435,7 @@ export default function AgentManagementPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="累计佣金"
@@ -446,7 +446,7 @@ export default function AgentManagementPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="待结算佣金"
@@ -525,8 +525,8 @@ export default function AgentManagementPage() {
       >
         {selectedAgent && (
           <div>
-            <Row gutter={16} style={{ marginBottom: 24 }}>
-              <Col span={8}>
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              <Col xs={24} sm={8} md={8}>
                 <Statistic
                   title="累计收益"
                   value={(selectedAgent.totalEarnings || 0).toFixed(2)}
@@ -534,7 +534,7 @@ export default function AgentManagementPage() {
                   valueStyle={{ color: '#52c41a' }}
                 />
               </Col>
-              <Col span={8}>
+              <Col xs={12} sm={8} md={8}>
                 <Statistic
                   title="已结算"
                   value={(selectedAgent.settledEarnings || 0).toFixed(2)}
@@ -542,7 +542,7 @@ export default function AgentManagementPage() {
                   valueStyle={{ color: '#1890ff' }}
                 />
               </Col>
-              <Col span={8}>
+              <Col xs={12} sm={8} md={8}>
                 <Statistic
                   title="待结算"
                   value={(selectedAgent.pendingEarnings || 0).toFixed(2)}
@@ -552,17 +552,17 @@ export default function AgentManagementPage() {
               </Col>
             </Row>
             
-            <Row gutter={16} style={{ marginBottom: 24 }}>
-              <Col span={6}>
+            <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="邀请用户" value={selectedAgent.invitedUsers} />
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="付费用户" value={selectedAgent.paidUsers} />
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={12} md={6}>
                 <Statistic title="佣金比例" value={`${(selectedAgent.commissionRate * 100).toFixed(0)}%`} />
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={12} md={6}>
                 <div>
                   <div style={{ color: 'rgba(0,0,0,0.45)', fontSize: 14, marginBottom: 4 }}>微信绑定</div>
                   {selectedAgent.wechatOpenid ? (

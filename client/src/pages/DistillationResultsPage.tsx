@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { 
   Card, Button, message, Space, Tag, Modal, Empty, 
-  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Form, Popconfirm 
+  Select, Input, Row, Col, Statistic, Badge, Tooltip, Alert, Form, Popconfirm, Drawer, List 
 } from 'antd';
 import { 
   FileTextOutlined, DeleteOutlined, ThunderboltOutlined, 
@@ -25,6 +25,8 @@ const { Option } = Select;
 export default function DistillationResultsPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const [filterDrawerVisible, setFilterDrawerVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<TopicWithReference[]>([]);
   const [total, setTotal] = useState(0);
@@ -48,6 +50,13 @@ export default function DistillationResultsPage() {
   const [isManualModalVisible, setIsManualModalVisible] = useState(false);
   const [manualForm] = Form.useForm();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 监听窗口大小变化
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 独立加载所有关键词
   const loadAllKeywords = async () => {
@@ -382,7 +391,7 @@ export default function DistillationResultsPage() {
   ];
   
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: isMobile ? 12 : 24 }}>
       {loading && data.length === 0 ? (
         <Card>
           <Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
@@ -414,18 +423,19 @@ export default function DistillationResultsPage() {
           title={
             <Space>
               <FileTextOutlined style={{ color: '#0ea5e9' }} />
-              <span>蒸馏结果列表</span>
+              <span>{isMobile ? '蒸馏结果' : '蒸馏结果列表'}</span>
               <Tag color="blue">{total} 个话题</Tag>
             </Space>
           }
           extra={
-            <Space>
+            <Space size={isMobile ? 'small' : 'middle'}>
               <Button
                 type="primary"
                 icon={<PlusOutlined />}
                 onClick={handleOpenManualModal}
+                size={isMobile ? 'small' : 'middle'}
               >
-                新建
+                {isMobile ? '新建' : '新建'}
               </Button>
               <Button
                 icon={<ReloadOutlined />}
@@ -434,11 +444,13 @@ export default function DistillationResultsPage() {
                   loadAllKeywords();
                 }}
                 loading={loading}
+                size={isMobile ? 'small' : 'middle'}
               >
-                刷新
+                {isMobile ? '' : '刷新'}
               </Button>
             </Space>
           }
+          styles={{ body: { padding: isMobile ? 12 : 24 } }}
         >
           {/* 搜索模式提示 */}
           {isSearchMode && searchText && (
@@ -455,110 +467,188 @@ export default function DistillationResultsPage() {
             />
           )}
 
-          {/* 统计卡片区域 */}
-          <Row gutter={16} style={{ marginBottom: 24 }}>
-            <Col span={6}>
+          {/* 统计卡片区域 - 移动端2x2布局 */}
+          <Row gutter={[12, 12]} style={{ marginBottom: isMobile ? 16 : 24 }}>
+            <Col xs={12} sm={12} md={6}>
               <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
-                  title="总话题数" 
+                  title={isMobile ? '话题数' : '总话题数'} 
                   value={statistics.totalTopics} 
                   suffix="个"
-                  valueStyle={{ color: '#0ea5e9' }}
+                  valueStyle={{ color: '#0ea5e9', fontSize: isMobile ? 20 : 24 }}
                 />
               </Card>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={12} md={6}>
               <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
-                  title="关键词数量" 
+                  title={isMobile ? '关键词' : '关键词数量'} 
                   value={statistics.totalKeywords} 
                   suffix="个"
-                  valueStyle={{ color: '#f59e0b' }}
+                  valueStyle={{ color: '#f59e0b', fontSize: isMobile ? 20 : 24 }}
                 />
               </Card>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={12} md={6}>
               <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
-                  title="总被引用次数" 
+                  title={isMobile ? '被引用' : '总被引用次数'} 
                   value={statistics.totalReferences} 
                   suffix="次"
-                  valueStyle={{ color: '#8b5cf6' }}
+                  valueStyle={{ color: '#8b5cf6', fontSize: isMobile ? 20 : 24 }}
                 />
               </Card>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={12} md={6}>
               <Card size="small" style={{ textAlign: 'center' }}>
                 <Statistic 
-                  title="当前显示" 
+                  title={isMobile ? '当前' : '当前显示'} 
                   value={data.length} 
                   suffix="个"
-                  valueStyle={{ color: '#10b981' }}
+                  valueStyle={{ color: '#10b981', fontSize: isMobile ? 20 : 24 }}
                 />
               </Card>
             </Col>
           </Row>
 
-          {/* 筛选工具栏 */}
-          <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
-            <Row gutter={16}>
-              <Col span={8}>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: '#64748b', fontSize: 14 }}>
-                    <FilterOutlined /> 按关键词筛选
-                  </span>
-                </div>
-                <Select
-                  size="large"
-                  style={{ width: '100%' }}
-                  value={filterKeyword}
-                  onChange={handleKeywordChange}
-                  placeholder="选择关键词"
-                  allowClear
+          {/* 移动端筛选按钮和抽屉 */}
+          {isMobile ? (
+            <>
+              <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+                <Button 
+                  icon={<FilterOutlined />} 
+                  onClick={() => setFilterDrawerVisible(true)}
+                  style={{ flex: 1 }}
                 >
-                  {allKeywords.map(keyword => (
-                    <Option key={keyword} value={keyword}>
-                      {keyword}
-                    </Option>
-                  ))}
-                </Select>
-              </Col>
-              <Col span={12}>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: '#64748b', fontSize: 14 }}>
-                    <SearchOutlined /> 搜索问题内容
-                  </span>
-                </div>
-                <Search
-                  placeholder="输入关键词搜索..."
-                  allowClear
-                  enterButton
-                  size="large"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onSearch={(value) => setSearchInput(value)}
-                />
-              </Col>
-              <Col span={4}>
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
-                </div>
+                  筛选 {hasActiveFilters ? '(已筛选)' : ''}
+                </Button>
                 <Button
-                  size="large"
-                  block
                   icon={<FilterOutlined />}
                   onClick={handleClearFilters}
                   disabled={!hasActiveFilters}
                 >
-                  清除筛选
+                  清除
                 </Button>
-              </Col>
-            </Row>
-          </div>
+              </div>
+              <Drawer
+                title="筛选条件"
+                placement="bottom"
+                open={filterDrawerVisible}
+                onClose={() => setFilterDrawerVisible(false)}
+                height="auto"
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <div>
+                    <div style={{ marginBottom: 8, color: '#64748b', fontSize: 14 }}>
+                      <FilterOutlined /> 按关键词筛选
+                    </div>
+                    <Select
+                      style={{ width: '100%' }}
+                      value={filterKeyword}
+                      onChange={handleKeywordChange}
+                      placeholder="选择关键词"
+                      allowClear
+                    >
+                      {allKeywords.map(keyword => (
+                        <Option key={keyword} value={keyword}>
+                          {keyword}
+                        </Option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div>
+                    <div style={{ marginBottom: 8, color: '#64748b', fontSize: 14 }}>
+                      <SearchOutlined /> 搜索问题内容
+                    </div>
+                    <Search
+                      placeholder="输入关键词搜索..."
+                      allowClear
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      onSearch={(value) => {
+                        setSearchInput(value);
+                        setFilterDrawerVisible(false);
+                      }}
+                    />
+                  </div>
+                  <Space style={{ marginTop: 8 }}>
+                    <Button onClick={handleClearFilters}>清除筛选</Button>
+                    <Button type="primary" onClick={() => setFilterDrawerVisible(false)}>
+                      确定
+                    </Button>
+                  </Space>
+                </div>
+              </Drawer>
+            </>
+          ) : (
+            /* 桌面端筛选工具栏 */
+            <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
+              <Row gutter={[16, 16]}>
+                <Col xs={24} sm={12} md={8}>
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ color: '#64748b', fontSize: 14 }}>
+                      <FilterOutlined /> 按关键词筛选
+                    </span>
+                  </div>
+                  <Select
+                    size="large"
+                    style={{ width: '100%' }}
+                    value={filterKeyword}
+                    onChange={handleKeywordChange}
+                    placeholder="选择关键词"
+                    allowClear
+                  >
+                    {allKeywords.map(keyword => (
+                      <Option key={keyword} value={keyword}>
+                        {keyword}
+                      </Option>
+                    ))}
+                  </Select>
+                </Col>
+                <Col xs={24} sm={12} md={12}>
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ color: '#64748b', fontSize: 14 }}>
+                      <SearchOutlined /> 搜索问题内容
+                    </span>
+                  </div>
+                  <Search
+                    placeholder="输入关键词搜索..."
+                    allowClear
+                    enterButton
+                    size="large"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onSearch={(value) => setSearchInput(value)}
+                  />
+                </Col>
+                <Col xs={24} sm={24} md={4}>
+                  <div style={{ marginBottom: 8 }}>
+                    <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
+                  </div>
+                  <Button
+                    size="large"
+                    block
+                    icon={<FilterOutlined />}
+                    onClick={handleClearFilters}
+                    disabled={!hasActiveFilters}
+                  >
+                    清除筛选
+                  </Button>
+                </Col>
+              </Row>
+            </div>
+          )}
 
-          {/* 操作栏 */}
-          <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Space>
+          {/* 操作栏 - 移动端垂直布局 */}
+          <div style={{ 
+            marginBottom: 16, 
+            display: 'flex', 
+            flexDirection: isMobile ? 'column' : 'row',
+            justifyContent: 'space-between', 
+            alignItems: isMobile ? 'stretch' : 'center',
+            gap: isMobile ? 8 : 0
+          }}>
+            <div style={{ marginBottom: isMobile ? 4 : 0 }}>
               {selectedRowKeys.length > 0 ? (
                 <span style={{ color: '#64748b', fontWeight: 500 }}>
                   已选择 {selectedRowKeys.length} 项
@@ -569,13 +659,14 @@ export default function DistillationResultsPage() {
                 </span>
               ) : (
                 <span style={{ color: '#94a3b8', fontSize: 13 }}>
-                  💡 提示：可勾选多项批量删除，或选择关键词后一键删除
+                  {isMobile ? '💡 勾选多项批量删除' : '💡 提示：可勾选多项批量删除，或选择关键词后一键删除'}
                 </span>
               )}
-            </Space>
-            <Space size="middle">
+            </div>
+            <Space size="small" wrap style={{ justifyContent: isMobile ? 'flex-start' : 'flex-end' }}>
               <Button
                 danger
+                size={isMobile ? 'small' : 'middle'}
                 icon={<DeleteOutlined />}
                 onClick={handleDeleteSelected}
                 disabled={selectedRowKeys.length === 0}
@@ -586,17 +677,94 @@ export default function DistillationResultsPage() {
               <Button
                 danger
                 type="primary"
+                size={isMobile ? 'small' : 'middle'}
                 icon={<DeleteOutlined />}
                 onClick={handleDeleteByKeyword}
                 disabled={!filterKeyword}
               >
-                删除当前关键词
+                {isMobile ? '删除关键词' : '删除当前关键词'}
               </Button>
             </Space>
           </div>
 
-          {/* 数据表格 */}
-          <ResizableTable<TopicWithReference>
+          {/* 数据表格 - 移动端使用列表 */}
+          {isMobile ? (
+            <List
+              loading={loading}
+              dataSource={data}
+              renderItem={(item: TopicWithReference) => (
+                <Card 
+                  size="small" 
+                  style={{ marginBottom: 8 }}
+                  actions={[
+                    <Popconfirm
+                      key="delete"
+                      title="确认删除"
+                      description="确定要删除这条蒸馏结果吗？"
+                      onConfirm={() => handleDeleteSingle(item.id, item.question)}
+                      okText="确定"
+                      cancelText="取消"
+                      okType="danger"
+                    >
+                      <Button type="link" danger size="small" icon={<DeleteOutlined />}>
+                        删除
+                      </Button>
+                    </Popconfirm>
+                  ]}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedRowKeys.includes(item.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRowKeys([...selectedRowKeys, item.id]);
+                        } else {
+                          setSelectedRowKeys(selectedRowKeys.filter(k => k !== item.id));
+                        }
+                      }}
+                      style={{ marginTop: 4 }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ marginBottom: 8 }}>
+                        <Tag color="blue">{item.keyword}</Tag>
+                        <Badge 
+                          count={item.referenceCount} 
+                          showZero 
+                          style={{ 
+                            backgroundColor: item.referenceCount > 0 ? '#52c41a' : '#d9d9d9',
+                            marginLeft: 8
+                          }}
+                        />
+                      </div>
+                      <div style={{ 
+                        fontSize: 14, 
+                        color: '#1e293b',
+                        wordBreak: 'break-word'
+                      }}>
+                        {item.question}
+                      </div>
+                      <div style={{ marginTop: 8, fontSize: 12, color: '#999' }}>
+                        {new Date(item.createdAt).toLocaleString('zh-CN')}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
+              pagination={{
+                current: currentPage,
+                pageSize: pageSize,
+                total: total,
+                onChange: (page, size) => {
+                  setCurrentPage(page);
+                  setPageSize(size);
+                },
+                size: 'small',
+                simple: true,
+              }}
+            />
+          ) : (
+            <ResizableTable<TopicWithReference>
             tableId="distillation-results-list"
             rowSelection={{
               selectedRowKeys,
@@ -635,6 +803,7 @@ export default function DistillationResultsPage() {
               )
             }}
           />
+          )}
         </Card>
       )}
 

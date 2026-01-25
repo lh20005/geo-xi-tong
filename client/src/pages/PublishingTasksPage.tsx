@@ -1026,9 +1026,9 @@ export default function PublishingTasksPage() {
 
   return (
     <div style={{ padding: 24 }}>
-      {/* 统计卡片 */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={6}>
+      {/* 统计卡片 - 移动端2x2布局 */}
+      <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="草稿文章" 
@@ -1038,7 +1038,7 @@ export default function PublishingTasksPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="已配置平台" 
@@ -1048,7 +1048,7 @@ export default function PublishingTasksPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="运行中任务" 
@@ -1058,7 +1058,7 @@ export default function PublishingTasksPage() {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={12} md={6}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="今日已发布" 

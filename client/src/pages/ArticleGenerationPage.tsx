@@ -557,9 +557,9 @@ export default function ArticleGenerationPage() {
           />
         )}
 
-        {/* 统计卡片区域 */}
-        <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={6}>
+        {/* 统计卡片区域 - 移动端2x2布局 */}
+        <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small" style={{ textAlign: 'center' }}>
               <Statistic 
                 title="总任务数" 
@@ -570,7 +570,7 @@ export default function ArticleGenerationPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small" style={{ textAlign: 'center' }}>
               <Statistic 
                 title="已完成" 
@@ -581,7 +581,7 @@ export default function ArticleGenerationPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small" style={{ textAlign: 'center' }}>
               <Statistic 
                 title="执行中" 
@@ -592,7 +592,7 @@ export default function ArticleGenerationPage() {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card size="small" style={{ textAlign: 'center' }}>
               <Statistic 
                 title="文章进度" 
@@ -606,8 +606,8 @@ export default function ArticleGenerationPage() {
 
         {/* 筛选工具栏 */}
         <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
-          <Row gutter={16}>
-            <Col span={5}>
+          <Row gutter={[16, 16]}>
+            <Col xs={12} sm={12} md={5}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <FilterOutlined /> 按状态筛选
@@ -630,7 +630,7 @@ export default function ArticleGenerationPage() {
                 <Option value="completed">已完成</Option>
               </Select>
             </Col>
-            <Col span={5}>
+            <Col xs={12} sm={12} md={5}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <FilterOutlined /> 按关键词筛选
@@ -656,7 +656,7 @@ export default function ArticleGenerationPage() {
                 ))}
               </Select>
             </Col>
-            <Col span={5}>
+            <Col xs={12} sm={12} md={5}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <FilterOutlined /> 按转化目标筛选
@@ -682,7 +682,7 @@ export default function ArticleGenerationPage() {
                 ))}
               </Select>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={12} md={6}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <SearchOutlined /> 搜索内容
@@ -698,7 +698,7 @@ export default function ArticleGenerationPage() {
                 onSearch={(value) => setSearchInput(value)}
               />
             </Col>
-            <Col span={3}>
+            <Col xs={24} sm={24} md={3}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
               </div>

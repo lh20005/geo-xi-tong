@@ -536,8 +536,8 @@ export default function ArticleListPage() {
       ) : (
         /* 桌面端：筛选工具栏 */
         <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
-          <Row gutter={16}>
-            <Col span={5}>
+          <Row gutter={[16, 16]}>
+            <Col xs={12} sm={12} md={5}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <SearchOutlined /> 发布状态
@@ -555,7 +555,7 @@ export default function ArticleListPage() {
               </Select>
             </Col>
             
-            <Col span={5}>
+            <Col xs={12} sm={12} md={5}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <SearchOutlined /> 关键词筛选
@@ -579,7 +579,7 @@ export default function ArticleListPage() {
               </Select>
             </Col>
             
-            <Col span={7}>
+            <Col xs={24} sm={24} md={7}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: '#64748b', fontSize: 14 }}>
                   <SearchOutlined /> 搜索内容
@@ -597,7 +597,7 @@ export default function ArticleListPage() {
               />
             </Col>
             
-            <Col span={3}>
+            <Col xs={12} sm={12} md={3}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
               </div>
@@ -612,7 +612,7 @@ export default function ArticleListPage() {
               </Button>
             </Col>
             
-            <Col span={4}>
+            <Col xs={12} sm={12} md={4}>
               <div style={{ marginBottom: 8 }}>
                 <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
               </div>

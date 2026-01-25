@@ -386,8 +386,8 @@ const CommissionMonitorPage = () => {
               {/* 系统健康状态 */}
               <Card title="系统健康状态" style={{ marginBottom: 24 }}>
                 {health && (
-                  <Row gutter={24}>
-                    <Col span={6}>
+                  <Row gutter={[16, 16]}>
+                    <Col xs={12} sm={12} md={6}>
                       <Statistic
                         title="系统状态"
                         value={health.status === 'healthy' ? '健康' : health.status === 'degraded' ? '降级' : '异常'}
@@ -398,14 +398,14 @@ const CommissionMonitorPage = () => {
                         prefix={health.status === 'healthy' ? <CheckCircleOutlined /> : <WarningOutlined />}
                       />
                     </Col>
-                    <Col span={6}>
+                    <Col xs={12} sm={12} md={6}>
                       <Statistic
                         title="运行时间"
                         value={formatUptime(health.uptime)}
                         prefix={<ClockCircleOutlined />}
                       />
                     </Col>
-                    <Col span={6}>
+                    <Col xs={12} sm={12} md={6}>
                       <Statistic
                         title="待结算佣金"
                         value={health.metrics.pendingCommissions}
@@ -413,7 +413,7 @@ const CommissionMonitorPage = () => {
                         prefix={<SyncOutlined />}
                       />
                     </Col>
-                    <Col span={6}>
+                    <Col xs={12} sm={12} md={6}>
                       <Statistic
                         title="超期未结算"
                         value={health.metrics.overdueCommissions}
@@ -449,8 +449,8 @@ const CommissionMonitorPage = () => {
 
               {/* 佣金统计 */}
               {stats && (
-                <Row gutter={16} style={{ marginBottom: 24 }}>
-                  <Col span={6}>
+                <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+                  <Col xs={12} sm={12} md={6}>
                     <Card>
                       <Statistic
                         title="待结算佣金"
@@ -465,7 +465,7 @@ const CommissionMonitorPage = () => {
                       </div>
                     </Card>
                   </Col>
-                  <Col span={6}>
+                  <Col xs={12} sm={12} md={6}>
                     <Card>
                       <Statistic
                         title="已结算佣金"
@@ -480,7 +480,7 @@ const CommissionMonitorPage = () => {
                       </div>
                     </Card>
                   </Col>
-                  <Col span={6}>
+                  <Col xs={12} sm={12} md={6}>
                     <Card>
                       <Statistic
                         title="今日佣金"
@@ -494,7 +494,7 @@ const CommissionMonitorPage = () => {
                       </div>
                     </Card>
                   </Col>
-                  <Col span={6}>
+                  <Col xs={12} sm={12} md={6}>
                     <Card>
                       <Statistic
                         title="本月佣金"

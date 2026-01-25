@@ -156,8 +156,8 @@ export default function PlatformManagementPage() {
   return (
     <div style={{ padding: 24 }}>
       {/* 统计卡片 - 与文章列表页风格一致 */}
-      <Row gutter={16} style={{ marginBottom: 24 }}>
-        <Col span={8}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={8} md={8}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="支持平台" 
@@ -167,7 +167,7 @@ export default function PlatformManagementPage() {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={12} sm={8} md={8}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="账号总数" 
@@ -176,7 +176,7 @@ export default function PlatformManagementPage() {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={12} sm={8} md={8}>
           <Card size="small" style={{ textAlign: 'center' }}>
             <Statistic 
               title="活跃账号" 

@@ -246,6 +246,121 @@ body {
   }
 }
 
+/* ==================== 移动端统计卡片优化 ==================== */
+@media (max-width: 768px) {
+  /* 统计卡片标题缩短 */
+  .ant-statistic-title {
+    font-size: 12px !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* 统计卡片数值 */
+  .ant-statistic-content {
+    font-size: 18px !important;
+  }
+  
+  .ant-statistic-content-value {
+    font-size: 18px !important;
+  }
+  
+  .ant-statistic-content-suffix {
+    font-size: 12px !important;
+  }
+  
+  /* 卡片内边距优化 */
+  .ant-card-small > .ant-card-body {
+    padding: 8px !important;
+  }
+}
+
+/* ==================== 移动端筛选区域优化 ==================== */
+@media (max-width: 768px) {
+  /* 筛选区域背景 */
+  .filter-toolbar {
+    padding: 12px !important;
+  }
+  
+  /* Select 组件优化 */
+  .ant-select-selector {
+    font-size: 14px !important;
+  }
+  
+  /* 搜索框优化 */
+  .ant-input-search .ant-input {
+    font-size: 14px !important;
+  }
+  
+  .ant-input-search-button {
+    min-width: 40px !important;
+  }
+  
+  /* 按钮组换行 */
+  .ant-space {
+    flex-wrap: wrap;
+  }
+  
+  /* 操作按钮紧凑 */
+  .ant-btn-sm {
+    padding: 0 8px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* ==================== 移动端操作栏优化 ==================== */
+@media (max-width: 768px) {
+  /* 操作栏垂直布局 */
+  .action-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  
+  /* 提示文字缩短 */
+  .action-bar .hint-text {
+    font-size: 12px !important;
+  }
+}
+
+/* ==================== 移动端列表卡片优化 ==================== */
+@media (max-width: 768px) {
+  /* 列表项紧凑 */
+  .ant-list-item {
+    padding: 8px !important;
+  }
+  
+  /* 卡片操作按钮 */
+  .ant-card-actions > li {
+    margin: 4px 0 !important;
+  }
+  
+  .ant-card-actions > li > span {
+    font-size: 12px !important;
+  }
+  
+  /* Tag 标签紧凑 */
+  .ant-tag {
+    font-size: 11px !important;
+    padding: 0 4px !important;
+    margin-right: 4px !important;
+  }
+}
+
+/* ==================== 移动端 Row/Col 间距优化 ==================== */
+@media (max-width: 768px) {
+  /* 减少 gutter 间距 */
+  .ant-row {
+    margin-left: -6px !important;
+    margin-right: -6px !important;
+  }
+  
+  .ant-row > .ant-col {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+}
+
 /* 分页组件居中显示 */
 .ant-table-pagination {
   display: flex !important;

@@ -272,8 +272,8 @@ const OrderManagementPage = () => {
 
       {/* 统计卡片 */}
       {stats && (
-        <Row gutter={16} style={{ marginBottom: 24 }}>
-          <Col span={6}>
+        <Row gutter={[12, 12]} style={{ marginBottom: 24 }}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="今日收入"
@@ -284,7 +284,7 @@ const OrderManagementPage = () => {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="本月收入"
@@ -295,7 +295,7 @@ const OrderManagementPage = () => {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="今日订单"
@@ -304,7 +304,7 @@ const OrderManagementPage = () => {
               />
             </Card>
           </Col>
-          <Col span={6}>
+          <Col xs={12} sm={12} md={6}>
             <Card>
               <Statistic
                 title="待支付订单"
