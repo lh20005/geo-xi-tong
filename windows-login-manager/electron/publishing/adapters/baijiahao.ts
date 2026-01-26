@@ -61,6 +61,95 @@ export class BaijiahaoAdapter extends PlatformAdapter {
     await this.randomWait(3000, 5000);
   }
 
+  /**
+   * 检测并关闭随机弹窗
+   * 百家号页面可能会随机弹出各种提示弹窗，需要自动检测并关闭
+   * 注意：第一步已经关闭了主弹窗，这里检测其他随机弹窗
+   */
+  private async closeRandomPopups(page: Page): Promise<void> {
+    await this.log('info', '开始检测随机弹窗...');
+    
+    // 常见的弹窗关闭按钮选择器（排除第一步已处理的主弹窗）
+    const popupCloseSelectors = [
+      '.c9a2214b6873cbb6-closeBtn',    // 另一种弹窗关闭按钮
+      '[class*="closeBtn"]',            // 包含 closeBtn 的类
+      '[class*="close-icon"]',          // 包含 close-icon 的类
+      '[class*="modal-close"]',         // 模态框关闭按钮
+      '.ant-modal-close',               // Ant Design 模态框关闭
+    ];
+
+    // 常见的弹窗确认按钮（如"我知道了"、"确定"等）
+    const popupConfirmTexts = [
+      '我知道了',
+      '知道了',
+      '确定',
+      '关闭',
+      '跳过',
+      '暂不',
+    ];
+
+    let closedCount = 0;
+    const maxAttempts = 3; // 最多尝试关闭3个弹窗
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let foundPopup = false;
+
+      // 尝试通过关闭按钮关闭弹窗
+      for (const selector of popupCloseSelectors) {
+        try {
+          const closeBtn = page.locator(selector).first();
+          const isVisible = await closeBtn.isVisible({ timeout: 500 }).catch(() => false);
+          
+          if (isVisible) {
+            await this.randomWait(300, 600);
+            await closeBtn.click({ force: true }).catch(() => {});
+            await this.log('info', `已关闭弹窗（选择器: ${selector}）`);
+            closedCount++;
+            foundPopup = true;
+            await this.randomWait(500, 1000);
+            break;
+          }
+        } catch (error) {
+          // 忽略错误，继续尝试下一个选择器
+        }
+      }
+
+      // 如果没有找到关闭按钮，尝试点击确认文本按钮
+      if (!foundPopup) {
+        for (const text of popupConfirmTexts) {
+          try {
+            const confirmBtn = page.getByRole('button', { name: text }).first();
+            const isVisible = await confirmBtn.isVisible({ timeout: 500 }).catch(() => false);
+            
+            if (isVisible) {
+              await this.randomWait(300, 600);
+              await confirmBtn.click({ force: true }).catch(() => {});
+              await this.log('info', `已点击弹窗按钮: ${text}`);
+              closedCount++;
+              foundPopup = true;
+              await this.randomWait(500, 1000);
+              break;
+            }
+          } catch (error) {
+            // 忽略错误，继续尝试下一个文本
+          }
+        }
+      }
+
+      // 如果这一轮没有找到任何弹窗，退出循环
+      if (!foundPopup) {
+        await this.log('info', '本轮未检测到弹窗，结束检测');
+        break;
+      }
+    }
+
+    if (closedCount > 0) {
+      await this.log('info', `共关闭了 ${closedCount} 个随机弹窗`);
+    } else {
+      await this.log('info', '未检测到需要关闭的随机弹窗，继续执行');
+    }
+  }
+
   async performLogin(page: Page, credentials: any): Promise<boolean> {
     try {
       await this.log('info', '开始登录百家号');
@@ -98,39 +187,43 @@ export class BaijiahaoAdapter extends PlatformAdapter {
     try {
       await this.log('info', '开始发布百家号文章', { title: article.title });
 
-      // 不再重复导航，因为登录时已经导航到发布页面了
       // 等待页面完全加载
       await this.log('info', '等待页面加载完成...');
-      await this.randomWait(3000, 5000); // 等待更长时间让页面和弹窗完全加载
-
-      // 第一步：点击下一步
-      await this.log('info', '第一步：点击下一步');
-      await page.getByText('下一步').click();
-      await this.log('info', '已点击: 下一步');
       await this.randomWait(3000, 5000);
 
-      // 第二步：点击下一步
-      await this.log('info', '第二步：点击下一步');
-      await page.getByText('下一步').click();
-      await this.log('info', '已点击: 下一步');
-      await this.randomWait(3000, 5000);
-
-      // 第三步：点击立即体验
-      await this.log('info', '第三步：点击立即体验');
-      await page.getByText('立即体验').click();
-      await this.log('info', '已点击: 立即体验');
-      await this.randomWait(3000, 5000);
-
-      // 第四步：点击我知道了
-      await this.log('info', '第四步：点击我知道了');
-      await page.getByRole('button', { name: '我知道了' }).click();
-      await this.log('info', '已点击: 我知道了');
-      await this.randomWait(3000, 5000);
-
-      // 第五步：关闭弹窗
-      await this.log('info', '第五步：关闭弹窗');
-      await page.locator('.c9a2214b6873cbb6-closeBtn').click();
+      // 第一步：关闭弹窗
+      await this.log('info', '第一步：关闭弹窗');
+      await this.randomWait(2000, 3000);
+      await page.locator('._7c78f7c013adb338-closeIcon').click();
       await this.log('info', '已点击: 关闭按钮');
+      await this.randomWait(3000, 5000);
+
+      // 第二步：检测并关闭随机弹窗（弹窗是随机的，没有也继续）
+      await this.log('info', '第二步：检测并关闭随机弹窗');
+      await this.randomWait(2000, 3000);
+      try {
+        await this.closeRandomPopups(page);
+      } catch (error: any) {
+        await this.log('warning', '检测随机弹窗时出错，继续执行', { error: error.message });
+      }
+      await this.randomWait(3000, 5000);
+
+      // 第三步：点击发布作品（使用force强制点击，避免被遮挡）
+      await this.log('info', '第三步：点击发布作品');
+      await page.getByText('发布作品').click({ force: true });
+      await this.log('info', '已点击: 发布作品');
+      await this.randomWait(3000, 5000);
+
+      // 第四步：点击下一步
+      await this.log('info', '第四步：点击下一步');
+      await page.getByRole('button', { name: '下一步' }).click();
+      await this.log('info', '已点击: 下一步');
+      await this.randomWait(3000, 5000);
+
+      // 第五步：点击下一步
+      await this.log('info', '第五步：点击下一步');
+      await page.getByRole('button', { name: '下一步' }).click();
+      await this.log('info', '已点击: 下一步');
       await this.randomWait(3000, 5000);
 
       // 第六步：点击下一步
@@ -145,44 +238,8 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已点击: 完成');
       await this.randomWait(3000, 5000);
 
-      // 第八步：点击我知道了
-      await this.log('info', '第八步：点击我知道了');
-      await page.getByRole('button', { name: '我知道了' }).click();
-      await this.log('info', '已点击: 我知道了');
-      await this.randomWait(3000, 5000);
-
-      // 第九步：点击发布作品（使用force强制点击，避免被遮挡）
-      await this.log('info', '第九步：点击发布作品');
-      await page.getByText('发布作品').click({ force: true });
-      await this.log('info', '已点击: 发布作品');
-      await this.randomWait(3000, 5000);
-
-      // 第十步：点击下一步
-      await this.log('info', '第十步：点击下一步');
-      await page.getByRole('button', { name: '下一步' }).click();
-      await this.log('info', '已点击: 下一步');
-      await this.randomWait(3000, 5000);
-
-      // 第十一步：点击下一步
-      await this.log('info', '第十一步：点击下一步');
-      await page.getByRole('button', { name: '下一步' }).click();
-      await this.log('info', '已点击: 下一步');
-      await this.randomWait(3000, 5000);
-
-      // 第十二步：点击下一步
-      await this.log('info', '第十二步：点击下一步');
-      await page.getByRole('button', { name: '下一步' }).click();
-      await this.log('info', '已点击: 下一步');
-      await this.randomWait(3000, 5000);
-
-      // 第十三步：点击完成
-      await this.log('info', '第十三步：点击完成');
-      await page.getByRole('button', { name: '完成' }).click();
-      await this.log('info', '已点击: 完成');
-      await this.randomWait(3000, 5000);
-
-      // 第十四步：输入标题
-      await this.log('info', '第十四步：输入标题');
+      // 第八步：输入标题
+      await this.log('info', '第八步：输入标题');
       await page.getByRole('paragraph').filter({ hasText: /^$/ }).click();
       await this.log('info', '已点击: 标题输入框');
       await this.randomWait(3000, 5000);
@@ -190,9 +247,8 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已输入: 标题内容');
       await this.randomWait(3000, 5000);
 
-
-      // 第十五步：点击"内容润色"
-      await this.log('info', '第十五步：点击内容润色');
+      // 第九步：点击"内容润色"
+      await this.log('info', '第九步：点击内容润色');
       
       // 等待页面稳定后再查找按钮
       await this.randomWait(3000, 5000);
@@ -206,12 +262,12 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       } catch (error: any) {
         await this.log('error', '找不到"内容润色"按钮', { error: error.message });
         await this.log('info', '尝试截图以便调试...');
-        await page.screenshot({ path: 'baijiahao-debug-step15.png' });
+        await page.screenshot({ path: 'baijiahao-debug-step9.png' });
         throw new Error('找不到"内容润色"按钮，请检查页面是否正确加载');
       }
 
-      // 第十六步：输入需要润色的内容
-      await this.log('info', '第十六步：输入需要润色的内容');
+      // 第十步：输入需要润色的内容
+      await this.log('info', '第十步：输入需要润色的内容');
       const cleanContent = this.cleanArticleContent(article.content);
       await page.getByRole('textbox', { name: '输入需要润色的内容' }).click();
       await this.log('info', '已点击: 润色输入框');
@@ -220,27 +276,27 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已输入: 文章内容');
       await this.randomWait(3000, 5000);
 
-      // 第十七步：点击生成按钮
-      await this.log('info', '第十七步：点击生成按钮');
+      // 第十一步：点击生成按钮
+      await this.log('info', '第十一步：点击生成按钮');
       await page.locator('.ac71384b1d7fa6ba-wrap > img').click();
       await this.log('info', '已点击: 生成按钮');
       await this.log('info', '等待20秒，给AI充足时间生成文章...');
-      await page.waitForTimeout(20000); // 等待20秒
+      await page.waitForTimeout(20000);
 
-      // 第十八步：点击"采纳"
-      await this.log('info', '第十八步：点击采纳');
+      // 第十二步：点击"采纳"
+      await this.log('info', '第十二步：点击采纳');
       await page.locator('div').filter({ hasText: /^采纳$/ }).first().click();
       await this.log('info', '已点击: 采纳按钮');
       await this.randomWait(3000, 5000);
 
-      // 第十九步：点击选择封面
-      await this.log('info', '第十九步：点击选择封面');
+      // 第十三步：点击选择封面
+      await this.log('info', '第十三步：点击选择封面');
       await page.locator('div').filter({ hasText: /^选择封面$/ }).nth(5).click();
       await this.log('info', '已点击: 选择封面按钮');
       await this.randomWait(3000, 5000);
 
-      // 第二十步：上传图片
-      await this.log('info', '第二十步：上传图片');
+      // 第十四步：上传图片
+      await this.log('info', '第十四步：上传图片');
       const imagePath = await this.prepareImage(article);
       
       // 在点击之前设置 fileChooser 监听
@@ -255,28 +311,26 @@ export class BaijiahaoAdapter extends PlatformAdapter {
       await this.log('info', '已自动设置图片文件');
       await this.randomWait(3000, 5000);
 
-      // 第二十一步：点击确定按钮
-      await this.log('info', '第二十一步：点击确定按钮');
+      // 第十五步：点击确定按钮
+      await this.log('info', '第十五步：点击确定按钮');
       await page.getByRole('button', { name: '确定 (1)' }).click();
       await this.log('info', '已点击: 确定按钮');
       await this.randomWait(3000, 5000);
 
-      // 第二十二步：勾选AI创作声明
-      await this.log('info', '第二十二步：勾选AI创作声明');
+      // 第十六步：勾选AI创作声明
+      await this.log('info', '第十六步：勾选AI创作声明');
       try {
-        // 尝试直接点击 checkbox（而不是 check，因为可能需要点击 label）
         await page.getByRole('checkbox', { name: 'AI创作声明' }).click({ force: true });
         await this.log('info', '已勾选: AI创作声明');
       } catch (error: any) {
         await this.log('warning', '使用 checkbox 点击失败，尝试点击文本标签', { error: error.message });
-        // 如果失败，尝试点击包含"AI创作声明"的文本
         await page.getByText('AI创作声明').click();
         await this.log('info', '已通过文本标签勾选: AI创作声明');
       }
       await this.randomWait(3000, 5000);
 
-      // 第二十三步：点击发布按钮
-      await this.log('info', '第二十三步：点击发布按钮');
+      // 第十七步：点击发布按钮
+      await this.log('info', '第十七步：点击发布按钮');
       await page.getByRole('button', { name: '发布', exact: true }).click();
       await this.log('info', '已点击: 发布按钮');
       await this.randomWait(3000, 5000);
