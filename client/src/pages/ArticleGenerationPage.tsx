@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Card, Button, Tag, Progress, message, Space, Modal, Popconfirm, 
-  Tooltip, Select, Input, Row, Col, Statistic, Alert 
+  Tooltip, Select, Input, Row, Col, Statistic, Alert, Grid 
 } from 'antd';
 import { 
   PlusOutlined, 
@@ -28,6 +28,7 @@ import type { GenerationTask, TaskConfig } from '../types/articleGeneration';
 
 const { Search } = Input;
 const { Option } = Select;
+const { useBreakpoint } = Grid;
 
 // 统计数据接口
 interface TaskStatistics {
@@ -71,6 +72,10 @@ export default function ArticleGenerationPage() {
   // 可用的关键词和转化目标列表
   const [availableKeywords, setAvailableKeywords] = useState<string[]>([]);
   const [availableConversionTargets, setAvailableConversionTargets] = useState<string[]>([]);
+  
+  // 响应式断点
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   // 搜索防抖
   useEffect(() => {
@@ -512,24 +517,39 @@ export default function ArticleGenerationPage() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: isMobile ? 12 : 24 }}>
       <Card
         title={
           <Space>
             <FileTextOutlined style={{ color: '#0ea5e9' }} />
             <span>文章生成任务</span>
+          </Space>
+        }
+        styles={{
+          body: { padding: isMobile ? 12 : 24 }
+        }}
+      >
+        {/* 移动端：操作按钮和统计标签 */}
+        <div style={{ 
+          marginBottom: 16,
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 12 : 16,
+          alignItems: isMobile ? 'stretch' : 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Space wrap>
             <Tag color="blue">{statistics.total} 个任务</Tag>
             {selectedRowKeys.length > 0 && (
               <Tag color="cyan">已选择 {selectedRowKeys.length} 个</Tag>
             )}
           </Space>
-        }
-        extra={
-          <Space>
+          <Space style={{ width: isMobile ? '100%' : 'auto' }}>
             <Button
               icon={<ReloadOutlined />}
               onClick={() => loadTasks()}
               loading={loading}
+              style={{ flex: isMobile ? 1 : 'none' }}
             >
               刷新
             </Button>
@@ -537,12 +557,12 @@ export default function ArticleGenerationPage() {
               type="primary"
               icon={<PlusOutlined />}
               onClick={() => setModalVisible(true)}
+              style={{ flex: isMobile ? 1 : 'none' }}
             >
               新建任务
             </Button>
           </Space>
-        }
-      >
+        </div>
         {/* 搜索模式提示 */}
         {searchText && (
           <Alert
@@ -605,16 +625,16 @@ export default function ArticleGenerationPage() {
         </Row>
 
         {/* 筛选工具栏 */}
-        <div style={{ marginBottom: 16, background: '#f8fafc', padding: 16, borderRadius: 8 }}>
-          <Row gutter={[16, 16]}>
+        <div style={{ marginBottom: 16, background: '#f8fafc', padding: isMobile ? 12 : 16, borderRadius: 8 }}>
+          <Row gutter={[12, 12]}>
             <Col xs={12} sm={12} md={5}>
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ color: '#64748b', fontSize: 14 }}>
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ color: '#64748b', fontSize: isMobile ? 12 : 14 }}>
                   <FilterOutlined /> 按状态筛选
                 </span>
               </div>
               <Select
-                size="large"
+                size={isMobile ? 'middle' : 'large'}
                 style={{ width: '100%' }}
                 value={filterStatus}
                 onChange={(value) => {
@@ -631,13 +651,13 @@ export default function ArticleGenerationPage() {
               </Select>
             </Col>
             <Col xs={12} sm={12} md={5}>
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ color: '#64748b', fontSize: 14 }}>
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ color: '#64748b', fontSize: isMobile ? 12 : 14 }}>
                   <FilterOutlined /> 按关键词筛选
                 </span>
               </div>
               <Select
-                size="large"
+                size={isMobile ? 'middle' : 'large'}
                 style={{ width: '100%' }}
                 value={filterKeyword}
                 onChange={(value) => {
@@ -657,13 +677,13 @@ export default function ArticleGenerationPage() {
               </Select>
             </Col>
             <Col xs={12} sm={12} md={5}>
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ color: '#64748b', fontSize: 14 }}>
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ color: '#64748b', fontSize: isMobile ? 12 : 14 }}>
                   <FilterOutlined /> 按转化目标筛选
                 </span>
               </div>
               <Select
-                size="large"
+                size={isMobile ? 'middle' : 'large'}
                 style={{ width: '100%' }}
                 value={filterConversionTarget}
                 onChange={(value) => {
@@ -683,27 +703,29 @@ export default function ArticleGenerationPage() {
               </Select>
             </Col>
             <Col xs={12} sm={12} md={6}>
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ color: '#64748b', fontSize: 14 }}>
+              <div style={{ marginBottom: 4 }}>
+                <span style={{ color: '#64748b', fontSize: isMobile ? 12 : 14 }}>
                   <SearchOutlined /> 搜索内容
                 </span>
               </div>
               <Search
-                placeholder="搜索关键词、蒸馏结果..."
+                placeholder="搜索..."
                 allowClear
                 enterButton
-                size="large"
+                size={isMobile ? 'middle' : 'large'}
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onSearch={(value) => setSearchInput(value)}
               />
             </Col>
             <Col xs={24} sm={24} md={3}>
-              <div style={{ marginBottom: 8 }}>
-                <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
-              </div>
+              {!isMobile && (
+                <div style={{ marginBottom: 4 }}>
+                  <span style={{ color: 'transparent', fontSize: 14 }}>.</span>
+                </div>
+              )}
               <Button
-                size="large"
+                size={isMobile ? 'middle' : 'large'}
                 block
                 icon={<FilterOutlined />}
                 onClick={handleClearFilters}
@@ -718,16 +740,19 @@ export default function ArticleGenerationPage() {
         {(selectedRowKeys.length > 0 || tasks.length > 0) && (
           <div style={{ 
             marginBottom: 16, 
-            padding: '12px 16px', 
+            padding: isMobile ? '8px 12px' : '12px 16px', 
             background: '#f5f5f5', 
             borderRadius: 8,
             display: 'flex',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? 8 : 0,
             justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: isMobile ? 'stretch' : 'center'
           }}>
-            <Space>
+            <Space wrap>
               <Button
                 danger
+                size={isMobile ? 'small' : 'middle'}
                 icon={<DeleteOutlined />}
                 onClick={handleBatchDelete}
                 disabled={selectedRowKeys.length === 0}
@@ -748,6 +773,7 @@ export default function ArticleGenerationPage() {
             <Button
               danger
               type="dashed"
+              size={isMobile ? 'small' : 'middle'}
               icon={<DeleteOutlined />}
               onClick={handleDeleteAll}
               disabled={tasks.length === 0}
@@ -765,6 +791,7 @@ export default function ArticleGenerationPage() {
           rowKey="id"
           loading={loading}
           rowSelection={rowSelection}
+          size={isMobile ? 'small' : 'middle'}
           pagination={{
             current: currentPage,
             pageSize,
@@ -773,12 +800,14 @@ export default function ArticleGenerationPage() {
               setCurrentPage(page);
               setPageSize(size);
             },
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条记录`,
-            pageSizeOptions: ['10', '20', '50', '100']
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
+            showTotal: isMobile ? undefined : (total) => `共 ${total} 条记录`,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            size: isMobile ? 'small' : 'default',
+            simple: isMobile,
           }}
-          scroll={{ x: 1030 }}
+          scroll={{ x: isMobile ? 600 : 1030 }}
         />
       </Card>
 

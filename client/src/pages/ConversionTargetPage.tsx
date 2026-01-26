@@ -9,6 +9,7 @@ import {
   Form,
   Empty,
   Tag,
+  Grid,
 } from 'antd';
 import {
   AimOutlined,
@@ -22,6 +23,8 @@ import type { TablePaginationConfig } from 'antd';
 import type { FilterValue, SorterResult } from 'antd/es/table/interface';
 import { apiClient } from '../api/client';
 import ResizableTable from '../components/ResizableTable';
+
+const { useBreakpoint } = Grid;
 
 const { TextArea } = Input;
 
@@ -52,6 +55,8 @@ export default function ConversionTargetPage() {
   const [modalMode, setModalMode] = useState<ModalMode>('create');
   const [selectedTarget, setSelectedTarget] = useState<ConversionTarget | null>(null);
   const [form] = Form.useForm();
+  const screens = useBreakpoint();
+  const isMobile = !screens.md;
 
   // 加载数据
   useEffect(() => {
@@ -90,7 +95,7 @@ export default function ConversionTargetPage() {
       dataIndex: 'company_name',
       key: 'company_name',
       sorter: true,
-      width: 200,
+      width: isMobile ? 120 : 200,
       align: 'center',
       render: (text: string) => <strong>{text}</strong>,
     },
@@ -98,7 +103,7 @@ export default function ConversionTargetPage() {
       title: '行业类型',
       dataIndex: 'industry',
       key: 'industry',
-      width: 150,
+      width: isMobile ? 80 : 150,
       align: 'center',
       render: (industry?: string) => 
         industry ? <Tag color="blue">{industry}</Tag> : <span style={{ color: '#999' }}>-</span>,
@@ -107,8 +112,9 @@ export default function ConversionTargetPage() {
       title: '官方网站',
       dataIndex: 'website',
       key: 'website',
-      width: 200,
+      width: isMobile ? 100 : 200,
       align: 'center',
+      hidden: isMobile,
       render: (website?: string) =>
         website ? (
           <a href={website} target="_blank" rel="noopener noreferrer">
@@ -124,6 +130,7 @@ export default function ConversionTargetPage() {
       key: 'address',
       width: 250,
       align: 'center',
+      hidden: isMobile,
       render: (address?: string) => address || <span style={{ color: '#999' }}>-</span>,
     },
     {
@@ -133,42 +140,52 @@ export default function ConversionTargetPage() {
       sorter: true,
       width: 180,
       align: 'center',
+      hidden: isMobile,
       render: (date: string) => new Date(date).toLocaleString('zh-CN'),
     },
     {
       title: '操作',
       key: 'action',
-      width: 200,
+      width: isMobile ? 80 : 200,
       align: 'center',
       fixed: 'right',
       render: (_: any, record: ConversionTarget) => (
-        <Space size="small">
+        isMobile ? (
           <Button
             type="link"
+            size="small"
             icon={<EyeOutlined />}
             onClick={() => handleView(record)}
-          >
-            查看
-          </Button>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            编辑
-          </Button>
-          <Button
-            type="link"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => handleDelete(record)}
-          >
-            删除
-          </Button>
-        </Space>
+          />
+        ) : (
+          <Space size="small">
+            <Button
+              type="link"
+              icon={<EyeOutlined />}
+              onClick={() => handleView(record)}
+            >
+              查看
+            </Button>
+            <Button
+              type="link"
+              icon={<EditOutlined />}
+              onClick={() => handleEdit(record)}
+            >
+              编辑
+            </Button>
+            <Button
+              type="link"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(record)}
+            >
+              删除
+            </Button>
+          </Space>
+        )
       ),
     },
-  ];
+  ].filter(col => !col.hidden);
 
   // 处理表格变化
   const handleTableChange = (
@@ -291,7 +308,7 @@ export default function ConversionTargetPage() {
   };
 
   return (
-    <div style={{ padding: '24px' }}>
+    <div style={{ padding: isMobile ? '12px' : '24px' }}>
       <Card
         title={
           <Space>
@@ -299,38 +316,56 @@ export default function ConversionTargetPage() {
             <span>转化目标管理</span>
           </Space>
         }
-        extra={
-          <Space>
-            <Input.Search
-              placeholder="搜索公司名称或行业"
-              allowClear
-              onSearch={handleSearch}
-              style={{ width: 250 }}
-              prefix={<SearchOutlined />}
-            />
-            <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-              新建转化目标
-            </Button>
-          </Space>
-        }
+        styles={{
+          body: { padding: isMobile ? '12px' : '24px' }
+        }}
       >
+        {/* 搜索和操作栏 */}
+        <div style={{ 
+          marginBottom: 16,
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 12 : 16,
+          alignItems: isMobile ? 'stretch' : 'center',
+          justifyContent: 'space-between'
+        }}>
+          <Input.Search
+            placeholder="搜索公司名称或行业"
+            allowClear
+            onSearch={handleSearch}
+            style={{ width: isMobile ? '100%' : 250 }}
+            prefix={<SearchOutlined />}
+          />
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={handleCreate}
+            style={{ width: isMobile ? '100%' : 'auto' }}
+          >
+            新建转化目标
+          </Button>
+        </div>
+
         <ResizableTable<ConversionTarget>
           tableId="conversion-target-list"
           columns={columns}
           dataSource={targets}
           rowKey="id"
           loading={loading}
+          size={isMobile ? 'small' : 'middle'}
           pagination={{
             current: currentPage,
             pageSize: pageSize,
             total: total,
-            showSizeChanger: true,
-            showQuickJumper: true,
-            showTotal: (total) => `共 ${total} 条`,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
+            showTotal: isMobile ? undefined : (total) => `共 ${total} 条`,
             pageSizeOptions: ['10', '20', '50', '100'],
+            size: isMobile ? 'small' : 'default',
+            simple: isMobile,
           }}
           onChange={handleTableChange}
-          scroll={{ x: 1200 }}
+          scroll={{ x: isMobile ? 280 : 1200 }}
           locale={{
             emptyText: (
               <Empty
@@ -357,8 +392,9 @@ export default function ConversionTargetPage() {
         okText={modalMode === 'view' ? '关闭' : modalMode === 'create' ? '创建' : '保存'}
         cancelText="取消"
         cancelButtonProps={{ style: { display: modalMode === 'view' ? 'none' : 'inline-block' } }}
-        width={600}
+        width={isMobile ? '95%' : 600}
         destroyOnClose
+        centered={isMobile}
       >
         <Form
           form={form}
