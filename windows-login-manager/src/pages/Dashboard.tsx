@@ -19,6 +19,7 @@ import dayjs, { Dayjs } from 'dayjs';
 
 // Dashboard 组件
 import AgentDashboardPanel from '../components/Dashboard/AgentDashboardPanel';
+import PlanCards from '../components/Dashboard/PlanCards';
 import SubscriptionOverview from '../components/Dashboard/SubscriptionOverview';
 import QuickStatsCards from '../components/Dashboard/QuickStatsCards';
 import PublishingTrendChart from '../components/Dashboard/PublishingTrendChart';
@@ -191,6 +192,9 @@ export default function Dashboard() {
       }}>
         {/* 代理商视图面板 - 顶部醒目位置 */}
         <AgentDashboardPanel onRefresh={loadData} />
+
+        {/* 套餐推荐卡片 - 便于用户快速购买 */}
+        <PlanCards />
 
         {/* 订阅概览 */}
         <SubscriptionOverview />
