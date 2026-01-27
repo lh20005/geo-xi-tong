@@ -429,6 +429,33 @@ export class BatchExecutor {
   isExecuting(): boolean {
     return this.isGlobalExecuting || this.activeBatches.size > 0;
   }
+
+  /**
+   * 强制清理执行状态
+   * 用于处理异常情况（如应用重启后状态不一致）
+   */
+  forceCleanup(): void {
+    console.log('🧹 强制清理批次执行状态...');
+    console.log(`   清理前: activeBatches=${this.activeBatches.size}, isGlobalExecuting=${this.isGlobalExecuting}`);
+    
+    this.activeBatches.clear();
+    this.stoppedBatches.clear();
+    this.isGlobalExecuting = false;
+    this.globalExecutionPromise = Promise.resolve();
+    
+    console.log('✅ 批次执行状态已清理');
+  }
+
+  /**
+   * 获取当前执行状态（用于调试）
+   */
+  getExecutionState(): { activeBatches: string[]; stoppedBatches: string[]; isGlobalExecuting: boolean } {
+    return {
+      activeBatches: Array.from(this.activeBatches),
+      stoppedBatches: Array.from(this.stoppedBatches),
+      isGlobalExecuting: this.isGlobalExecuting
+    };
+  }
 }
 
 // 导出单例

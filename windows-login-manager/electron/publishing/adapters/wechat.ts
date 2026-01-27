@@ -45,7 +45,8 @@ export class WechatAdapter extends PlatformAdapter {
         await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
         await page.waitForTimeout(2000);
 
-        const isLoggedIn = await page.locator('.weui-desktop_name').isVisible({ timeout: 5000 }).catch(() => false);
+        // 使用多重验证的 checkLoginStatus 方法，避免误判
+        const isLoggedIn = await this.checkLoginStatus(page);
         
         if (isLoggedIn) {
           await this.log('info', 'Cookie 登录成功');
@@ -95,32 +96,59 @@ export class WechatAdapter extends PlatformAdapter {
 
   /**
    * 检查登录状态
-   * 最佳实践：检查 URL 重定向 + 多指标验证 + 容错处理
+   * 最佳实践：
+   * 1. 首先检查 URL 重定向（最可靠的未登录信号）
+   * 2. 多元素检查作为备选
+   * 3. 如果没有明确的未登录信号，默认假设已登录（避免误判）
    */
   async checkLoginStatus(page: Page): Promise<boolean> {
     try {
-      await this.log('info', '开始检查微信公众号登录状态');
+      await this.log('info', '🔍 检查微信公众号登录状态...');
+      
+      // 等待页面稳定
+      await page.waitForTimeout(2000);
       
       // 首先检查 URL - 如果在扫码页面，说明未登录
       const currentUrl = page.url();
-      if (currentUrl.includes('cgi-bin/scanloginqrcode')) {
+      if (currentUrl.includes('cgi-bin/scanloginqrcode') || currentUrl.includes('/login')) {
         await this.log('warning', '❌ 在扫码登录页面，Cookie已失效');
         return false;
       }
       
-      // 检查用户名元素（登录成功的标志）
+      // 方法1：检查用户名元素（登录成功的标志）
       const usernameVisible = await page.locator('.weui-desktop_name').isVisible({ timeout: 5000 }).catch(() => false);
-      
       if (usernameVisible) {
-        await this.log('info', '✅ 微信公众号登录状态正常');
+        await this.log('info', '✅ 微信公众号登录状态正常（检测到用户名）');
         return true;
       }
       
+      // 方法2：检查头像元素
+      const avatarVisible = await page.locator('.weui-desktop-account__img, .weui-desktop-account__avatar').first().isVisible({ timeout: 3000 }).catch(() => false);
+      if (avatarVisible) {
+        await this.log('info', '✅ 微信公众号登录状态正常（检测到头像）');
+        return true;
+      }
+      
+      // 方法3：检查首页特有元素（说明在首页且已登录）
+      const homeVisible = await page.locator('.weui-desktop-home, .weui-desktop-panel').first().isVisible({ timeout: 3000 }).catch(() => false);
+      if (homeVisible) {
+        await this.log('info', '✅ 微信公众号登录状态正常（检测到首页元素）');
+        return true;
+      }
+      
+      // 方法4：检查是否有扫码登录二维码（未登录的明确信号）
+      const hasQRCode = await page.locator('.login__type__container__scan__qrcode, .qrcode').first().isVisible({ timeout: 2000 }).catch(() => false);
+      if (hasQRCode) {
+        await this.log('warning', '❌ 检测到扫码登录二维码，Cookie已失效');
+        return false;
+      }
+      
       // 如果没有明确的登录/未登录信号，假设已登录（避免误判）
-      await this.log('info', '✅ 未检测到登录页面，假设已登录');
+      await this.log('info', '✅ 未检测到明确的未登录信号，假设已登录');
       return true;
     } catch (error: any) {
       await this.log('error', '检查登录状态出错', { error: error.message });
+      // 出错时不要轻易判定为未登录，避免误判
       return true;
     }
   }

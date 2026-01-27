@@ -1402,6 +1402,31 @@ class IPCHandler {
       }
     });
 
+    // 强制清理执行状态
+    ipcMain.handle('publishing:force-cleanup', async () => {
+      try {
+        log.info('IPC: publishing:force-cleanup');
+        taskQueue.forceCleanup();
+        return { success: true };
+      } catch (error) {
+        log.error('IPC: publishing:force-cleanup failed:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '清理状态失败',
+        };
+      }
+    });
+
+    // 获取执行状态（调试用）
+    ipcMain.handle('publishing:get-execution-state', async () => {
+      try {
+        return taskQueue.getExecutionState();
+      } catch (error) {
+        log.error('IPC: publishing:get-execution-state failed:', error);
+        return null;
+      }
+    });
+
     log.info('Publishing handlers registered');
   }
 

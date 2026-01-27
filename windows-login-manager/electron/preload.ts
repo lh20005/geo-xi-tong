@@ -113,6 +113,15 @@ export interface PublishingAPI {
   stopTask: (taskId: number) => Promise<{ success: boolean }>;
   stopBatch: (batchId: string) => Promise<{ success: boolean }>;
   
+  // 状态管理
+  forceCleanup: () => Promise<{ success: boolean; error?: string }>;
+  getExecutionState: () => Promise<{
+    isRunning: boolean;
+    singleTaskExecuting: boolean;
+    executingTasks: number[];
+    batchState: { activeBatches: string[]; stoppedBatches: string[]; isGlobalExecuting: boolean };
+  } | null>;
+  
   // 事件监听
   onTaskLog: (callback: (data: TaskLogEvent) => void) => () => void;
   onTaskStatus: (callback: (data: TaskStatusEvent) => void) => () => void;
@@ -291,6 +300,10 @@ const publishingAPI: PublishingAPI = {
   executeBatch: (batchId: string) => ipcRenderer.invoke('publishing:execute-batch', batchId),
   stopTask: (taskId: number) => ipcRenderer.invoke('publishing:stop-task', taskId),
   stopBatch: (batchId: string) => ipcRenderer.invoke('publishing:stop-batch', batchId),
+  
+  // 状态管理
+  forceCleanup: () => ipcRenderer.invoke('publishing:force-cleanup'),
+  getExecutionState: () => ipcRenderer.invoke('publishing:get-execution-state'),
   
   // 事件监听
   onTaskLog: (callback: (data: TaskLogEvent) => void) => {

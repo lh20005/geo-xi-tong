@@ -181,7 +181,12 @@ export class TaskQueue {
    */
   private async checkAndExecuteBatches(): Promise<void> {
     try {
-      // 如果已经有批次在执行，不启动新的批次
+      // 如果已经有批次在执行，先检查状态一致性
+      if (batchExecutor.isExecuting()) {
+        await this.checkAndAutoCleanup();
+      }
+
+      // 再次检查，如果仍有批次在执行，不启动新的批次
       if (batchExecutor.isExecuting()) {
         return;
       }
@@ -317,6 +322,15 @@ export class TaskQueue {
    */
   async executeTask(taskId: number): Promise<{ success: boolean; error?: string }> {
     try {
+      // 先检查内存状态是否与实际情况一致
+      if (batchExecutor.isExecuting()) {
+        const shouldCleanup = await this.checkAndAutoCleanup();
+        if (shouldCleanup) {
+          console.log('✅ 检测到状态不一致，已自动清理');
+        }
+      }
+
+      // 再次检查
       if (batchExecutor.isExecuting()) {
         return { success: false, error: '有批次正在执行中，请等待完成' };
       }
@@ -349,6 +363,16 @@ export class TaskQueue {
    */
   async executeBatch(batchId: string): Promise<{ success: boolean; error?: string }> {
     try {
+      // 先检查内存状态是否与实际情况一致
+      // 如果内存显示有批次在执行，但数据库中没有 running 状态的任务，则自动清理
+      if (batchExecutor.isExecuting()) {
+        const shouldCleanup = await this.checkAndAutoCleanup();
+        if (shouldCleanup) {
+          console.log('✅ 检测到状态不一致，已自动清理');
+        }
+      }
+
+      // 再次检查（清理后可能已经可以执行了）
       if (batchExecutor.isExecuting()) {
         return { 
           success: false, 
@@ -372,6 +396,39 @@ export class TaskQueue {
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * 检查并自动清理不一致的状态
+   * 返回 true 表示进行了清理
+   */
+  private async checkAndAutoCleanup(): Promise<boolean> {
+    try {
+      // 从服务器获取当前 running 状态的任务
+      const response = await apiClient.get('/api/publishing/tasks', {
+        params: { status: 'running' }
+      });
+
+      if (!response.data?.success) {
+        return false;
+      }
+
+      const runningTasks = response.data.data?.tasks || [];
+      
+      // 如果数据库中没有 running 状态的任务，但内存显示有批次在执行
+      // 说明状态不一致，需要清理
+      if (runningTasks.length === 0 && batchExecutor.isExecuting()) {
+        console.log('🔍 检测到状态不一致：内存显示有批次执行，但数据库无 running 任务');
+        console.log(`   内存状态: activeBatches=${batchExecutor.getExecutingBatches().join(', ')}`);
+        this.forceCleanup();
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('检查状态一致性失败:', error);
+      return false;
     }
   }
 
@@ -413,6 +470,41 @@ export class TaskQueue {
       this.stop();
       this.start();
     }
+  }
+
+  /**
+   * 强制清理执行状态
+   * 用于处理异常情况（如应用重启后状态不一致）
+   */
+  forceCleanup(): void {
+    console.log('🧹 强制清理任务队列状态...');
+    
+    // 清理批次执行器状态
+    batchExecutor.forceCleanup();
+    
+    // 清理本地状态
+    this.executingTasks.clear();
+    this.singleTaskExecuting = false;
+    
+    console.log('✅ 任务队列状态已清理');
+    this.sendQueueStatus();
+  }
+
+  /**
+   * 获取执行状态（用于调试）
+   */
+  getExecutionState(): {
+    isRunning: boolean;
+    singleTaskExecuting: boolean;
+    executingTasks: number[];
+    batchState: { activeBatches: string[]; stoppedBatches: string[]; isGlobalExecuting: boolean };
+  } {
+    return {
+      isRunning: this.isRunning,
+      singleTaskExecuting: this.singleTaskExecuting,
+      executingTasks: Array.from(this.executingTasks),
+      batchState: batchExecutor.getExecutionState()
+    };
   }
 }
 
