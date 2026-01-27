@@ -180,6 +180,10 @@ export class PublishingExecutor {
 
   /**
    * 执行发布任务（带超时控制）
+   * 
+   * 关键改进：使用 AbortController 实现真正的超时取消
+   * Promise.race 只能让 race 返回，但不会取消底层操作
+   * 必须在超时时主动关闭浏览器，否则任务会继续运行阻塞后续任务
    */
   async executeTask(taskId: number): Promise<void> {
     const taskStartTime = Date.now();
@@ -189,6 +193,8 @@ export class PublishingExecutor {
     this.cancelledTasks.delete(taskId);
     
     let page = null;
+    let timeoutTimer: NodeJS.Timeout | null = null;
+    let isTimedOut = false;
 
     try {
       // 从服务器获取任务详情
@@ -227,9 +233,21 @@ export class PublishingExecutor {
       // 更新任务状态为运行中
       await this.updateTaskStatus(taskId, 'running');
 
-      // 创建超时Promise
+      // 创建超时 Promise，超时时主动关闭浏览器
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => {
+        timeoutTimer = setTimeout(async () => {
+          isTimedOut = true;
+          console.log(`⏰ [任务 #${taskId}] 超时！正在强制关闭浏览器...`);
+          await this.log(taskId, 'error', `任务执行超时（${validatedTimeout}分钟），正在强制终止...`);
+          
+          // 关键：超时时立即强制关闭浏览器，终止底层操作
+          try {
+            await browserAutomationService.forceCloseBrowser();
+            console.log(`✅ [任务 #${taskId}] 浏览器已强制关闭`);
+          } catch (closeError) {
+            console.error(`❌ [任务 #${taskId}] 强制关闭浏览器失败:`, closeError);
+          }
+          
           reject(new TaskTimeoutError(validatedTimeout, taskId));
         }, validatedTimeout * 60 * 1000);
       });
@@ -238,6 +256,8 @@ export class PublishingExecutor {
       const executePromise = this.performPublish(taskId, task, account, taskConfig);
 
       // 使用Promise.race实现超时控制
+      // 注意：超时时 timeoutPromise 会先关闭浏览器，然后 reject
+      // 这样 executePromise 中的浏览器操作会因为浏览器关闭而抛出错误并结束
       page = await Promise.race([executePromise, timeoutPromise]);
 
       const taskDuration = Math.round((Date.now() - taskStartTime) / 1000);
@@ -246,9 +266,15 @@ export class PublishingExecutor {
     } catch (error: any) {
       const taskDuration = Math.round((Date.now() - taskStartTime) / 1000);
       console.error(`❌ [任务 #${taskId}] 执行失败，耗时: ${taskDuration}秒`, error);
-      const isTimeout = error instanceof TaskTimeoutError;
+      const isTimeout = error instanceof TaskTimeoutError || isTimedOut;
       await this.handleTaskFailure(taskId, error, isTimeout);
     } finally {
+      // 清除超时定时器（如果任务正常完成）
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+      
       // 确保资源总是被清理
       const cleanupStartTime = Date.now();
       console.log(`🔄 [任务 #${taskId}] 开始清理资源...`);
@@ -508,21 +534,33 @@ export class PublishingExecutor {
 
   /**
    * 清理浏览器资源
+   * 增强版：确保无论任务成功、失败还是超时，都能正确清理资源
    */
   private async cleanupBrowser(page: any, taskId: number): Promise<void> {
     try {
+      // 先尝试关闭页面
       if (page) {
-        console.log(`🔄 [任务 #${taskId}] 关闭页面...`);
-        await browserAutomationService.closePage(page);
-        console.log(`✅ [任务 #${taskId}] 页面已关闭`);
+        try {
+          console.log(`🔄 [任务 #${taskId}] 关闭页面...`);
+          await browserAutomationService.closePage(page);
+          console.log(`✅ [任务 #${taskId}] 页面已关闭`);
+        } catch (pageError) {
+          console.warn(`⚠️  [任务 #${taskId}] 关闭页面失败（可能已被关闭）:`, pageError);
+        }
       }
       
-      console.log(`🔄 [任务 #${taskId}] 关闭浏览器...`);
-      await browserAutomationService.closeBrowser();
-      console.log(`✅ [任务 #${taskId}] 浏览器已关闭`);
+      // 检查浏览器是否仍在运行，如果是则关闭
+      if (browserAutomationService.isBrowserRunning()) {
+        console.log(`🔄 [任务 #${taskId}] 关闭浏览器...`);
+        await browserAutomationService.closeBrowser();
+        console.log(`✅ [任务 #${taskId}] 浏览器已关闭`);
+      } else {
+        console.log(`ℹ️  [任务 #${taskId}] 浏览器已经关闭，跳过清理`);
+      }
     } catch (error) {
-      console.error(`⚠️  [任务 #${taskId}] 关闭浏览器失败:`, error);
+      console.error(`⚠️  [任务 #${taskId}] 正常关闭浏览器失败:`, error);
       
+      // 尝试强制关闭
       try {
         console.log(`🔄 [任务 #${taskId}] 尝试强制关闭浏览器...`);
         await browserAutomationService.forceCloseBrowser();
