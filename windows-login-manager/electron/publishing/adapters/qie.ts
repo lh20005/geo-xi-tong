@@ -114,15 +114,66 @@ export class QieAdapter extends PlatformAdapter {
       await this.humanClick(titleInput, '标题输入框');
       await this.humanType(titleInput, article.title, '标题内容');
 
-      // 第二步：输入正文
+      // 第二步：输入正文（先清空可能存在的自动保存内容）
       await this.log('info', '第二步：输入正文');
-      await this.humanClick(page.getByRole('paragraph').filter({ hasText: /^$/ }), '正文编辑器');
+      const editor = page.locator('.ProseMirror');
+      await this.randomWait(3000, 5000);
+      await editor.click();
+      await this.log('info', '已点击: 正文编辑器');
+      
+      // 清空编辑器内容（企鹅号有自动保存功能，可能有遗留内容）
+      await this.randomWait(3000, 5000);
+      await editor.press('Control+a'); // 全选
+      await this.log('info', '已全选编辑器内容');
+      await this.randomWait(3000, 5000);
+      await editor.press('Backspace'); // 删除
+      await this.log('info', '已清空编辑器遗留内容');
+      await this.randomWait(3000, 5000);
+      
       const cleanContent = this.cleanArticleContent(article.content);
-      await this.humanType(page.locator('.ProseMirror'), cleanContent, '正文内容');
+      await this.humanType(editor, cleanContent, '正文内容');
 
-      // 第三步：点击"更换"按钮
-      await this.log('info', '第三步：点击更换按钮');
-      await this.humanClick(page.getByText('更换'), '更换按钮');
+      // 第三步：点击添加封面按钮或更换按钮（两种情况）
+      await this.log('info', '第三步：点击封面按钮');
+      await this.randomWait(3000, 5000);
+      
+      // 先尝试点击"添加封面"按钮（无遗留封面的情况）
+      const addCoverButton = page.locator('#articlePublish-coverinfo').getByRole('button').filter({ hasText: /^$/ });
+      const changeButton = page.getByText('更换');
+      
+      let coverClicked = false;
+      
+      // 尝试方式1：点击添加封面按钮
+      try {
+        const isAddVisible = await addCoverButton.isVisible({ timeout: 3000 });
+        if (isAddVisible) {
+          await addCoverButton.click();
+          await this.log('info', '已点击: 添加封面按钮');
+          coverClicked = true;
+        }
+      } catch {
+        await this.log('info', '添加封面按钮不可见，尝试更换按钮');
+      }
+      
+      // 尝试方式2：点击更换按钮（有遗留封面的情况）
+      if (!coverClicked) {
+        try {
+          const isChangeVisible = await changeButton.isVisible({ timeout: 3000 });
+          if (isChangeVisible) {
+            await changeButton.click();
+            await this.log('info', '已点击: 更换按钮');
+            coverClicked = true;
+          }
+        } catch {
+          await this.log('error', '更换按钮也不可见');
+        }
+      }
+      
+      if (!coverClicked) {
+        throw new Error('无法找到添加封面或更换按钮');
+      }
+      
+      await this.randomWait(3000, 5000);
 
       // 第四步：点击"本地上传"
       await this.log('info', '第四步：点击本地上传');
@@ -150,39 +201,44 @@ export class QieAdapter extends PlatformAdapter {
       await this.log('info', '第六步：点击确认按钮');
       await this.humanClick(page.getByRole('button', { name: '确认' }), '确认按钮');
 
-      // 第七步：输入标签
-      await this.log('info', '第七步：输入标签');
-      await this.humanClick(
-        page.getByText('最多9个标签，每个标签最多8个字，用空格或Enter键隔开'),
-        '标签输入区域'
-      );
-      const tags = this.prepareTags(article, config);
-      await this.humanType(
-        page.locator('#articlePublish-tag').getByRole('textbox'),
-        tags,
-        '标签内容'
-      );
+      // 清除遗留的自主声明（如果有）
+      await this.log('info', '检查是否有遗留的自主声明...');
+      await this.randomWait(3000, 5000);
+      try {
+        const clearButton = page.locator('.omui-icon.omui-icon-clear-reverse');
+        const hasClearButton = await clearButton.isVisible({ timeout: 3000 });
+        if (hasClearButton) {
+          await this.log('info', '检测到遗留的自主声明，正在清除...');
+          await clearButton.click();
+          await this.log('info', '已清除遗留的自主声明');
+          await this.randomWait(3000, 5000);
+        } else {
+          await this.log('info', '没有遗留的自主声明');
+        }
+      } catch {
+        await this.log('info', '没有检测到遗留的自主声明');
+      }
 
-      // 第八步：点击"添加内容自主声明"按钮
-      await this.log('info', '第八步：点击添加内容自主声明');
+      // 第七步：点击"添加内容自主声明"按钮
+      await this.log('info', '第七步：点击添加内容自主声明');
       await this.humanClick(
         page.getByRole('button', { name: '添加内容自主声明' }),
         '添加内容自主声明按钮'
       );
 
-      // 第九步：选择第5个单选框（AI生成内容声明）
-      await this.log('info', '第九步：选择AI生成内容声明');
+      // 第八步：选择第5个单选框（AI生成内容声明）
+      await this.log('info', '第八步：选择AI生成内容声明');
       await this.humanClick(
         page.locator('div:nth-child(5) > .omui-radio > .omui-radio__inner'),
         'AI生成内容声明选项'
       );
 
-      // 第十步：点击确认按钮
-      await this.log('info', '第十步：点击确认按钮');
+      // 第九步：点击确认按钮
+      await this.log('info', '第九步：点击确认按钮');
       await this.humanClick(page.getByRole('button', { name: '确认' }), '确认按钮');
 
-      // 第十一步：点击发布按钮
-      await this.log('info', '第十一步：点击发布按钮');
+      // 第十步：点击发布按钮
+      await this.log('info', '第十步：点击发布按钮');
       await this.humanClick(page.getByRole('button', { name: '发布', exact: true }), '发布按钮');
 
       // 验证发布结果
