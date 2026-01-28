@@ -258,17 +258,17 @@ export class SohuAdapter extends PlatformAdapter {
 
       // 第七步：点击确定按钮
       await this.log('info', '第七步：点击确定按钮');
-      await this.humanClick(
-        page.getByRole('paragraph').filter({ hasText: '确定' }),
-        '确定按钮'
-      );
+      await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+      await page.getByRole('paragraph').filter({ hasText: /^确定$/ }).click();
+      await this.log('info', '已点击: 确定按钮');
+      await this.randomWait(3000, 5000); // 点击后等待 3-5秒
 
       // 第八步：点击"发布"按钮
       await this.log('info', '第八步：点击发布按钮');
-      await this.humanClick(
-        page.getByText('发布', { exact: true }),
-        '发布按钮'
-      );
+      await this.randomWait(3000, 5000); // 点击前等待 3-5秒
+      await page.getByText('发布', { exact: true }).click();
+      await this.log('info', '已点击: 发布按钮');
+      await this.randomWait(3000, 5000); // 点击后等待 3-5秒
 
       // 验证发布结果
       const success = await this.verifyPublishSuccess(page);
