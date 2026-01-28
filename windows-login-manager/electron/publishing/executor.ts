@@ -445,7 +445,7 @@ export class PublishingExecutor {
       await this.log(taskId, 'info', `🎉 文章《${article.title}》发布成功！`);
 
       return page;
-    } catch (error) {
+    } catch (error: any) {
       // 如果发生错误，确保清理page
       if (page) {
         try {
@@ -454,6 +454,25 @@ export class PublishingExecutor {
           console.error('关闭页面失败:', closeError);
         }
       }
+      
+      // 检查是否是浏览器关闭错误
+      const isBrowserClosedError = 
+        error.isBrowserClosed ||
+        error.message?.includes('Target page, context or browser has been closed') ||
+        error.message?.includes('browser has been closed') ||
+        error.message?.includes('context has been closed') ||
+        error.message?.includes('page has been closed') ||
+        error.message?.includes('Target closed') ||
+        error.message?.includes('Session closed');
+
+      if (isBrowserClosedError) {
+        // 浏览器意外关闭，可能是网络问题或页面崩溃
+        // 将其视为账号离线错误，需要用户重新登录
+        await this.log(taskId, 'error', `❌ ${task.platform_id} 浏览器上下文意外关闭，Cookie可能已失效`);
+        await this.updateAccountOnlineStatus(account.id, false, '浏览器上下文意外关闭，请重新登录');
+        throw new AccountOfflineError(account.id, task.platform_id, `${task.platform_id} Cookie已失效，请重新登录`);
+      }
+      
       throw error;
     }
   }

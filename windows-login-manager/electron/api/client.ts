@@ -69,6 +69,7 @@ class APIClient {
   private axiosInstance: AxiosInstance;
   private isRefreshing = false;
   private refreshSubscribers: Array<(token: string) => void> = [];
+  private baseURLInitialized = false;
 
   private constructor() {
     // 创建axios实例
@@ -106,6 +107,7 @@ class APIClient {
     }
     
     this.axiosInstance.defaults.baseURL = url;
+    this.baseURLInitialized = true;
     log.info(`API base URL set to: ${url}`);
   }
 
@@ -116,6 +118,11 @@ class APIClient {
   private setupRequestInterceptor(): void {
     this.axiosInstance.interceptors.request.use(
       async (config) => {
+        // 确保 baseURL 已初始化（关键修复：防止任务队列在 IPC 初始化前发起请求）
+        if (!this.baseURLInitialized) {
+          await this.ensureBaseURLInitialized();
+        }
+
         // 获取Token
         const tokens = await storageManager.getTokens();
         
@@ -130,7 +137,7 @@ class APIClient {
           log.warn('Request not using HTTPS:', config.url);
         }
 
-        log.debug(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
+        log.debug(`API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
         return config;
       },
       (error) => {
@@ -138,6 +145,36 @@ class APIClient {
         return Promise.reject(error);
       }
     );
+  }
+
+  /**
+   * 确保 baseURL 已初始化
+   * 这个方法会在首次请求时自动调用，确保即使在 IPC 初始化之前也能正确设置 baseURL
+   */
+  private async ensureBaseURLInitialized(): Promise<void> {
+    if (this.baseURLInitialized) return;
+
+    try {
+      const config = await storageManager.getConfig();
+      if (config && config.serverUrl) {
+        this.axiosInstance.defaults.baseURL = config.serverUrl;
+        log.info(`[API Client] Auto-initialized baseURL: ${config.serverUrl}`);
+      } else {
+        // 生产环境硬编码服务器地址
+        const { app } = require('electron');
+        const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+        const defaultUrl = isDev ? 'http://localhost:3000' : 'https://www.jzgeo.cc';
+        this.axiosInstance.defaults.baseURL = defaultUrl;
+        log.info(`[API Client] Auto-initialized baseURL (default): ${defaultUrl}`);
+      }
+      this.baseURLInitialized = true;
+    } catch (error) {
+      log.error('[API Client] Failed to auto-initialize baseURL:', error);
+      // 使用硬编码的生产环境地址作为后备
+      this.axiosInstance.defaults.baseURL = 'https://www.jzgeo.cc';
+      this.baseURLInitialized = true;
+      log.info('[API Client] Using fallback baseURL: https://www.jzgeo.cc');
+    }
   }
 
   /**

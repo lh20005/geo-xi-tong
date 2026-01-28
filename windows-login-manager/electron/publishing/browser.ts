@@ -207,6 +207,9 @@ export class BrowserAutomationService {
 
   /**
    * 执行带重试的操作
+   * 
+   * 注意：如果检测到浏览器上下文已关闭，会立即抛出错误，不再重试
+   * 因为在浏览器关闭的情况下重试是无意义的
    */
   async executeWithRetry<T>(
     operation: () => Promise<T>,
@@ -216,6 +219,13 @@ export class BrowserAutomationService {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
+        // 在每次尝试前检查浏览器是否仍然可用
+        if (!this.isBrowserRunning()) {
+          const browserClosedError = new Error('浏览器已关闭，无法继续执行');
+          (browserClosedError as any).isBrowserClosed = true;
+          throw browserClosedError;
+        }
+
         if (attempt > 1) {
           this.log('info', `重试操作 (${attempt}/${maxRetries})`);
         }
@@ -224,6 +234,24 @@ export class BrowserAutomationService {
       } catch (error: any) {
         lastError = error;
         console.error(`操作失败 (尝试 ${attempt}/${maxRetries}):`, error.message);
+
+        // 检查是否是浏览器/页面关闭错误
+        const isBrowserClosedError = 
+          error.isBrowserClosed ||
+          error.message?.includes('Target page, context or browser has been closed') ||
+          error.message?.includes('browser has been closed') ||
+          error.message?.includes('context has been closed') ||
+          error.message?.includes('page has been closed') ||
+          error.message?.includes('Target closed') ||
+          error.message?.includes('Session closed');
+
+        if (isBrowserClosedError) {
+          // 浏览器已关闭，不再重试，直接抛出错误
+          this.log('error', '浏览器上下文已关闭，停止重试');
+          const browserError = new Error(`浏览器已关闭: ${error.message}`);
+          (browserError as any).isBrowserClosed = true;
+          throw browserError;
+        }
 
         if (attempt < maxRetries) {
           // 等待一段时间后重试

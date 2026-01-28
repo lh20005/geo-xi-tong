@@ -49,9 +49,9 @@ export class XiaohongshuAdapter extends PlatformAdapter {
       if (credentials.cookies && credentials.cookies.length > 0) {
         await this.log('info', '尝试使用 Cookie 登录');
         
-        // 导航到发布页面
-        await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
-        await page.waitForTimeout(2000);
+        // 注意：executor.ts 已经设置了 Cookie 并导航到发布页面
+        // 这里不需要再次导航，直接检查登录状态即可
+        await page.waitForTimeout(3000);
 
         // 检查是否已登录
         const isLoggedIn = await this.checkLoginStatus(page);

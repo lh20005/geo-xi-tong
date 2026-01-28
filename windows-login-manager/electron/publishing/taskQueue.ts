@@ -6,12 +6,14 @@
  * 1. 任务必须串行执行
  * 2. batchExecutor 内部使用 Promise 链保证串行
  * 3. 本模块只负责触发执行，不负责串行控制
+ * 4. 只有用户登录后才会执行任务检查
  */
 
 import { BrowserWindow } from 'electron';
 import { publishingExecutor } from './executor';
 import { batchExecutor } from './batchExecutor';
 import { apiClient } from '../api/client';
+import { storageManager } from '../storage/manager';
 import { LocalTask, QueueStatusEvent } from './types';
 
 /**
@@ -25,6 +27,8 @@ export class TaskQueue {
   private mainWindow: BrowserWindow | null = null;
   // 单任务执行锁
   private singleTaskExecuting = false;
+  // 用于避免重复打印未登录日志
+  private lastAuthCheckFailed = false;
 
   /**
    * 设置主窗口（用于发送 IPC 消息）
@@ -60,9 +64,12 @@ export class TaskQueue {
 
     this.isRunning = true;
     console.log('✅ 任务队列已启动（检查间隔: 10秒）');
+    console.log(`   当前时间: ${new Date().toLocaleString('zh-CN')}`);
+    console.log('   注意: 任务队列需要用户登录后才会执行任务');
     this.sendQueueStatus();
 
     // 立即执行一次检查
+    console.log('🔍 [任务队列] 立即执行首次检查...');
     this.checkAndExecuteTasks();
 
     // 定期检查
@@ -192,15 +199,28 @@ export class TaskQueue {
       }
       
       // 从服务器获取待执行的批次
+      // 注意：使用较大的 pageSize 确保能获取到所有待处理任务
       const response = await apiClient.get('/api/publishing/tasks', {
-        params: { status: 'pending' }
+        params: { status: 'pending', pageSize: 100 }
       });
 
-      if (!response.data?.success || !response.data?.data?.tasks) {
+      if (!response.data?.success) {
+        console.log('⚠️  [任务队列] 获取待处理任务失败:', response.data?.message || '未知错误');
+        return;
+      }
+      
+      if (!response.data?.data?.tasks) {
+        console.log('⚠️  [任务队列] 返回数据格式异常');
         return;
       }
 
       const tasks = response.data.data.tasks as LocalTask[];
+      const total = response.data.data.total || 0;
+      
+      // 调试日志：显示获取到的任务数量
+      if (tasks.length > 0 || total > 0) {
+        console.log(`📋 [任务队列] 获取到 ${tasks.length} 个待处理任务（总数: ${total}）`);
+      }
       
       // 找出所有有 batch_id 的任务，按批次分组
       const batchMap = new Map<string, { createdAt: Date; tasks: LocalTask[] }>();
@@ -226,9 +246,9 @@ export class TaskQueue {
         const sortedBatches = Array.from(batchMap.entries())
           .sort((a, b) => a[1].createdAt.getTime() - b[1].createdAt.getTime());
         
-        const [batchId] = sortedBatches[0];
+        const [batchId, batchInfo] = sortedBatches[0];
         
-        console.log(`🚀 开始执行队列中的批次: ${batchId}`);
+        console.log(`🚀 开始执行队列中的批次: ${batchId}（包含 ${batchInfo.tasks.length} 个任务）`);
         
         // 执行批次（batchExecutor 内部会处理串行）
         batchExecutor.executeBatch(batchId).catch(error => {
@@ -237,8 +257,47 @@ export class TaskQueue {
         
         this.sendQueueStatus();
       }
+    } catch (error: any) {
+      // 增强错误日志，显示更多细节
+      console.error('❌ 检查批次失败:', error.message || error);
+      if (error.response) {
+        console.error('   HTTP状态:', error.response.status);
+        console.error('   响应数据:', JSON.stringify(error.response.data).substring(0, 200));
+      }
+    }
+  }
+
+  /**
+   * 检查用户是否已登录
+   * 如果没有 token，返回 false
+   */
+  private async isUserAuthenticated(): Promise<boolean> {
+    try {
+      const tokens = await storageManager.getTokens();
+      if (!tokens) {
+        // 只在首次检测到未登录时打印日志
+        if (!this.lastAuthCheckFailed) {
+          console.log('⚠️  [任务队列] 用户未登录（无 token），等待登录后自动开始执行任务');
+          this.lastAuthCheckFailed = true;
+        }
+        return false;
+      }
+      if (!tokens.authToken) {
+        if (!this.lastAuthCheckFailed) {
+          console.log('⚠️  [任务队列] Token 无效（authToken 为空），请重新登录');
+          this.lastAuthCheckFailed = true;
+        }
+        return false;
+      }
+      // 登录成功，重置标记
+      if (this.lastAuthCheckFailed) {
+        console.log('✅ [任务队列] 用户已登录，Token 有效，开始检查任务');
+        this.lastAuthCheckFailed = false;
+      }
+      return true;
     } catch (error) {
-      console.error('❌ 检查批次失败:', error);
+      console.error('❌ [任务队列] 检查认证状态失败:', error);
+      return false;
     }
   }
 
@@ -247,23 +306,30 @@ export class TaskQueue {
    */
   private async checkAndExecuteTasks(): Promise<void> {
     try {
-      // 0. 检测超时任务
+      // 0. 检查用户是否已登录
+      const isAuthenticated = await this.isUserAuthenticated();
+      if (!isAuthenticated) {
+        // 用户未登录，静默跳过（不打印日志，避免刷屏）
+        return;
+      }
+
+      // 1. 检测超时任务
       await this.detectTimeoutTasks();
 
-      // 1. 检查批次任务
+      // 2. 检查批次任务
       await this.checkAndExecuteBatches();
 
-      // 2. 如果有批次在执行，不执行普通任务
+      // 3. 如果有批次在执行，不执行普通任务
       if (batchExecutor.isExecuting()) {
         return;
       }
 
-      // 3. 如果有单任务在执行，不启动新任务
+      // 4. 如果有单任务在执行，不启动新任务
       if (this.singleTaskExecuting) {
         return;
       }
 
-      // 4. 检查普通定时任务（没有 batch_id 的任务）
+      // 5. 检查普通定时任务（没有 batch_id 的任务）
       const response = await apiClient.get('/api/publishing/tasks', {
         params: { status: 'pending' }
       });

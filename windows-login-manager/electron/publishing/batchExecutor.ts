@@ -245,10 +245,22 @@ export class BatchExecutor {
               console.log(`❌ 任务 #${task.id} 最终状态: ${finalTask?.status}，耗时 ${duration}秒`);
               taskSucceeded = true; // 任务已完成（虽然失败），不需要重试
               // 失败的任务不更新 lastCompletedTask，这样下一个任务不需要等待间隔
+            } else if (finalTask?.status === 'pending') {
+              // 任务状态仍是 pending，说明执行被拒绝（可能是顺序控制）
+              // 不设置 taskSucceeded = true，让 while 循环继续重试
+              console.log(`⚠️ 任务 #${task.id} 状态仍为 pending，等待 30 秒后重试...`);
+              retryCount++;
+              if (retryCount < maxRetries) {
+                const stopped = await this.waitSecondsWithStopCheck(batchId, 30);
+                if (stopped) {
+                  console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+                  break;
+                }
+              }
             } else {
-              // 任务状态仍是 pending，可能需要重试
-              console.log(`⚠️ 任务 #${task.id} 状态: ${finalTask?.status}，可能需要重试`);
-              taskSucceeded = true; // 避免无限循环
+              // 其他未知状态，记录并继续
+              console.log(`⚠️ 任务 #${task.id} 状态: ${finalTask?.status}，跳过`);
+              taskSucceeded = true;
             }
           } catch (error: any) {
             const duration = Math.round((Date.now() - taskStartTime) / 1000);

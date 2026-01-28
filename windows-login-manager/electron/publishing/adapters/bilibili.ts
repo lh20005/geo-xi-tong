@@ -86,8 +86,10 @@ export class BilibiliAdapter extends PlatformAdapter {
       if (credentials.cookies && credentials.cookies.length > 0) {
         await this.log('info', '尝试使用 Cookie 登录');
         
-        await page.goto(this.getPublishUrl(), { waitUntil: 'networkidle' });
-        await page.waitForTimeout(2000);
+        // 注意：executor.ts 已经设置了 Cookie 并导航到发布页面
+        // 这里不需要再次导航，直接检查登录状态即可
+        // 等待页面稳定
+        await page.waitForTimeout(3000);
 
         // 使用多重验证的 checkLoginStatus 方法，避免误判
         const isLoggedIn = await this.checkLoginStatus(page);
@@ -388,58 +390,64 @@ export class BilibiliAdapter extends PlatformAdapter {
       await this.log('info', '🔍 检查哔哩哔哩登录状态...');
       
       // 等待页面稳定（B站页面加载较慢）
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(3000);
       
       // 首先检查 URL - 如果被重定向到登录页面，说明未登录
       const currentUrl = page.url();
+      await this.log('info', `当前URL: ${currentUrl}`);
+      
       if (currentUrl.includes('/login') || currentUrl.includes('passport.bilibili.com')) {
         await this.log('warning', '❌ 已被重定向到登录页面，Cookie已失效');
         return false;
       }
       
-      // 方法1（最可靠）：通过 B站 API 检查登录状态
-      // https://api.bilibili.com/x/web-interface/nav 返回 isLogin 字段
-      try {
-        const apiCheck = await page.evaluate(async () => {
-          try {
-            const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {
-              credentials: 'include'
-            });
-            const data = await response.json() as { 
-              code?: number;
-              data?: { isLogin?: boolean; uname?: string; face?: string } 
-            };
-            return {
-              code: data.code,
-              isLogin: data.data?.isLogin || false,
-              username: data.data?.uname || '',
-              hasAvatar: !!data.data?.face
-            };
-          } catch (error) {
-            return { code: -1, isLogin: false, username: '', hasAvatar: false };
+      // 如果在创作中心页面，先假设已登录（B站创作中心需要登录才能访问）
+      if (currentUrl.includes('member.bilibili.com')) {
+        await this.log('info', '✅ 已在创作中心页面，Cookie有效');
+        
+        // 额外验证：尝试通过 API 获取用户信息
+        try {
+          const apiCheck = await page.evaluate(async () => {
+            try {
+              const response = await fetch('https://api.bilibili.com/x/web-interface/nav', {
+                credentials: 'include'
+              });
+              const data = await response.json() as { 
+                code?: number;
+                data?: { isLogin?: boolean; uname?: string; face?: string } 
+              };
+              return {
+                code: data.code,
+                isLogin: data.data?.isLogin || false,
+                username: data.data?.uname || '',
+                hasAvatar: !!data.data?.face
+              };
+            } catch (error) {
+              return { code: -999, isLogin: false, username: '', hasAvatar: false };
+            }
+          });
+          
+          await this.log('info', `API检查结果: code=${apiCheck.code}, isLogin=${apiCheck.isLogin}, username=${apiCheck.username}`);
+          
+          // API 返回 code=0 且 isLogin=true 表示已登录
+          if (apiCheck.code === 0 && apiCheck.isLogin) {
+            await this.log('info', `✅ 哔哩哔哩登录状态正常（API验证），用户: ${apiCheck.username}`);
+            return true;
           }
-        });
-        
-        // API 返回 code=0 且 isLogin=true 表示已登录
-        if (apiCheck.code === 0 && apiCheck.isLogin) {
-          await this.log('info', `✅ 哔哩哔哩登录状态正常（API验证），用户: ${apiCheck.username}`);
-          return true;
+          
+          // API 返回 code=-101 表示未登录，但如果在创作中心页面，可能是 API 问题
+          if (apiCheck.code === -101) {
+            await this.log('warning', 'API返回未登录状态（code=-101），但已在创作中心页面，继续检查页面元素...');
+            // 不直接返回 false，继续检查页面元素
+          }
+        } catch (e: any) {
+          await this.log('warning', `API检查失败: ${e.message}，继续其他检查`);
         }
-        
-        // API 返回 code=-101 表示未登录
-        if (apiCheck.code === -101) {
-          await this.log('warning', '❌ API返回未登录状态（code=-101），Cookie已失效');
-          return false;
-        }
-        
-        await this.log('info', `API检查结果: code=${apiCheck.code}, isLogin=${apiCheck.isLogin}`);
-      } catch (e) {
-        await this.log('warning', 'API检查失败，继续其他检查');
       }
       
       // 方法2：检查用户名元素（登录成功的标志）
       // 增加等待时间，因为 B 站页面加载较慢
-      const usernameVisible = await page.locator('span.right-entry-text').isVisible({ timeout: 8000 }).catch(() => false);
+      const usernameVisible = await page.locator('span.right-entry-text').isVisible({ timeout: 5000 }).catch(() => false);
       
       if (usernameVisible) {
         try {
@@ -456,28 +464,40 @@ export class BilibiliAdapter extends PlatformAdapter {
       }
       
       // 方法3：检查用户头像（另一个登录标志）
-      const avatarVisible = await page.locator('.header-avatar-wrap img, .bili-avatar img').first().isVisible({ timeout: 3000 }).catch(() => false);
+      const avatarVisible = await page.locator('.header-avatar-wrap img, .bili-avatar img, .v-popover-wrap img').first().isVisible({ timeout: 3000 }).catch(() => false);
       if (avatarVisible) {
         await this.log('info', '✅ 哔哩哔哩登录状态正常（检测到用户头像）');
         return true;
       }
       
       // 方法4：检查创作中心特有元素（说明在创作中心且已登录）
-      const hasCreatorElement = await page.locator('.home-containter, .creator-home').first().isVisible({ timeout: 3000 }).catch(() => false);
+      const hasCreatorElement = await page.locator('.home-containter, .creator-home, .platform-home').first().isVisible({ timeout: 3000 }).catch(() => false);
       if (hasCreatorElement) {
         await this.log('info', '✅ 哔哩哔哩登录状态正常（检测到创作中心元素）');
         return true;
       }
       
-      // 方法5：检查是否有"登录"按钮（未登录的明确信号）
+      // 方法5：检查导航栏中的"投稿"按钮（已登录用户才能看到）
+      const hasUploadBtn = await page.locator('#nav_upload_btn, [class*="upload"]').first().isVisible({ timeout: 3000 }).catch(() => false);
+      if (hasUploadBtn) {
+        await this.log('info', '✅ 哔哩哔哩登录状态正常（检测到投稿按钮）');
+        return true;
+      }
+      
+      // 方法6：检查是否有"登录"按钮（未登录的明确信号）
       const hasLoginButton = await page.getByRole('button', { name: '登录' }).isVisible({ timeout: 2000 }).catch(() => false);
       if (hasLoginButton) {
         await this.log('warning', '❌ 检测到登录按钮，Cookie已失效');
         return false;
       }
       
+      // 如果在创作中心页面且没有明确的未登录信号，假设已登录
+      if (currentUrl.includes('member.bilibili.com')) {
+        await this.log('info', '✅ 在创作中心页面且无未登录信号，假设已登录');
+        return true;
+      }
+      
       // 如果没有明确的登录/未登录信号，假设已登录（避免误判）
-      // 这是最佳实践：宁可让发布流程继续尝试，也不要因为检测问题而误判用户被踢出
       await this.log('info', '✅ 未检测到明确的未登录信号，假设已登录');
       return true;
     } catch (error: any) {
