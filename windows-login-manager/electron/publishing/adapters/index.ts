@@ -9,11 +9,9 @@ import { DouyinAdapter } from './douyin';
 import { ToutiaoAdapter } from './toutiao';
 import { SohuAdapter } from './sohu';
 import { WangyiAdapter } from './wangyi';
-import { BaijiahaoAdapter } from './baijiahao';
 import { ZhihuAdapter } from './zhihu';
 import { CSDNAdapter } from './csdn';
 import { JianshuAdapter } from './jianshu';
-import { WechatAdapter } from './wechat';
 import { QieAdapter } from './qie';
 import { BilibiliAdapter } from './bilibili';
 
@@ -37,15 +35,13 @@ export class AdapterRegistry {
     this.register(new ToutiaoAdapter());
     this.register(new SohuAdapter());
     this.register(new WangyiAdapter());
-    this.register(new BaijiahaoAdapter());
     this.register(new ZhihuAdapter());
     this.register(new CSDNAdapter());
     this.register(new JianshuAdapter());
-    this.register(new WechatAdapter());
     this.register(new QieAdapter());
     this.register(new BilibiliAdapter());
     
-    console.log('✅ 已注册 12 个平台适配器（本地发布模块）');
+    console.log('✅ 已注册 10 个平台适配器（本地发布模块）');
   }
 
   /**
@@ -100,10 +96,8 @@ export { DouyinAdapter } from './douyin';
 export { ToutiaoAdapter } from './toutiao';
 export { SohuAdapter } from './sohu';
 export { WangyiAdapter } from './wangyi';
-export { BaijiahaoAdapter } from './baijiahao';
 export { ZhihuAdapter } from './zhihu';
 export { CSDNAdapter } from './csdn';
 export { JianshuAdapter } from './jianshu';
-export { WechatAdapter } from './wechat';
 export { QieAdapter } from './qie';
 export { BilibiliAdapter } from './bilibili';

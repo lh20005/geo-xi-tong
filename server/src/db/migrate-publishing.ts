@@ -153,13 +153,6 @@ async function migratePublishing() {
         required_fields: JSON.stringify(['username', 'password'])
       },
       {
-        platform_id: 'baijiahao',
-        platform_name: '百家号',
-        icon_url: '/icons/platforms/baijiahao.png',
-        adapter_class: 'BaijiahaoAdapter',
-        required_fields: JSON.stringify(['username', 'password'])
-      },
-      {
         platform_id: 'toutiao',
         platform_name: '头条号',
         icon_url: '/icons/platforms/toutiao.png',
@@ -178,13 +171,6 @@ async function migratePublishing() {
         platform_name: '知乎',
         icon_url: '/icons/platforms/zhihu.png',
         adapter_class: 'ZhihuAdapter',
-        required_fields: JSON.stringify(['username', 'password'])
-      },
-      {
-        platform_id: 'wechat',
-        platform_name: '微信公众号',
-        icon_url: '/icons/platforms/wechat.png',
-        adapter_class: 'WechatAdapter',
         required_fields: JSON.stringify(['username', 'password'])
       },
       {

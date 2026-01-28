@@ -5,8 +5,6 @@ import { loginManager, Platform, LoginResult } from '../login/login-manager';
 import { toutiaoLoginManager } from '../login/toutiao-login-manager';
 import { douyinLoginManager } from '../login/douyin-login-manager';
 import { xiaohongshuLoginManager } from '../login/xiaohongshu-login-manager';
-import { wechatLoginManager } from '../login/wechat-login-manager';
-import { baijiahaoLoginManager } from '../login/baijiahao-login-manager';
 import { jianshuLoginManager } from '../login/jianshu-login-manager';
 import { zhihuLoginManager } from '../login/zhihu-login-manager';
 import { qieLoginManager } from '../login/qie-login-manager';
@@ -288,18 +286,6 @@ class IPCHandler {
           return result;
         }
 
-        if (platformId === 'wechat') {
-          log.info('IPC: 使用微信公众号专用登录管理器');
-          const result = await wechatLoginManager.login(mainWindow);
-          return result;
-        }
-
-        if (platformId === 'baijiahao') {
-          log.info('IPC: 使用百家号专用登录管理器');
-          const result = await baijiahaoLoginManager.login(mainWindow);
-          return result;
-        }
-
         if (platformId === 'jianshu') {
           log.info('IPC: 使用简书专用登录管理器');
           const result = await jianshuLoginManager.login(mainWindow);
@@ -374,10 +360,6 @@ class IPCHandler {
           await douyinLoginManager.cancelLogin();
         } else if (platformId === 'xiaohongshu') {
           await xiaohongshuLoginManager.cancelLogin();
-        } else if (platformId === 'wechat') {
-          await wechatLoginManager.cancelLogin();
-        } else if (platformId === 'baijiahao') {
-          await baijiahaoLoginManager.cancelLogin();
         } else if (platformId === 'jianshu') {
           await jianshuLoginManager.cancelLogin();
         } else if (platformId === 'zhihu') {
@@ -412,16 +394,6 @@ class IPCHandler {
           if (xiaohongshuLoginManager.isLoggingIn()) {
             log.info('IPC: 取消小红书登录');
             await xiaohongshuLoginManager.cancelLogin();
-          }
-          
-          if (wechatLoginManager.isLoggingIn()) {
-            log.info('IPC: 取消微信公众号登录');
-            await wechatLoginManager.cancelLogin();
-          }
-          
-          if (baijiahaoLoginManager.isLoggingIn()) {
-            log.info('IPC: 取消百家号登录');
-            await baijiahaoLoginManager.cancelLogin();
           }
           
           if (jianshuLoginManager.isLoggingIn()) {
@@ -470,8 +442,6 @@ class IPCHandler {
           if (!toutiaoLoginManager.isLoggingIn() && 
               !douyinLoginManager.isLoggingIn() && 
               !xiaohongshuLoginManager.isLoggingIn() &&
-              !wechatLoginManager.isLoggingIn() &&
-              !baijiahaoLoginManager.isLoggingIn() &&
               !jianshuLoginManager.isLoggingIn() &&
               !zhihuLoginManager.isLoggingIn() &&
               !qieLoginManager.isLoggingIn() &&

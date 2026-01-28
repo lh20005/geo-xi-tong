@@ -583,10 +583,6 @@ export class AccountService {
           url: 'https://mp.163.com/subscribe_v4/index.html#/',
           waitTime: 3000  // 网易号需要导航到首页
         },
-        'baijiahao': {
-          url: 'https://baijiahao.baidu.com/builder/rc/home',
-          waitTime: 3000  // 百家号需要导航到首页
-        },
         'bilibili': {
           url: 'https://member.bilibili.com/platform/home',
           waitTime: 2000  // B站创作者中心
@@ -885,41 +881,6 @@ export class AccountService {
         }
       },
       
-      // 微信公众号：检测账号信息
-      'wechat': async () => {
-        console.log(`[等待登录] 微信公众号：等待登录成功...`);
-        console.log(`[等待登录] 微信公众号：初始URL: ${initialUrl}`);
-        
-        try {
-          // 第一步：等待URL跳转到后台页面（包含cgi-bin和token参数）
-          console.log(`[等待登录] 微信公众号：等待URL跳转...`);
-          await page.waitForFunction(
-            `window.location.href.includes('mp.weixin.qq.com/cgi-bin/') && 
-             window.location.href.includes('token=')`,
-            { timeout: 300000 }
-          );
-          
-          const currentUrl = page.url();
-          console.log(`[等待登录] 微信公众号：✅ URL已跳转到后台: ${currentUrl}`);
-          
-          // 第二步：等待侧边栏账号信息元素出现（最多3秒）
-          // 一旦检测到元素就立即继续，不需要等待完整的3秒
-          console.log(`[等待登录] 微信公众号：等待账号信息元素加载（最多3秒）...`);
-          
-          try {
-            await page.waitForSelector('.weui-desktop-account__info, .mp_account_box, #js_mp_sidemenu', { timeout: 3000 });
-            console.log(`[等待登录] 微信公众号：✅ 检测到账号信息元素，登录成功！`);
-          } catch (e) {
-            // 3秒后元素还没出现，但URL已经正确，也认为登录成功
-            console.log(`[等待登录] 微信公众号：⚠️ 3秒内未检测到账号信息元素，但URL已包含token，继续执行`);
-          }
-          
-        } catch (e) {
-          console.log(`[等待登录] 微信公众号：❌ 登录检测超时`);
-          throw new Error('微信公众号登录超时：URL未跳转');
-        }
-      },
-      
       // B站：检测用户信息
       'bilibili': async () => {
         console.log(`[等待登录] B站：等待登录成功...`);
@@ -981,51 +942,6 @@ export class AccountService {
         } catch (e) {
           console.log(`[等待登录] 网易号：❌ 登录检测超时`);
           throw new Error('网易号登录超时：URL未跳转');
-        }
-      },
-      
-      // 百家号：检测头像元素
-      'baijiahao': async () => {
-        console.log(`[等待登录] 百家号：等待登录成功...`);
-        console.log(`[等待登录] 百家号：初始URL: ${initialUrl}`);
-        
-        try {
-          // 等待URL跳转（不包含register/login）
-          console.log(`[等待登录] 百家号：等待URL跳转...`);
-          await page.waitForFunction(
-            `!window.location.href.includes('register') && 
-             !window.location.href.includes('login') &&
-             window.location.href.includes('baijiahao.baidu.com')`,
-            { timeout: 300000 }
-          );
-          
-          const currentUrl = page.url();
-          console.log(`[等待登录] 百家号：✅ URL已跳转: ${currentUrl}`);
-          
-          // 等待头像元素出现（参考脚本使用 .UjPPKm89R4RrZTKhwG5H）
-          console.log(`[等待登录] 百家号：等待头像元素加载...`);
-          try {
-            await page.waitForSelector('.UjPPKm89R4RrZTKhwG5H, .user-name, [class*="avatar"]', { timeout: 10000 });
-            console.log(`[等待登录] 百家号：✅ 检测到头像元素，登录成功！`);
-            
-            // 百家号需要触发 mouseover 事件来显示用户名
-            try {
-              const element = await page.$('.p7Psc5P3uJ5lyxeI0ETR');
-              if (element) {
-                await element.hover();
-                console.log(`[等待登录] 百家号：已触发hover事件`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-            } catch (hoverError) {
-              console.log(`[等待登录] 百家号：hover事件触发失败，继续执行`);
-            }
-          } catch (e) {
-            console.log(`[等待登录] 百家号：⚠️ 未检测到头像元素，但URL已变化，继续执行`);
-          }
-          
-        } catch (e) {
-          console.log(`[等待登录] 百家号：❌ 登录检测超时`);
-          throw new Error('百家号登录超时：URL未跳转');
         }
       },
       
@@ -1308,19 +1224,6 @@ export class AccountService {
         ],
         
         // 社交媒体平台 - 已优化
-        'wechat': [
-          // 微信公众号 - 使用精确的侧边栏账号信息选择器
-          '.weui-desktop-account__info',      // 优先级1：侧边栏账号信息容器（最可靠）
-          '.weui-desktop-account__nickname',  // 优先级2：账号昵称
-          '.mp_account_box .weui-desktop-account__info', // 优先级3：账号信息框内的信息
-          '#js_account_name',                 // 优先级4：账号名称ID
-          '.account_info_title',              // 优先级5：账号信息标题
-          '.account-name',                    // 优先级6：账号名称
-          '.user-name',                       // 优先级7：用户名
-          '.username',                        // 优先级8：用户名
-          '[class*="account"]',               // 优先级9：包含account的class
-          '[class*="user-name"]'              // 优先级10：包含user-name的class
-        ],
         'xiaohongshu': [
           // 小红书创作者中心 - 根据参考脚本优化
           '.account-name',                    // 优先级1：账号名称（参考脚本）
