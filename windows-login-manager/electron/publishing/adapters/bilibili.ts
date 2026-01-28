@@ -152,9 +152,50 @@ export class BilibiliAdapter extends PlatformAdapter {
       await this.humanClick(articleUploadBtn, '专栏投稿按钮');
       await this.randomWait(3000, 5000);
 
-      // 第三步：输入标题
+      // 第三步：点击"新的创作"按钮（如果存在，处理遗留草稿的情况）
+      await this.log('info', '第三步：检查是否需要点击新的创作按钮');
+      await this.randomWait(2000, 3000);
+      
+      try {
+        // 查找 iframe 中的"新的创作"按钮
+        const iframes = page.locator('iframe');
+        const iframeCount = await iframes.count();
+        
+        let newCreationClicked = false;
+        for (let i = 0; i < iframeCount; i++) {
+          try {
+            const frame = iframes.nth(i);
+            const frameElement = await frame.elementHandle();
+            if (frameElement) {
+              const contentFrame = await frameElement.contentFrame();
+              if (contentFrame) {
+                const newCreationBtn = contentFrame.getByRole('button', { name: '新的创作' });
+                const btnVisible = await newCreationBtn.isVisible({ timeout: 3000 }).catch(() => false);
+                if (btnVisible) {
+                  await this.randomWait(2000, 3000);
+                  await newCreationBtn.click();
+                  await this.log('info', '已点击: 新的创作按钮');
+                  newCreationClicked = true;
+                  await this.randomWait(3000, 5000);
+                  break;
+                }
+              }
+            }
+          } catch {
+            // 继续检查下一个 iframe
+          }
+        }
+        
+        if (!newCreationClicked) {
+          await this.log('info', '没有检测到新的创作按钮，继续下一步');
+        }
+      } catch (e: any) {
+        await this.log('info', '检查新的创作按钮时出错，继续下一步', { error: e.message });
+      }
+
+      // 第四步：输入标题
       // 选择器: #app > div > div.web-editor__wrap > div.b-read-editor > div.b-read-editor__title.mt-l > div > textarea
-      await this.log('info', '第三步：输入标题');
+      await this.log('info', '第四步：输入标题');
       
       const titleTextarea = page.locator('div.b-read-editor__title textarea');
       const titleVisible = await titleTextarea.isVisible({ timeout: 10000 }).catch(() => false);
@@ -168,9 +209,9 @@ export class BilibiliAdapter extends PlatformAdapter {
       await this.humanClick(titleTextarea, '标题输入框');
       await this.humanType(titleTextarea, article.title, '标题内容');
 
-      // 第四步：输入正文
+      // 第五步：输入正文
       // 选择器: div.b-read-editor__field > div > div.ql-editor
-      await this.log('info', '第四步：输入正文');
+      await this.log('info', '第五步：输入正文');
       
       const contentEditor = page.locator('div.b-read-editor__field div.ql-editor');
       const editorVisible = await contentEditor.isVisible({ timeout: 10000 }).catch(() => false);
@@ -187,9 +228,9 @@ export class BilibiliAdapter extends PlatformAdapter {
       const cleanContent = this.cleanArticleContent(article.content);
       await this.humanType(contentEditor, cleanContent, '正文内容');
 
-      // 第五步：上传图片
+      // 第六步：上传图片
       // 选择器: div.b-read-editor__toolbar > div > div:nth-child(13)
-      await this.log('info', '第五步：上传图片');
+      await this.log('info', '第六步：上传图片');
       const images = this.extractImagesFromContent(article.content);
       
       if (images.length > 0) {
@@ -231,9 +272,9 @@ export class BilibiliAdapter extends PlatformAdapter {
         await this.log('info', '文章中没有图片，跳过图片上传');
       }
 
-      // 第六步：点击发布按钮
+      // 第七步：点击发布按钮
       // 选择器: div.b-read-editor__btns button.bre-btn.primary.size--large
-      await this.log('info', '第六步：点击发布按钮');
+      await this.log('info', '第七步：点击发布按钮');
       
       const publishBtn = page.locator('div.b-read-editor__btns button.bre-btn.primary.size--large');
       const publishBtnVisible = await publishBtn.isVisible({ timeout: 5000 }).catch(() => false);
