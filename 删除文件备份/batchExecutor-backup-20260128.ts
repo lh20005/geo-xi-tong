@@ -1,0 +1,474 @@
+/**
+ * 批次执行器
+ * 本地发布模块 - 负责按顺序执行批次中的任务
+ * 
+ * 核心设计：使用全局执行锁确保任务严格串行执行
+ * - 全局只有一个任务在执行（不管是哪个批次）
+ * - 使用 Promise 链确保串行：每个任务必须等待上一个任务完成
+ * 
+ * 参考: https://www.webdevtutor.net/blog/typescript-promise-queue
+ */
+
+import { BrowserWindow } from 'electron';
+import { publishingExecutor } from './executor';
+import { apiClient } from '../api/client';
+import { LocalTask, BatchInfo } from './types';
+import { sleep } from './utils';
+
+/**
+ * 批次执行器
+ */
+export class BatchExecutor {
+  private mainWindow: BrowserWindow | null = null;
+  
+  // 全局执行锁：确保同一时间只有一个任务在执行
+  private globalExecutionPromise: Promise<void> = Promise.resolve();
+  private isGlobalExecuting = false;
+  
+  // 批次状态
+  private activeBatches: Set<string> = new Set();
+  private stoppedBatches: Set<string> = new Set();
+  
+  // 配置
+  private readonly STOP_CHECK_INTERVAL_MS = 1000;
+
+  /**
+   * 设置主窗口
+   */
+  setMainWindow(window: BrowserWindow | null): void {
+    this.mainWindow = window;
+    publishingExecutor.setMainWindow(window);
+  }
+
+  /**
+   * 执行批次（入口方法）
+   * 
+   * 关键：使用 Promise 链确保串行执行
+   * 每次调用都会将新任务追加到 Promise 链的末尾
+   */
+  async executeBatch(batchId: string): Promise<void> {
+    // 检查批次是否已在执行
+    if (this.activeBatches.has(batchId)) {
+      console.log(`⚠️  批次 ${batchId} 已在执行队列中，跳过重复调用`);
+      return;
+    }
+    
+    // 标记批次为活跃
+    this.activeBatches.add(batchId);
+    this.stoppedBatches.delete(batchId);
+    
+    console.log(`📥 批次 ${batchId} 加入执行队列`);
+    
+    // 将批次执行追加到全局 Promise 链
+    // 这确保了即使多个批次同时调用，也会串行执行
+    this.globalExecutionPromise = this.globalExecutionPromise
+      .then(() => this.runBatch(batchId))
+      .catch(error => {
+        console.error(`❌ 批次 ${batchId} 执行出错:`, error);
+      })
+      .finally(() => {
+        this.activeBatches.delete(batchId);
+        this.stoppedBatches.delete(batchId);
+        console.log(`📤 批次 ${batchId} 已从执行队列移除`);
+      });
+    
+    return this.globalExecutionPromise;
+  }
+
+  /**
+   * 执行单个批次的所有任务
+   * 
+   * 关键设计：严格串行执行
+   * 1. 每次只执行一个任务，等待其完成后再执行下一个
+   * 2. 在执行任务前检查间隔时间，确保满足间隔要求
+   * 3. 不依赖服务器端的间隔检查（429），而是在客户端主动等待
+   */
+  private async runBatch(batchId: string): Promise<void> {
+    if (this.stoppedBatches.has(batchId)) {
+      console.log(`🛑 批次 ${batchId} 已被停止，跳过执行`);
+      return;
+    }
+    
+    this.isGlobalExecuting = true;
+    const startTime = Date.now();
+    
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`🚀 开始执行批次 ${batchId}`);
+    console.log(`   时间: ${new Date().toLocaleString('zh-CN')}`);
+    console.log(`${'='.repeat(60)}\n`);
+
+    try {
+      // 获取批次任务列表（按 batch_order 排序）
+      const tasks = await this.fetchBatchTasks(batchId);
+      
+      if (tasks.length === 0) {
+        console.log(`⚠️  批次 ${batchId} 没有任务`);
+        return;
+      }
+
+      console.log(`📋 批次共有 ${tasks.length} 个任务\n`);
+
+      // 记录上一个成功完成的任务信息（用于计算间隔）
+      let lastCompletedTask: { id: number; completedAt: number; intervalMinutes: number } | null = null;
+
+      // 串行执行每个任务
+      for (let i = 0; i < tasks.length; i++) {
+        // 检查停止信号
+        if (this.stoppedBatches.has(batchId)) {
+          console.log(`\n🛑 批次 ${batchId} 被用户停止`);
+          break;
+        }
+
+        const task = tasks[i];
+        const taskNumber = i + 1;
+        
+        // 获取最新任务状态
+        const currentTask = await this.fetchTaskById(task.id);
+        if (!currentTask) {
+          console.log(`⏭️  任务 #${task.id} 不存在，跳过`);
+          continue;
+        }
+
+        // 跳过非 pending 状态的任务
+        if (currentTask.status !== 'pending') {
+          console.log(`⏭️  任务 #${task.id} 状态为 ${currentTask.status}，跳过执行`);
+          
+          // 如果任务已完成，更新 lastCompletedTask 以便后续任务计算间隔
+          if (currentTask.status === 'success' && currentTask.completed_at) {
+            const rawInterval = (task as any).intervalMinutes ?? task.interval_minutes;
+            lastCompletedTask = {
+              id: task.id,
+              completedAt: new Date(currentTask.completed_at).getTime(),
+              intervalMinutes: Number(rawInterval) || 0
+            };
+          }
+          continue;
+        }
+
+        // ========== 关键修复：在执行任务前，主动等待间隔时间 ==========
+        // 这样可以避免触发服务器端的 429 错误
+        if (lastCompletedTask && lastCompletedTask.intervalMinutes > 0) {
+          const waitDurationMs = lastCompletedTask.intervalMinutes * 60 * 1000;
+          const targetTime = lastCompletedTask.completedAt + waitDurationMs;
+          const now = Date.now();
+          const remainingMs = targetTime - now;
+          
+          if (remainingMs > 0) {
+            const remainingSeconds = Math.ceil(remainingMs / 1000);
+            console.log(`\n⏳ 等待间隔时间（剩余 ${remainingSeconds} 秒）...`);
+            console.log(`   [Debug] 前一个任务 #${lastCompletedTask.id} 完成于 ${new Date(lastCompletedTask.completedAt).toLocaleString()}`);
+            console.log(`   [Debug] 间隔 ${lastCompletedTask.intervalMinutes} 分钟，目标时间 ${new Date(targetTime).toLocaleString()}`);
+            
+            // 使用秒级等待，更精确
+            const stopped = await this.waitSecondsWithStopCheck(batchId, remainingSeconds);
+            if (stopped) {
+              console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+              break;
+            }
+            console.log(`✅ 间隔等待完成，开始执行任务 #${task.id}`);
+          }
+        } else if (i > 0 && !lastCompletedTask) {
+          // 如果没有 lastCompletedTask 但不是第一个任务，尝试从数据库获取前一个任务信息
+          const prevTask = tasks[i - 1];
+          const prevTaskData = await this.fetchTaskById(prevTask.id);
+          
+          if (prevTaskData && prevTaskData.completed_at) {
+            const rawInterval = (prevTask as any).intervalMinutes ?? prevTask.interval_minutes;
+            const intervalMinutes = Number(rawInterval) || 0;
+            
+            if (intervalMinutes > 0) {
+              const completedAt = new Date(prevTaskData.completed_at).getTime();
+              const waitDurationMs = intervalMinutes * 60 * 1000;
+              const targetTime = completedAt + waitDurationMs;
+              const now = Date.now();
+              const remainingMs = targetTime - now;
+              
+              if (remainingMs > 0) {
+                const remainingSeconds = Math.ceil(remainingMs / 1000);
+                console.log(`\n⏳ 等待间隔时间（剩余 ${remainingSeconds} 秒）...`);
+                console.log(`   [Debug] 前一个任务 #${prevTask.id} 完成于 ${new Date(completedAt).toLocaleString()}`);
+                console.log(`   [Debug] 间隔 ${intervalMinutes} 分钟，目标时间 ${new Date(targetTime).toLocaleString()}`);
+                
+                const stopped = await this.waitSecondsWithStopCheck(batchId, remainingSeconds);
+                if (stopped) {
+                  console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+                  break;
+                }
+                console.log(`✅ 间隔等待完成，开始执行任务 #${task.id}`);
+              }
+            }
+          }
+        }
+        // ========== 间隔检查结束 ==========
+
+        // 执行任务
+        console.log(`\n${'─'.repeat(50)}`);
+        console.log(`📝 执行任务 ${taskNumber}/${tasks.length}`);
+        console.log(`   任务ID: #${task.id}`);
+        console.log(`   文章: ${task.article_title}`);
+        console.log(`   平台: ${task.platform_id}`);
+        console.log(`   时间: ${new Date().toLocaleString('zh-CN')}`);
+        console.log(`${'─'.repeat(50)}`);
+
+        const taskStartTime = Date.now();
+        let taskSucceeded = false;
+        let retryCount = 0;
+        const maxRetries = 5; // 429 错误最大重试次数
+        
+        while (!taskSucceeded && retryCount < maxRetries) {
+          try {
+            // 检查停止信号
+            if (this.stoppedBatches.has(batchId)) {
+              console.log(`\n🛑 批次 ${batchId} 被用户停止`);
+              break;
+            }
+            
+            // 执行任务（这里会等待任务完成）
+            await publishingExecutor.executeTask(task.id);
+            
+            const duration = Math.round((Date.now() - taskStartTime) / 1000);
+            
+            // 检查任务最终状态
+            const finalTask = await this.fetchTaskById(task.id);
+            if (finalTask?.status === 'success') {
+              console.log(`✅ 任务 #${task.id} 成功，耗时 ${duration}秒`);
+              taskSucceeded = true;
+              
+              // 更新 lastCompletedTask
+              const rawInterval = (task as any).intervalMinutes ?? task.interval_minutes;
+              lastCompletedTask = {
+                id: task.id,
+                completedAt: finalTask.completed_at ? new Date(finalTask.completed_at).getTime() : Date.now(),
+                intervalMinutes: Number(rawInterval) || 0
+              };
+            } else if (finalTask?.status === 'failed' || finalTask?.status === 'timeout' || finalTask?.status === 'cancelled') {
+              console.log(`❌ 任务 #${task.id} 最终状态: ${finalTask?.status}，耗时 ${duration}秒`);
+              taskSucceeded = true; // 任务已完成（虽然失败），不需要重试
+              // 失败的任务不更新 lastCompletedTask，这样下一个任务不需要等待间隔
+            } else if (finalTask?.status === 'pending') {
+              // 任务状态仍是 pending，说明执行被拒绝（可能是顺序控制）
+              // 不设置 taskSucceeded = true，让 while 循环继续重试
+              console.log(`⚠️ 任务 #${task.id} 状态仍为 pending，等待 30 秒后重试...`);
+              retryCount++;
+              if (retryCount < maxRetries) {
+                const stopped = await this.waitSecondsWithStopCheck(batchId, 30);
+                if (stopped) {
+                  console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+                  break;
+                }
+              }
+            } else {
+              // 其他未知状态，记录并继续
+              console.log(`⚠️ 任务 #${task.id} 状态: ${finalTask?.status}，跳过`);
+              taskSucceeded = true;
+            }
+          } catch (error: any) {
+            const duration = Math.round((Date.now() - taskStartTime) / 1000);
+            
+            // 检查是否是可重试的 429 错误
+            if (error.isRetryable && error.retryAfterSeconds) {
+              retryCount++;
+              const waitSeconds = error.retryAfterSeconds;
+              
+              console.log(`\n⏳ 任务 #${task.id} 触发间隔/并发控制，等待 ${waitSeconds} 秒后重试 (${retryCount}/${maxRetries})`);
+              
+              // 等待指定时间
+              const stopped = await this.waitSecondsWithStopCheck(batchId, waitSeconds);
+              if (stopped) {
+                console.log(`\n🛑 批次 ${batchId} 在等待期间被停止`);
+                break;
+              }
+              
+              // 继续重试
+              continue;
+            }
+            
+            // 其他错误，记录并继续
+            console.error(`❌ 任务 #${task.id} 异常，耗时 ${duration}秒:`, error.message);
+            taskSucceeded = true; // 避免无限循环
+          }
+        }
+        
+        if (retryCount >= maxRetries) {
+          console.error(`❌ 任务 #${task.id} 重试次数已用完 (${maxRetries}次)`);
+        }
+
+        // 检查停止信号
+        if (this.stoppedBatches.has(batchId)) {
+          console.log(`\n🛑 批次 ${batchId} 被用户停止`);
+          break;
+        }
+      }
+
+      // 批次完成
+      const totalDuration = Math.round((Date.now() - startTime) / 1000);
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`🎉 批次 ${batchId} 执行完成`);
+      console.log(`   总耗时: ${totalDuration}秒`);
+      console.log(`${'='.repeat(60)}\n`);
+
+      // 打印统计
+      await this.printBatchSummary(batchId);
+
+    } catch (error: any) {
+      console.error(`❌ 批次 ${batchId} 执行失败:`, error);
+    } finally {
+      this.isGlobalExecuting = false;
+    }
+  }
+
+  /**
+   * 等待指定秒数，期间检查停止信号
+   */
+  private async waitSecondsWithStopCheck(batchId: string, seconds: number): Promise<boolean> {
+    if (seconds <= 0) return false;
+    
+    const totalMs = seconds * 1000;
+    const startTime = Date.now();
+    const endTime = startTime + totalMs;
+    
+    console.log(`[BatchExecutor] Starting wait. Seconds: ${seconds}, EndTime: ${new Date(endTime).toLocaleString()}`);
+    
+    while (Date.now() < endTime) {
+      // 检查停止信号
+      if (this.stoppedBatches.has(batchId)) {
+        console.log(`[BatchExecutor] Stop signal received for batch ${batchId}`);
+        return true;
+      }
+      
+      // 等待1秒
+      await sleep(this.STOP_CHECK_INTERVAL_MS);
+    }
+    
+    console.log(`[BatchExecutor] Wait finished.`);
+    return false;
+  }
+
+  /**
+   * 获取批次任务列表
+   */
+  private async fetchBatchTasks(batchId: string): Promise<LocalTask[]> {
+    try {
+      const response = await apiClient.get('/api/publishing/tasks', {
+        params: { batch_id: batchId }
+      });
+      
+      if (response.data?.success && response.data?.data?.tasks) {
+        const tasks = response.data.data.tasks as LocalTask[];
+        // 按 batch_order 排序
+        return tasks.sort((a, b) => (a.batch_order || 0) - (b.batch_order || 0));
+      }
+      return [];
+    } catch (error) {
+      console.error('获取批次任务失败:', error);
+      return [];
+    }
+  }
+
+  /**
+   * 获取单个任务详情
+   */
+  private async fetchTaskById(taskId: number): Promise<LocalTask | null> {
+    try {
+      const response = await apiClient.get(`/api/publishing/tasks/${taskId}`);
+      if (response.data?.success && response.data?.data) {
+        return response.data.data as LocalTask;
+      }
+      return null;
+    } catch (error) {
+      console.error('获取任务详情失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 打印批次统计
+   */
+  private async printBatchSummary(batchId: string): Promise<void> {
+    try {
+      const response = await apiClient.get(`/api/publishing/batches/${batchId}`);
+      if (response.data?.success && response.data?.data) {
+        const stats = response.data.data as BatchInfo;
+        console.log(`📊 批次统计:`);
+        console.log(`   总任务: ${stats.total_tasks}`);
+        console.log(`   成功: ${stats.success_tasks}`);
+        console.log(`   失败: ${stats.failed_tasks}`);
+        console.log(`   已取消: ${stats.cancelled_tasks}`);
+        console.log(`   待处理: ${stats.pending_tasks}`);
+      }
+    } catch (error: any) {
+      console.error('获取批次统计失败:', error.message);
+    }
+  }
+
+  /**
+   * 停止批次
+   */
+  async stopBatch(batchId: string): Promise<{ cancelledCount: number; terminatedCount: number }> {
+    console.log(`🛑 停止批次 ${batchId}...`);
+    
+    // 标记为停止
+    this.stoppedBatches.add(batchId);
+    
+    try {
+      // 调用服务器 API 停止批次
+      const response = await apiClient.post(`/api/publishing/batches/${batchId}/stop`);
+      
+      if (response.data?.success && response.data?.data) {
+        const result = response.data.data;
+        console.log(`✅ 已取消 ${result.cancelledCount} 个待处理任务`);
+        console.log(`✅ 已终止 ${result.terminatedCount} 个运行中任务`);
+        return result;
+      }
+      
+      return { cancelledCount: 0, terminatedCount: 0 };
+    } catch (error: any) {
+      console.error('停止批次失败:', error.message);
+      return { cancelledCount: 0, terminatedCount: 0 };
+    }
+  }
+
+  /**
+   * 获取正在执行的批次列表
+   */
+  getExecutingBatches(): string[] {
+    return Array.from(this.activeBatches);
+  }
+
+  /**
+   * 检查是否有批次正在执行
+   */
+  isExecuting(): boolean {
+    return this.isGlobalExecuting || this.activeBatches.size > 0;
+  }
+
+  /**
+   * 强制清理执行状态
+   * 用于处理异常情况（如应用重启后状态不一致）
+   */
+  forceCleanup(): void {
+    console.log('🧹 强制清理批次执行状态...');
+    console.log(`   清理前: activeBatches=${this.activeBatches.size}, isGlobalExecuting=${this.isGlobalExecuting}`);
+    
+    this.activeBatches.clear();
+    this.stoppedBatches.clear();
+    this.isGlobalExecuting = false;
+    this.globalExecutionPromise = Promise.resolve();
+    
+    console.log('✅ 批次执行状态已清理');
+  }
+
+  /**
+   * 获取当前执行状态（用于调试）
+   */
+  getExecutionState(): { activeBatches: string[]; stoppedBatches: string[]; isGlobalExecuting: boolean } {
+    return {
+      activeBatches: Array.from(this.activeBatches),
+      stoppedBatches: Array.from(this.stoppedBatches),
+      isGlobalExecuting: this.isGlobalExecuting
+    };
+  }
+}
+
+// 导出单例
+export const batchExecutor = new BatchExecutor();

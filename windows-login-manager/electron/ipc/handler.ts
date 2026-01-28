@@ -1352,11 +1352,17 @@ class IPCHandler {
       }
     });
 
-    // 手动执行单个任务
+    // 手动执行单个任务（异步启动，不等待完成）
     ipcMain.handle('publishing:execute-task', async (_event, taskId: number) => {
       try {
         log.info(`IPC: publishing:execute-task - ${taskId}`);
-        return await taskQueue.executeTask(taskId);
+        
+        // 异步启动任务执行，不等待完成
+        taskQueue.executeTask(taskId).catch(err => {
+          log.error(`Task ${taskId} execution failed:`, err);
+        });
+        
+        return { success: true };
       } catch (error) {
         log.error('IPC: publishing:execute-task failed:', error);
         return {
@@ -1366,11 +1372,18 @@ class IPCHandler {
       }
     });
 
-    // 手动执行批次
+    // 手动执行批次（异步启动，不等待完成）
     ipcMain.handle('publishing:execute-batch', async (_event, batchId: string) => {
       try {
         log.info(`IPC: publishing:execute-batch - ${batchId}`);
-        return await taskQueue.executeBatch(batchId);
+        
+        // 异步启动批次执行，不等待完成
+        // 这样可以立即返回，让对话框关闭
+        taskQueue.executeBatch(batchId).catch(err => {
+          log.error(`Batch ${batchId} execution failed:`, err);
+        });
+        
+        return { success: true };
       } catch (error) {
         log.error('IPC: publishing:execute-batch failed:', error);
         return {

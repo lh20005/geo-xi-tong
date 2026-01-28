@@ -134,13 +134,13 @@ export class WangyiAdapter extends PlatformAdapter {
         return true;
       }
 
-      // 如果没有明确的登录/未登录信号，假设已登录（避免误判）
-      await this.log('info', '✅ 未检测到登录页面，假设已登录');
-      return true;
+      // 所有检测方法都未找到登录标志，说明 Cookie 已失效
+      await this.log('warning', '❌ 未检测到任何登录标志，Cookie可能已失效，请重新登录');
+      return false;
 
     } catch (error: any) {
       await this.log('error', '登录状态检查出错', { error: error.message });
-      return true;
+      return false;
     }
   }
 

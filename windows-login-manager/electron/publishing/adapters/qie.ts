@@ -386,15 +386,13 @@ export class QieAdapter extends PlatformAdapter {
         }
       }
       
-      // 如果没有明确的登录/未登录信号，假设已登录（避免误判）
-      await this.log('info', '✅ 未检测到登录页面，假设已登录');
-      return true;
+      // 所有检测方法都未找到登录标志，说明 Cookie 已失效
+      await this.log('warning', '❌ 未检测到任何登录标志，Cookie可能已失效，请重新登录');
+      return false;
       
     } catch (error: any) {
       await this.log('error', '检查登录状态出错', { error: error.message });
-      // 出错时不要轻易判定为未登录，返回 true 让后续流程继续
-      // 如果真的未登录，后续操作会失败并给出更明确的错误
-      return true;
+      return false;
     }
   }
 }

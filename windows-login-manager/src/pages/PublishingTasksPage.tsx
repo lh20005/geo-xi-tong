@@ -401,19 +401,22 @@ export default function PublishingTasksPage() {
           loadTasks();
           loadDraftArticles();
           
-          // 触发本地批次执行
+          // 异步触发本地批次执行（不阻塞对话框关闭）
           if (window.publishing) {
-            try {
-              const result = await window.publishing.executeBatch(batchId);
-              if (result.success) {
-                message.success('批次已开始本地执行');
-              } else {
-                message.warning(result.error || '批次执行启动失败，请手动执行');
+            // 使用 setTimeout 确保对话框先关闭
+            setTimeout(async () => {
+              try {
+                const result = await window.publishing.executeBatch(batchId);
+                if (result.success) {
+                  message.success('批次已开始本地执行');
+                } else {
+                  message.warning(result.error || '批次执行启动失败，请手动执行');
+                }
+              } catch (err) {
+                console.error('触发本地批次执行失败:', err);
+                message.warning('批次执行启动失败，请手动执行');
               }
-            } catch (err) {
-              console.error('触发本地批次执行失败:', err);
-              message.warning('批次执行启动失败，请手动执行');
-            }
+            }, 100);
           }
         } catch (error: any) {
           message.error(error.message || '创建任务失败');
