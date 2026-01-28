@@ -1,6 +1,6 @@
 {
   "name": "ai-geo-system",
-  "version": "1.2.8",
+  "version": "1.2.9",
   "description": "Ai智软精准GEO优化系统 - 基于Electron的桌面应用",
   "main": "dist-electron/main.js",
   "author": "Your Company",

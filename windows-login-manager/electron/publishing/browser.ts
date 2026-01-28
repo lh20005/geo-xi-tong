@@ -110,8 +110,14 @@ export class BrowserAutomationService {
       this.log('info', '✅ 浏览器启动成功 (Playwright)');
       return this.browser;
     } catch (error: any) {
-      this.log('error', '❌ 浏览器启动失败', { error: error.message });
-      throw new Error('浏览器启动失败');
+      // 打印完整错误信息以便调试
+      console.error('[Browser] 浏览器启动失败，完整错误:', error);
+      this.log('error', '❌ 浏览器启动失败', { 
+        error: error.message,
+        stack: error.stack,
+        code: error.code
+      });
+      throw new Error(`浏览器启动失败: ${error.message}`);
     }
   }
 

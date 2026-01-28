@@ -17,55 +17,119 @@ export interface BrowserLaunchOptions {
 /**
  * 获取捆绑的 Playwright Chromium 路径
  * 打包后的应用会在 resources/playwright-browsers 目录下查找
+ * 
+ * 目录结构说明：
+ * - 打包后：resources/playwright-browsers/chromium-1200/chrome-win64/chrome.exe
+ * - 开发模式：playwright-browsers/win/chromium-1200/chrome-win64/chrome.exe
+ *            playwright-browsers/mac-arm64/chromium-1200/chrome-mac-arm64/...
  */
 function getBundledChromiumPath(): string | undefined {
   const platform = process.platform;
   const arch = process.arch; // 'x64' 或 'arm64'
   const isPackaged = app.isPackaged;
   
+  console.log(`[Browser] 查找捆绑的 Chromium...`);
+  console.log(`[Browser] 当前平台: ${platform}, 架构: ${arch}, 已打包: ${isPackaged}`);
+  
   // 确定 playwright-browsers 目录位置
   let browsersBasePath: string;
+  let chromiumBasePath: string | undefined;
+  
   if (isPackaged) {
     // 打包后：在 resources 目录下
+    // 结构：resources/playwright-browsers/chromium-1200/chrome-win64/chrome.exe
     browsersBasePath = path.join(process.resourcesPath, 'playwright-browsers');
+    console.log(`[Browser] 打包模式，基础路径: ${browsersBasePath}`);
+    
+    if (!fs.existsSync(browsersBasePath)) {
+      console.log(`[Browser] ❌ 捆绑浏览器目录不存在: ${browsersBasePath}`);
+      return undefined;
+    }
+    
+    // 查找 chromium-* 目录
+    const dirs = fs.readdirSync(browsersBasePath);
+    const chromiumDir = dirs.find(d => d.startsWith('chromium-') && !d.includes('headless'));
+    
+    if (!chromiumDir) {
+      console.log(`[Browser] ❌ 未找到 chromium 目录，目录内容: ${dirs.join(', ')}`);
+      return undefined;
+    }
+    
+    chromiumBasePath = path.join(browsersBasePath, chromiumDir);
   } else {
-    // 开发模式：在项目根目录下
-    browsersBasePath = path.join(__dirname, '..', '..', 'playwright-browsers');
+    // 开发模式：在项目根目录下，按平台分目录
+    // 结构：playwright-browsers/win/chromium-1200/chrome-win64/chrome.exe
+    //       playwright-browsers/mac-arm64/chromium-1200/chrome-mac-arm64/...
+    const projectRoot = path.join(__dirname, '..', '..');
+    browsersBasePath = path.join(projectRoot, 'playwright-browsers');
+    console.log(`[Browser] 开发模式，基础路径: ${browsersBasePath}`);
+    
+    if (!fs.existsSync(browsersBasePath)) {
+      console.log(`[Browser] ❌ 捆绑浏览器目录不存在: ${browsersBasePath}`);
+      return undefined;
+    }
+    
+    // 开发模式下，根据平台选择子目录
+    let platformDir: string;
+    if (platform === 'win32') {
+      platformDir = 'win';
+    } else if (platform === 'darwin') {
+      platformDir = arch === 'arm64' ? 'mac-arm64' : 'mac-x64';
+    } else {
+      platformDir = 'linux';
+    }
+    
+    const platformBrowserPath = path.join(browsersBasePath, platformDir);
+    console.log(`[Browser] 平台浏览器目录: ${platformBrowserPath}`);
+    
+    if (!fs.existsSync(platformBrowserPath)) {
+      console.log(`[Browser] ❌ 平台浏览器目录不存在: ${platformBrowserPath}`);
+      // 尝试直接在 browsersBasePath 下查找（兼容旧结构）
+      const dirs = fs.readdirSync(browsersBasePath);
+      const chromiumDir = dirs.find(d => d.startsWith('chromium-') && !d.includes('headless'));
+      if (chromiumDir) {
+        chromiumBasePath = path.join(browsersBasePath, chromiumDir);
+        console.log(`[Browser] 使用兼容路径: ${chromiumBasePath}`);
+      } else {
+        return undefined;
+      }
+    } else {
+      // 在平台目录下查找 chromium-* 目录
+      const dirs = fs.readdirSync(platformBrowserPath);
+      const chromiumDir = dirs.find(d => d.startsWith('chromium-') && !d.includes('headless'));
+      
+      if (!chromiumDir) {
+        console.log(`[Browser] ❌ 未找到 chromium 目录，目录内容: ${dirs.join(', ')}`);
+        return undefined;
+      }
+      
+      chromiumBasePath = path.join(platformBrowserPath, chromiumDir);
+    }
   }
   
-  console.log(`[Browser] 查找捆绑的 Chromium，基础路径: ${browsersBasePath}`);
-  console.log(`[Browser] 当前平台: ${platform}, 架构: ${arch}`);
-  
-  if (!fs.existsSync(browsersBasePath)) {
-    console.log(`[Browser] 捆绑浏览器目录不存在: ${browsersBasePath}`);
+  if (!chromiumBasePath) {
+    console.log('[Browser] ❌ 无法确定 Chromium 基础目录');
     return undefined;
   }
   
-  // 查找 chromium-* 目录（排除 chromium_headless_shell）
-  const dirs = fs.readdirSync(browsersBasePath);
-  const chromiumDir = dirs.find(d => d.startsWith('chromium-') || d === 'chromium');
-  
-  if (!chromiumDir) {
-    console.log('[Browser] 未找到 chromium 目录');
-    return undefined;
-  }
-  
-  const chromiumBasePath = path.join(browsersBasePath, chromiumDir);
   console.log(`[Browser] Chromium 基础目录: ${chromiumBasePath}`);
   
   // 列出 chromium 目录下的所有子目录
   let chromiumSubDirs: string[] = [];
   try {
-    chromiumSubDirs = fs.readdirSync(chromiumBasePath).filter(d => 
-      fs.statSync(path.join(chromiumBasePath, d)).isDirectory()
-    );
+    chromiumSubDirs = fs.readdirSync(chromiumBasePath).filter(d => {
+      try {
+        return fs.statSync(path.join(chromiumBasePath!, d)).isDirectory();
+      } catch {
+        return false;
+      }
+    });
     console.log(`[Browser] Chromium 子目录: ${chromiumSubDirs.join(', ')}`);
   } catch (e) {
     console.log('[Browser] 无法读取 Chromium 子目录');
   }
   
   // 根据平台和架构确定可执行文件路径
-  // Playwright 新版本使用不同的目录结构
   let executablePaths: string[] = [];
   
   if (platform === 'darwin') {
@@ -107,7 +171,8 @@ function getBundledChromiumPath(): string | undefined {
     }
   }
   
-  console.log(`[Browser] ❌ 捆绑的 Chromium 可执行文件不存在，已尝试路径: ${executablePaths.join(', ')}`);
+  console.log(`[Browser] ❌ 捆绑的 Chromium 可执行文件不存在`);
+  console.log(`[Browser] 已尝试路径: ${executablePaths.slice(0, 3).join(', ')}...`);
   return undefined;
 }
 
