@@ -4,7 +4,7 @@
 
 ### 当前版本
 ```
-1.2.9
+1.3.0
 ```
 
 ### 版本号规则（语义化版本）
@@ -17,6 +17,7 @@
 ### 版本历史
 | 版本 | 发布日期 | 类型 | 说明 |
 |------|----------|------|------|
+| 1.3.0 | 2026-01-29 | Minor | 升级服务器，更新后台服务 |
 | 1.2.9 | 2026-01-28 | Patch | 修复 Windows 安装或升级后无法自动打开浏览器的问题 |
 | 1.2.8 | 2026-01-28 | Patch | 修复任务失败重试时后续任务提前执行的问题 |
 | 1.2.7 | 2026-01-24 | Patch | 修复批次发布任务定时间隔问题 |
@@ -188,39 +189,37 @@ release/
 
 ---
 
-## 腾讯云 COS 配置
+## 服务器自托管配置
 
 | 配置项 | 值 |
 |--------|-----|
-| 存储桶名称 | geo-1301979637 |
-| 地域 | ap-shanghai |
-| 访问域名 | https://geo-1301979637.cos.ap-shanghai.myqcloud.com |
-| 发布目录 | /releases/ |
-| 访问权限 | 私有读写 + Policy 允许 `releases/*` 公开读取 |
-
-### COS 权限配置
-存储桶设置为"私有读写"，通过 Policy 策略允许 `releases/` 目录公开读取：
-- 策略 ID：geo
-- 效力：允许
-- 用户：所有用户 (*)
-- 资源：`geo-1301979637/releases/*`
-- 操作：GetObject
+| 服务器 | 101.35.116.9 |
+| 访问域名 | https://www.jzgeo.cc |
+| 发布目录 | /var/www/geo-system/releases/ |
+| Nginx 路径 | /releases/ |
 
 ### 上传文件清单
-每次发布需上传到 `/releases/` 目录：
+每次发布需上传到服务器 `/var/www/geo-system/releases/` 目录：
 ```
 releases/
 ├── Ai智软精准GEO优化系统 Setup {version}.exe      # Windows（自动更新）
 ├── Ai智软精准GEO优化系统-{version}-mac.zip        # macOS Intel（自动更新）
 ├── Ai智软精准GEO优化系统-{version}-arm64-mac.zip  # macOS ARM（自动更新）
-├── Ai智软精准GEO优化系统-{version}.dmg            # macOS Intel（手动下载）
-├── Ai智软精准GEO优化系统-{version}-arm64.dmg      # macOS ARM（手动下载）
 ├── latest.yml                                      # Windows 更新元数据
 ├── latest-mac.yml                                  # macOS 更新元数据
 └── latest/                                         # 营销页面下载（固定链接）
     ├── GEO优化系统-Windows.exe
     ├── GEO优化系统-Mac-Intel.dmg
     └── GEO优化系统-Mac-Apple.dmg
+```
+
+### 上传命令
+```bash
+# 上传更新元数据和安装包
+scp -i "私钥路径" release/latest.yml release/latest-mac.yml release/*.exe release/*-mac.zip ubuntu@101.35.116.9:/var/www/geo-system/releases/
+
+# 上传 latest/ 目录固定链接文件
+scp -i "私钥路径" release/latest/* ubuntu@101.35.116.9:/var/www/geo-system/releases/latest/
 ```
 
 ### latest/ 目录说明（重要）
@@ -285,21 +284,107 @@ cd windows-login-manager
 npm run build:all
 ```
 
-### 3. 上传到 COS
-通过腾讯云控制台上传 `release/` 目录下的以下文件到 `/releases/`：
-- `*.exe` - Windows 安装包
-- `*.dmg` - macOS 安装包（手动下载用）
-- `*.zip` - macOS 更新包（自动更新用）
-- `latest.yml` - Windows 更新元数据
-- `latest-mac.yml` - macOS 更新元数据
+### 3. 清理服务器旧文件
+上传前先删除服务器上的旧版本文件，避免混淆：
+```bash
+ssh -i "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem" ubuntu@101.35.116.9 "rm -f /var/www/geo-system/releases/*.exe /var/www/geo-system/releases/*.zip /var/www/geo-system/releases/*.yml"
+```
+
+### 4. 上传到服务器
+
+**上传更新元数据（yml 文件）：**
+```bash
+scp -i "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem" windows-login-manager/release/latest.yml windows-login-manager/release/latest-mac.yml ubuntu@101.35.116.9:/var/www/geo-system/releases/
+```
+
+**上传 Windows 安装包：**
+```bash
+scp -i "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem" "windows-login-manager/release/Ai智软精准GEO优化系统 Setup {version}.exe" ubuntu@101.35.116.9:/var/www/geo-system/releases/
+```
+
+**上传 macOS 更新包（zip）：**
+```bash
+scp -i "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem" "windows-login-manager/release/Ai智软精准GEO优化系统-{version}-mac.zip" "windows-login-manager/release/Ai智软精准GEO优化系统-{version}-arm64-mac.zip" ubuntu@101.35.116.9:/var/www/geo-system/releases/
+```
+
+**上传 latest/ 目录固定链接文件（手动下载用）：**
+```bash
+scp -i "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem" windows-login-manager/release/latest/* ubuntu@101.35.116.9:/var/www/geo-system/releases/latest/
+```
+
+### 5. 验证
+访问以下链接确认上传成功：
+- https://www.jzgeo.cc/releases/latest.yml
+- https://www.jzgeo.cc/releases/latest-mac.yml
+- https://www.jzgeo.cc/releases/latest/GEO优化系统-Windows.exe
+
+### 6. 存档
+将历次打包文件归档到 `打包历史/` 目录，按照"打包的日期+修复内容简介"为文件夹名称存放。
+
+---
+
+## 服务器文件对应关系
+
+| 本地文件 | 服务器路径 | 用途 |
+|---------|-----------|------|
+| `release/latest.yml` | `/var/www/geo-system/releases/latest.yml` | Windows 自动更新元数据 |
+| `release/latest-mac.yml` | `/var/www/geo-system/releases/latest-mac.yml` | macOS 自动更新元数据 |
+| `release/Ai智软精准GEO优化系统 Setup {version}.exe` | `/var/www/geo-system/releases/` | Windows 自动更新安装包 |
+| `release/Ai智软精准GEO优化系统-{version}-mac.zip` | `/var/www/geo-system/releases/` | macOS Intel 自动更新包 |
+| `release/Ai智软精准GEO优化系统-{version}-arm64-mac.zip` | `/var/www/geo-system/releases/` | macOS ARM 自动更新包 |
+| `release/latest/GEO优化系统-Windows.exe` | `/var/www/geo-system/releases/latest/` | 营销页面下载（固定链接） |
+| `release/latest/GEO优化系统-Mac-Intel.dmg` | `/var/www/geo-system/releases/latest/` | 营销页面下载（固定链接） |
+| `release/latest/GEO优化系统-Mac-Apple.dmg` | `/var/www/geo-system/releases/latest/` | 营销页面下载（固定链接） |
+
+---
+
+## 发布检查清单
+
+- [ ] 版本号已更新 (`package.json`)
+- [ ] CHANGELOG.md 已更新
+- [ ] 代码已提交并打 tag
+- [ ] 浏览器已下载（`npm run download:browsers`）
+- [ ] Windows exe 已打包
+- [ ] macOS dmg + zip 已打包（两种架构）
+- [ ] **运行 `npm run verify:browsers` 验证浏览器打包正确**
+- [ ] latest.yml 和 latest-mac.yml 包含正确的 releaseNotes
+- [ ] 服务器旧文件已清理
+- [ ] 所有文件已上传到服务器 `/var/www/geo-system/releases/` 目录
+- [ ] latest/ 目录已更新固定链接文件
+- [ ] 验证下载链接可访问（yml 和 exe）
+- [ ] 更新本规则文件中的版本历史
+# 1. 更新 package.json 中的 version
+# 2. 更新 CHANGELOG.md
+# 3. 提交代码
+git add .
+git commit -m "chore: release v{version}"
+git tag v{version}
+git push && git push --tags
+```
+
+### 2. 打包
+```bash
+cd windows-login-manager
+npm run build:all
+```
+
+### 3. 上传到服务器
+使用 scp 命令上传 `release/` 目录下的文件到服务器：
+```bash
+# 上传更新元数据和安装包
+scp -i "私钥路径" release/latest.yml release/latest-mac.yml "release/Ai智软精准GEO优化系统 Setup *.exe" release/*-mac.zip ubuntu@101.35.116.9:/var/www/geo-system/releases/
+
+# 上传 latest/ 目录固定链接文件
+scp -i "私钥路径" release/latest/* ubuntu@101.35.116.9:/var/www/geo-system/releases/latest/
+```
 
 ### 4. 更新 latest/ 目录
 将最新版本的安装包复制到 `latest/` 目录并重命名为固定文件名。
 
 ### 5. 验证
 访问以下链接确认上传成功：
-- https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest.yml
-- https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest-mac.yml
+- https://www.jzgeo.cc/releases/latest.yml
+- https://www.jzgeo.cc/releases/latest-mac.yml
 
 ## 存档流程
 将历次打包文件归档到 `打包历史/` 目录，并且按照“打包的日期+修复内容简介”为文件夹的名称归档存放。
@@ -316,7 +401,7 @@ npm run build:all
 - [ ] macOS dmg + zip 已打包（两种架构）
 - [ ] **运行 `npm run verify:browsers` 验证浏览器打包正确**
 - [ ] latest.yml 和 latest-mac.yml 包含正确的 releaseNotes
-- [ ] 所有文件已上传到 COS `/releases/` 目录
+- [ ] 所有文件已上传到服务器 `/var/www/geo-system/releases/` 目录
 - [ ] latest/ 目录已更新固定链接文件
 - [ ] 验证下载链接可访问
 - [ ] 验证 Windows 自动更新功能

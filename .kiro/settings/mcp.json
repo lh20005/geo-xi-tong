@@ -7,7 +7,7 @@
         "@idletoaster/ssh-mcp-server@latest"
       ],
       "env": {
-        "SSH_HOST": "124.221.247.107",
+        "SSH_HOST": "101.35.116.9",
         "SSH_PORT": "22",
         "SSH_USERNAME": "ubuntu",
         "SSH_KEY_PATH": "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem"

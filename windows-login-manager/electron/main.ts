@@ -742,9 +742,9 @@ class ApplicationManager {
         autoUpdater.setMainWindow(this.window);
       }
       
-      // 设置更新服务器 URL（腾讯云 COS）
+      // 设置更新服务器 URL（服务器自托管）
       // 硬编码 URL，因为打包后的应用无法读取 .env 文件
-      const updateServerUrl = 'https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases';
+      const updateServerUrl = 'https://www.jzgeo.cc/releases';
       autoUpdater.setFeedURL(updateServerUrl);
       logger.info(`Auto updater configured with URL: ${updateServerUrl}`);
       

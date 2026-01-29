@@ -209,7 +209,7 @@ export default function PlatformManagementPage() {
             <Space size="middle" wrap>
               {/* Windows 版 */}
               <a
-                href="https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Windows.exe"
+                href="https://www.jzgeo.cc/releases/latest/GEO优化系统-Windows.exe"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ textDecoration: 'none' }}
@@ -237,7 +237,7 @@ export default function PlatformManagementPage() {
               
               {/* Mac Apple Silicon 版 */}
               <a
-                href="https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Mac-Apple.dmg"
+                href="https://www.jzgeo.cc/releases/latest/GEO优化系统-Mac-Apple.dmg"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ textDecoration: 'none' }}
@@ -265,7 +265,7 @@ export default function PlatformManagementPage() {
               
               {/* Mac Intel 版 */}
               <a
-                href="https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Mac-Intel.dmg"
+                href="https://www.jzgeo.cc/releases/latest/GEO优化系统-Mac-Intel.dmg"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ textDecoration: 'none' }}

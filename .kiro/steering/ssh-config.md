@@ -4,11 +4,11 @@ inclusion: always
 
 # 服务器 SSH 配置
 
-## 生产服务器 (124.221.247.107)
+## 生产服务器 (101.35.116.9)
 
 | 项目 | 值 |
 |------|-----|
-| Host | 124.221.247.107 |
+| Host | 101.35.116.9 |
 | User | ubuntu |
 | Private Key | /Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem |
 | 项目路径 | /var/www/geo-system |
@@ -20,7 +20,7 @@ inclusion: always
 **重要：每次调用 SSH MCP 工具时必须显式传递这些参数！**
 
 ```
-host: 124.221.247.107
+host: 101.35.116.9
 user: ubuntu
 privateKeyPath: /Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem
 ```
@@ -45,7 +45,7 @@ privateKeyPath: /Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem
 ```javascript
 // 执行远程命令
 mcp_ssh_mcp_server_remote_ssh({
-  host: "124.221.247.107",
+  host: "101.35.116.9",
   user: "ubuntu", 
   privateKeyPath: "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem",
   command: "pm2 status"
@@ -53,7 +53,7 @@ mcp_ssh_mcp_server_remote_ssh({
 
 // 执行数据库查询
 mcp_ssh_mcp_server_remote_ssh({
-  host: "124.221.247.107",
+  host: "101.35.116.9",
   user: "ubuntu",
   privateKeyPath: "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem", 
   command: "sudo -u postgres psql -d geo_system -c \"SELECT COUNT(*) FROM users;\""

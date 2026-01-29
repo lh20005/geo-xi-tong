@@ -6,9 +6,9 @@ import { config } from '../config/env';
 
 // 下载链接配置（使用 latest/ 目录的固定链接，无需随版本更新）
 const DOWNLOAD_LINKS = {
-  windows: 'https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Windows.exe',
-  macAppleSilicon: 'https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Mac-Apple.dmg',
-  macIntel: 'https://geo-1301979637.cos.ap-shanghai.myqcloud.com/releases/latest/GEO优化系统-Mac-Intel.dmg',
+  windows: 'https://www.jzgeo.cc/releases/latest/GEO优化系统-Windows.exe',
+  macAppleSilicon: 'https://www.jzgeo.cc/releases/latest/GEO优化系统-Mac-Apple.dmg',
+  macIntel: 'https://www.jzgeo.cc/releases/latest/GEO优化系统-Mac-Intel.dmg',
 };
 
 interface HeaderProps {
