@@ -409,58 +409,83 @@ export class PaymentService {
           await boosterPackService.activateBoosterPack(order.user_id, order.plan_id, order.id);
           console.log(`[PaymentService] 加量包开通成功: 用户 ${order.user_id}, 套餐 ${order.plan_id}`);
         } else {
-          // 获取套餐的 billing_cycle 和 duration_days 来计算订阅时长
-          const planResult = await client.query(
-            `SELECT billing_cycle, duration_days FROM subscription_plans WHERE id = $1`,
+          // 检查用户是否有受保护的年度订阅
+          const { boosterPackService } = await import('./BoosterPackService');
+          const protectedSubscription = await boosterPackService.getProtectedAnnualSubscription(order.user_id);
+          
+          // 检查购买的套餐是否也是受保护的年度套餐
+          const purchasedPlanResult = await client.query(
+            `SELECT is_protected_annual FROM subscription_plans WHERE id = $1`,
             [order.plan_id]
           );
+          const isPurchasedPlanProtected = purchasedPlanResult.rows[0]?.is_protected_annual || false;
           
-          let durationDays = 30; // 默认 30 天
-          if (planResult.rows.length > 0) {
-            const { billing_cycle, duration_days } = planResult.rows[0];
-            if (duration_days && duration_days > 0) {
-              durationDays = duration_days;
-            } else {
-              // 根据 billing_cycle 计算
-              switch (billing_cycle) {
-                case 'yearly':
-                  durationDays = 365;
-                  break;
-                case 'quarterly':
-                  durationDays = 90;
-                  break;
-                case 'monthly':
-                default:
-                  durationDays = 30;
-                  break;
+          if (protectedSubscription && !isPurchasedPlanProtected) {
+            // 年度套餐用户购买非年度套餐：转换为加量包配额叠加
+            console.log(`[PaymentService] 年度套餐用户 ${order.user_id} 购买其他套餐，转换为配额叠加`);
+            await client.query('COMMIT'); // 先提交订单状态更新
+            
+            // 使用加量包服务处理
+            await boosterPackService.activateAnnualAddonPack(order.user_id, order.plan_id, order.id);
+            console.log(`[PaymentService] 年度套餐配额叠加成功: 用户 ${order.user_id}, 套餐 ${order.plan_id}`);
+            
+            // 重新开始事务用于后续操作
+            await client.query('BEGIN');
+          } else {
+            // 正常流程：替换订阅
+            // 获取套餐的 billing_cycle 和 duration_days 来计算订阅时长
+            const planResult = await client.query(
+              `SELECT billing_cycle, duration_days FROM subscription_plans WHERE id = $1`,
+              [order.plan_id]
+            );
+            
+            let durationDays = 30; // 默认 30 天
+            if (planResult.rows.length > 0) {
+              const { billing_cycle, duration_days } = planResult.rows[0];
+              if (duration_days && duration_days > 0) {
+                durationDays = duration_days;
+              } else {
+                // 根据 billing_cycle 计算
+                switch (billing_cycle) {
+                  case 'yearly':
+                    durationDays = 365;
+                    break;
+                  case 'quarterly':
+                    durationDays = 90;
+                    break;
+                  case 'monthly':
+                  default:
+                    durationDays = 30;
+                    break;
+                }
               }
             }
+            
+            // 将用户现有的 active 订阅标记为已替换
+            await client.query(
+              `UPDATE user_subscriptions 
+               SET status = 'replaced', updated_at = CURRENT_TIMESTAMP
+               WHERE user_id = $1 AND status = 'active' AND COALESCE(plan_type, 'base') = 'base'`,
+              [order.user_id]
+            );
+            
+            // 创建订阅（根据套餐计费周期设置时长）
+            const subscriptionStartDate = new Date();
+            await client.query(
+              `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
+               VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, (CURRENT_TIMESTAMP + INTERVAL '1 day' * $3)::timestamp + TIME '23:59:59')`,
+              [order.user_id, order.plan_id, durationDays]
+            );
+            
+            // 使用统一的配额初始化服务（先清除旧记录，再初始化新配额）
+            await QuotaInitializationService.clearUserQuotas(order.user_id, client);
+            await QuotaInitializationService.initializeUserQuotas(order.user_id, order.plan_id, {
+              resetUsage: true,
+              client,
+              subscriptionStartDate  // 传入订阅开始日期
+            });
+            await QuotaInitializationService.updateStorageQuota(order.user_id, order.plan_id, client);
           }
-          
-          // 将用户现有的 active 订阅标记为已替换
-          await client.query(
-            `UPDATE user_subscriptions 
-             SET status = 'replaced', updated_at = CURRENT_TIMESTAMP
-             WHERE user_id = $1 AND status = 'active'`,
-            [order.user_id]
-          );
-          
-          // 创建订阅（根据套餐计费周期设置时长）
-          const subscriptionStartDate = new Date();
-          await client.query(
-            `INSERT INTO user_subscriptions (user_id, plan_id, status, start_date, end_date)
-             VALUES ($1, $2, 'active', CURRENT_TIMESTAMP, (CURRENT_TIMESTAMP + INTERVAL '1 day' * $3)::timestamp + TIME '23:59:59')`,
-            [order.user_id, order.plan_id, durationDays]
-          );
-          
-          // 使用统一的配额初始化服务（先清除旧记录，再初始化新配额）
-          await QuotaInitializationService.clearUserQuotas(order.user_id, client);
-          await QuotaInitializationService.initializeUserQuotas(order.user_id, order.plan_id, {
-            resetUsage: true,
-            client,
-            subscriptionStartDate  // 传入订阅开始日期
-          });
-          await QuotaInitializationService.updateStorageQuota(order.user_id, order.plan_id, client);
         }
 
         await client.query('COMMIT');

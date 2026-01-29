@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card, Progress, Tag, Space, Button, Tooltip, Empty, Spin, Alert } from 'antd';
-import { ThunderboltOutlined, ClockCircleOutlined, WarningOutlined, ReloadOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { ThunderboltOutlined, ClockCircleOutlined, WarningOutlined, ReloadOutlined, ShoppingCartOutlined, CrownOutlined } from '@ant-design/icons';
 import { apiClient } from '../../api/client';
 
 interface BoosterQuota {
@@ -14,6 +14,7 @@ interface BoosterQuota {
   createdAt: string;
   expiresAt: string;
   planName?: string;
+  sourceType?: 'booster' | 'annual_addon';
 }
 
 interface CombinedQuota {
@@ -34,6 +35,7 @@ interface CombinedQuota {
     earliestExpiration?: string;
     isBeingConsumed: boolean;
     expirationWarning?: boolean;
+    hasAnnualAddon?: boolean;
   };
   combinedRemaining: number;
 }
@@ -179,16 +181,24 @@ export function BoosterQuotaCard({ onPurchase }: BoosterQuotaCardProps) {
                 ? Math.round((booster.totalUsed / booster.totalLimit) * 100) 
                 : 0;
               
+              // 检查是否包含年度套餐额外购买的配额
+              const hasAnnualAddon = booster.hasAnnualAddon;
+              
               return (
                 <Card 
                   key={quota.featureCode} 
                   size="small" 
-                  style={{ background: '#faf5ff' }}
+                  style={{ background: hasAnnualAddon ? '#fffbeb' : '#faf5ff' }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                     <Space>
                       <span style={{ fontWeight: 500 }}>{quota.featureName}</span>
                       <Tag color="purple">{booster.activePackCount} 个加量包</Tag>
+                      {hasAnnualAddon && (
+                        <Tooltip title="包含年度会员额外购买的配额">
+                          <Tag color="gold" icon={<CrownOutlined />}>年度会员加量</Tag>
+                        </Tooltip>
+                      )}
                       {booster.isBeingConsumed && (
                         <Tooltip title="基础配额已用完，正在消耗加量包配额">
                           <Tag color="orange">正在使用</Tag>

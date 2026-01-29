@@ -49,6 +49,7 @@ export interface CombinedQuotaOverview {
     earliestExpiration?: string;
     isBeingConsumed: boolean;
     expirationWarning?: boolean;
+    hasAnnualAddon?: boolean;  // 是否包含年度套餐额外购买的配额
   };
   combinedRemaining: number;
 }
@@ -206,7 +207,8 @@ export class QuotaConsumptionService {
       const boosterResult = await pool.query(
         `SELECT 
           COUNT(*) as active_pack_count,
-          MIN(expires_at) as earliest_expiration
+          MIN(expires_at) as earliest_expiration,
+          BOOL_OR(COALESCE(source_type, 'booster') = 'annual_addon') as has_annual_addon
         FROM user_booster_quotas
         WHERE user_id = $1 
           AND feature_code = $2 
@@ -217,6 +219,7 @@ export class QuotaConsumptionService {
 
       const boosterInfo = boosterResult.rows[0];
       const earliestExpiration = boosterInfo.earliest_expiration;
+      const hasAnnualAddon = boosterInfo.has_annual_addon || false;
       const now = new Date();
       const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
@@ -249,7 +252,8 @@ export class QuotaConsumptionService {
           activePackCount: parseInt(boosterInfo.active_pack_count) || 0,
           earliestExpiration: earliestExpiration?.toISOString(),
           isBeingConsumed,
-          expirationWarning
+          expirationWarning,
+          hasAnnualAddon  // 是否包含年度套餐额外购买的配额
         },
         combinedRemaining: quota.combined_remaining
       });

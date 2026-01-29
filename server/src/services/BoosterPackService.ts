@@ -17,6 +17,8 @@ export interface BoosterQuota {
   status: 'active' | 'expired' | 'exhausted';
   createdAt: Date;
   expiresAt: Date;
+  sourceType?: 'booster' | 'annual_addon';  // 来源类型
+  planName?: string;  // 套餐名称
 }
 
 export interface BoosterSummary {
@@ -224,8 +226,12 @@ export class BoosterPackService {
         (ubq.quota_limit - ubq.quota_used) as remaining,
         ubq.status,
         ubq.created_at as "createdAt",
-        ubq.expires_at as "expiresAt"
+        ubq.expires_at as "expiresAt",
+        COALESCE(ubq.source_type, 'booster') as "sourceType",
+        sp.plan_name as "planName"
       FROM user_booster_quotas ubq
+      JOIN user_subscriptions us ON ubq.booster_subscription_id = us.id
+      JOIN subscription_plans sp ON us.plan_id = sp.id
       WHERE ubq.user_id = $1 
         AND ubq.status = 'active'
         AND ubq.expires_at > CURRENT_TIMESTAMP
@@ -308,12 +314,14 @@ export class BoosterPackService {
         us.start_date as "startDate",
         us.end_date as "endDate",
         us.created_at as "createdAt",
+        COALESCE(us.source_type, 'normal') as "sourceType",
         (
           SELECT json_agg(json_build_object(
             'featureCode', ubq.feature_code,
             'quotaLimit', ubq.quota_limit,
             'quotaUsed', ubq.quota_used,
-            'status', ubq.status
+            'status', ubq.status,
+            'sourceType', COALESCE(ubq.source_type, 'booster')
           ))
           FROM user_booster_quotas ubq
           WHERE ubq.booster_subscription_id = us.id
@@ -333,6 +341,172 @@ export class BoosterPackService {
       pageSize,
       totalPages: Math.ceil(total / pageSize)
     };
+  }
+
+  /**
+   * 检查用户是否有受保护的年度订阅
+   * @param userId 用户ID
+   * @returns 受保护的年度订阅信息，如果没有则返回 null
+   */
+  async getProtectedAnnualSubscription(userId: number): Promise<{
+    subscriptionId: number;
+    planId: number;
+    planCode: string;
+    planName: string;
+    startDate: Date;
+    endDate: Date;
+  } | null> {
+    const result = await pool.query(
+      `SELECT * FROM get_user_protected_annual_subscription($1)`,
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      subscriptionId: row.subscription_id,
+      planId: row.plan_id,
+      planCode: row.plan_code,
+      planName: row.plan_name,
+      startDate: row.start_date,
+      endDate: row.end_date
+    };
+  }
+
+  /**
+   * 将套餐转换为加量包配额（年度套餐用户额外购买时使用）
+   * @param userId 用户ID
+   * @param planId 购买的套餐ID
+   * @param orderId 订单ID
+   * @returns 创建的加量包订阅
+   */
+  async activateAnnualAddonPack(
+    userId: number,
+    planId: number,
+    orderId: number
+  ): Promise<BoosterSubscription> {
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      // 1. 检查用户是否有受保护的年度订阅
+      const protectedSub = await this.getProtectedAnnualSubscription(userId);
+      if (!protectedSub) {
+        throw new Error('用户没有受保护的年度订阅');
+      }
+
+      // 2. 获取套餐信息
+      const planResult = await client.query(
+        `SELECT sp.*, 
+          json_agg(
+            json_build_object(
+              'featureCode', pf.feature_code,
+              'featureName', pf.feature_name,
+              'featureValue', pf.feature_value,
+              'featureUnit', pf.feature_unit
+            )
+          ) FILTER (WHERE pf.id IS NOT NULL) as features
+        FROM subscription_plans sp
+        LEFT JOIN plan_features pf ON pf.plan_id = sp.id
+        WHERE sp.id = $1
+        GROUP BY sp.id`,
+        [planId]
+      );
+
+      if (planResult.rows.length === 0) {
+        throw new Error('套餐不存在');
+      }
+
+      const plan = planResult.rows[0];
+      const features = plan.features || [];
+
+      // 3. 计算过期时间
+      const startDate = new Date();
+      const endDate = new Date();
+      endDate.setDate(endDate.getDate() + (plan.duration_days || 30));
+      endDate.setHours(23, 59, 59, 999);
+
+      // 4. 创建加量包订阅记录（标记为年度套餐额外购买）
+      const subscriptionResult = await client.query(
+        `INSERT INTO user_subscriptions (
+          user_id, plan_id, plan_type, status, start_date, end_date, source_type
+        ) VALUES ($1, $2, 'booster', 'active', $3, $4, 'annual_addon')
+        RETURNING *`,
+        [userId, planId, startDate, endDate]
+      );
+
+      const subscription = subscriptionResult.rows[0];
+
+      // 5. 为每个功能创建加量包配额记录
+      for (const feature of features) {
+        if (feature.featureValue > 0) {
+          await client.query(
+            `INSERT INTO user_booster_quotas (
+              user_id, booster_subscription_id, feature_code, 
+              quota_limit, quota_used, status, expires_at, source_type
+            ) VALUES ($1, $2, $3, $4, 0, 'active', $5, 'annual_addon')`,
+            [userId, subscription.id, feature.featureCode, feature.featureValue, endDate]
+          );
+        }
+      }
+
+      // 6. 记录使用记录（审计）
+      await client.query(
+        `INSERT INTO usage_records (
+          user_id, feature_code, amount, resource_type, resource_id, metadata, source
+        ) VALUES ($1, 'annual_addon_activation', 1, 'annual_addon', $2, $3, 'booster')`,
+        [userId, subscription.id, JSON.stringify({
+          planId,
+          planName: plan.plan_name,
+          orderId,
+          protectedSubscriptionId: protectedSub.subscriptionId,
+          protectedPlanName: protectedSub.planName,
+          features: features.filter((f: any) => f.featureValue > 0).map((f: any) => ({
+            featureCode: f.featureCode,
+            quotaLimit: f.featureValue
+          }))
+        })]
+      );
+
+      await client.query('COMMIT');
+
+      // 7. 推送通知
+      try {
+        const wsService = getWebSocketService();
+        wsService.broadcast(userId, 'annual_addon_activated', {
+          subscriptionId: subscription.id,
+          planName: plan.plan_name,
+          protectedPlanName: protectedSub.planName,
+          expiresAt: endDate,
+          message: `您的年度会员（${protectedSub.planName}）权益不受影响，${plan.plan_name} 的配额已叠加到您的账户`
+        });
+      } catch (error) {
+        console.error('推送年度套餐额外购买通知失败:', error);
+      }
+
+      console.log(`[BoosterPackService] ✅ 年度套餐用户 ${userId} 额外购买 ${plan.plan_name} 已转换为加量包`);
+
+      return {
+        id: subscription.id,
+        userId: subscription.user_id,
+        planId: subscription.plan_id,
+        planType: 'booster',
+        status: subscription.status,
+        startDate: subscription.start_date,
+        endDate: subscription.end_date,
+        createdAt: subscription.created_at
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('年度套餐额外购买转换失败:', error);
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 
