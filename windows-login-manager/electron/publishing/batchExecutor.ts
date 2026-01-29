@@ -61,7 +61,7 @@ export class BatchExecutor {
     console.log(`${'='.repeat(60)}\n`);
 
     try {
-      // 获取批次任务
+      // 获取批次任务（会等待直到所有任务创建完成）
       const tasks = await this.fetchBatchTasks(batchId);
       
       if (tasks.length === 0) {
@@ -278,22 +278,96 @@ export class BatchExecutor {
 
   /**
    * 获取批次任务列表
+   * 会等待直到获取到所有任务（包括 batch_order=0 的任务），或超时
    */
   private async fetchBatchTasks(batchId: string): Promise<LocalTask[]> {
+    const maxWaitTime = 30000; // 最多等待30秒
+    const checkInterval = 1000; // 每秒检查一次
+    const startTime = Date.now();
+    let lastTaskCount = 0;
+    let stableCount = 0; // 任务数量稳定的次数
+    
+    console.log(`📋 开始获取批次 ${batchId} 的任务列表...`);
+    
+    while (Date.now() - startTime < maxWaitTime) {
+      try {
+        // 重要：设置 pageSize=1000 确保获取所有任务
+        const response = await apiClient.get('/api/publishing/tasks', {
+          params: { batch_id: batchId, pageSize: 1000 }
+        });
+        
+        if (response.data?.success && response.data?.data?.tasks) {
+          const tasks = response.data.data.tasks as LocalTask[];
+          const currentCount = tasks.length;
+          
+          // 按 batch_order 排序
+          const sortedTasks = tasks.sort((a, b) => (a.batch_order || 0) - (b.batch_order || 0));
+          
+          // 关键检查：必须有 batch_order=0 的任务
+          const hasFirstTask = sortedTasks.length > 0 && sortedTasks[0].batch_order === 0;
+          
+          if (!hasFirstTask && currentCount > 0) {
+            console.log(`⏳ 等待第一个任务(batch_order=0)创建... 当前最小顺序: ${sortedTasks[0]?.batch_order}`);
+            await new Promise(r => setTimeout(r, checkInterval));
+            continue;
+          }
+          
+          // 如果任务数量与上次相同，增加稳定计数
+          if (currentCount === lastTaskCount && currentCount > 0 && hasFirstTask) {
+            stableCount++;
+            // 任务数量连续3次稳定，认为所有任务已创建完成
+            if (stableCount >= 3) {
+              console.log(`📋 批次任务加载完成，共 ${currentCount} 个任务`);
+              
+              // 打印前几个任务的信息，用于调试
+              console.log(`📋 任务顺序验证：`);
+              for (let i = 0; i < Math.min(5, sortedTasks.length); i++) {
+                const t = sortedTasks[i];
+                console.log(`   ${i + 1}. 任务#${t.id} (顺序: ${t.batch_order}, 平台: ${t.platform_id}, 状态: ${t.status})`);
+              }
+              
+              return sortedTasks;
+            }
+          } else {
+            // 任务数量变化，重置稳定计数
+            stableCount = 0;
+            lastTaskCount = currentCount;
+            if (currentCount > 0) {
+              console.log(`⏳ 等待任务创建完成... 当前: ${currentCount} 个，第一个任务顺序: ${sortedTasks[0]?.batch_order}`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('获取批次任务失败:', error);
+      }
+      
+      await new Promise(r => setTimeout(r, checkInterval));
+    }
+    
+    // 超时，返回当前获取到的任务
+    console.warn(`⚠️ 等待任务创建超时，使用当前获取到的任务`);
     try {
+      // 重要：设置 pageSize=1000 确保获取所有任务
       const response = await apiClient.get('/api/publishing/tasks', {
-        params: { batch_id: batchId }
+        params: { batch_id: batchId, pageSize: 1000 }
       });
       
       if (response.data?.success && response.data?.data?.tasks) {
         const tasks = response.data.data.tasks as LocalTask[];
-        return tasks.sort((a, b) => (a.batch_order || 0) - (b.batch_order || 0));
+        const sortedTasks = tasks.sort((a, b) => (a.batch_order || 0) - (b.batch_order || 0));
+        
+        // 即使超时，也要验证第一个任务
+        if (sortedTasks.length > 0 && sortedTasks[0].batch_order !== 0) {
+          console.error(`❌ 错误：批次缺少 batch_order=0 的任务，最小顺序为 ${sortedTasks[0].batch_order}`);
+        }
+        
+        return sortedTasks;
       }
-      return [];
     } catch (error) {
       console.error('获取批次任务失败:', error);
-      return [];
     }
+    
+    return [];
   }
 
   /**

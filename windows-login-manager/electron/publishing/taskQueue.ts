@@ -108,9 +108,9 @@ export class TaskQueue {
     if (batchExecutor.isExecuting()) return;
 
     try {
-      // 获取待处理任务
+      // 获取待处理任务（使用较大的 pageSize 确保获取所有批次的任务）
       const response = await apiClient.get('/api/publishing/tasks', {
-        params: { status: 'pending', pageSize: 100 }
+        params: { status: 'pending', pageSize: 500 }
       });
 
       if (!response.data?.success || !response.data?.data?.tasks) return;
@@ -119,28 +119,53 @@ export class TaskQueue {
       if (tasks.length === 0) return;
 
       // 找出有 batch_id 的任务，按批次分组
-      const batchMap = new Map<string, { createdAt: Date; count: number }>();
+      // 同时检查每个批次是否有 batch_order=0 的任务
+      const batchMap = new Map<string, { 
+        createdAt: Date; 
+        count: number; 
+        hasFirstTask: boolean;
+        minOrder: number;
+      }>();
       
       for (const task of tasks) {
         if (task.batch_id) {
           if (!batchMap.has(task.batch_id)) {
             batchMap.set(task.batch_id, {
               createdAt: new Date(task.created_at || Date.now()),
-              count: 0
+              count: 0,
+              hasFirstTask: false,
+              minOrder: Infinity
             });
           }
-          batchMap.get(task.batch_id)!.count++;
+          const batch = batchMap.get(task.batch_id)!;
+          batch.count++;
+          
+          // 检查是否有 batch_order=0 的任务
+          const order = task.batch_order || 0;
+          if (order === 0) {
+            batch.hasFirstTask = true;
+          }
+          if (order < batch.minOrder) {
+            batch.minOrder = order;
+          }
         }
       }
 
       if (batchMap.size === 0) return;
 
-      // 按创建时间排序，执行最早的批次
-      const sortedBatches = Array.from(batchMap.entries())
+      // 只选择有 batch_order=0 任务的批次
+      // 这确保批次的所有任务都已创建完成
+      const validBatches = Array.from(batchMap.entries())
+        .filter(([_, info]) => info.hasFirstTask)
         .sort((a, b) => a[1].createdAt.getTime() - b[1].createdAt.getTime());
 
-      const [batchId, info] = sortedBatches[0];
-      console.log(`🚀 自动执行批次 ${batchId}（${info.count} 个任务）`);
+      if (validBatches.length === 0) {
+        // 没有完整的批次，可能任务还在创建中
+        return;
+      }
+
+      const [batchId, info] = validBatches[0];
+      console.log(`🚀 自动执行批次 ${batchId}（${info.count} 个任务，最小顺序: ${info.minOrder}）`);
 
       // 执行批次（不等待完成）
       batchExecutor.executeBatch(batchId).catch(err => {
