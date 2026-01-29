@@ -189,6 +189,61 @@ release/
 
 ---
 
+## macOS latest-mac.yml 合并（强制）
+
+### 问题说明
+
+**重要：分别打包 macOS Intel 和 ARM 版本时，后打包的版本会覆盖 `latest-mac.yml`！**
+
+这会导致只有一个架构的用户能收到更新提示，另一个架构的用户无法检测到新版本。
+
+### 解决方案
+
+每次打包完成后，必须手动合并 `latest-mac.yml`，确保包含两个架构的文件信息。
+
+### 正确的 latest-mac.yml 格式
+
+```yaml
+version: {version}
+files:
+  - url: Ai智软精准GEO优化系统-{version}-mac.zip        # Intel 版本
+    sha512: {intel_sha512}
+    size: {intel_size}
+  - url: Ai智软精准GEO优化系统-{version}-arm64-mac.zip  # ARM 版本
+    sha512: {arm_sha512}
+    size: {arm_size}
+path: Ai智软精准GEO优化系统-{version}-arm64-mac.zip
+sha512: {arm_sha512}
+releaseNotes: |
+  ...
+releaseDate: '...'
+```
+
+### 合并步骤
+
+1. 先打包 Intel 版本：`npm run build:mac-x64`
+2. 记录生成的 `latest-mac.yml` 中 Intel zip 的 sha512 和 size
+3. 再打包 ARM 版本：`npm run build:mac-arm`（会覆盖 yml 文件）
+4. 手动编辑 `latest-mac.yml`，在 `files` 数组开头添加 Intel 版本的条目
+
+### 获取 sha512 的命令
+
+```bash
+# macOS/Linux
+shasum -a 512 "release/Ai智软精准GEO优化系统-{version}-mac.zip" | awk '{print $1}' | xxd -r -p | base64
+
+# 获取文件大小
+stat -f%z "release/Ai智软精准GEO优化系统-{version}-mac.zip"
+```
+
+### 验证 latest-mac.yml
+
+上传前检查 `latest-mac.yml` 的 `files` 数组必须包含两个条目：
+- `*-mac.zip`（Intel）
+- `*-arm64-mac.zip`（ARM）
+
+---
+
 ## 服务器自托管配置
 
 | 配置项 | 值 |
@@ -347,6 +402,7 @@ scp -i "/Users/lzc/Desktop/GEO资料/腾讯云ssh秘钥/kiro.pem" windows-login-
 - [ ] Windows exe 已打包
 - [ ] macOS dmg + zip 已打包（两种架构）
 - [ ] **运行 `npm run verify:browsers` 验证浏览器打包正确**
+- [ ] **latest-mac.yml 已合并（包含 Intel 和 ARM 两个 zip 文件条目）**
 - [ ] latest.yml 和 latest-mac.yml 包含正确的 releaseNotes
 - [ ] 服务器旧文件已清理
 - [ ] 所有文件已上传到服务器 `/var/www/geo-system/releases/` 目录
@@ -400,10 +456,11 @@ scp -i "私钥路径" release/latest/* ubuntu@101.35.116.9:/var/www/geo-system/r
 - [ ] Windows exe 已打包
 - [ ] macOS dmg + zip 已打包（两种架构）
 - [ ] **运行 `npm run verify:browsers` 验证浏览器打包正确**
+- [ ] **latest-mac.yml 已合并（包含 Intel 和 ARM 两个 zip 文件条目）**
 - [ ] latest.yml 和 latest-mac.yml 包含正确的 releaseNotes
 - [ ] 所有文件已上传到服务器 `/var/www/geo-system/releases/` 目录
 - [ ] latest/ 目录已更新固定链接文件
 - [ ] 验证下载链接可访问
 - [ ] 验证 Windows 自动更新功能
-- [ ] 验证 macOS 自动更新功能
+- [ ] 验证 macOS 自动更新功能（Intel 和 ARM 都要验证）
 - [ ] 更新本规则文件中的版本历史
