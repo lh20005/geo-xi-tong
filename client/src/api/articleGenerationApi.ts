@@ -22,10 +22,24 @@ export async function createTask(config: TaskConfig): Promise<CreateTaskResponse
 /**
  * 获取任务列表
  */
-export async function fetchTasks(page: number = 1, pageSize: number = 10): Promise<TaskListResponse> {
-  const response = await apiClient.get('/article-generation/tasks', {
-    params: { page, pageSize }
-  });
+export async function fetchTasks(
+  page: number = 1, 
+  pageSize: number = 10,
+  filters?: {
+    status?: string;
+    keyword?: string;
+    conversionTarget?: string;
+    search?: string;
+  }
+): Promise<TaskListResponse & { availableKeywords?: string[]; availableConversionTargets?: string[] }> {
+  const params: Record<string, any> = { page, pageSize };
+  
+  if (filters?.status) params.status = filters.status;
+  if (filters?.keyword) params.keyword = filters.keyword;
+  if (filters?.conversionTarget) params.conversionTarget = filters.conversionTarget;
+  if (filters?.search) params.search = filters.search;
+  
+  const response = await apiClient.get('/article-generation/tasks', { params });
   return response.data;
 }
 

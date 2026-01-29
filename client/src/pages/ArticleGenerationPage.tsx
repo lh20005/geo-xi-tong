@@ -102,50 +102,30 @@ export default function ArticleGenerationPage() {
   const loadTasks = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      // 如果有筛选条件，获取所有数据进行前端筛选
-      const hasFilters = filterStatus || filterKeyword || filterConversionTarget || searchText;
-      const data = hasFilters 
-        ? await fetchTasks(1, 1000) // 有筛选时获取所有数据
-        : await fetchTasks(currentPage, pageSize);
+      // 使用服务器端筛选
+      const filters = {
+        status: filterStatus || undefined,
+        keyword: filterKeyword || undefined,
+        conversionTarget: filterConversionTarget || undefined,
+        search: searchText || undefined
+      };
       
-      let filteredTasks = data.tasks;
+      const data = await fetchTasks(currentPage, pageSize, filters);
       
-      // 应用筛选
-      if (filterStatus) {
-        filteredTasks = filteredTasks.filter(task => task.status === filterStatus);
+      setTasks(data.tasks);
+      setTotal(data.total);
+      
+      // 使用服务器返回的可用筛选选项
+      if (data.availableKeywords) {
+        setAvailableKeywords(data.availableKeywords);
       }
-      if (filterKeyword) {
-        filteredTasks = filteredTasks.filter(task => task.keyword === filterKeyword);
-      }
-      if (filterConversionTarget) {
-        filteredTasks = filteredTasks.filter(task => 
-          task.conversionTargetName === filterConversionTarget
-        );
-      }
-      if (searchText) {
-        const searchLower = searchText.toLowerCase();
-        filteredTasks = filteredTasks.filter(task => 
-          task.keyword.toLowerCase().includes(searchLower) ||
-          (task.distillationResult && task.distillationResult.toLowerCase().includes(searchLower)) ||
-          (task.conversionTargetName && task.conversionTargetName.toLowerCase().includes(searchLower))
-        );
+      if (data.availableConversionTargets) {
+        setAvailableConversionTargets(data.availableConversionTargets);
       }
       
-      // 如果有筛选条件，在前端进行分页
-      if (hasFilters) {
-        const startIndex = (currentPage - 1) * pageSize;
-        const endIndex = startIndex + pageSize;
-        setTotal(filteredTasks.length);
-        setTasks(filteredTasks.slice(startIndex, endIndex));
-      } else {
-        // 没有筛选条件时，使用后端返回的 total
-        setTasks(filteredTasks);
-        setTotal(data.total);
-      }
-      
-      // 计算统计数据
+      // 计算统计数据（基于当前筛选结果）
       const stats: TaskStatistics = {
-        total: data.tasks.length,
+        total: data.total,
         pending: data.tasks.filter(t => t.status === 'pending').length,
         running: data.tasks.filter(t => t.status === 'running').length,
         completed: data.tasks.filter(t => t.status === 'completed').length,
@@ -154,14 +134,6 @@ export default function ArticleGenerationPage() {
         completedArticles: data.tasks.reduce((sum, t) => sum + t.generatedCount, 0)
       };
       setStatistics(stats);
-      
-      // 提取可用的关键词和转化目标
-      const keywords = Array.from(new Set(data.tasks.map(t => t.keyword).filter(Boolean)));
-      const targets = Array.from(new Set(
-        data.tasks.map(t => t.conversionTargetName).filter(Boolean)
-      )) as string[];
-      setAvailableKeywords(keywords);
-      setAvailableConversionTargets(targets);
       
     } catch (error: any) {
       if (!silent) {

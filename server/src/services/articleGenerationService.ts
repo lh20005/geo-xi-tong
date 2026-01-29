@@ -389,20 +389,80 @@ export class ArticleGenerationService {
    * 获取任务列表
    * 需求: 8.4, 8.5, 13.3
    */
-  async getTasks(page: number = 1, pageSize: number = 10, userId?: number): Promise<{ tasks: GenerationTask[]; total: number }> {
+  async getTasks(
+    page: number = 1, 
+    pageSize: number = 10, 
+    userId?: number,
+    filters?: {
+      status?: string;
+      keyword?: string;
+      conversionTarget?: string;
+      search?: string;
+    }
+  ): Promise<{ 
+    tasks: GenerationTask[]; 
+    total: number;
+    availableKeywords?: string[];
+    availableConversionTargets?: string[];
+  }> {
     const offset = (page - 1) * pageSize;
 
-    // 添加用户ID过滤
-    const countQuery = userId 
-      ? 'SELECT COUNT(*) FROM generation_tasks WHERE user_id = $1'
-      : 'SELECT COUNT(*) FROM generation_tasks';
-    const countParams = userId ? [userId] : [];
-    const countResult = await pool.query(countQuery, countParams);
+    // 构建 WHERE 条件
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let paramIndex = 1;
+
+    if (userId) {
+      conditions.push(`gt.user_id = $${paramIndex}`);
+      params.push(userId);
+      paramIndex++;
+    }
+
+    if (filters?.status) {
+      conditions.push(`gt.status = $${paramIndex}`);
+      params.push(filters.status);
+      paramIndex++;
+    }
+
+    if (filters?.keyword) {
+      conditions.push(`gt.distillation_keyword = $${paramIndex}`);
+      params.push(filters.keyword);
+      paramIndex++;
+    }
+
+    if (filters?.conversionTarget) {
+      conditions.push(`gt.conversion_target_name = $${paramIndex}`);
+      params.push(filters.conversionTarget);
+      paramIndex++;
+    }
+
+    if (filters?.search) {
+      conditions.push(`(
+        gt.distillation_keyword ILIKE $${paramIndex} OR 
+        gt.conversion_target_name ILIKE $${paramIndex} OR
+        EXISTS (
+          SELECT 1 FROM articles a 
+          WHERE a.task_id = gt.id AND (
+            a.topic_question_snapshot ILIKE $${paramIndex} OR
+            a.title ILIKE $${paramIndex}
+          )
+        )
+      )`);
+      params.push(`%${filters.search}%`);
+      paramIndex++;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // 获取总数
+    const countQuery = `SELECT COUNT(*) FROM generation_tasks gt ${whereClause}`;
+    const countResult = await pool.query(countQuery, params);
     const total = parseInt(countResult.rows[0].count);
 
-    // 添加用户ID过滤到主查询
-    const whereClause = userId ? 'WHERE gt.user_id = $3' : '';
-    const queryParams = userId ? [pageSize, offset, userId] : [pageSize, offset];
+    // 添加分页参数
+    const limitParam = paramIndex;
+    const offsetParam = paramIndex + 1;
+    params.push(pageSize, offset);
 
     const result = await pool.query(
       `SELECT 
@@ -438,9 +498,29 @@ export class ArticleGenerationService {
        LEFT JOIN distillations d ON gt.distillation_id = d.id
        ${whereClause}
        ORDER BY gt.created_at DESC
-       LIMIT $1 OFFSET $2`,
-      queryParams
+       LIMIT $${limitParam} OFFSET $${offsetParam}`,
+      params
     );
+
+    // 获取可用的筛选选项（仅当前用户的数据）
+    const userCondition = userId ? 'WHERE user_id = $1' : '';
+    const userParams = userId ? [userId] : [];
+
+    const keywordsResult = await pool.query(
+      `SELECT DISTINCT distillation_keyword FROM generation_tasks ${userCondition} ORDER BY distillation_keyword`,
+      userParams
+    );
+    const availableKeywords = keywordsResult.rows
+      .map(r => r.distillation_keyword)
+      .filter(Boolean);
+
+    const targetsResult = await pool.query(
+      `SELECT DISTINCT conversion_target_name FROM generation_tasks ${userCondition} ORDER BY conversion_target_name`,
+      userParams
+    );
+    const availableConversionTargets = targetsResult.rows
+      .map(r => r.conversion_target_name)
+      .filter(Boolean);
 
     return {
       tasks: result.rows.map(row => {
@@ -486,7 +566,9 @@ export class ArticleGenerationService {
           distillationResult
         };
       }),
-      total
+      total,
+      availableKeywords,
+      availableConversionTargets
     };
   }
 

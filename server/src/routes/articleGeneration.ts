@@ -126,7 +126,7 @@ articleGenerationRouter.post('/tasks', async (req, res) => {
 
 /**
  * 获取任务列表
- * GET /api/article-generation/tasks?page=1&pageSize=10
+ * GET /api/article-generation/tasks?page=1&pageSize=10&status=running&keyword=xxx&conversionTarget=xxx&search=xxx
  */
 articleGenerationRouter.get('/tasks', async (req, res) => {
   try {
@@ -138,13 +138,24 @@ articleGenerationRouter.get('/tasks', async (req, res) => {
       return res.status(400).json({ error: '无效的分页参数' });
     }
 
-    const result = await service.getTasks(page, pageSize, userId);
+    // 筛选参数
+    const filters = {
+      status: req.query.status as string || undefined,
+      keyword: req.query.keyword as string || undefined,
+      conversionTarget: req.query.conversionTarget as string || undefined,
+      search: req.query.search as string || undefined
+    };
+
+    const result = await service.getTasks(page, pageSize, userId, filters);
 
     res.json({
       tasks: result.tasks,
       total: result.total,
       page,
-      pageSize
+      pageSize,
+      // 返回可用的筛选选项
+      availableKeywords: result.availableKeywords || [],
+      availableConversionTargets: result.availableConversionTargets || []
     });
   } catch (error: any) {
     console.error('获取任务列表错误:', error);
