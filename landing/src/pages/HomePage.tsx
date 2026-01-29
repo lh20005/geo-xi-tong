@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import Header from '../components/Header';
 import PaymentModal from '../components/PaymentModal';
+import AgentPromoModal from '../components/AgentPromoModal';
 import SEO from '../components/SEO';
 import { config } from '../config/env';
 import { useUserStatus } from '../hooks/useUserStatus';
@@ -1185,6 +1186,12 @@ export default function HomePage() {
           isAgentDiscount={selectedPlan.isAgentDiscount}
         />
       )}
+
+      {/* 代理商加盟推广弹窗 */}
+      <AgentPromoModal 
+        isLoggedIn={isLoggedIn}
+        onEnterSystem={handleEnterSystem}
+      />
     </div>
   );
 }
